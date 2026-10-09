@@ -359,3 +359,64 @@ func TestS11Membership(t *testing.T) {
 		})
 	})
 }
+
+func TestS12LoginThrottling(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, c *client) {
+		c.do("POST", "/api/v1/auth/signup", map[string]string{"email": "t@x.uz", "name": "T", "password": "long enough pw"})
+		for range 5 {
+			code, body := c.do("POST", "/api/v1/auth/login", map[string]string{"email": "t@x.uz", "password": "wrong password"})
+			expect(t, code, 401, body)
+		}
+		res := c.raw("POST", "/api/v1/auth/login", map[string]string{"email": "t@x.uz", "password": "long enough pw"}, nil)
+		res.Body.Close()
+		expect(t, res.StatusCode, 429, nil)
+		if ra := res.Header.Get("Retry-After"); ra == "" || ra == "0" {
+			t.Fatalf("Retry-After = %q", ra)
+		}
+	})
+}
+
+func TestS13CSRFGuard(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		anon.signedIn("csrf@x.uz") // creates the account
+		res := anon.raw("POST", "/api/v1/auth/login", map[string]string{"email": "csrf@x.uz", "password": "long enough pw"}, nil)
+		res.Body.Close()
+		var ck *http.Cookie
+		for _, x := range res.Cookies() {
+			if x.Name == "kyber_session" {
+				ck = x
+			}
+		}
+		post := func(contentType string, withCookie bool, bearer string) int {
+			req, _ := http.NewRequest("POST", anon.srv.URL+"/api/v1/projects", strings.NewReader(`{"key":"CS","name":"x"}`))
+			if contentType != "" {
+				req.Header.Set("Content-Type", contentType)
+			}
+			if withCookie {
+				req.AddCookie(ck)
+			}
+			if bearer != "" {
+				req.Header.Set("Authorization", "Bearer "+bearer)
+			}
+			r, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.Body.Close()
+			return r.StatusCode
+		}
+		if got := post("text/plain", true, ""); got != 403 {
+			t.Fatalf("cookie + text/plain = %d, want 403", got)
+		}
+		if got := post("application/x-www-form-urlencoded", true, ""); got != 403 {
+			t.Fatalf("cookie + form = %d, want 403", got)
+		}
+		if got := post("application/json; charset=utf-8", true, ""); got != 201 {
+			t.Fatalf("cookie + json = %d, want 201", got)
+		}
+		bearer := anon.signedIn("csrf@x.uz").token
+		if got := post("", false, bearer); got != 409 { // project CS exists; bearer is not CSRF-checked
+			t.Fatalf("bearer without content-type = %d, want 409", got)
+		}
+	})
+}

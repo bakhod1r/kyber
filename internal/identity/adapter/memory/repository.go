@@ -4,6 +4,7 @@ package memory
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/bakhod1r/kyber/internal/identity/domain"
 )
@@ -73,4 +74,17 @@ func (r *Repository) DeleteSession(_ context.Context, hash []byte) error {
 	defer r.mu.Unlock()
 	delete(r.sessions, string(hash))
 	return nil
+}
+
+func (r *Repository) DeleteExpiredSessions(_ context.Context, now time.Time) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for k, s := range r.sessions {
+		if !now.Before(s.ExpiresAt) {
+			delete(r.sessions, k)
+			n++
+		}
+	}
+	return n, nil
 }

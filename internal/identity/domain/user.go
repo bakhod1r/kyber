@@ -78,6 +78,8 @@ type Sessions interface {
 	CreateSession(ctx context.Context, s Session) error
 	SessionByHash(ctx context.Context, hash []byte) (Session, error) // ErrSessionNotFound
 	DeleteSession(ctx context.Context, hash []byte) error
+	// DeleteExpiredSessions removes sessions expired at now and returns how many.
+	DeleteExpiredSessions(ctx context.Context, now time.Time) (int, error)
 }
 
 // PasswordHasher hashes and verifies passwords (argon2id in production).

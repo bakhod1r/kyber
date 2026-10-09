@@ -71,6 +71,7 @@ func newHandler(ctx context.Context, log *slog.Logger) (http.Handler, func(), er
 		return nil, nil, err
 	}
 	log.Info("database ready")
+	server.StartJobs(ctx, log, pool)
 	secure := os.Getenv("KYBER_COOKIE_SECURE") != "false"
 	return server.NewPostgres(log, pool, secure), pool.Close, nil
 }

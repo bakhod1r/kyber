@@ -5,7 +5,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
+	"mime"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,7 +85,13 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return
 	}
-	token, err := h.svc.Login(r.Context(), in.Email, in.Password)
+	token, err := h.svc.Login(r.Context(), in.Email, in.Password, clientIP(r))
+	var tooMany *app.TooManyAttemptsError
+	if errors.As(err, &tooMany) {
+		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(tooMany.RetryAfter.Seconds()))))
+		httpx.JSON(w, http.StatusTooManyRequests, map[string]string{"error": err.Error()})
+		return
+	}
 	if err != nil {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return
@@ -94,7 +104,8 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
-	if err := h.svc.Logout(r.Context(), tokenFrom(r)); err != nil {
+	token, _ := tokenFrom(r)
+	if err := h.svc.Logout(r.Context(), token); err != nil {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return
 	}
@@ -117,7 +128,12 @@ func UserFrom(ctx context.Context) *domain.User {
 // RequireAuth rejects requests without a valid session cookie or Bearer token.
 func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := tokenFrom(r)
+		token, fromCookie := tokenFrom(r)
+		if fromCookie && !safeMethod(r.Method) && !isJSON(r) {
+			// CSRF guard: browsers cannot send cross-site JSON without a CORS preflight.
+			httpx.JSON(w, http.StatusForbidden, map[string]string{"error": "cookie-authenticated writes require Content-Type: application/json"})
+			return
+		}
 		if token == "" {
 			httpx.Error(w, r, h.log, app.ErrUnauthenticated, statusFor)
 			return
@@ -132,12 +148,32 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	})
 }
 
-func tokenFrom(r *http.Request) string {
-	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-		return strings.TrimPrefix(auth, "Bearer ")
+// tokenFrom prefers the Bearer header; fromCookie reports a cookie-sourced token.
+func tokenFrom(r *http.Request) (token string, fromCookie bool) {
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimPrefix(h, "Bearer "), false
 	}
 	if c, err := r.Cookie(CookieName); err == nil {
-		return c.Value
+		return c.Value, true
 	}
-	return ""
+	return "", false
+}
+
+func safeMethod(m string) bool {
+	return m == http.MethodGet || m == http.MethodHead || m == http.MethodOptions
+}
+
+func isJSON(r *http.Request) bool {
+	mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	return err == nil && mt == "application/json"
+}
+
+// clientIP is the TCP peer address; deployments behind a proxy should terminate
+// throttling there or configure trusted forwarding (not yet supported).
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }

@@ -4,6 +4,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -68,4 +69,9 @@ func (r *Repository) SessionByHash(ctx context.Context, hash []byte) (domain.Ses
 func (r *Repository) DeleteSession(ctx context.Context, hash []byte) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM sessions WHERE token_hash = $1`, hash)
 	return err
+}
+
+func (r *Repository) DeleteExpiredSessions(ctx context.Context, now time.Time) (int, error) {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM sessions WHERE expires_at <= $1`, now)
+	return int(tag.RowsAffected()), err
 }

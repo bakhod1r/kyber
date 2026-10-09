@@ -53,3 +53,21 @@ func TestRepository(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestDeleteExpiredSessions(t *testing.T) {
+	ctx := context.Background()
+	r := postgres.NewRepository(dbtest.New(t))
+	email, _ := domain.ParseEmail("ali@x.uz")
+	u, _ := domain.NewUser("30000000-0000-4000-8000-000000000001", email, "Ali", "hash")
+	_ = r.Create(ctx, u)
+	now := time.Now()
+	_ = r.CreateSession(ctx, domain.Session{TokenHash: []byte("expired-expired-expired-expired!"), UserID: u.ID(), ExpiresAt: now.Add(-time.Minute)})
+	_ = r.CreateSession(ctx, domain.Session{TokenHash: []byte("valid-valid-valid-valid-valid-va"), UserID: u.ID(), ExpiresAt: now.Add(time.Hour)})
+	n, err := r.DeleteExpiredSessions(ctx, now)
+	if err != nil || n != 1 {
+		t.Fatalf("deleted = %d, %v", n, err)
+	}
+	if _, err := r.SessionByHash(ctx, []byte("valid-valid-valid-valid-valid-va")); err != nil {
+		t.Fatalf("valid session lost: %v", err)
+	}
+}

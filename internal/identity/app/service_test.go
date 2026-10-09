@@ -59,7 +59,7 @@ func TestLoginAuthenticateLogout(t *testing.T) {
 	s, c, _ := setup()
 	_, _ = s.Signup(ctx, app.Signup{Email: "ali@x.uz", Name: "Ali", Password: "long enough pw"})
 
-	token, err := s.Login(ctx, "ALI@x.uz", "long enough pw")
+	token, err := s.Login(ctx, "ALI@x.uz", "long enough pw", "127.0.0.1")
 	if err != nil || len(token) < 40 {
 		t.Fatalf("token = %q, %v", token, err)
 	}
@@ -75,7 +75,7 @@ func TestLoginAuthenticateLogout(t *testing.T) {
 	}
 
 	// Expiry after 30 days.
-	token, _ = s.Login(ctx, "ali@x.uz", "long enough pw")
+	token, _ = s.Login(ctx, "ali@x.uz", "long enough pw", "127.0.0.1")
 	c.now = c.now.Add(30*24*time.Hour + time.Second)
 	if _, err := s.Authenticate(ctx, token); !errors.Is(err, app.ErrUnauthenticated) {
 		t.Fatalf("expired err = %v", err)
@@ -90,9 +90,9 @@ func TestLoginFailuresAreIndistinguishable(t *testing.T) {
 	s, _, h := setup()
 	_, _ = s.Signup(ctx, app.Signup{Email: "ali@x.uz", Name: "Ali", Password: "long enough pw"})
 
-	_, errWrongPw := s.Login(ctx, "ali@x.uz", "wrong password")
+	_, errWrongPw := s.Login(ctx, "ali@x.uz", "wrong password", "127.0.0.1")
 	before := h.verifies
-	_, errNoUser := s.Login(ctx, "nobody@x.uz", "wrong password")
+	_, errNoUser := s.Login(ctx, "nobody@x.uz", "wrong password", "127.0.0.1")
 	if !errors.Is(errWrongPw, app.ErrInvalidCredentials) || !errors.Is(errNoUser, app.ErrInvalidCredentials) {
 		t.Fatalf("errs = %v / %v", errWrongPw, errNoUser)
 	}
@@ -101,5 +101,54 @@ func TestLoginFailuresAreIndistinguishable(t *testing.T) {
 	}
 	if h.verifies != before+1 {
 		t.Fatal("unknown user must still run a hash verification (timing)")
+	}
+}
+
+func TestPurgeExpiredSessions(t *testing.T) {
+	ctx := context.Background()
+	s, c, _ := setup()
+	_, _ = s.Signup(ctx, app.Signup{Email: "ali@x.uz", Name: "Ali", Password: "long enough pw"})
+	old, _ := s.Login(ctx, "ali@x.uz", "long enough pw", "ip")
+	c.now = c.now.Add(20 * 24 * time.Hour)
+	fresh, _ := s.Login(ctx, "ali@x.uz", "long enough pw", "ip")
+	c.now = c.now.Add(11 * 24 * time.Hour) // old is now 31 days old, fresh 11
+
+	n, err := s.PurgeExpiredSessions(ctx)
+	if err != nil || n != 1 {
+		t.Fatalf("purged = %d, %v", n, err)
+	}
+	if _, err := s.Authenticate(ctx, fresh); err != nil {
+		t.Fatalf("fresh session lost: %v", err)
+	}
+	if _, err := s.Authenticate(ctx, old); !errors.Is(err, app.ErrUnauthenticated) {
+		t.Fatalf("old err = %v", err)
+	}
+}
+
+func TestRunSessionPurgerStopsOnCancel(t *testing.T) {
+	s, c, _ := setup()
+	ctx, cancel := context.WithCancel(context.Background())
+	_, _ = s.Signup(ctx, app.Signup{Email: "ali@x.uz", Name: "Ali", Password: "long enough pw"})
+	_, _ = s.Login(ctx, "ali@x.uz", "long enough pw", "ip")
+	c.now = c.now.Add(31 * 24 * time.Hour)
+
+	purged := make(chan int, 10)
+	done := make(chan struct{})
+	go func() {
+		s.RunSessionPurger(ctx, time.Millisecond, func(n int, err error) {
+			if err == nil {
+				purged <- n
+			}
+		})
+		close(done)
+	}()
+	if n := <-purged; n != 1 {
+		t.Fatalf("first purge = %d, want 1", n)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("purger did not stop after cancel")
 	}
 }

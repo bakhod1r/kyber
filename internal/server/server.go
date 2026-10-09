@@ -51,6 +51,19 @@ func NewInMemory(log *slog.Logger) http.Handler {
 	})
 }
 
+// StartJobs runs background maintenance (hourly expired-session purge) until ctx ends.
+func StartJobs(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) {
+	ids := identitypg.NewRepository(pool)
+	svc := identityapp.NewService(ids, ids, argon2.New(), systemClock{}, id.New)
+	go svc.RunSessionPurger(ctx, time.Hour, func(n int, err error) {
+		if err != nil {
+			log.ErrorContext(ctx, "session purge failed", "err", err)
+			return
+		}
+		log.InfoContext(ctx, "expired sessions purged", "count", n)
+	})
+}
+
 // NewPostgres builds the API on PostgreSQL; the pool must already be migrated.
 func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool) http.Handler {
 	ids := identitypg.NewRepository(pool)

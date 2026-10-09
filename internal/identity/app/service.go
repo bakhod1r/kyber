@@ -28,11 +28,12 @@ type Service struct {
 	clock    Clock
 	newID    func() string
 	dummy    string // hash verified for unknown users to equalise timing
+	throttle *throttle
 }
 
 func NewService(users domain.Users, sessions domain.Sessions, hasher domain.PasswordHasher, clock Clock, newID func() string) *Service {
 	dummy, _ := hasher.Hash("kyber-dummy-password")
-	return &Service{users: users, sessions: sessions, hasher: hasher, clock: clock, newID: newID, dummy: dummy}
+	return &Service{users: users, sessions: sessions, hasher: hasher, clock: clock, newID: newID, dummy: dummy, throttle: newThrottle(clock)}
 }
 
 type Signup struct{ Email, Name, Password string }
@@ -60,7 +61,23 @@ func (s *Service) Signup(ctx context.Context, cmd Signup) (*domain.User, error) 
 }
 
 // Login returns an opaque bearer token; only its SHA-256 hash is stored.
-func (s *Service) Login(ctx context.Context, rawEmail, password string) (string, error) {
+// Five failures per email+IP within 15 minutes lock that pair out (TooManyAttemptsError).
+func (s *Service) Login(ctx context.Context, rawEmail, password, ip string) (string, error) {
+	key := throttleKey(rawEmail, ip)
+	if err := s.throttle.check(key); err != nil {
+		return "", err
+	}
+	token, err := s.login(ctx, rawEmail, password)
+	switch {
+	case errors.Is(err, ErrInvalidCredentials):
+		s.throttle.fail(key)
+	case err == nil:
+		s.throttle.reset(key)
+	}
+	return token, err
+}
+
+func (s *Service) login(ctx context.Context, rawEmail, password string) (string, error) {
 	email, err := domain.ParseEmail(rawEmail)
 	if err != nil {
 		s.hasher.Verify(s.dummy, password)
@@ -110,7 +127,26 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	return s.sessions.DeleteSession(ctx, hashToken(token))
 }
 
+// PurgeExpiredSessions deletes expired sessions (run periodically).
+func (s *Service) PurgeExpiredSessions(ctx context.Context) (int, error) {
+	return s.sessions.DeleteExpiredSessions(ctx, s.clock.Now())
+}
+
 func hashToken(token string) []byte {
 	h := sha256.Sum256([]byte(token))
 	return h[:]
+}
+
+// RunSessionPurger purges expired sessions every interval until ctx is cancelled.
+func (s *Service) RunSessionPurger(ctx context.Context, every time.Duration, report func(int, error)) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			report(s.PurgeExpiredSessions(ctx))
+		}
+	}
 }
