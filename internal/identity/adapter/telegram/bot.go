@@ -90,6 +90,9 @@ func (b *Bot) Updates(ctx context.Context, offset int64, wait time.Duration) ([]
 	return out, err
 }
 
+// UpdateTimeout bounds the handling of one update (DB work plus the reply).
+const UpdateTimeout = 10 * time.Second
+
 // StartHandler receives "/start <payload>" from a private chat.
 type StartHandler func(ctx context.Context, payload string, from User, chatID string) error
 
@@ -119,9 +122,11 @@ func (b *Bot) Poll(ctx context.Context, log *slog.Logger, wait, backoff time.Dur
 			if cmd != "/start" {
 				continue
 			}
-			if err := onStart(ctx, strings.TrimSpace(payload), m.From, strconv.FormatInt(m.Chat.ID, 10)); err != nil {
+			uctx, cancel := context.WithTimeout(ctx, UpdateTimeout)
+			if err := onStart(uctx, strings.TrimSpace(payload), m.From, strconv.FormatInt(m.Chat.ID, 10)); err != nil {
 				log.InfoContext(ctx, "telegram /start not handled", "err", err)
 			}
+			cancel()
 		}
 	}
 }

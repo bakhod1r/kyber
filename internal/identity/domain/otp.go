@@ -93,4 +93,6 @@ type OTPChallenges interface {
 	// UpdateOTP loads the challenge under a lock, applies fn and saves it even when fn fails
 	// (wrong codes must be counted); fn's error is returned.
 	UpdateOTP(ctx context.Context, id string, fn func(*OTPChallenge) error) error
+	// DeleteExpiredOTPs removes challenges expired before now and returns how many.
+	DeleteExpiredOTPs(ctx context.Context, now time.Time) (int, error)
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 	"time"
 
@@ -153,13 +154,14 @@ func events[E outbox.Event](log func() []E) func() []outbox.Event {
 // StartJobs runs background maintenance (expired-session purge) until ctx ends.
 func StartJobs(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, purgeEvery time.Duration) {
 	ids := identitypg.NewRepository(pool)
-	svc := identityapp.NewService(ids, ids, argon2.New(), systemClock{}, id.New)
+	// The purge job also clears expired login-code challenges (no bot needed for that).
+	svc := identityapp.NewService(ids, ids, argon2.New(), systemClock{}, id.New, identityapp.WithTelegramOTP(ids, nil))
 	go svc.RunSessionPurger(ctx, purgeEvery, func(n int, err error) {
 		if err != nil {
 			log.ErrorContext(ctx, "session purge failed", "err", err)
 			return
 		}
-		log.InfoContext(ctx, "expired sessions purged", "count", n)
+		log.InfoContext(ctx, "expired sessions and login codes purged", "count", n)
 	})
 }
 
@@ -307,8 +309,8 @@ func recoverer(log *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if v := recover(); v != nil {
-				log.ErrorContext(r.Context(), "panic", "value", v, "path", r.URL.Path)
-				httpx.Problem(w, r, errorx.New(httpx.CodeInternal, fmt.Sprint(v)))
+				log.ErrorContext(r.Context(), "panic", "value", fmt.Sprint(v), "path", r.URL.Path, "stack", string(debug.Stack()))
+				httpx.Problem(w, r, errorx.New(httpx.CodeInternal, "internal error"))
 			}
 		}()
 		next.ServeHTTP(w, r)

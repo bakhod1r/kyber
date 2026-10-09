@@ -149,3 +149,30 @@ func TestDisplayName(t *testing.T) {
 		t.Fatal("display name")
 	}
 }
+
+// Regression (review): each update is time-boxed so one slow delivery cannot stall others.
+func TestPollTimeBoxesEachUpdate(t *testing.T) {
+	api := newAPI(t)
+	api.updates = []map[string]any{msg(1, "private", "/start a")}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	got := make(chan time.Duration, 1)
+	go telegram.NewBot("TOKEN", api.URL).Poll(ctx, slog.New(slog.DiscardHandler), 0, time.Millisecond,
+		func(c context.Context, _ string, _ telegram.User, _ string) error {
+			d, ok := c.Deadline()
+			if !ok {
+				got <- -1
+				return nil
+			}
+			got <- time.Until(d)
+			return nil
+		})
+	select {
+	case d := <-got:
+		if d <= 0 || d > telegram.UpdateTimeout {
+			t.Fatalf("handler deadline in %s, want within %s", d, telegram.UpdateTimeout)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler not called")
+	}
+}

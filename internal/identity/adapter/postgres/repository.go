@@ -149,3 +149,8 @@ func (r *Repository) UpdateOTP(ctx context.Context, oid string, fn func(*domain.
 	}
 	return fnErr
 }
+
+func (r *Repository) DeleteExpiredOTPs(ctx context.Context, now time.Time) (int, error) {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM otp_challenges WHERE expires_at <= $1`, now)
+	return int(tag.RowsAffected()), err
+}

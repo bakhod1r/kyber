@@ -144,3 +144,16 @@ func TestTelegramOTPStartLimiterDown(t *testing.T) {
 		t.Fatal("limiter outage must fail closed")
 	}
 }
+
+func TestPurgeRemovesExpiredChallenges(t *testing.T) {
+	ctx := context.Background()
+	s, clk, _ := setupOTP()
+	ch, _ := s.StartTelegramOTP(ctx, "1.1.1.1")
+	clk.now = clk.now.Add(domain.OTPTTL + time.Second)
+	if n, err := s.PurgeExpiredSessions(ctx); err != nil || n != 1 {
+		t.Fatalf("purged = %d %v", n, err)
+	}
+	if _, _, err := s.VerifyTelegramOTP(ctx, ch.ID, "123456"); !errors.Is(err, domain.ErrOTPNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+}

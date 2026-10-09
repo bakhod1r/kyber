@@ -52,4 +52,16 @@ func RunOTP(t *testing.T, s domain.OTPChallenges) {
 	if got, _ := s.OTPByID(ctx, id); got.Attempts != domain.OTPMaxAttempts {
 		t.Fatalf("attempts after concurrent guesses = %d, want %d", got.Attempts, domain.OTPMaxAttempts)
 	}
+	// Expired challenges are purged; live ones stay.
+	const live = "50000000-0000-4000-8000-000000000002"
+	_ = s.CreateOTP(ctx, domain.NewOTPChallenge(live, "nonce-live", now.Add(time.Hour)))
+	if n, err := s.DeleteExpiredOTPs(ctx, now.Add(domain.OTPTTL+time.Second)); err != nil || n != 1 {
+		t.Fatalf("purged = %d, %v", n, err)
+	}
+	if _, err := s.OTPByID(ctx, id); !errors.Is(err, domain.ErrOTPNotFound) {
+		t.Fatalf("expired still there: %v", err)
+	}
+	if _, err := s.OTPByID(ctx, live); err != nil {
+		t.Fatalf("live challenge purged: %v", err)
+	}
 }

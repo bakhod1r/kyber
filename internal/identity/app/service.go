@@ -156,8 +156,15 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 }
 
 // PurgeExpiredSessions deletes expired sessions (run periodically).
+// PurgeExpiredSessions deletes expired sessions and, when code login is configured,
+// expired login-code challenges; it returns how many rows were removed.
 func (s *Service) PurgeExpiredSessions(ctx context.Context) (int, error) {
-	return s.sessions.DeleteExpiredSessions(ctx, s.clock.Now())
+	n, err := s.sessions.DeleteExpiredSessions(ctx, s.clock.Now())
+	if err != nil || s.otps == nil {
+		return n, err
+	}
+	m, err := s.otps.DeleteExpiredOTPs(ctx, s.clock.Now())
+	return n + m, err
 }
 
 func hashToken(token string) []byte {

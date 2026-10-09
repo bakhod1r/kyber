@@ -151,3 +151,16 @@ func (r *Repository) UpdateOTP(_ context.Context, id string, fn func(*domain.OTP
 	r.otps[id] = c
 	return err
 }
+
+func (r *Repository) DeleteExpiredOTPs(_ context.Context, now time.Time) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for id, c := range r.otps {
+		if !now.Before(c.ExpiresAt) {
+			delete(r.otps, id)
+			n++
+		}
+	}
+	return n, nil
+}
