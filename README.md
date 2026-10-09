@@ -2,9 +2,10 @@
 <h1 align="center">Kyber</h1>
 <p align="center">Open-source, self-hosted issue &amp; project tracker — the core of Jira, in one Go binary.</p>
 
-> Status: **v0.3 (Sprint 03)** — web UI with Kanban board, project roles, PostgreSQL, accounts, throttled login, outbox, metrics.
+> Status: **v0.4 (Sprint 04)** — issue details & comments, Kanban board, project roles, OpenAPI contract, localized problem details (en/uz/ru), PostgreSQL, optional Redis.
 
 <p align="center"><img src="docs/assets/board.png" alt="Kyber Kanban board" width="820"></p>
+<p align="center"><img src="docs/assets/issue-panel.png" alt="Kyber issue panel with comments" width="820"></p>
 > Roadmap: [`docs/PLAN.md`](docs/PLAN.md) · Backlog: [`docs/backlog`](docs/backlog) · QA: [`docs/qa`](docs/qa)
 
 ## Quick start
@@ -24,9 +25,14 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 |---|---|---|
 | `KYBER_ADDR` | `:8080` | Listen address |
 | `KYBER_DATABASE_URL` | — | PostgreSQL URL; unset = in-memory dev mode |
+| `KYBER_REDIS_URL` | — | Optional; shares the login limiter across replicas (guard) |
 | `KYBER_COOKIE_SECURE` | `true` | Set `false` only for plain-HTTP local use |
+| `KYBER_SESSION_PURGE_EVERY` | `1h` | Expired-session cleanup interval (jittered) |
 
 ## API (v1)
+
+Full contract: [`api/openapi.yaml`](api/openapi.yaml) (OpenAPI 3.1, enforced by the test suite).
+Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/problem+json` with a stable `code`; titles follow `Accept-Language` (en, uz, ru).
 
 | Method | Path | Description |
 |---|---|---|
@@ -37,7 +43,8 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 | POST / GET | `/api/v1/projects` | Create / list projects |
 | GET | `/api/v1/projects/{key}` | Get project |
 | POST / GET | `/api/v1/projects/{key}/issues[?status=]` | Create / list issues |
-| GET | `/api/v1/issues/{KEY-N}` | Get issue |
+| GET · PATCH | `/api/v1/issues/{KEY-N}` | Get issue · edit title/description/priority/assignee (with `version`) |
+| GET · POST | `/api/v1/issues/{KEY-N}/comments` | List · add comments |
 | POST | `/api/v1/issues/{KEY-N}/transitions` | Move issue (`todo ⇄ in_progress ⇄ done`) |
 
 ## Development
@@ -53,6 +60,12 @@ make web-test     # typecheck + Vitest
 make e2e          # Playwright against a fresh server
 KYBER_TEST_DATABASE_URL=postgres://… make test   # + PostgreSQL integration tests
 ```
+
+## Built with
+
+Kyber reuses the author's libraries: [emailx](https://github.com/bakhod1r/emailx), [errorx](https://github.com/bakhod1r/errorx),
+[guard](https://github.com/bakhod1r/guard), [oneenv](https://github.com/bakhod1r/oneenv), [jitterx](https://github.com/bakhod1r/jitterx),
+[ctxsentinel](https://github.com/bakhod1r/ctxsentinel) — plus pgx, React and TanStack Query.
 
 ## License
 

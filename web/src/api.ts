@@ -5,7 +5,26 @@ export type User = { id: string; email: string; name: string };
 export type Project = { id: string; key: string; name: string };
 export type Status = "todo" | "in_progress" | "done";
 export type IssueType = "epic" | "story" | "task" | "bug" | "subtask";
-export type Issue = { id: string; key: string; title: string; type: IssueType; status: Status };
+export type Priority = "lowest" | "low" | "medium" | "high" | "highest";
+export type Issue = {
+  id: string;
+  key: string;
+  title: string;
+  type: IssueType;
+  status: Status;
+  description: string;
+  priority: Priority;
+  assignee_id: string | null;
+  version: number;
+};
+export type IssuePatch = {
+  version: number;
+  title?: string;
+  description?: string;
+  priority?: Priority;
+  assignee_id?: string | null;
+};
+export type Comment = { id: string; author_id: string; author_name: string; body: string; created_at: string };
 export type Role = "admin" | "member" | "viewer";
 export type Member = { user_id: string; email: string; name: string; role: Role };
 
@@ -16,6 +35,7 @@ export const STATUSES: { id: Status; label: string }[] = [
 ];
 
 export const ISSUE_TYPES: IssueType[] = ["task", "story", "bug", "epic", "subtask"];
+export const PRIORITIES: Priority[] = ["highest", "high", "medium", "low", "lowest"];
 
 /** RFC 9457 problem details as returned by the API (application/problem+json). */
 export type Problem = { type: string; title: string; status: number; code: string; detail?: string; numeric_code?: number };
@@ -73,4 +93,9 @@ export const api = {
     request<Issue>("POST", `/api/v1/projects/${seg(key)}/issues`, { title, type }),
   transition: (issueKey: string, to: Status) =>
     request<Issue>("POST", `/api/v1/issues/${seg(issueKey)}/transitions`, { to }),
+  issue: (issueKey: string) => request<Issue>("GET", `/api/v1/issues/${seg(issueKey)}`),
+  editIssue: (issueKey: string, patch: IssuePatch) => request<Issue>("PATCH", `/api/v1/issues/${seg(issueKey)}`, patch),
+  comments: (issueKey: string) => request<List<Comment>>("GET", `/api/v1/issues/${seg(issueKey)}/comments`).then((r) => r.items),
+  addComment: (issueKey: string, body: string) =>
+    request<Comment>("POST", `/api/v1/issues/${seg(issueKey)}/comments`, { body }),
 };

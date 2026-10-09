@@ -38,6 +38,27 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await page.reload();
   await expect(page.getByRole("region", { name: "In Progress" }).getByText("Ship the board")).toBeVisible();
 
+  // KYB-S17: open the issue, edit details, assign, comment — all persisted.
+  await page.getByRole("button", { name: "Ship the board" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Description").fill("Drag cards between columns.\nKeyboard support later.");
+  await dialog.getByLabel("Priority").selectOption("highest");
+  await dialog.getByLabel("Assignee").selectOption({ label: "E2E User" });
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog.getByText("Saved")).toBeVisible();
+  await dialog.getByLabel("Add a comment").fill("Looks great!");
+  await dialog.getByRole("button", { name: "Comment" }).click();
+  await expect(dialog.getByText("Looks great!")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByLabel("Priority: highest")).toBeVisible();
+  await expect(page.getByTitle("E2E User")).toHaveText("EU");
+  await page.reload();
+  await page.getByRole("button", { name: "Ship the board" }).click();
+  await expect(page.getByRole("dialog").getByLabel("Description")).toHaveValue("Drag cards between columns.\nKeyboard support later.");
+  await expect(page.getByRole("dialog").getByText("Looks great!")).toBeVisible();
+  await page.keyboard.press("Escape");
+
   // Inviting an unknown email surfaces the server error.
   await page.getByLabel("Invite by email").fill("nobody@example.com");
   await page.getByRole("button", { name: "Invite" }).click();

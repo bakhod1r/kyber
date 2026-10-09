@@ -111,3 +111,34 @@ label { display: grid; gap: 0.25rem; font-size: 0.85rem; color: var(--muted); }
   .board { grid-template-columns: 1fr; }
   .panel.inline { grid-template-columns: 1fr; }
 }
+
+/* Sprint 04: cards, issue panel, comments */
+.card-head, .card-foot { display: flex; justify-content: space-between; align-items: center; }
+.card-open {
+  display: block; width: 100%; text-align: left; background: none; color: var(--text);
+  font-weight: 500; padding: 0.2rem 0; margin: 0.15rem 0; border: 0; border-radius: 4px;
+}
+.card-open:hover { color: var(--accent); }
+.prio { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.prio-highest { background: #d32f2f; }
+.prio-high { background: #f57c00; }
+.prio-medium { background: #fbc02d; }
+.prio-low { background: #43a047; }
+.prio-lowest { background: #90a4ae; }
+.avatar {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-text); font-size: 0.65rem; font-weight: 700;
+}
+.overlay { position: fixed; inset: 0; background: rgb(4 10 20 / 45%); display: grid; place-items: center; padding: 1rem; z-index: 10; }
+.issue-panel { width: min(720px, 100%); max-height: 90vh; overflow: auto; display: grid; gap: 1rem; }
+.issue-panel-head { display: flex; justify-content: space-between; align-items: center; }
+.issue-panel-head h2 { margin: 0; text-transform: capitalize; }
+.issue-form { display: grid; gap: 0.75rem; }
+.issue-form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.issue-form .row.end { display: flex; justify-content: flex-end; align-items: center; gap: 1rem; }
+textarea { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.65rem; width: 100%; resize: vertical; }
+.comments ul { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
+.comments form { display: grid; gap: 0.5rem; justify-items: end; }
+.comments label { width: 100%; }
+.comment-meta { font-size: 0.8rem; color: var(--muted); }
+.comment-body { margin: 0.2rem 0 0; white-space: pre-wrap; }

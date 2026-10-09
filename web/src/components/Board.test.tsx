@@ -7,6 +7,7 @@ import { Board } from "./Board";
 
 const issue = (n: number, status: Issue["status"], title = `Issue ${n}`): Issue => ({
   id: `i-${n}`, key: `KYB-${n}`, title, type: "task", status,
+  description: "", priority: "medium", assignee_id: null, version: 1,
 });
 
 function drag(card: HTMLElement, column: HTMLElement) {

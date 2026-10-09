@@ -3,20 +3,23 @@ import { type FormEvent, useState } from "react";
 import { useParams } from "react-router-dom";
 import { type Role, api } from "../api";
 import { Board } from "../components/Board";
+import { IssuePanel } from "../components/IssuePanel";
 
 export function ProjectPage() {
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
   const project = projects.data?.find((p) => p.key === key);
+  const [open, setOpen] = useState<string | null>(null);
   return (
     <div className="project">
       <h1>
         <span className="key">{key}</span> {project?.name ?? ""}
       </h1>
       <div className="project-grid">
-        <Board projectKey={key} />
+        <Board projectKey={key} onOpen={setOpen} />
         <Members projectKey={key} />
       </div>
+      {open && <IssuePanel issueKey={open} projectKey={key} onClose={() => setOpen(null)} />}
     </div>
   );
 }

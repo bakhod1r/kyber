@@ -1,13 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type DragEvent, type FormEvent, useState } from "react";
-import { ISSUE_TYPES, type Issue, type IssueType, STATUSES, type Status, api } from "../api";
+import { ISSUE_TYPES, type Issue, type IssueType, type Member, STATUSES, type Status, api } from "../api";
 
 const DRAG_TYPE = "application/x-kyber-issue";
 
-export function Board({ projectKey }: { projectKey: string }) {
+export function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "")).toUpperCase() || "?";
+}
+
+export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (issueKey: string) => void }) {
   const qc = useQueryClient();
   const queryKey = ["issues", projectKey];
   const issues = useQuery({ queryKey, queryFn: () => api.issues(projectKey) });
+  const members = useQuery({ queryKey: ["members", projectKey], queryFn: () => api.members(projectKey) });
+  const byId = new Map<string, Member>((members.data ?? []).map((m) => [m.user_id, m]));
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState<Status | null>(null);
 
@@ -75,9 +82,21 @@ export function Board({ projectKey }: { projectKey: string }) {
                     e.dataTransfer.effectAllowed = "move";
                   }}
                 >
-                  <span className={`type type-${i.type}`}>{i.type}</span>
-                  <p>{i.title}</p>
-                  <small>{i.key}</small>
+                  <div className="card-head">
+                    <span className={`type type-${i.type}`}>{i.type}</span>
+                    <span className={`prio prio-${i.priority}`} aria-label={`Priority: ${i.priority}`} title={`Priority: ${i.priority}`} />
+                  </div>
+                  <button type="button" className="card-open" onClick={() => onOpen?.(i.key)}>
+                    {i.title}
+                  </button>
+                  <div className="card-foot">
+                    <small>{i.key}</small>
+                    {i.assignee_id && byId.get(i.assignee_id) && (
+                      <span className="avatar" title={byId.get(i.assignee_id)?.name}>
+                        {initials(byId.get(i.assignee_id)?.name ?? "")}
+                      </span>
+                    )}
+                  </div>
                 </article>
               ))}
             </section>
