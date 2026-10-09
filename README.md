@@ -1,5 +1,4 @@
-<p align="center"><img src="docs/assets/logo.svg" width="120" alt="Kyber"></p>
-<h1 align="center">Kyber</h1>
+<p align="center"><img src="docs/assets/logo-full.png" width="220" alt="Kyber"></p>
 <p align="center">Open-source, self-hosted issue &amp; project tracker — the core of Jira, in one Go binary.</p>
 
 > Status: **v0.7 (Sprint 07)** — reports & insights (burndown, velocity, created vs resolved, cycle time, workload), story points, notifications & @mentions, Scrum backlog & sprints, Kanban board, project roles, OpenAPI contract, localized errors (en/uz/ru), PostgreSQL, optional Redis.

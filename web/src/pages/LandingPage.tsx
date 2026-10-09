@@ -26,7 +26,7 @@ export function LandingPage() {
       </header>
       <main>
         <section className="hero">
-          <img src="/logo.svg" alt="" width={96} height={96} className="hero-logo" />
+          <img src="/logo.svg" alt="" width={140} height={140} className="hero-logo" />
           <h1>Plan, track and ship software — on your own terms.</h1>
           <p className="lead">
             Kyber is an open-source issue and project tracker with the Jira essentials: boards, backlog, sprints, reports

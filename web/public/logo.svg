@@ -1,43 +1,36 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Kyber">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="287 133 680 680" width="128" height="128" role="img" aria-label="Kyber">
   <defs>
-    <radialGradient id="kb-halo" cx="50%" cy="54%" r="50%">
-      <stop offset="0" stop-color="#4fd2ff" stop-opacity=".55"/>
-      <stop offset=".55" stop-color="#2f8fff" stop-opacity=".18"/>
-      <stop offset="1" stop-color="#2f8fff" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="kb-left" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#d9f7ff"/>
-      <stop offset="1" stop-color="#5cc8ff"/>
+    <linearGradient id="kb-hex" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4fe0ff"/>
+      <stop offset="1" stop-color="#1f5fc4"/>
     </linearGradient>
-    <linearGradient id="kb-mid" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#8fe3ff"/>
-      <stop offset="1" stop-color="#1f8bff"/>
+    <linearGradient id="kb-hex-r" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#47c8ff"/>
+      <stop offset="1" stop-color="#2a7fe0"/>
     </linearGradient>
-    <linearGradient id="kb-right" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3aa7ff"/>
-      <stop offset="1" stop-color="#0a3fb8"/>
+    <linearGradient id="kb-hilt" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8d98a6"/>
+      <stop offset=".5" stop-color="#e3e8ee"/>
+      <stop offset="1" stop-color="#8d98a6"/>
     </linearGradient>
-    <linearGradient id="kb-core" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
-      <stop offset=".5" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-    <filter id="kb-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2"/></filter>
+    <filter id="kb-glow" x="-200%" y="-20%" width="500%" height="140%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
   </defs>
-  <circle cx="64" cy="68" r="60" fill="url(#kb-halo)"/>
-  <!-- crystal: pointed top, three visible faces, faceted base -->
-  <path d="M64 6 L40 34 L44 98 L64 122 Z" fill="url(#kb-left)"/>
-  <path d="M64 6 L56 36 L58 100 L64 122 L70 100 L72 36 Z" fill="url(#kb-mid)"/>
-  <path d="M64 6 L88 34 L84 98 L64 122 Z" fill="url(#kb-right)"/>
-  <path d="M64 6 L56 36 L58 100 L64 122 L44 98 L40 34 Z" fill="url(#kb-left)"/>
-  <path d="M64 6 L72 36 L70 100 L64 122 L84 98 L88 34 Z" fill="url(#kb-right)"/>
-  <!-- facet edges -->
-  <path d="M40 34 L56 36 L72 36 L88 34 M44 98 L58 100 L70 100 L84 98" fill="none" stroke="#e8fbff" stroke-width="1.2" stroke-opacity=".7" stroke-linejoin="round"/>
-  <!-- inner core -->
-  <rect x="61" y="26" width="6" height="84" rx="3" fill="#bdf2ff" filter="url(#kb-blur)" opacity=".9"/>
-  <rect x="62.6" y="30" width="2.8" height="76" rx="1.4" fill="url(#kb-core)"/>
-  <!-- outline -->
-  <path d="M64 6 L88 34 L84 98 L64 122 L44 98 L40 34 Z" fill="none" stroke="#c9f5ff" stroke-width="2" stroke-linejoin="round"/>
-  <!-- glint -->
-  <path d="M47 40 L51 40 L49 62 Z" fill="#ffffff" opacity=".75"/>
+  <!-- crystal hexagon, split into a K -->
+  <path d="M410 375 L557 288 L557 758 L410 670 Z" fill="url(#kb-hex)"/>
+  <path d="M673 278 L836 375 L673 472 Z" fill="url(#kb-hex-r)"/>
+  <path d="M650 543 L844 393 L844 670 L806 693 Z" fill="url(#kb-hex-r)"/>
+  <path d="M673 618 L780 710 L673 770 Z" fill="url(#kb-hex-r)"/>
+  <!-- lightsaber: glow, blade, hilt -->
+  <rect x="596" y="150" width="50" height="470" rx="25" fill="#3fd0ff" opacity=".85" filter="url(#kb-glow)"/>
+  <rect x="607" y="157" width="28" height="456" rx="14" fill="#eafcff"/>
+  <rect x="611" y="170" width="20" height="440" rx="10" fill="#ffffff"/>
+  <g fill="url(#kb-hilt)">
+    <rect x="594" y="625" width="53" height="9" rx="2"/>
+    <rect x="594" y="641" width="53" height="9" rx="2"/>
+    <rect x="598" y="658" width="45" height="86" rx="4"/>
+    <path d="M598 752 H643 L636 770 V792 H605 V770 Z"/>
+  </g>
+  <rect x="611" y="674" width="19" height="54" rx="2" fill="none" stroke="#3b4553" stroke-width="5"/>
 </svg>

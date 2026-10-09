@@ -1,10 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="292 140 670 670" width="32" height="32" preserveAspectRatio="xMidYMid meet">
   <defs>
-    <linearGradient id="a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9f7ff"/><stop offset="1" stop-color="#4bbcff"/></linearGradient>
-    <linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f9bff"/><stop offset="1" stop-color="#0a3fb8"/></linearGradient>
+    <linearGradient id="m-a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fe0ff"/><stop offset="1" stop-color="#1f5fc4"/></linearGradient>
   </defs>
-  <path d="M16 1 L7 8.5 L9 25 L16 31 Z" fill="url(#a)"/>
-  <path d="M16 1 L25 8.5 L23 25 L16 31 Z" fill="url(#b)"/>
-  <rect x="15" y="7" width="2" height="19" rx=".8" fill="#ffffff" opacity=".9"/>
-  <path d="M16 1 L25 8.5 L23 25 L16 31 L9 25 L7 8.5 Z" fill="none" stroke="#0a3fb8" stroke-opacity=".35" stroke-width=".8" stroke-linejoin="round"/>
+  <path d="M410 375 L557 288 L557 758 L410 670 Z" fill="url(#m-a)"/>
+  <path d="M673 278 L836 375 L673 472 Z" fill="url(#m-a)"/>
+  <path d="M650 543 L844 393 L844 670 L806 693 Z" fill="url(#m-a)"/>
+  <path d="M673 618 L780 710 L673 770 Z" fill="url(#m-a)"/>
+  <rect x="598" y="155" width="46" height="640" rx="23" fill="#7fe6ff"/>
+  <rect x="610" y="170" width="22" height="440" rx="11" fill="#ffffff"/>
 </svg>
