@@ -1,23 +1,43 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Kyber logo">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Kyber">
   <defs>
-    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0" stop-color="#5ad8ff" stop-opacity=".55"/>
-      <stop offset="1" stop-color="#5ad8ff" stop-opacity="0"/>
+    <radialGradient id="kb-halo" cx="50%" cy="54%" r="50%">
+      <stop offset="0" stop-color="#4fd2ff" stop-opacity=".55"/>
+      <stop offset=".55" stop-color="#2f8fff" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#2f8fff" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="l" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#e6fbff"/><stop offset="1" stop-color="#3fb6ff"/>
+    <linearGradient id="kb-left" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d9f7ff"/>
+      <stop offset="1" stop-color="#5cc8ff"/>
     </linearGradient>
-    <linearGradient id="r" x1="1" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#7fdcff"/><stop offset="1" stop-color="#0b5fd1"/>
+    <linearGradient id="kb-mid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fe3ff"/>
+      <stop offset="1" stop-color="#1f8bff"/>
     </linearGradient>
+    <linearGradient id="kb-right" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3aa7ff"/>
+      <stop offset="1" stop-color="#0a3fb8"/>
+    </linearGradient>
+    <linearGradient id="kb-core" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="kb-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2"/></filter>
   </defs>
-  <circle cx="64" cy="64" r="62" fill="url(#glow)"/>
-  <!-- elongated hexagonal crystal: tip, shoulders, base -->
-  <polygon points="64,8 84,34 84,94 64,120 64,8" fill="url(#r)"/>
-  <polygon points="64,8 44,34 44,94 64,120 64,8" fill="url(#l)"/>
-  <polygon points="64,8 74,34 74,94 64,120" fill="#ffffff" opacity=".35"/>
-  <polyline points="44,34 64,44 84,34" fill="none" stroke="#e6fbff" stroke-width="1.5" opacity=".8"/>
-  <polyline points="44,94 64,104 84,94" fill="none" stroke="#bfefff" stroke-width="1.5" opacity=".6"/>
-  <line x1="64" y1="44" x2="64" y2="104" stroke="#e6fbff" stroke-width="1" opacity=".5"/>
-  <polygon points="64,8 84,34 84,94 64,120 44,94 44,34" fill="none" stroke="#bff3ff" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="64" cy="68" r="60" fill="url(#kb-halo)"/>
+  <!-- crystal: pointed top, three visible faces, faceted base -->
+  <path d="M64 6 L40 34 L44 98 L64 122 Z" fill="url(#kb-left)"/>
+  <path d="M64 6 L56 36 L58 100 L64 122 L70 100 L72 36 Z" fill="url(#kb-mid)"/>
+  <path d="M64 6 L88 34 L84 98 L64 122 Z" fill="url(#kb-right)"/>
+  <path d="M64 6 L56 36 L58 100 L64 122 L44 98 L40 34 Z" fill="url(#kb-left)"/>
+  <path d="M64 6 L72 36 L70 100 L64 122 L84 98 L88 34 Z" fill="url(#kb-right)"/>
+  <!-- facet edges -->
+  <path d="M40 34 L56 36 L72 36 L88 34 M44 98 L58 100 L70 100 L84 98" fill="none" stroke="#e8fbff" stroke-width="1.2" stroke-opacity=".7" stroke-linejoin="round"/>
+  <!-- inner core -->
+  <rect x="61" y="26" width="6" height="84" rx="3" fill="#bdf2ff" filter="url(#kb-blur)" opacity=".9"/>
+  <rect x="62.6" y="30" width="2.8" height="76" rx="1.4" fill="url(#kb-core)"/>
+  <!-- outline -->
+  <path d="M64 6 L88 34 L84 98 L64 122 L44 98 L40 34 Z" fill="none" stroke="#c9f5ff" stroke-width="2" stroke-linejoin="round"/>
+  <!-- glint -->
+  <path d="M47 40 L51 40 L49 62 Z" fill="#ffffff" opacity=".75"/>
 </svg>
