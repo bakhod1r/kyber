@@ -10,17 +10,44 @@ import (
 )
 
 type Repository struct {
-	mu    sync.Mutex
-	byKey map[string]domain.Issue
+	mu     sync.Mutex
+	byKey  map[string]domain.Issue
+	outbox []domain.Event
 }
 
 func NewRepository() *Repository { return &Repository{byKey: map[string]domain.Issue{}} }
 
-func (r *Repository) Save(_ context.Context, is *domain.Issue) error {
+func (r *Repository) Save(_ context.Context, is *domain.Issue, events []domain.Event) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	stored, exists := r.byKey[is.Key().String()]
+	switch {
+	case is.Version() == 0 && exists,
+		is.Version() > 0 && (!exists || stored.Version() != is.Version()):
+		return domain.ErrConcurrentModification
+	}
+	is.MarkPersisted()
 	r.byKey[is.Key().String()] = *is
+	r.outbox = append(r.outbox, events...)
 	return nil
+}
+
+// OutboxNames returns the names of all events written so far.
+func (r *Repository) OutboxNames() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	names := make([]string, len(r.outbox))
+	for i, e := range r.outbox {
+		names[i] = e.EventName()
+	}
+	return names
+}
+
+// Outbox returns all events written so far.
+func (r *Repository) Outbox() []domain.Event {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]domain.Event(nil), r.outbox...)
 }
 
 func (r *Repository) ByKey(_ context.Context, key domain.IssueKey) (*domain.Issue, error) {

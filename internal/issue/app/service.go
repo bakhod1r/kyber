@@ -17,14 +17,13 @@ var (
 type Service struct {
 	issues   domain.Repository
 	keys     domain.KeyAllocator
-	events   domain.EventPublisher
 	workflow *domain.Workflow
 	newID    func() string
 }
 
-func NewService(issues domain.Repository, keys domain.KeyAllocator, events domain.EventPublisher,
+func NewService(issues domain.Repository, keys domain.KeyAllocator,
 	wf *domain.Workflow, newID func() string) *Service {
-	return &Service{issues: issues, keys: keys, events: events, workflow: wf, newID: newID}
+	return &Service{issues: issues, keys: keys, workflow: wf, newID: newID}
 }
 
 type CreateIssue struct {
@@ -82,10 +81,6 @@ func (s *Service) List(ctx context.Context, project, status string) ([]*domain.I
 }
 
 func (s *Service) save(ctx context.Context, is *domain.Issue) error {
-	events := is.PullEvents()
-	if err := s.issues.Save(ctx, is); err != nil {
-		return err
-	}
-	// TODO(outbox): persist events in the same transaction as the aggregate (ADR-0008).
-	return s.events.Publish(ctx, events...)
+	// The repository writes the aggregate and its events atomically (transactional outbox).
+	return s.issues.Save(ctx, is, is.PullEvents())
 }

@@ -2,50 +2,107 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/bakhod1r/kyber/internal/identity/adapter/argon2"
+	identityhttp "github.com/bakhod1r/kyber/internal/identity/adapter/httpapi"
+	identitymemory "github.com/bakhod1r/kyber/internal/identity/adapter/memory"
+	identitypg "github.com/bakhod1r/kyber/internal/identity/adapter/postgres"
+	identityapp "github.com/bakhod1r/kyber/internal/identity/app"
+	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
 	issuehttp "github.com/bakhod1r/kyber/internal/issue/adapter/httpapi"
 	issuememory "github.com/bakhod1r/kyber/internal/issue/adapter/memory"
+	issuepg "github.com/bakhod1r/kyber/internal/issue/adapter/postgres"
 	"github.com/bakhod1r/kyber/internal/issue/adapter/projectacl"
 	issueapp "github.com/bakhod1r/kyber/internal/issue/app"
 	issuedomain "github.com/bakhod1r/kyber/internal/issue/domain"
-	"github.com/bakhod1r/kyber/internal/platform/events"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 	"github.com/bakhod1r/kyber/internal/platform/id"
+	"github.com/bakhod1r/kyber/internal/platform/metrics"
 	projecthttp "github.com/bakhod1r/kyber/internal/project/adapter/httpapi"
 	projectmemory "github.com/bakhod1r/kyber/internal/project/adapter/memory"
+	projectpg "github.com/bakhod1r/kyber/internal/project/adapter/postgres"
 	projectapp "github.com/bakhod1r/kyber/internal/project/app"
+	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
 )
 
-// NewInMemory builds the API backed by in-memory adapters (Sprint 01; Postgres follows).
+// deps are the adapters a server is assembled from.
+type deps struct {
+	projects     projectdomain.Repository
+	issues       issuedomain.Repository
+	users        identitydomain.Users
+	sessions     identitydomain.Sessions
+	ready        func(context.Context) error
+	cookieSecure bool
+}
+
+// NewInMemory builds the API on in-memory adapters (dev mode and tests).
 func NewInMemory(log *slog.Logger) http.Handler {
-	projects := projectapp.NewService(projectmemory.NewRepository(), id.New)
-	issues := issueapp.NewService(
-		issuememory.NewRepository(),
-		projectacl.New(projects),
-		events.LogPublisher[issuedomain.Event]{Log: log},
-		issuedomain.DefaultWorkflow(),
-		id.New,
-	)
+	ids := identitymemory.NewRepository()
+	return build(log, deps{
+		projects: projectmemory.NewRepository(), issues: issuememory.NewRepository(),
+		users: ids, sessions: ids, ready: func(context.Context) error { return nil },
+	})
+}
+
+// NewPostgres builds the API on PostgreSQL; the pool must already be migrated.
+func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool) http.Handler {
+	ids := identitypg.NewRepository(pool)
+	return build(log, deps{
+		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool),
+		users: ids, sessions: ids, ready: pool.Ping, cookieSecure: cookieSecure,
+	})
+}
+
+type systemClock struct{}
+
+func (systemClock) Now() time.Time { return time.Now() }
+
+func build(log *slog.Logger, d deps) http.Handler {
+	projects := projectapp.NewService(d.projects, id.New)
+	issues := issueapp.NewService(d.issues, projectacl.New(projects), issuedomain.DefaultWorkflow(), id.New)
+	identity := identityapp.NewService(d.users, d.sessions, argon2.New(), systemClock{}, id.New)
+	auth := identityhttp.New(identity, log, d.cookieSecure)
+	m := metrics.NewHTTP()
+
+	api := http.NewServeMux()
+	auth.RegisterProtected(api)
+	projecthttp.New(projects, log).Register(api)
+	issuehttp.New(issues, log).Register(api)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
-	projecthttp.New(projects, log).Register(mux)
-	issuehttp.New(issues, log).Register(mux)
-	return logging(log, recoverer(log, mux))
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := d.ready(ctx); err != nil {
+			log.WarnContext(r.Context(), "not ready", "err", err)
+			httpx.JSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+	mux.Handle("GET /metrics", m)
+	auth.RegisterPublic(mux)
+	mux.Handle("/api/v1/", auth.RequireAuth(api))
+	return observe(log, m, recoverer(log, mux))
 }
 
-func logging(log *slog.Logger, next http.Handler) http.Handler {
+func observe(log *slog.Logger, m *metrics.HTTP, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		log.InfoContext(r.Context(), "http", "method", r.Method, "path", r.URL.Path,
-			"status", rec.status, "dur", time.Since(start))
+		d := time.Since(start)
+		m.Observe(r.Method, rec.status, d)
+		log.InfoContext(r.Context(), "http", "method", r.Method, "path", r.URL.Path, "status", rec.status, "dur", d)
 	})
 }
 

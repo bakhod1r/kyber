@@ -47,3 +47,6 @@ func ParseIssueKey(s string) (IssueKey, error) {
 	}
 	return NewIssueKey(s[:i], n)
 }
+
+// MarshalText renders the key as "KYB-12" (used in event payloads and JSON).
+func (k IssueKey) MarshalText() ([]byte, error) { return []byte(k.String()), nil }

@@ -129,3 +129,17 @@ func TestIssueAccessors(t *testing.T) {
 		t.Fatalf("unexpected issue state: %+v", is)
 	}
 }
+
+func TestRehydrateAndVersion(t *testing.T) {
+	key, _ := domain.NewIssueKey("KYB", 7)
+	is := domain.Rehydrate("i-7", key, "Restored", domain.TypeBug, domain.StatusDone, 3)
+	if is.Version() != 3 || is.Status() != domain.StatusDone || is.Title() != "Restored" {
+		t.Fatalf("unexpected %+v", is)
+	}
+	if len(is.PullEvents()) != 0 {
+		t.Fatal("rehydration must not emit events")
+	}
+	if newIssue(t).Version() != 0 {
+		t.Fatal("new issue must have version 0")
+	}
+}

@@ -9,6 +9,8 @@ var (
 	ErrEmptyTitle       = errors.New("issue title must not be empty")
 	ErrInvalidIssueType = errors.New("issue type must be one of epic, story, task, bug, subtask")
 	ErrIssueNotFound    = errors.New("issue not found")
+	// ErrConcurrentModification means the issue was changed by someone else since it was loaded.
+	ErrConcurrentModification = errors.New("issue was modified concurrently")
 )
 
 type IssueID string
@@ -43,12 +45,13 @@ func ParseIssueType(s string) (IssueType, error) {
 
 // Issue is the aggregate root of the Issue Tracking context.
 type Issue struct {
-	id     IssueID
-	key    IssueKey
-	title  string
-	typ    IssueType
-	status StatusID
-	events []Event
+	id      IssueID
+	key     IssueKey
+	title   string
+	typ     IssueType
+	status  StatusID
+	version int // 0 = never persisted
+	events  []Event
 }
 
 func NewIssue(id IssueID, key IssueKey, title string, typ IssueType, wf *Workflow) (*Issue, error) {
@@ -57,9 +60,20 @@ func NewIssue(id IssueID, key IssueKey, title string, typ IssueType, wf *Workflo
 		return nil, err
 	}
 	is := &Issue{id: id, key: key, title: title, typ: typ, status: wf.Initial()}
-	is.record(IssueCreated{ID: id, Key: key})
+	is.record(IssueCreated{ID: id, Key: key, Type: typ, Title: title})
 	return is, nil
 }
+
+// Rehydrate rebuilds a persisted issue without emitting events (repository use only).
+func Rehydrate(id IssueID, key IssueKey, title string, typ IssueType, status StatusID, version int) *Issue {
+	return &Issue{id: id, key: key, title: title, typ: typ, status: status, version: version}
+}
+
+// Version is the optimistic-locking version; 0 means not yet persisted.
+func (i *Issue) Version() int { return i.version }
+
+// MarkPersisted is called by repositories after a successful save.
+func (i *Issue) MarkPersisted() { i.version++ }
 
 func (i *Issue) ID() IssueID      { return i.id }
 func (i *Issue) Key() IssueKey    { return i.key }
@@ -74,7 +88,7 @@ func (i *Issue) Transition(to StatusID, wf *Workflow) error {
 	}
 	from := i.status
 	i.status = to
-	i.record(IssueTransitioned{ID: i.id, From: from, To: to})
+	i.record(IssueTransitioned{ID: i.id, Key: i.key, From: from, To: to})
 	return nil
 }
 

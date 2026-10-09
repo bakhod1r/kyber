@@ -37,6 +37,14 @@ func NewProject(id ProjectID, key, name string) (*Project, error) {
 	return &Project{id: id, key: key, name: name}, nil
 }
 
+// Rehydrate rebuilds a persisted project (repository use only).
+func Rehydrate(id ProjectID, key, name string, issueSeq int) *Project {
+	return &Project{id: id, key: key, name: name, issueSeq: issueSeq}
+}
+
+// IssueSeq is the last allocated issue number.
+func (p *Project) IssueSeq() int { return p.issueSeq }
+
 func (p *Project) ID() ProjectID { return p.id }
 func (p *Project) Key() string   { return p.key }
 func (p *Project) Name() string  { return p.name }

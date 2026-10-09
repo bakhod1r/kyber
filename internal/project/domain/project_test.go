@@ -51,3 +51,10 @@ func trim(s string) string {
 	}
 	return s
 }
+
+func TestRehydrate(t *testing.T) {
+	p := domain.Rehydrate("p-1", "KYB", "Kyber", 41)
+	if p.IssueSeq() != 41 || p.NextIssueNumber() != 42 {
+		t.Fatalf("seq = %d", p.IssueSeq())
+	}
+}

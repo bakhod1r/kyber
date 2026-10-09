@@ -46,7 +46,7 @@ func statusFor(err error) (int, bool) {
 		return http.StatusUnprocessableEntity, true
 	case errors.Is(err, app.ErrProjectNotFound), errors.Is(err, domain.ErrIssueNotFound):
 		return http.StatusNotFound, true
-	case errors.Is(err, domain.ErrTransitionNotAllowed):
+	case errors.Is(err, domain.ErrTransitionNotAllowed), errors.Is(err, domain.ErrConcurrentModification):
 		return http.StatusConflict, true
 	}
 	return 0, false

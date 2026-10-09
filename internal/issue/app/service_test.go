@@ -29,19 +29,22 @@ func (f *fakeKeys) Next(_ context.Context, project string) (domain.IssueKey, err
 	return domain.NewIssueKey(project, seq+1)
 }
 
-type recorder struct{ events []domain.Event }
-
-func (r *recorder) Publish(_ context.Context, ev ...domain.Event) error {
-	r.events = append(r.events, ev...)
-	return nil
+// recorder exposes the repository outbox as the events published so far.
+type recorder struct {
+	repo *memory.Repository
+	skip int
 }
 
+func (r *recorder) all() []domain.Event { return r.repo.Outbox()[r.skip:] }
+func (r *recorder) reset()              { r.skip = len(r.repo.Outbox()) }
+
 func setup() (*app.Service, *recorder) {
-	rec := &recorder{}
+	repo := memory.NewRepository()
+	rec := &recorder{repo: repo}
 	n := 0
 	ids := func() string { n++; return fmt.Sprintf("i-%d", n) }
 	keys := &fakeKeys{seqs: map[string]int{"KYB": 0, "OPS": 0}}
-	return app.NewService(memory.NewRepository(), keys, rec, domain.DefaultWorkflow(), ids), rec
+	return app.NewService(repo, keys, domain.DefaultWorkflow(), ids), rec
 }
 
 func TestCreateIssue(t *testing.T) {
@@ -61,8 +64,8 @@ func TestCreateIssue(t *testing.T) {
 	if is1.Status() != domain.StatusTodo {
 		t.Fatalf("status = %s", is1.Status())
 	}
-	if len(rec.events) != 3 || rec.events[0].EventName() != "issue.created" {
-		t.Fatalf("events = %+v", rec.events)
+	if len(rec.all()) != 3 || rec.all()[0].EventName() != "issue.created" {
+		t.Fatalf("events = %+v", rec.all())
 	}
 }
 
@@ -82,7 +85,7 @@ func TestCreateIssueValidation(t *testing.T) {
 			t.Errorf("Create(%+v) err = %v, want %v", c.cmd, err, c.want)
 		}
 	}
-	if len(rec.events) != 0 {
+	if len(rec.all()) != 0 {
 		t.Fatal("failed commands must not publish events")
 	}
 	// Validation failures must not burn issue numbers.
@@ -113,7 +116,7 @@ func TestTransitionIssue(t *testing.T) {
 	ctx := context.Background()
 	s, rec := setup()
 	_, _ = s.Create(ctx, app.CreateIssue{Project: "KYB", Title: "Login", Type: "task"})
-	rec.events = nil
+	rec.reset()
 
 	if _, err := s.Transition(ctx, "KYB-1", "done"); !errors.Is(err, domain.ErrTransitionNotAllowed) {
 		t.Fatalf("err = %v", err)
@@ -129,9 +132,9 @@ func TestTransitionIssue(t *testing.T) {
 	if stored, _ := s.Get(ctx, "KYB-1"); stored.Status() != domain.StatusInProgress {
 		t.Fatal("transition must persist")
 	}
-	ev, ok := rec.events[0].(domain.IssueTransitioned)
-	if len(rec.events) != 1 || !ok || ev.From != domain.StatusTodo || ev.To != domain.StatusInProgress {
-		t.Fatalf("events = %+v", rec.events)
+	ev, ok := rec.all()[0].(domain.IssueTransitioned)
+	if len(rec.all()) != 1 || !ok || ev.From != domain.StatusTodo || ev.To != domain.StatusInProgress {
+		t.Fatalf("events = %+v", rec.all())
 	}
 	if _, err := s.Transition(ctx, "KYB-9", "done"); !errors.Is(err, domain.ErrIssueNotFound) {
 		t.Fatalf("err = %v", err)

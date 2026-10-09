@@ -7,26 +7,64 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 
+	"github.com/bakhod1r/kyber/internal/platform/db/dbtest"
 	"github.com/bakhod1r/kyber/internal/server"
 )
 
 // Acceptance tests for docs/backlog/sprint-01.md. Each subtest names its story and AC.
 
 type client struct {
-	t   *testing.T
-	srv *httptest.Server
+	t     *testing.T
+	srv   *httptest.Server
+	token string
 }
 
-func newClient(t *testing.T) *client {
-	t.Helper()
-	srv := httptest.NewServer(server.NewInMemory(slog.New(slog.NewTextHandler(io.Discard, nil))))
-	t.Cleanup(srv.Close)
-	return &client{t: t, srv: srv}
+// backends returns the server factories under test: memory always, Postgres when configured.
+func backends(t *testing.T) map[string]func(t *testing.T) http.Handler {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	b := map[string]func(t *testing.T) http.Handler{
+		"memory": func(*testing.T) http.Handler { return server.NewInMemory(log) },
+	}
+	if os.Getenv("KYBER_TEST_DATABASE_URL") != "" {
+		b["postgres"] = func(t *testing.T) http.Handler { return server.NewPostgres(log, dbtest.New(t), false) }
+	}
+	return b
+}
+
+// forEachBackend runs fn with an anonymous client per backend.
+func forEachBackend(t *testing.T, fn func(t *testing.T, c *client)) {
+	for name, mk := range backends(t) {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(mk(t))
+			t.Cleanup(srv.Close)
+			fn(t, &client{t: t, srv: srv})
+		})
+	}
+}
+
+// signedIn registers and logs in a user, returning a client sending a Bearer token.
+func (c *client) signedIn(email string) *client {
+	c.t.Helper()
+	c.do("POST", "/api/v1/auth/signup", map[string]string{"email": email, "name": "Tester", "password": "long enough pw"})
+	code, body := c.do("POST", "/api/v1/auth/login", map[string]string{"email": email, "password": "long enough pw"})
+	expect(c.t, code, 200, body)
+	return &client{t: c.t, srv: c.srv, token: body["token"].(string)}
 }
 
 func (c *client) do(method, path string, body any) (int, map[string]any) {
+	c.t.Helper()
+	res := c.raw(method, path, body, nil)
+	defer res.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	return res.StatusCode, out
+}
+
+func (c *client) raw(method, path string, body any, cookie *http.Cookie) *http.Response {
 	c.t.Helper()
 	var r io.Reader
 	if body != nil {
@@ -35,14 +73,17 @@ func (c *client) do(method, path string, body any) (int, map[string]any) {
 	}
 	req, _ := http.NewRequest(method, c.srv.URL+path, r)
 	req.Header.Set("Content-Type", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	if cookie != nil {
+		req.AddCookie(cookie)
+	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		c.t.Fatal(err)
 	}
-	defer res.Body.Close()
-	var out map[string]any
-	_ = json.NewDecoder(res.Body).Decode(&out)
-	return res.StatusCode, out
+	return res
 }
 
 func expect(t *testing.T, got, want int, body map[string]any) {
@@ -52,14 +93,101 @@ func expect(t *testing.T, got, want int, body map[string]any) {
 	}
 }
 
-func TestHealthz(t *testing.T) {
-	c := newClient(t)
-	code, body := c.do("GET", "/healthz", nil)
-	expect(t, code, 200, body)
+func TestOps(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, c *client) {
+		code, body := c.do("GET", "/healthz", nil)
+		expect(t, code, 200, body)
+		code, body = c.do("GET", "/readyz", nil)
+		expect(t, code, 200, body)
+		res := c.raw("GET", "/metrics", nil, nil)
+		b, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != 200 || !strings.Contains(string(b), `kyber_http_requests_total{method="GET",status="200"}`) {
+			t.Fatalf("metrics = %d %s", res.StatusCode, b)
+		}
+	})
+}
+
+func TestS9Auth(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, c *client) {
+		t.Run("AC1 signup", func(t *testing.T) {
+			code, body := c.do("POST", "/api/v1/auth/signup", map[string]string{"email": " Ali@X.uz", "name": "Ali", "password": "long enough pw"})
+			expect(t, code, 201, body)
+			if body["email"] != "ali@x.uz" || body["password_hash"] != nil {
+				t.Fatalf("body = %v", body)
+			}
+			code, body = c.do("POST", "/api/v1/auth/signup", map[string]string{"email": "ali@x.uz", "name": "Ali", "password": "long enough pw"})
+			expect(t, code, 409, body)
+			code, body = c.do("POST", "/api/v1/auth/signup", map[string]string{"email": "b@x.uz", "name": "B", "password": "short"})
+			expect(t, code, 422, body)
+			code, body = c.do("POST", "/api/v1/auth/signup", map[string]string{"email": "nope", "name": "B", "password": "long enough pw"})
+			expect(t, code, 422, body)
+		})
+		t.Run("AC2 login sets secure cookie and returns token", func(t *testing.T) {
+			res := c.raw("POST", "/api/v1/auth/login", map[string]string{"email": "ali@x.uz", "password": "long enough pw"}, nil)
+			res.Body.Close()
+			expect(t, res.StatusCode, 200, nil)
+			var ck *http.Cookie
+			for _, x := range res.Cookies() {
+				if x.Name == "kyber_session" {
+					ck = x
+				}
+			}
+			if ck == nil || !ck.HttpOnly || ck.SameSite != http.SameSiteLaxMode || ck.Value == "" {
+				t.Fatalf("cookie = %+v", ck)
+			}
+			t.Run("AC4 me via cookie, logout invalidates", func(t *testing.T) {
+				res := c.raw("GET", "/api/v1/me", nil, ck)
+				var me map[string]any
+				_ = json.NewDecoder(res.Body).Decode(&me)
+				res.Body.Close()
+				expect(t, res.StatusCode, 200, me)
+				if me["email"] != "ali@x.uz" {
+					t.Fatalf("me = %v", me)
+				}
+				res = c.raw("POST", "/api/v1/auth/logout", nil, ck)
+				res.Body.Close()
+				expect(t, res.StatusCode, 204, nil)
+				res = c.raw("GET", "/api/v1/me", nil, ck)
+				res.Body.Close()
+				expect(t, res.StatusCode, 401, nil)
+			})
+		})
+		t.Run("AC3 no user enumeration", func(t *testing.T) {
+			code1, b1 := c.do("POST", "/api/v1/auth/login", map[string]string{"email": "ali@x.uz", "password": "wrong password"})
+			code2, b2 := c.do("POST", "/api/v1/auth/login", map[string]string{"email": "ghost@x.uz", "password": "wrong password"})
+			expect(t, code1, 401, b1)
+			expect(t, code2, 401, b2)
+			if b1["error"] != b2["error"] {
+				t.Fatalf("messages differ: %v vs %v", b1, b2)
+			}
+		})
+	})
+}
+
+func TestS10APIRequiresAuth(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, c *client) {
+		for _, r := range [][2]string{
+			{"GET", "/api/v1/projects"}, {"POST", "/api/v1/projects"}, {"GET", "/api/v1/me"},
+			{"GET", "/api/v1/issues/KYB-1"}, {"POST", "/api/v1/auth/logout"},
+		} {
+			code, body := c.do(r[0], r[1], map[string]string{})
+			expect(t, code, 401, body)
+		}
+		bad := &client{t: t, srv: c.srv, token: "forged"}
+		code, body := bad.do("GET", "/api/v1/projects", nil)
+		expect(t, code, 401, body)
+		code, body = c.signedIn("bearer@x.uz").do("GET", "/api/v1/projects", nil)
+		expect(t, code, 200, body)
+	})
 }
 
 func TestS1CreateProject(t *testing.T) {
-	c := newClient(t)
+	forEachBackend(t, testS1)
+}
+
+func testS1(t *testing.T, anon *client) {
+	c := anon.signedIn("s1@x.uz")
 
 	t.Run("AC1 created", func(t *testing.T) {
 		code, body := c.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
@@ -96,6 +224,7 @@ func TestS1CreateProject(t *testing.T) {
 	})
 	t.Run("malformed json", func(t *testing.T) {
 		req, _ := http.NewRequest("POST", c.srv.URL+"/api/v1/projects", bytes.NewBufferString("{"))
+		req.Header.Set("Authorization", "Bearer "+c.token)
 		res, _ := http.DefaultClient.Do(req)
 		res.Body.Close()
 		expect(t, res.StatusCode, 400, nil)
@@ -103,7 +232,11 @@ func TestS1CreateProject(t *testing.T) {
 }
 
 func TestS2toS5IssueLifecycle(t *testing.T) {
-	c := newClient(t)
+	forEachBackend(t, testIssues)
+}
+
+func testIssues(t *testing.T, anon *client) {
+	c := anon.signedIn("issues@x.uz")
 	c.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
 
 	t.Run("S2 AC1+AC2 create with sequential keys and todo status", func(t *testing.T) {
