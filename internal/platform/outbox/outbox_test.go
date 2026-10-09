@@ -24,6 +24,9 @@ func TestRelayDispatchesInOrderOnce(t *testing.T) {
 	var got []string
 	relay := outbox.NewRelay(store, quiet())
 	relay.Handle("x.created", func(_ context.Context, m outbox.Message) error {
+		if m.At.IsZero() {
+			t.Error("message without time")
+		}
 		got = append(got, m.Name+":"+string(m.Payload))
 		return nil
 	})

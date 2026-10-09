@@ -22,6 +22,7 @@ type Message struct {
 	ID      int64
 	Name    string
 	Payload []byte
+	At      time.Time // when the event was recorded
 }
 
 // Store claims unpublished messages in order and marks those fn accepted as published.
@@ -108,7 +109,7 @@ func (s *MemoryStore) Process(_ context.Context, limit int, fn func(Message) err
 				return 0, err
 			}
 			s.nextID++
-			s.pending = append(s.pending, Message{ID: s.nextID, Name: e.EventName(), Payload: payload})
+			s.pending = append(s.pending, Message{ID: s.nextID, Name: e.EventName(), Payload: payload, At: time.Now()})
 		}
 		s.cursors[i] = len(events)
 	}

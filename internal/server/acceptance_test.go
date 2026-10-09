@@ -3,6 +3,7 @@ package server_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -861,4 +862,118 @@ func TestS25EstimatesAndSprintDates(t *testing.T) {
 			t.Fatalf("default length = %v", d)
 		}
 	})
+}
+
+func TestS27Reports(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		c := anon.signedIn("lead@x.uz")
+		outsider := anon.signedIn("out@x.uz")
+		_, me := c.do("GET", "/api/v1/me", nil)
+		c.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		points := map[string]float64{"KYB-1": 3, "KYB-2": 5, "KYB-3": 2, "KYB-4": 8}
+		for i, typ := range []string{"bug", "story", "task", "story"} {
+			_, is := c.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": fmt.Sprint("t", i), "type": typ})
+			key := is["key"].(string)
+			patch := map[string]any{"version": is["version"], "estimate": points[key]}
+			if key == "KYB-1" || key == "KYB-2" {
+				patch["assignee_id"] = me["id"]
+			}
+			c.do("PATCH", "/api/v1/issues/"+key, patch)
+		}
+		_, sp := c.do("POST", "/api/v1/projects/KYB/sprints", map[string]string{"name": "Sprint 1"})
+		sid := sp["id"].(string)
+		plan := func(key string) {
+			_, is := c.do("GET", "/api/v1/issues/"+key, nil)
+			c.do("PATCH", "/api/v1/issues/"+key, map[string]any{"version": is["version"], "sprint_id": sid})
+		}
+		for _, k := range []string{"KYB-1", "KYB-2", "KYB-3"} {
+			plan(k)
+		}
+		// Let the relay ingest the planning before the sprint starts (event times matter).
+		eventuallyJSON(t, c, "/api/v1/projects/KYB/reports/created-vs-resolved?days=1", func(b map[string]any) bool {
+			return b["days"].([]any)[0].(map[string]any)["created"] == float64(4)
+		})
+		time.Sleep(30 * time.Millisecond)
+		c.do("POST", "/api/v1/sprints/"+sid+"/start", nil)
+		time.Sleep(30 * time.Millisecond)
+		c.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "in_progress"})
+		c.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "done"})
+		plan("KYB-4") // scope added mid-sprint
+
+		// AC3 burndown: 10 committed, KYB-1 (3) done, KYB-4 (8) added -> 15 remaining.
+		bd := eventuallyJSON(t, c, "/api/v1/sprints/"+sid+"/burndown", func(b map[string]any) bool {
+			s := b["samples"].([]any)
+			return len(s) > 0 && s[len(s)-1].(map[string]any)["remaining_points"] == float64(15)
+		})
+		if bd["start_points"] != float64(10) || bd["start_issues"] != float64(3) || bd["added_points"] != float64(8) || bd["added_issues"] != float64(1) {
+			t.Fatalf("burndown = %v", bd)
+		}
+		if ideal := bd["ideal"].([]any); len(ideal) != 2 || ideal[1].(map[string]any)["remaining_points"] != float64(0) {
+			t.Fatalf("ideal = %v", ideal)
+		}
+
+		// AC1 summary.
+		code, sum := c.do("GET", "/api/v1/projects/KYB/reports/summary", nil)
+		expect(t, code, 200, sum)
+		if sum["total"] != float64(4) || sum["done"] != float64(1) || sum["open"] != float64(3) || sum["unassigned"] != float64(2) ||
+			sum["total_points"] != float64(18) || sum["open_points"] != float64(15) {
+			t.Fatalf("summary totals = %v", sum)
+		}
+		byType := map[string]float64{}
+		for _, x := range sum["by_type"].([]any) {
+			byType[x.(map[string]any)["key"].(string)] = x.(map[string]any)["count"].(float64)
+		}
+		if byType["story"] != 2 || byType["bug"] != 1 || byType["task"] != 1 {
+			t.Fatalf("by_type = %v", sum["by_type"])
+		}
+		wl := sum["workload"].([]any)
+		if len(wl) != 2 || wl[0].(map[string]any)["name"] != "Tester" || wl[0].(map[string]any)["points"] != float64(5) || wl[1].(map[string]any)["user_id"] != nil {
+			t.Fatalf("workload = %v", wl)
+		}
+		if ct := sum["cycle_time"].(map[string]any); ct["count"] != float64(1) {
+			t.Fatalf("cycle_time = %v", ct)
+		}
+
+		// AC2 created vs resolved.
+		code, cvr := c.do("GET", "/api/v1/projects/KYB/reports/created-vs-resolved?days=7", nil)
+		expect(t, code, 200, cvr)
+		days := cvr["days"].([]any)
+		today := days[len(days)-1].(map[string]any)
+		if len(days) != 7 || today["created"] != float64(4) || today["resolved"] != float64(1) || today["cum_created"] != float64(4) {
+			t.Fatalf("created vs resolved = %v", days)
+		}
+		for _, bad := range []string{"0", "366", "x"} {
+			code, b := c.do("GET", "/api/v1/projects/KYB/reports/created-vs-resolved?days="+bad, nil)
+			expect(t, code, 422, b)
+		}
+
+		// AC4 velocity after completion: committed 10, completed 3.
+		c.do("POST", "/api/v1/sprints/"+sid+"/complete", nil)
+		vel := eventuallyJSON(t, c, "/api/v1/projects/KYB/reports/velocity", func(b map[string]any) bool { return len(b["sprints"].([]any)) == 1 })
+		v := vel["sprints"].([]any)[0].(map[string]any)
+		if v["name"] != "Sprint 1" || v["committed_points"] != float64(10) || v["completed_points"] != float64(3) || v["completed_issues"] != float64(1) {
+			t.Fatalf("velocity = %v", v)
+		}
+
+		// AC5 outsiders.
+		for _, p := range []string{"/api/v1/projects/KYB/reports/summary", "/api/v1/projects/KYB/reports/created-vs-resolved", "/api/v1/projects/KYB/reports/velocity", "/api/v1/sprints/" + sid + "/burndown"} {
+			code, b := outsider.do("GET", p, nil)
+			expect(t, code, 404, b)
+		}
+	})
+}
+
+func eventuallyJSON(t *testing.T, c *client, path string, ok func(map[string]any) bool) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		code, body := c.do("GET", path, nil)
+		if code == 200 && ok(body) {
+			return body
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("GET %s never matched: %d %v", path, code, body)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 }

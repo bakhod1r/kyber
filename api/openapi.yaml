@@ -332,6 +332,146 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/reports/summary:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: reportSummary
+      description: Current totals and distributions; workload counts open issues; cycle time covers issues done in the last 30 days.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [total, open, done, unassigned, total_points, open_points, by_status, by_type, by_priority, workload, cycle_time]
+                properties:
+                  total: { type: integer }
+                  open: { type: integer }
+                  done: { type: integer }
+                  unassigned: { type: integer }
+                  total_points: { type: number }
+                  open_points: { type: number }
+                  by_status: { type: array, items: { $ref: "#/components/schemas/Bucket" } }
+                  by_type: { type: array, items: { $ref: "#/components/schemas/Bucket" } }
+                  by_priority: { type: array, items: { $ref: "#/components/schemas/Bucket" } }
+                  workload:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [user_id, name, count, points]
+                      properties:
+                        user_id: { type: [string, "null"], description: null = unassigned }
+                        name: { type: string }
+                        count: { type: integer }
+                        points: { type: number }
+                  cycle_time:
+                    type: object
+                    additionalProperties: false
+                    required: [count, average_hours, median_hours]
+                    properties:
+                      count: { type: integer }
+                      average_hours: { type: number }
+                      median_hours: { type: number }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/reports/created-vs-resolved:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: reportCreatedVsResolved
+      parameters:
+        - { name: days, in: query, schema: { type: string }, description: "1-365, default 30 (UTC days ending today)." }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [days]
+                properties:
+                  days:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [date, created, resolved, cum_created, cum_resolved]
+                      properties:
+                        date: { type: string, format: date }
+                        created: { type: integer }
+                        resolved: { type: integer }
+                        cum_created: { type: integer }
+                        cum_resolved: { type: integer }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/reports/velocity:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: reportVelocity
+      description: The last seven closed sprints, oldest first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [sprints]
+                properties:
+                  sprints:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, name, committed_points, completed_points, completed_issues]
+                      properties:
+                        id: { type: string }
+                        name: { type: string }
+                        committed_points: { type: number }
+                        completed_points: { type: number }
+                        completed_issues: { type: integer }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/sprints/{id}/burndown:
+    parameters: [{ $ref: "#/components/parameters/SprintID" }]
+    get:
+      operationId: sprintBurndown
+      description: Remaining work from the sprint start until now (or completion), as a step line, plus the ideal line to the end date.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [sprint, start_points, start_issues, added_points, added_issues, removed_issues, samples, ideal]
+                properties:
+                  sprint:
+                    type: object
+                    additionalProperties: false
+                    required: [id, name, state, started_at, ends_at, completed_at]
+                    properties:
+                      id: { type: string }
+                      name: { type: string }
+                      state: { type: string, enum: [planned, active, closed] }
+                      started_at: { type: [string, "null"], format: date-time }
+                      ends_at: { type: [string, "null"], format: date-time }
+                      completed_at: { type: [string, "null"], format: date-time }
+                  start_points: { type: number }
+                  start_issues: { type: integer }
+                  added_points: { type: number }
+                  added_issues: { type: integer }
+                  removed_issues: { type: integer }
+                  samples: { type: array, items: { $ref: "#/components/schemas/BurndownSample" } }
+                  ideal: { type: array, items: { $ref: "#/components/schemas/BurndownSample" } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/notifications:
     get:
       operationId: listNotifications
@@ -512,6 +652,22 @@ components:
         started_at: { type: [string, "null"], format: date-time }
         ends_at: { type: [string, "null"], format: date-time }
         completed_at: { type: [string, "null"], format: date-time }
+    Bucket:
+      type: object
+      additionalProperties: false
+      required: [key, count, points]
+      properties:
+        key: { type: string }
+        count: { type: integer }
+        points: { type: number }
+    BurndownSample:
+      type: object
+      additionalProperties: false
+      required: [at, remaining_points, remaining_issues]
+      properties:
+        at: { type: string, format: date-time }
+        remaining_points: { type: number }
+        remaining_issues: { type: integer }
     Notification:
       type: object
       required: [id, kind, issue_key, issue_title, actor_name, excerpt, read, created_at]

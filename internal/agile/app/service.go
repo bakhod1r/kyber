@@ -141,3 +141,13 @@ func (s *Service) CanHold(ctx context.Context, project, id string) error {
 	}
 	return nil
 }
+
+// Peek returns a sprint without authorization, for read models in other contexts.
+func (s *Service) Peek(ctx context.Context, id string) (*domain.Sprint, error) {
+	return s.d.Sprints.ByID(ctx, domain.SprintID(id))
+}
+
+// AllSprints lists a project's sprints without authorization (read models only).
+func (s *Service) AllSprints(ctx context.Context, project string) ([]*domain.Sprint, error) {
+	return s.d.Sprints.ListByProject(ctx, project)
+}

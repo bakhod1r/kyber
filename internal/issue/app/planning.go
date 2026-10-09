@@ -101,3 +101,9 @@ func (s *Service) Peek(ctx context.Context, rawKey string) (*domain.Issue, error
 	}
 	return s.issues.ByKey(ctx, key)
 }
+
+// Snapshot lists every issue of a project without authorization, for read models
+// in other contexts (they authorize the caller themselves).
+func (s *Service) Snapshot(ctx context.Context, project string) ([]*domain.Issue, error) {
+	return s.issues.ListByProject(ctx, project, domain.ListFilter{})
+}

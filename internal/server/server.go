@@ -25,6 +25,12 @@ import (
 	identitypg "github.com/bakhod1r/kyber/internal/identity/adapter/postgres"
 	identityapp "github.com/bakhod1r/kyber/internal/identity/app"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
+	insightsacl "github.com/bakhod1r/kyber/internal/insights/adapter/acl"
+	insightshttp "github.com/bakhod1r/kyber/internal/insights/adapter/httpapi"
+	insightsmemory "github.com/bakhod1r/kyber/internal/insights/adapter/memory"
+	insightspg "github.com/bakhod1r/kyber/internal/insights/adapter/postgres"
+	insightsapp "github.com/bakhod1r/kyber/internal/insights/app"
+	insightsdomain "github.com/bakhod1r/kyber/internal/insights/domain"
 	"github.com/bakhod1r/kyber/internal/issue/adapter/agileacl"
 	issuehttp "github.com/bakhod1r/kyber/internal/issue/adapter/httpapi"
 	issuememory "github.com/bakhod1r/kyber/internal/issue/adapter/memory"
@@ -63,6 +69,7 @@ type deps struct {
 	cookieSecure bool
 	redis        redis.UniversalClient // optional: shared login limiter (guard)
 	notes        notifydomain.Repository
+	activity     insightsdomain.Repository
 	outbox       outbox.Store
 	ctx          context.Context // lifetime of background work (outbox relay)
 	relayEvery   time.Duration
@@ -87,7 +94,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	sprintRepo := agilememory.NewRepository()
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
-		sprints: sprintRepo, notes: notifymemory.NewRepository(),
+		sprints: sprintRepo, notes: notifymemory.NewRepository(), activity: insightsmemory.NewRepository(),
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox), events(sprintRepo.Outbox)),
 		users:  ids, sessions: ids, ready: func(context.Context) error { return nil },
 	}
@@ -128,7 +135,8 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		sprints: agilepg.NewRepository(pool), notes: notifypg.NewRepository(pool), outbox: outbox.NewPostgresStore(pool),
-		users: ids, sessions: ids, ready: pool.Ping, cookieSecure: cookieSecure,
+		activity: insightspg.NewRepository(pool),
+		users:    ids, sessions: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
 		o(&d)
@@ -168,7 +176,14 @@ func build(log *slog.Logger, d deps) http.Handler {
 		Repo: d.notes, Issues: notifyacl.NewIssues(issues), Members: notifyacl.NewMembers(projects),
 		Users: notifyacl.NewUsers(d.users), NewID: id.New, Now: time.Now, Log: log,
 	})
+	insights := insightsapp.NewService(insightsapp.Deps{
+		Repo: d.activity, Access: insightsacl.NewAccess(projects), Issues: insightsacl.NewIssues(issues),
+		Users: insightsacl.NewUsers(d.users), Sprints: insightsacl.NewSprints(agile), Now: time.Now, Log: log,
+	})
 	relay := outbox.NewRelay(d.outbox, log)
+	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated"} {
+		relay.Handle(name, insights.OnIssueEvent)
+	}
 	relay.Handle("issue.assigned", notify.OnIssueAssigned)
 	relay.Handle("comment.added", notify.OnCommentAdded)
 	if d.ctx == nil {
@@ -192,6 +207,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	issuehttp.New(issues, log).Register(api)
 	agilehttp.New(agile, log).Register(api)
 	notifyhttp.New(notify, log).Register(api)
+	insightshttp.New(insights, log).Register(api)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
