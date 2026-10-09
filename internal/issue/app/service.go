@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/bakhod1r/kyber/internal/issue/domain"
 )
@@ -13,7 +14,14 @@ var (
 	ErrProjectNotFound = errors.New("project not found")
 	ErrInvalidKey      = errors.New("invalid issue key")
 	ErrForbidden       = errors.New("insufficient project role")
+	ErrInvalidAssignee = errors.New("assignee must be a member of the project")
 )
+
+// Directory answers membership and naming questions about users (ACL to Project/Identity).
+type Directory interface {
+	IsMember(ctx context.Context, project, user string) (bool, error)
+	DisplayName(ctx context.Context, user string) (string, error)
+}
 
 // Access is the anti-corruption port to the Project context's membership rules.
 // Non-members get ErrProjectNotFound, members lacking the permission ErrForbidden.
@@ -22,16 +30,31 @@ type Access interface {
 }
 
 type Service struct {
-	issues   domain.Repository
-	keys     domain.KeyAllocator
-	access   Access
-	workflow *domain.Workflow
-	newID    func() string
+	issues    domain.Repository
+	comments  domain.CommentRepository
+	keys      domain.KeyAllocator
+	access    Access
+	directory Directory
+	workflow  *domain.Workflow
+	newID     func() string
+	now       func() time.Time
 }
 
-func NewService(issues domain.Repository, keys domain.KeyAllocator, access Access,
-	wf *domain.Workflow, newID func() string) *Service {
-	return &Service{issues: issues, keys: keys, access: access, workflow: wf, newID: newID}
+// Deps are the ports the Issue Tracking use cases depend on.
+type Deps struct {
+	Issues    domain.Repository
+	Comments  domain.CommentRepository
+	Keys      domain.KeyAllocator
+	Access    Access
+	Directory Directory
+	Workflow  *domain.Workflow
+	NewID     func() string
+	Now       func() time.Time
+}
+
+func NewService(d Deps) *Service {
+	return &Service{issues: d.Issues, comments: d.Comments, keys: d.Keys, access: d.Access,
+		directory: d.Directory, workflow: d.Workflow, newID: d.NewID, now: d.Now}
 }
 
 type CreateIssue struct {

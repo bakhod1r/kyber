@@ -132,7 +132,7 @@ func TestIssueAccessors(t *testing.T) {
 
 func TestRehydrateAndVersion(t *testing.T) {
 	key, _ := domain.NewIssueKey("KYB", 7)
-	is := domain.Rehydrate("i-7", key, "Restored", domain.TypeBug, domain.StatusDone, 3)
+	is := domain.Rehydrate(domain.Snapshot{ID: "i-7", Key: key, Title: "Restored", Type: domain.TypeBug, Status: domain.StatusDone, Version: 3})
 	if is.Version() != 3 || is.Status() != domain.StatusDone || is.Title() != "Restored" {
 		t.Fatalf("unexpected %+v", is)
 	}

@@ -73,3 +73,9 @@ func (r *Repository) ListByProject(_ context.Context, project string, status *do
 	sort.Slice(out, func(i, j int) bool { return out[i].Key().Number() < out[j].Key().Number() })
 	return out, nil
 }
+
+func (r *Repository) appendOutbox(events []domain.Event) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.outbox = append(r.outbox, events...)
+}

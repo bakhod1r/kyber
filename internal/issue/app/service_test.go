@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/bakhod1r/kyber/internal/issue/adapter/memory"
 	"github.com/bakhod1r/kyber/internal/issue/app"
@@ -52,6 +53,15 @@ func (f fakeAccess) Authorize(_ context.Context, actor, project string, write bo
 	return nil
 }
 
+func (f fakeAccess) IsMember(_ context.Context, project, user string) (bool, error) {
+	_, ok := f[project][user]
+	return ok, nil
+}
+
+func (f fakeAccess) DisplayName(_ context.Context, user string) (string, error) {
+	return "Name of " + user, nil
+}
+
 const (
 	dev    = "u-dev"
 	viewer = "u-viewer"
@@ -64,10 +74,16 @@ func setup() (*app.Service, *recorder) {
 	n := 0
 	ids := func() string { n++; return fmt.Sprintf("i-%d", n) }
 	keys := &fakeKeys{seqs: map[string]int{"KYB": 0, "OPS": 0}}
-	return app.NewService(repo, keys, fakeAccess{
+	access := fakeAccess{
 		"KYB": {dev: "w", viewer: "r"},
 		"OPS": {dev: "w"},
-	}, domain.DefaultWorkflow(), ids), rec
+	}
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	return app.NewService(app.Deps{
+		Issues: repo, Comments: memory.NewCommentRepository(repo), Keys: keys, Access: access, Directory: access,
+		Workflow: domain.DefaultWorkflow(), NewID: ids,
+		Now: func() time.Time { now = now.Add(time.Minute); return now },
+	}), rec
 }
 
 func TestCreateIssue(t *testing.T) {

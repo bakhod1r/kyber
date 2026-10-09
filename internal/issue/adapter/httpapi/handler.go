@@ -2,9 +2,11 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/bakhod1r/kyber/internal/issue/app"
 	"github.com/bakhod1r/kyber/internal/issue/domain"
@@ -24,26 +26,40 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/projects/{key}/issues", h.list)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}", h.get)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/transitions", h.transition)
+	mux.HandleFunc("PATCH /api/v1/issues/{issueKey}", h.edit)
+	mux.HandleFunc("GET /api/v1/issues/{issueKey}/comments", h.comments)
+	mux.HandleFunc("POST /api/v1/issues/{issueKey}/comments", h.addComment)
 }
 
 type issueDTO struct {
-	ID     string `json:"id"`
-	Key    string `json:"key"`
-	Title  string `json:"title"`
-	Type   string `json:"type"`
-	Status string `json:"status"`
+	ID          string  `json:"id"`
+	Key         string  `json:"key"`
+	Title       string  `json:"title"`
+	Type        string  `json:"type"`
+	Status      string  `json:"status"`
+	Description string  `json:"description"`
+	Priority    string  `json:"priority"`
+	AssigneeID  *string `json:"assignee_id"`
+	Version     int     `json:"version"`
 }
 
 func toDTO(is *domain.Issue) issueDTO {
-	return issueDTO{ID: string(is.ID()), Key: is.Key().String(), Title: is.Title(),
-		Type: string(is.Type()), Status: string(is.Status())}
+	d := issueDTO{ID: string(is.ID()), Key: is.Key().String(), Title: is.Title(), Type: string(is.Type()),
+		Status: string(is.Status()), Description: is.Description(), Priority: string(is.Priority()), Version: is.Version()}
+	if a := is.Assignee(); a != "" {
+		s := string(a)
+		d.AssigneeID = &s
+	}
+	return d
 }
 
 func statusFor(err error) (int, bool) {
 	switch {
 	case errors.Is(err, app.ErrInvalidKey):
 		return http.StatusBadRequest, true
-	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidIssueType):
+	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidIssueType),
+		errors.Is(err, domain.ErrInvalidPriority), errors.Is(err, domain.ErrDescriptionTooLong),
+		errors.Is(err, domain.ErrInvalidCommentBody), errors.Is(err, app.ErrInvalidAssignee), errors.Is(err, errMissingVersion):
 		return http.StatusUnprocessableEntity, true
 	case errors.Is(err, app.ErrProjectNotFound), errors.Is(err, domain.ErrIssueNotFound):
 		return http.StatusNotFound, true
@@ -103,4 +119,87 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		items = append(items, toDTO(is))
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+var errMissingVersion = errors.New("version is required")
+
+// edit accepts a partial update; "assignee_id": null unassigns, an absent key leaves it unchanged.
+func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Version     *int            `json:"version"`
+		Title       *string         `json:"title"`
+		Description *string         `json:"description"`
+		Priority    *string         `json:"priority"`
+		AssigneeID  json.RawMessage `json:"assignee_id"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, r, h.log, err, statusFor)
+		return
+	}
+	if in.Version == nil {
+		httpx.Error(w, r, h.log, errMissingVersion, statusFor)
+		return
+	}
+	cmd := app.EditIssue{Version: *in.Version, Title: in.Title, Description: in.Description, Priority: in.Priority}
+	if in.AssigneeID != nil {
+		cmd.AssigneeSet = true
+		if string(in.AssigneeID) != "null" {
+			if err := json.Unmarshal(in.AssigneeID, &cmd.Assignee); err != nil {
+				httpx.Error(w, r, h.log, httpx.ErrBadJSON, statusFor)
+				return
+			}
+		}
+	}
+	is, err := h.svc.Edit(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"), cmd)
+	if err != nil {
+		httpx.Error(w, r, h.log, err, statusFor)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toDTO(is))
+}
+
+type commentDTO struct {
+	ID         string    `json:"id"`
+	AuthorID   string    `json:"author_id"`
+	AuthorName string    `json:"author_name"`
+	Body       string    `json:"body"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+func toCommentDTO(c app.CommentView) commentDTO {
+	return commentDTO{ID: string(c.ID()), AuthorID: string(c.Author()), AuthorName: c.AuthorName,
+		Body: c.Body(), CreatedAt: c.CreatedAt().UTC()}
+}
+
+func (h *Handler) comments(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.Comments(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, statusFor)
+		return
+	}
+	items := make([]commentDTO, 0, len(list))
+	for _, c := range list {
+		items = append(items, toCommentDTO(c))
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Body string }
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, r, h.log, err, statusFor)
+		return
+	}
+	actor := auth.Actor(r.Context())
+	c, err := h.svc.AddComment(r.Context(), actor, r.PathValue("issueKey"), in.Body)
+	if err != nil {
+		httpx.Error(w, r, h.log, err, statusFor)
+		return
+	}
+	name, err := h.svc.DisplayName(r.Context(), actor)
+	if err != nil {
+		httpx.Error(w, r, h.log, err, statusFor)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, toCommentDTO(app.CommentView{Comment: c, AuthorName: name}))
 }

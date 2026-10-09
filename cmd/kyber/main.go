@@ -11,20 +11,24 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bakhod1r/kyber/internal/platform/config"
 	"github.com/bakhod1r/kyber/internal/platform/db"
 	"github.com/bakhod1r/kyber/internal/server"
 )
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	addr := os.Getenv("KYBER_ADDR")
-	if addr == "" {
-		addr = ":8080"
+	cfg, err := config.Load()
+	if err != nil {
+		log.Error("invalid configuration", "err", err)
+		os.Exit(1)
 	}
+	log.Info("configuration loaded", "config", cfg.String())
+	addr := cfg.Addr
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	handler, cleanup, err := newHandler(ctx, log)
+	handler, cleanup, err := newHandler(ctx, log, cfg)
 	if err != nil {
 		log.Error("startup failed", "err", err)
 		os.Exit(1)
@@ -56,8 +60,8 @@ func main() {
 }
 
 // newHandler selects Postgres when KYBER_DATABASE_URL is set, otherwise in-memory dev mode.
-func newHandler(ctx context.Context, log *slog.Logger) (http.Handler, func(), error) {
-	url := os.Getenv("KYBER_DATABASE_URL")
+func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http.Handler, func(), error) {
+	url := cfg.DatabaseURL
 	if url == "" {
 		log.Warn("KYBER_DATABASE_URL not set: running in-memory dev mode, data is lost on restart")
 		return server.NewInMemory(log), func() {}, nil
@@ -71,7 +75,6 @@ func newHandler(ctx context.Context, log *slog.Logger) (http.Handler, func(), er
 		return nil, nil, err
 	}
 	log.Info("database ready")
-	server.StartJobs(ctx, log, pool)
-	secure := os.Getenv("KYBER_COOKIE_SECURE") != "false"
-	return server.NewPostgres(log, pool, secure), pool.Close, nil
+	server.StartJobs(ctx, log, pool, cfg.SessionPurgeEvery)
+	return server.NewPostgres(log, pool, cfg.CookieSecure), pool.Close, nil
 }

@@ -23,3 +23,31 @@ func TestEventJSONContract(t *testing.T) {
 		}
 	}
 }
+
+func TestAllEventContracts(t *testing.T) {
+	key, _ := domain.NewIssueKey("KYB", 1)
+	tests := []struct {
+		e        domain.Event
+		name     string
+		wantJSON string
+	}{
+		{domain.IssueCreated{ID: "i-1", Key: key, Type: domain.TypeBug, Title: "t"}, "issue.created",
+			`{"id":"i-1","key":"KYB-1","type":"bug","title":"t"}`},
+		{domain.IssueTransitioned{ID: "i-1", Key: key, From: "todo", To: "done"}, "issue.transitioned",
+			`{"id":"i-1","key":"KYB-1","from":"todo","to":"done"}`},
+		{domain.IssueEdited{ID: "i-1", Key: key, Fields: []string{"title"}}, "issue.edited",
+			`{"id":"i-1","key":"KYB-1","fields":["title"]}`},
+		{domain.IssueAssigned{ID: "i-1", Key: key, From: "", To: "u-1"}, "issue.assigned",
+			`{"id":"i-1","key":"KYB-1","from":"","to":"u-1"}`},
+		{domain.CommentAdded{ID: "c-1", IssueID: "i-1", IssueKey: key, Author: "u-1"}, "comment.added",
+			`{"id":"c-1","issue_id":"i-1","issue_key":"KYB-1","author":"u-1"}`},
+	}
+	for _, tt := range tests {
+		if tt.e.EventName() != tt.name {
+			t.Errorf("%T name = %q, want %q", tt.e, tt.e.EventName(), tt.name)
+		}
+		if b, _ := json.Marshal(tt.e); string(b) != tt.wantJSON {
+			t.Errorf("%s json = %s, want %s", tt.name, b, tt.wantJSON)
+		}
+	}
+}

@@ -37,6 +37,7 @@ import (
 type deps struct {
 	projects     projectdomain.Repository
 	issues       issuedomain.Repository
+	comments     issuedomain.CommentRepository
 	users        identitydomain.Users
 	sessions     identitydomain.Sessions
 	ready        func(context.Context) error
@@ -46,17 +47,18 @@ type deps struct {
 // NewInMemory builds the API on in-memory adapters (dev mode and tests).
 func NewInMemory(log *slog.Logger) http.Handler {
 	ids := identitymemory.NewRepository()
+	issueRepo := issuememory.NewRepository()
 	return build(log, deps{
-		projects: projectmemory.NewRepository(), issues: issuememory.NewRepository(),
+		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		users: ids, sessions: ids, ready: func(context.Context) error { return nil },
 	})
 }
 
-// StartJobs runs background maintenance (hourly expired-session purge) until ctx ends.
-func StartJobs(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) {
+// StartJobs runs background maintenance (expired-session purge) until ctx ends.
+func StartJobs(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, purgeEvery time.Duration) {
 	ids := identitypg.NewRepository(pool)
 	svc := identityapp.NewService(ids, ids, argon2.New(), systemClock{}, id.New)
-	go svc.RunSessionPurger(ctx, time.Hour, func(n int, err error) {
+	go svc.RunSessionPurger(ctx, purgeEvery, func(n int, err error) {
 		if err != nil {
 			log.ErrorContext(ctx, "session purge failed", "err", err)
 			return
@@ -69,7 +71,7 @@ func StartJobs(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool) {
 func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool) http.Handler {
 	ids := identitypg.NewRepository(pool)
 	return build(log, deps{
-		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool),
+		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		users: ids, sessions: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	})
 }
@@ -79,9 +81,13 @@ type systemClock struct{}
 func (systemClock) Now() time.Time { return time.Now() }
 
 func build(log *slog.Logger, d deps) http.Handler {
-	projects := projectapp.NewService(d.projects, identitydir.New(d.users), id.New)
-	acl := projectacl.New(projects)
-	issues := issueapp.NewService(d.issues, acl, acl, issuedomain.DefaultWorkflow(), id.New)
+	users := identitydir.New(d.users)
+	projects := projectapp.NewService(d.projects, users, id.New)
+	acl := projectacl.New(projects, users)
+	issues := issueapp.NewService(issueapp.Deps{
+		Issues: d.issues, Comments: d.comments, Keys: acl, Access: acl, Directory: acl,
+		Workflow: issuedomain.DefaultWorkflow(), NewID: id.New, Now: time.Now,
+	})
 	identity := identityapp.NewService(d.users, d.sessions, argon2.New(), systemClock{}, id.New)
 	auth := identityhttp.New(identity, log, d.cookieSecure)
 	m := metrics.NewHTTP()

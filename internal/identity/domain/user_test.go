@@ -19,6 +19,10 @@ func TestParseEmail(t *testing.T) {
 		{"@x.com", "", false},
 		{"a@", "", false},
 		{"a b@x.com", "", false},
+		{"Ali <ali@x.uz>", "", false}, // display-name form is not an address
+		{"ali@@x.uz", "", false},
+		{"ali@x..uz", "", false},
+		{"J.Doe+tag@Gmail.com", "j.doe+tag@gmail.com", true}, // kept as typed, only lower-cased
 		{strings.Repeat("a", 250) + "@x.com", "", false},
 	}
 	for _, tt := range tests {

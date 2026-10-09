@@ -8,6 +8,7 @@ import (
 
 	issueapp "github.com/bakhod1r/kyber/internal/issue/app"
 	"github.com/bakhod1r/kyber/internal/issue/domain"
+	projectapp "github.com/bakhod1r/kyber/internal/project/app"
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
 )
 
@@ -17,9 +18,35 @@ type Projects interface {
 	Authorize(ctx context.Context, actor projectdomain.UserID, key string, need projectdomain.Permission) error
 }
 
-type Adapter struct{ projects Projects }
+// Users resolves display names (the Project context's view of Identity).
+type Users interface {
+	ByID(ctx context.Context, id projectdomain.UserID) (projectapp.UserInfo, error)
+}
 
-func New(p Projects) *Adapter { return &Adapter{projects: p} }
+type Adapter struct {
+	projects Projects
+	users    Users
+}
+
+func New(p Projects, u Users) *Adapter { return &Adapter{projects: p, users: u} }
+
+// IsMember reports whether user belongs to the project (any role).
+func (a *Adapter) IsMember(ctx context.Context, project, user string) (bool, error) {
+	err := a.projects.Authorize(ctx, projectdomain.UserID(user), project, projectdomain.PermRead)
+	if errors.Is(err, projectdomain.ErrProjectNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// DisplayName returns the user's name, or a neutral placeholder for deleted users.
+func (a *Adapter) DisplayName(ctx context.Context, user string) (string, error) {
+	u, err := a.users.ByID(ctx, projectdomain.UserID(user))
+	if errors.Is(err, projectapp.ErrUnknownUser) {
+		return "Deleted user", nil
+	}
+	return u.Name, err
+}
 
 func (a *Adapter) Next(ctx context.Context, project string) (domain.IssueKey, error) {
 	n, err := a.projects.NextIssueNumber(ctx, project)

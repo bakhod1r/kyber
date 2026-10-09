@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/bakhod1r/emailx"
 )
 
 var (
@@ -20,10 +22,11 @@ var (
 // Email is a normalised (trimmed, lower-cased) address.
 type Email string
 
+// Syntax is checked by emailx; the address is kept as typed (only trimmed and
+// lower-cased), so provider-specific rewriting such as Gmail dot removal never applies.
 func ParseEmail(s string) (Email, error) {
 	s = strings.ToLower(strings.TrimSpace(s))
-	at := strings.IndexByte(s, '@')
-	if len(s) > 254 || at < 1 || at == len(s)-1 || strings.ContainsAny(s, " \t\r\n") || strings.Count(s, "@") != 1 {
+	if len(s) > 254 || strings.ContainsAny(s, "<> \t\r\n") || !emailx.IsValid(s) {
 		return "", ErrInvalidEmail
 	}
 	return Email(s), nil

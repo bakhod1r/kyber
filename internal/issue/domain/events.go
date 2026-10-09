@@ -20,3 +20,27 @@ type IssueTransitioned struct {
 
 func (IssueCreated) EventName() string      { return "issue.created" }
 func (IssueTransitioned) EventName() string { return "issue.transitioned" }
+
+type IssueEdited struct {
+	ID     IssueID  `json:"id"`
+	Key    IssueKey `json:"key"`
+	Fields []string `json:"fields"`
+}
+
+type IssueAssigned struct {
+	ID   IssueID  `json:"id"`
+	Key  IssueKey `json:"key"`
+	From UserID   `json:"from"`
+	To   UserID   `json:"to"`
+}
+
+type CommentAdded struct {
+	ID       CommentID `json:"id"`
+	IssueID  IssueID   `json:"issue_id"`
+	IssueKey IssueKey  `json:"issue_key"`
+	Author   UserID    `json:"author"`
+}
+
+func (IssueEdited) EventName() string   { return "issue.edited" }
+func (IssueAssigned) EventName() string { return "issue.assigned" }
+func (CommentAdded) EventName() string  { return "comment.added" }

@@ -83,6 +83,7 @@ func (c *client) raw(method, path string, body any, cookie *http.Cookie) *http.R
 	if err != nil {
 		c.t.Fatal(err)
 	}
+	spec.check(c.t, req, res)
 	return res
 }
 
@@ -433,5 +434,94 @@ func TestS14UIServed(t *testing.T) {
 		}
 		code, body := c.do("GET", "/api/v1/unknown", nil)
 		expect(t, code, 401, body) // API namespace never falls through to the UI
+	})
+}
+
+func TestS15IssueDetails(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		alice := anon.signedIn("alice@x.uz")
+		bob := anon.signedIn("bob@x.uz")
+		carol := anon.signedIn("carol@x.uz")
+		_, bobMe := bob.do("GET", "/api/v1/me", nil)
+		_, carolMe := carol.do("GET", "/api/v1/me", nil)
+		alice.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		alice.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "bob@x.uz", "role": "viewer"})
+		_, created := alice.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "Login", "type": "task"})
+
+		t.Run("AC1 defaults", func(t *testing.T) {
+			if created["priority"] != "medium" || created["description"] != "" || created["assignee_id"] != nil || created["version"] != float64(1) {
+				t.Fatalf("created = %v", created)
+			}
+		})
+		var version any = created["version"]
+		t.Run("AC2 edit and assign", func(t *testing.T) {
+			code, body := alice.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{
+				"version": version, "title": "Login v2", "description": "Steps\n1. open", "priority": "high", "assignee_id": bobMe["id"],
+			})
+			expect(t, code, 200, body)
+			if body["title"] != "Login v2" || body["priority"] != "high" || body["assignee_id"] != bobMe["id"] || body["version"] != float64(2) {
+				t.Fatalf("body = %v", body)
+			}
+			version = body["version"]
+			code, body = alice.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": version, "assignee_id": nil})
+			expect(t, code, 200, body)
+			if body["assignee_id"] != nil || body["title"] != "Login v2" {
+				t.Fatalf("unassign body = %v", body)
+			}
+			version = body["version"]
+		})
+		t.Run("AC3 conflicts and validation", func(t *testing.T) {
+			code, body := alice.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": 1, "title": "stale"})
+			expect(t, code, 409, body)
+			for _, patch := range []map[string]any{
+				{"version": version, "priority": "urgent"},
+				{"version": version, "title": "  "},
+				{"version": version, "description": strings.Repeat("x", 20_001)},
+			} {
+				code, body := alice.do("PATCH", "/api/v1/issues/KYB-1", patch)
+				expect(t, code, 422, body)
+			}
+			code, body = alice.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"title": "no version"})
+			expect(t, code, 422, body)
+		})
+		t.Run("AC4 permissions", func(t *testing.T) {
+			code, body := alice.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": version, "assignee_id": carolMe["id"]})
+			expect(t, code, 422, body)
+			code, body = bob.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": version, "title": "x"})
+			expect(t, code, 403, body)
+			code, body = carol.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": version, "title": "x"})
+			expect(t, code, 404, body)
+		})
+	})
+}
+
+func TestS16Comments(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		alice := anon.signedIn("alice@x.uz")
+		bob := anon.signedIn("bob@x.uz")
+		carol := anon.signedIn("carol@x.uz")
+		alice.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		alice.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "bob@x.uz", "role": "viewer"})
+		alice.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "Login", "type": "task"})
+
+		code, body := alice.do("POST", "/api/v1/issues/KYB-1/comments", map[string]string{"body": "  First!  "})
+		expect(t, code, 201, body)
+		if body["body"] != "First!" || body["author_name"] != "Tester" || body["id"] == "" || body["created_at"] == "" {
+			t.Fatalf("comment = %v", body)
+		}
+		alice.do("POST", "/api/v1/issues/KYB-1/comments", map[string]string{"body": "Second"})
+
+		code, body = bob.do("GET", "/api/v1/issues/KYB-1/comments", nil)
+		expect(t, code, 200, body)
+		items := body["items"].([]any)
+		if len(items) != 2 || items[0].(map[string]any)["body"] != "First!" || items[1].(map[string]any)["body"] != "Second" {
+			t.Fatalf("items = %v", items)
+		}
+		code, body = alice.do("POST", "/api/v1/issues/KYB-1/comments", map[string]string{"body": "   "})
+		expect(t, code, 422, body)
+		code, body = bob.do("POST", "/api/v1/issues/KYB-1/comments", map[string]string{"body": "hi"})
+		expect(t, code, 403, body)
+		code, body = carol.do("GET", "/api/v1/issues/KYB-1/comments", nil)
+		expect(t, code, 404, body)
 	})
 }

@@ -9,6 +9,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/bakhod1r/jitterx"
+
 	"github.com/bakhod1r/kyber/internal/identity/domain"
 )
 
@@ -137,16 +139,11 @@ func hashToken(token string) []byte {
 	return h[:]
 }
 
-// RunSessionPurger purges expired sessions every interval until ctx is cancelled.
+// RunSessionPurger purges expired sessions on a jittered interval until ctx is cancelled,
+// so replicas started together do not all hit the database at the same moment.
 func (s *Service) RunSessionPurger(ctx context.Context, every time.Duration, report func(int, error)) {
-	t := time.NewTicker(every)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			report(s.PurgeExpiredSessions(ctx))
-		}
-	}
+	_ = jitterx.Every(ctx, every, nil, func(ctx context.Context) error {
+		report(s.PurgeExpiredSessions(ctx))
+		return nil // a failed purge is reported and retried next tick, never fatal
+	})
 }

@@ -34,7 +34,10 @@ Large features: `/flow <goal>`. Every PR: `/review`.
 ## Conventions
 
 - Go: `go fmt`, `go vet`, `golangci-lint`; table-driven tests; `internal/` packages; no globals.
-- SQL is the source of truth: migrations in `server/migrations`, queries via `sqlc`.
+- SQL is the source of truth: migrations in `internal/platform/db/migrations` (embedded, forward-only).
+- Persistence: hand-written `pgx/v5` repositories in each context's `adapter/postgres`, implementing the
+  domain's repository port. **No `sqlc`, no ORM** (ADR-0002). Every adapter passes the shared repository
+  contract test (`domain/repotest`) against real PostgreSQL.
 - API: OpenAPI 3.1 in `api/openapi.yaml` first; Go server & TS client generated from it.
 - Frontend: strict TypeScript, TanStack Query for server state, no `any`.
 - Conventional Commits. No secrets in code, logs, or fixtures.

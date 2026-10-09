@@ -81,7 +81,7 @@ murakkablik; modullar orasidagi chegara keyinchalik ajratish imkonini saqlaydi.
 | Go versiyasi | 1.23+ | generics, `log/slog`, `net/http` routing |
 | Router | `go-chi/chi` v5 | stdlib-mos, middleware ekotizimi |
 | API kontrakt | OpenAPI 3.1 → `oapi-codegen` (server) + `openapi-typescript` (client) | contract-first, FE/BE drift yo'q |
-| DB access | `pgx/v5` + `sqlc` | type-safe SQL, ORM'siz |
+| DB access | `pgx/v5` (qo'lda yozilgan repository'lar, DDD port'lari ortida) | ORM va sqlc yo'q — ADR-0002 |
 | Migratsiya | `goose` (embed) | binary ichida |
 | Auth | `argon2id`, opaque session (cookie) + PAT; OIDC `coreos/go-oidc` | xavfsiz default |
 | AuthZ | RBAC jadvallari + service qatlamida `authz.Can(ctx, action, resource)` | markaziy tekshiruv |
@@ -109,7 +109,6 @@ kyber/
 │   ├── notify/
 │   └── realtime/
 ├── migrations/                    # goose SQL
-├── queries/                       # sqlc SQL
 ├── web/                           # React app (embed qilinadi)
 ├── deploy/                        # docker, compose, helm
 └── docs/                          # PLAN, ADR, user docs
@@ -188,7 +187,7 @@ internal/issue/
 ├── domain/        # aggregate, entity, value object, event, repository port  (I/O yo'q)
 ├── app/           # use case'lar (command/query handler), tranzaksiya chegarasi
 ├── adapter/
-│   ├── postgres/  # repository implementatsiyasi (sqlc)
+│   ├── postgres/  # repository implementatsiyasi (pgx)
 │   └── http/      # OpenAPI handler → app
 └── issue.go       # modul wiring
 ```
@@ -287,7 +286,7 @@ Katta feature'lar uchun: `/flow "Sprint va backlog moduli"` — har bosqichdan k
 | ADR | Mavzu | Taklif |
 |---|---|---|
 | 0001 | Arxitektura uslubi | Modular monolith, single binary, embedded SPA |
-| 0002 | DB access | `pgx` + `sqlc` + `goose`, ORM yo'q |
+| 0002 | DB access | `pgx` + embedded migratsiyalar, sqlc/ORM yo'q — **qabul qilindi** |
 | 0003 | API | Contract-first OpenAPI 3.1, REST + WebSocket |
 | 0004 | Multi-tenancy | Shared schema + `workspace_id`; RLS keyinroq |
 | 0005 | Auth | Opaque session cookie (web) + PAT (API), argon2id |
