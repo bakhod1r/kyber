@@ -420,3 +420,18 @@ func TestS13CSRFGuard(t *testing.T) {
 		}
 	})
 }
+
+func TestS14UIServed(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, c *client) {
+		for _, p := range []string{"/", "/login", "/projects/KYB"} {
+			res := c.raw("GET", p, nil, nil)
+			res.Body.Close()
+			// 200 with a built UI, 503 with instructions when web/dist is empty; never 401/404.
+			if res.StatusCode != 200 && res.StatusCode != 503 {
+				t.Fatalf("GET %s = %d", p, res.StatusCode)
+			}
+		}
+		code, body := c.do("GET", "/api/v1/unknown", nil)
+		expect(t, code, 401, body) // API namespace never falls through to the UI
+	})
+}

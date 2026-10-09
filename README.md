@@ -2,13 +2,15 @@
 <h1 align="center">Kyber</h1>
 <p align="center">Open-source, self-hosted issue &amp; project tracker — the core of Jira, in one Go binary.</p>
 
-> Status: **v0.2 (Sprint 02)** — PostgreSQL storage, accounts & sessions, projects, issues, workflow, outbox, metrics.
+> Status: **v0.3 (Sprint 03)** — web UI with Kanban board, project roles, PostgreSQL, accounts, throttled login, outbox, metrics.
+
+<p align="center"><img src="docs/assets/board.png" alt="Kyber Kanban board" width="820"></p>
 > Roadmap: [`docs/PLAN.md`](docs/PLAN.md) · Backlog: [`docs/backlog`](docs/backlog) · QA: [`docs/qa`](docs/qa)
 
 ## Quick start
 
 ```bash
-docker compose up --build    # PostgreSQL + Kyber on :8080  (make run = in-memory dev mode)
+docker compose up --build    # PostgreSQL + Kyber (UI + API) on http://localhost:8080
 
 curl -XPOST localhost:8080/api/v1/auth/signup -d '{"email":"me@example.com","name":"Me","password":"a long password"}'
 TOKEN=$(curl -s -XPOST localhost:8080/api/v1/auth/login -d '{"email":"me@example.com","password":"a long password"}' | jq -r .token)
@@ -31,6 +33,7 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 | GET | `/healthz` · `/readyz` · `/metrics` | Liveness · readiness (DB) · Prometheus |
 | POST | `/api/v1/auth/signup` · `/auth/login` · `/auth/logout` | Accounts & sessions (cookie or Bearer) |
 | GET | `/api/v1/me` | Current user |
+| GET / POST | `/api/v1/projects/{key}/members` | List members / add or change a member's role (admin) |
 | POST / GET | `/api/v1/projects` | Create / list projects |
 | GET | `/api/v1/projects/{key}` | Get project |
 | POST / GET | `/api/v1/projects/{key}/issues[?status=]` | Create / list issues |
@@ -41,8 +44,13 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 
 Domain-Driven Design + Test-Driven Development — see [`CLAUDE.md`](CLAUDE.md) and `docs/PLAN.md` §3.5–3.6.
 
+Roles: `admin` (manage members) ⊃ `member` (create/move issues) ⊃ `viewer` (read). Non-members get `404`.
+
 ```bash
+make web          # build the React UI (embedded into the Go binary)
 make lint test build
+make web-test     # typecheck + Vitest
+make e2e          # Playwright against a fresh server
 KYBER_TEST_DATABASE_URL=postgres://… make test   # + PostgreSQL integration tests
 ```
 

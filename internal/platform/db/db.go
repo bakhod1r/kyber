@@ -73,3 +73,9 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 		return nil
 	})
 }
+
+// MigrationSQL returns one embedded migration's SQL (used by migration tests).
+func MigrationSQL(name string) (string, error) {
+	b, err := migrations.ReadFile("migrations/" + name)
+	return string(b), err
+}

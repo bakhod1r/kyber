@@ -30,6 +30,7 @@ import (
 	projectpg "github.com/bakhod1r/kyber/internal/project/adapter/postgres"
 	projectapp "github.com/bakhod1r/kyber/internal/project/app"
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
+	"github.com/bakhod1r/kyber/web"
 )
 
 // deps are the adapters a server is assembled from.
@@ -107,6 +108,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
 	mux.Handle("/api/v1/", auth.RequireAuth(api))
+	mux.Handle("/", web.Handler(web.Dist()))
 	return observe(log, m, recoverer(log, mux))
 }
 
