@@ -1051,3 +1051,43 @@ func TestS29JiraImport(t *testing.T) {
 		expect(t, code, 413, b)
 	})
 }
+
+func TestS30CSVExport(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		viewer := anon.signedIn("viewer@x.uz")
+		_, me := lead.do("GET", "/api/v1/me", nil)
+		for _, k := range []string{"KYB", "NEW"} {
+			lead.do("POST", "/api/v1/projects", map[string]string{"key": k, "name": k})
+		}
+		lead.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "viewer@x.uz", "role": "viewer"})
+		_, is := lead.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "=cmd, \"quoted\"", "type": "bug"})
+		lead.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": is["version"], "estimate": 2.5, "priority": "highest",
+			"assignee_id": me["id"], "description": "multi\nline"})
+		lead.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "in_progress"})
+		lead.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "Plain", "type": "story"})
+
+		// AC1 any member downloads a CSV attachment.
+		res := viewer.raw("GET", "/api/v1/projects/KYB/export.csv", nil, nil)
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != 200 || res.Header.Get("Content-Type") != "text/csv; charset=utf-8" ||
+			!strings.Contains(res.Header.Get("Content-Disposition"), `filename="KYB-issues.csv"`) {
+			t.Fatalf("export = %d %v", res.StatusCode, res.Header)
+		}
+		// AC2 the file imports back unchanged into another project.
+		code, run := lead.do("POST", "/api/v1/projects/NEW/import/jira?dry_run=false", map[string]string{"csv": string(body)})
+		expect(t, code, 201, run)
+		if len(run["items"].([]any)) != 2 || len(run["errors"].([]any)) != 0 {
+			t.Fatalf("re-import = %v", run)
+		}
+		_, got := lead.do("GET", "/api/v1/issues/NEW-1", nil)
+		if got["title"] != "'=cmd, \"quoted\"" || got["type"] != "bug" || got["status"] != "in_progress" || got["priority"] != "highest" ||
+			got["estimate"] != 2.5 || got["assignee_id"] != me["id"] || got["description"] != "multi\nline" {
+			t.Fatalf("round trip = %v", got)
+		}
+		// AC3 outsiders cannot export.
+		code, b := anon.signedIn("out@x.uz").do("GET", "/api/v1/projects/KYB/export.csv", nil)
+		expect(t, code, 404, b)
+	})
+}

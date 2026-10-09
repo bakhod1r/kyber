@@ -14,6 +14,13 @@ import (
 
 type fakeAccess map[string]string // actor → role in KYB
 
+func (f fakeAccess) AuthorizeRead(_ context.Context, actor, project string) error {
+	if _, ok := f[actor]; !ok || project != "KYB" {
+		return app.ErrProjectNotFound
+	}
+	return nil
+}
+
 func (f fakeAccess) AuthorizeAdmin(_ context.Context, actor, project string) error {
 	role, ok := f[actor]
 	switch {

@@ -62,4 +62,12 @@ describe("Jira import (KYB-S29)", () => {
     await user.click(screen.getByRole("button", { name: "Preview" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("only project admins can import");
   });
+
+  it("S30: offers a CSV export of the project", () => {
+    mockApi({});
+    renderWithProviders(<JiraImport projectKey="KYB" />);
+    const link = screen.getByRole("link", { name: "Export all issues (CSV)" });
+    expect(link).toHaveAttribute("href", "/api/v1/projects/KYB/export.csv");
+    expect(link).toHaveAttribute("download");
+  });
 });

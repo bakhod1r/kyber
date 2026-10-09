@@ -190,7 +190,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	importer := importerapp.NewService(importerapp.Deps{
 		Access: importeracl.NewProject(projects), Members: importeracl.NewProject(projects),
-		Issues: importeracl.NewIssues(issues, time.Now), Mappings: d.mappings,
+		Issues: importeracl.NewIssues(issues, time.Now), Mappings: d.mappings, Source: importeracl.NewSource(issues, d.users),
 	})
 	relay := outbox.NewRelay(d.outbox, log)
 	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated", "issue.imported"} {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 
@@ -25,6 +26,12 @@ var (
 // Non-members get ErrProjectNotFound, non-admins ErrForbidden.
 type Access interface {
 	AuthorizeAdmin(ctx context.Context, actor, project string) error
+	AuthorizeRead(ctx context.Context, actor, project string) error
+}
+
+// Source lists a project's issues for export (ACL to Issue Tracking and Identity).
+type Source interface {
+	ExportRows(ctx context.Context, project string) ([]domain.ExportRow, error)
 }
 
 // Members lists the project's members for matching assignees and reporters.
@@ -42,6 +49,7 @@ type Deps struct {
 	Members  Members
 	Issues   Issues
 	Mappings domain.MappingRepository
+	Source   Source
 }
 
 type Service struct {
@@ -126,4 +134,16 @@ func (s *Service) Import(ctx context.Context, actor, project, csv string, dryRun
 		r.Items = append(r.Items, ReportItem{Item: it, IssueKey: key})
 	}
 	return r, nil
+}
+
+// Export writes every issue of the project as a Jira-compatible CSV; any member may export.
+func (s *Service) Export(ctx context.Context, actor, project string, w io.Writer) error {
+	if err := s.d.Access.AuthorizeRead(ctx, actor, project); err != nil {
+		return err
+	}
+	rows, err := s.d.Source.ExportRows(ctx, project)
+	if err != nil {
+		return err
+	}
+	return domain.WriteJiraCSV(w, rows)
 }

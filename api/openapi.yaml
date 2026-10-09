@@ -361,6 +361,17 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/export.csv:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: exportCsv
+      description: >-
+        Every issue of the project as a Jira-compatible CSV (UTF-8 with BOM); people are exported by email.
+        The file imports back through `importJira`. Cells starting with = + - @ are prefixed with ' to defuse spreadsheet formulas.
+      responses:
+        "200": { description: CSV file, content: { text/csv: { schema: { type: string } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/reports/summary:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:

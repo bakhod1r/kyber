@@ -36,7 +36,14 @@ export function JiraImport({ projectKey }: { projectKey: string }) {
   const error = fileError ?? (run.error ? run.error.message : null);
   return (
     <section className="panel import" aria-labelledby="import-title">
-      <h2 id="import-title">Import from Jira</h2>
+      <h2 id="import-title">Import &amp; export</h2>
+      <p>
+        <a href={`/api/v1/projects/${encodeURIComponent(projectKey)}/export.csv`} download>
+          Export all issues (CSV)
+        </a>{" "}
+        — Jira-compatible; it imports back here or into Jira.
+      </p>
+      <h3>Import from Jira</h3>
       <p className="hint">
         In Jira, open the issue search, choose <b>Export → CSV (all fields)</b>, then upload the file here. Nothing changes until you
         confirm the preview; importing the same file again skips issues already imported.

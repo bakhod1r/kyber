@@ -2,8 +2,10 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -22,6 +24,7 @@ func New(svc *app.Service, log *slog.Logger) *Handler { return &Handler{svc: svc
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/projects/{key}/import/jira", h.jira)
+	mux.HandleFunc("GET /api/v1/projects/{key}/export.csv", h.export)
 }
 
 var errBadDryRun = errors.New("dry_run must be true or false")
@@ -138,4 +141,18 @@ func (h *Handler) jira(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusMultiStatus
 	}
 	httpx.JSON(w, status, out)
+}
+
+// export buffers the CSV so a failure still yields a proper problem response.
+func (h *Handler) export(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+	var buf bytes.Buffer
+	if err := h.svc.Export(r.Context(), auth.Actor(r.Context()), key, &buf); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", key+"-issues.csv"))
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = buf.WriteTo(w)
 }

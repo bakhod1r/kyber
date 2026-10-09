@@ -7,6 +7,7 @@ import (
 	"math"
 	"time"
 
+	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
 	"github.com/bakhod1r/kyber/internal/importer/app"
 	"github.com/bakhod1r/kyber/internal/importer/domain"
 	issuedomain "github.com/bakhod1r/kyber/internal/issue/domain"
@@ -79,4 +80,68 @@ func (a Issues) Import(ctx context.Context, project, reporter string, it domain.
 		return "", err
 	}
 	return is.Key().String(), nil
+}
+
+func (a Project) AuthorizeRead(ctx context.Context, actor, project string) error {
+	err := a.projects.Authorize(ctx, projectdomain.UserID(actor), project, projectdomain.PermRead)
+	if errors.Is(err, projectdomain.ErrForbidden) {
+		return app.ErrProjectNotFound
+	}
+	return translate(err)
+}
+
+type Snapshotter interface {
+	Snapshot(ctx context.Context, project string) ([]*issuedomain.Issue, error)
+}
+
+type Users interface {
+	ByID(ctx context.Context, id identitydomain.UserID) (*identitydomain.User, error)
+}
+
+// Source reads issues for export, resolving people to emails (what Jira imports match on).
+type Source struct {
+	issues Snapshotter
+	users  Users
+}
+
+func NewSource(i Snapshotter, u Users) Source { return Source{issues: i, users: u} }
+
+func (a Source) ExportRows(ctx context.Context, project string) ([]domain.ExportRow, error) {
+	list, err := a.issues.Snapshot(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	emails := map[issuedomain.UserID]string{"": ""}
+	email := func(id issuedomain.UserID) (string, error) {
+		if e, ok := emails[id]; ok {
+			return e, nil
+		}
+		u, err := a.users.ByID(ctx, identitydomain.UserID(id))
+		if errors.Is(err, identitydomain.ErrUserNotFound) {
+			emails[id] = ""
+			return "", nil
+		}
+		if err != nil {
+			return "", err
+		}
+		emails[id] = string(u.Email())
+		return string(u.Email()), nil
+	}
+	rows := make([]domain.ExportRow, 0, len(list))
+	for _, is := range list {
+		r := domain.ExportRow{Key: is.Key().String(), Summary: is.Title(), Type: string(is.Type()), Status: string(is.Status()),
+			Priority: string(is.Priority()), Description: is.Description()}
+		if r.Assignee, err = email(is.Assignee()); err != nil {
+			return nil, err
+		}
+		if r.Reporter, err = email(is.Reporter()); err != nil {
+			return nil, err
+		}
+		if p, ok := is.Estimate(); ok {
+			f := p.Float()
+			r.Points = &f
+		}
+		rows = append(rows, r)
+	}
+	return rows, nil
 }
