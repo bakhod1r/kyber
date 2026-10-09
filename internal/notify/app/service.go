@@ -10,6 +10,7 @@ import (
 
 	"github.com/bakhod1r/kyber/internal/notify/domain"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
 // ErrIssueGone is returned by Issues.Lookup when the issue no longer exists.
@@ -28,6 +29,10 @@ type (
 	Members interface {
 		IsMember(ctx context.Context, project, user string) (bool, error)
 	}
+	// Workspaces tells which workspace a project belongs to.
+	Workspaces interface {
+		WorkspaceOf(ctx context.Context, project string) (string, error)
+	}
 	Users interface {
 		UserIDByEmail(ctx context.Context, email string) (id string, ok bool, err error)
 		DisplayName(ctx context.Context, id string) (string, error)
@@ -35,13 +40,14 @@ type (
 )
 
 type Deps struct {
-	Repo    domain.Repository
-	Issues  Issues
-	Members Members
-	Users   Users
-	NewID   func() string
-	Now     func() time.Time
-	Log     *slog.Logger
+	Repo       domain.Repository
+	Issues     Issues
+	Members    Members
+	Workspaces Workspaces
+	Users      Users
+	NewID      func() string
+	Now        func() time.Time
+	Log        *slog.Logger
 }
 
 type Service struct{ d Deps }
@@ -128,6 +134,10 @@ func (s *Service) deliverTo(ctx context.Context, event int64, issueKey string, i
 		}
 		actorName = name
 	}
+	ws, err := s.d.Workspaces.WorkspaceOf(ctx, info.Project)
+	if err != nil {
+		return err
+	}
 	for u, kind := range recipients {
 		ok, err := s.d.Members.IsMember(ctx, info.Project, string(u))
 		if err != nil {
@@ -137,7 +147,7 @@ func (s *Service) deliverTo(ctx context.Context, event int64, issueKey string, i
 			continue
 		}
 		n := domain.Notification{
-			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Kind: kind, IssueKey: issueKey,
+			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Workspace: ws, Kind: kind, IssueKey: issueKey,
 			IssueTitle: info.Title, ActorName: actorName, Excerpt: text, SourceEvent: event, CreatedAt: s.d.Now(),
 		}
 		if err := s.d.Repo.Add(ctx, n); err != nil {
@@ -158,19 +168,28 @@ func excerpt(body string) string {
 const pageSize = 50
 
 // List returns the user's newest notifications and their unread count.
+// inbox is the user's inbox in the request's workspace.
+func inbox(ctx context.Context, user string) domain.Inbox {
+	ws, ok := tenant.From(ctx)
+	if !ok {
+		ws = tenant.Default
+	}
+	return domain.Inbox{Workspace: ws, User: domain.UserID(user)}
+}
+
 func (s *Service) List(ctx context.Context, user string, unreadOnly bool) ([]domain.Notification, int, error) {
-	items, err := s.d.Repo.ListFor(ctx, domain.UserID(user), unreadOnly, pageSize)
+	items, err := s.d.Repo.ListFor(ctx, inbox(ctx, user), unreadOnly, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
-	unread, err := s.d.Repo.UnreadCount(ctx, domain.UserID(user))
+	unread, err := s.d.Repo.UnreadCount(ctx, inbox(ctx, user))
 	return items, unread, err
 }
 
 func (s *Service) MarkRead(ctx context.Context, user, id string) error {
-	return s.d.Repo.MarkRead(ctx, domain.UserID(user), domain.NotificationID(id), s.d.Now())
+	return s.d.Repo.MarkRead(ctx, inbox(ctx, user), domain.NotificationID(id), s.d.Now())
 }
 
 func (s *Service) MarkAllRead(ctx context.Context, user string) error {
-	return s.d.Repo.MarkAllRead(ctx, domain.UserID(user), s.d.Now())
+	return s.d.Repo.MarkAllRead(ctx, inbox(ctx, user), s.d.Now())
 }

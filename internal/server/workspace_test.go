@@ -69,3 +69,34 @@ func TestS33Workspaces(t *testing.T) {
 		}
 	}, server.WithBaseDomain("kyber.test"))
 }
+
+// Regression (architecture review): notifications must not cross workspaces.
+func TestS33NotificationsStayInTheirWorkspace(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		apex := on(anon, "kyber.test")
+		alice := apex.signedIn("alice@x.uz")
+		bob := apex.signedIn("bob@x.uz")
+		_, me := alice.do("GET", "/api/v1/me", nil)
+		bob.do("POST", "/api/v1/workspaces", map[string]string{"slug": "globex", "name": "Globex"})
+		alice.do("POST", "/api/v1/workspaces", map[string]string{"slug": "acme", "name": "Acme"})
+		g := on(bob, "globex.kyber.test")
+		g.do("POST", "/api/v1/projects", map[string]string{"key": "GLX", "name": "Globex"})
+		g.do("POST", "/api/v1/projects/GLX/members", map[string]string{"email": "alice@x.uz", "role": "member"})
+		_, is := g.do("POST", "/api/v1/projects/GLX/issues", map[string]string{"title": "Merger plans", "type": "task"})
+		g.do("PATCH", "/api/v1/issues/GLX-1", map[string]any{"version": is["version"], "assignee_id": me["id"]})
+
+		eventuallyJSON(t, on(alice, "globex.kyber.test"), "/api/v1/notifications", func(b map[string]any) bool {
+			return len(b["items"].([]any)) == 1
+		})
+		code, inbox := on(alice, "acme.kyber.test").do("GET", "/api/v1/notifications", nil)
+		expect(t, code, 200, inbox)
+		if len(inbox["items"].([]any)) != 0 || inbox["unread"] != float64(0) {
+			t.Fatalf("acme inbox shows globex notifications: %v", inbox)
+		}
+		on(alice, "acme.kyber.test").do("POST", "/api/v1/notifications/read-all", nil)
+		_, still := on(alice, "globex.kyber.test").do("GET", "/api/v1/notifications", nil)
+		if still["unread"] != float64(1) {
+			t.Fatalf("read-all in acme cleared globex: %v", still)
+		}
+	}, server.WithBaseDomain("kyber.test"))
+}

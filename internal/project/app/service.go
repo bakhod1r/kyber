@@ -153,6 +153,16 @@ func (s *Service) Members(ctx context.Context, actor domain.UserID, key string) 
 	return out, nil
 }
 
+// WorkspaceOf returns a project's workspace for read models in other contexts (no
+// authorization: callers scope their own data with it).
+func (s *Service) WorkspaceOf(ctx context.Context, key string) (domain.WorkspaceID, error) {
+	p, err := s.repo.ByKey(ctx, key)
+	if err != nil {
+		return "", err
+	}
+	return p.Workspace(), nil
+}
+
 // NextIssueNumber atomically advances the project's issue sequence.
 func (s *Service) NextIssueNumber(ctx context.Context, key string) (int, error) {
 	var n int

@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/bakhod1r/jitterx"
@@ -61,6 +62,9 @@ func (s *Service) Signup(ctx context.Context, cmd Signup) (*domain.User, error) 
 	email, err := domain.ParseEmail(cmd.Email)
 	if err != nil {
 		return nil, err
+	}
+	if strings.HasSuffix(string(email), "@"+syntheticDomain) { // reserved for Google/Telegram accounts
+		return nil, domain.ErrInvalidEmail
 	}
 	if err := domain.ValidatePassword(cmd.Password); err != nil {
 		return nil, err

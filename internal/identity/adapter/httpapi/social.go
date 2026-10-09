@@ -180,6 +180,9 @@ func (h *Handler) setSession(w http.ResponseWriter, token string) {
 // otpStart begins "log in with a Telegram code": the browser opens the deep link, presses
 // Start in the bot and receives a code there.
 func (h *Handler) otpStart(w http.ResponseWriter, r *http.Request) {
+	if !requireJSON(w, r) {
+		return
+	}
 	if !h.social.TelegramOTP {
 		httpx.Error(w, r, h.log, errProviderDisabled, codeFor)
 		return
@@ -200,6 +203,9 @@ func (h *Handler) otpStart(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) otpVerify(w http.ResponseWriter, r *http.Request) {
+	if !requireJSON(w, r) {
+		return
+	}
 	if !h.social.TelegramOTP {
 		httpx.Error(w, r, h.log, errProviderDisabled, codeFor)
 		return
@@ -216,4 +222,15 @@ func (h *Handler) otpVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	h.setSession(w, token)
 	httpx.JSON(w, http.StatusOK, map[string]string{"token": token})
+}
+
+// requireJSON rejects cross-site form posts on public sign-in endpoints (login CSRF):
+// browsers cannot send application/json cross-site without a CORS preflight.
+func requireJSON(w http.ResponseWriter, r *http.Request) bool {
+	if isJSON(r) {
+		return true
+	}
+	msg := "sign-in requests require Content-Type: application/json"
+	httpx.Problem(w, r, errorx.New(httpx.CodeCSRF, msg).WithDetails(msg))
+	return false
 }

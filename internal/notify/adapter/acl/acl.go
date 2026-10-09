@@ -78,3 +78,17 @@ func (a Users) DisplayName(ctx context.Context, id string) (string, error) {
 	}
 	return u.Name(), nil
 }
+
+type ProjectWorkspaces interface {
+	WorkspaceOf(ctx context.Context, key string) (projectdomain.WorkspaceID, error)
+}
+
+// Workspaces resolves a project's workspace through the Project context.
+type Workspaces struct{ projects ProjectWorkspaces }
+
+func NewWorkspaces(p ProjectWorkspaces) Workspaces { return Workspaces{projects: p} }
+
+func (a Workspaces) WorkspaceOf(ctx context.Context, project string) (string, error) {
+	ws, err := a.projects.WorkspaceOf(ctx, project)
+	return string(ws), err
+}

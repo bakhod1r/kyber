@@ -71,3 +71,14 @@ func TestSetMemberJoinsWorkspace(t *testing.T) {
 		t.Fatalf("joins = %v", j)
 	}
 }
+
+func TestWorkspaceOf(t *testing.T) {
+	s := newService(t)
+	_, _ = s.Create(tenant.With(context.Background(), "w-acme"), alice, "KYB", "Kyber")
+	if ws, err := s.WorkspaceOf(context.Background(), "KYB"); err != nil || ws != "w-acme" {
+		t.Fatalf("WorkspaceOf = %q %v", ws, err)
+	}
+	if _, err := s.WorkspaceOf(context.Background(), "NOPE"); !errors.Is(err, domain.ErrProjectNotFound) {
+		t.Fatalf("missing err = %v", err)
+	}
+}

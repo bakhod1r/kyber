@@ -209,7 +209,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	sprintACL.Sprints = agileacl.New(agile)
 	notify := notifyapp.NewService(notifyapp.Deps{
-		Repo: d.notes, Issues: notifyacl.NewIssues(issues), Members: notifyacl.NewMembers(projects),
+		Repo: d.notes, Issues: notifyacl.NewIssues(issues), Members: notifyacl.NewMembers(projects), Workspaces: notifyacl.NewWorkspaces(projects),
 		Users: notifyacl.NewUsers(d.users), NewID: id.New, Now: time.Now, Log: log,
 	})
 	insights := insightsapp.NewService(insightsapp.Deps{

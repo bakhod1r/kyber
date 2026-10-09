@@ -153,3 +153,23 @@ func TestDiscoveryFailureAndConfig(t *testing.T) {
 		t.Fatal("enabled only with client id and secret")
 	}
 }
+
+// Regression: the provider is discovered during /start, whose request context ends before
+// /callback; Google's signing keys are fetched later and must not use that dead context.
+func TestKeysFetchedAfterDiscoveryRequestEnded(t *testing.T) {
+	f := newFake(t)
+	c := client(f)
+	flow := google.NewFlow()
+	startCtx, cancel := context.WithCancel(context.Background())
+	u, err := c.AuthURL(startCtx, flow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel() // the /start request is over
+	q, _ := url.Parse(u)
+	f.challenge = q.Query().Get("code_challenge")
+	f.claims = validClaims(flow.Nonce)
+	if _, err := c.Exchange(context.Background(), "good-code", flow); err != nil {
+		t.Fatalf("callback after start ended: %v", err)
+	}
+}

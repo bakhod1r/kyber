@@ -188,6 +188,7 @@ paths:
                   id: { type: string, description: Keep it in the browser; needed to verify the code. }
                   link: { type: string, example: "https://t.me/kyber_bot?start=AbC123" }
                   expires_at: { type: string, format: date-time }
+        "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "429":
           description: Too many code requests from this IP.
@@ -215,6 +216,7 @@ paths:
               schema: { type: object, required: [token], properties: { token: { type: string } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }

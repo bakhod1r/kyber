@@ -35,12 +35,12 @@ func (r *Repository) Add(_ context.Context, n domain.Notification) error {
 	return nil
 }
 
-func (r *Repository) ListFor(_ context.Context, user domain.UserID, unreadOnly bool, limit int) ([]domain.Notification, error) {
+func (r *Repository) ListFor(_ context.Context, in domain.Inbox, unreadOnly bool, limit int) ([]domain.Notification, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []domain.Notification
 	for _, n := range r.all {
-		if n.Recipient == user && (!unreadOnly || !n.Read()) {
+		if in.Holds(n) && (!unreadOnly || !n.Read()) {
 			out = append(out, n)
 		}
 	}
@@ -51,23 +51,23 @@ func (r *Repository) ListFor(_ context.Context, user domain.UserID, unreadOnly b
 	return out, nil
 }
 
-func (r *Repository) UnreadCount(_ context.Context, user domain.UserID) (int, error) {
+func (r *Repository) UnreadCount(_ context.Context, in domain.Inbox) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	c := 0
 	for _, n := range r.all {
-		if n.Recipient == user && !n.Read() {
+		if in.Holds(n) && !n.Read() {
 			c++
 		}
 	}
 	return c, nil
 }
 
-func (r *Repository) MarkRead(_ context.Context, user domain.UserID, id domain.NotificationID, at time.Time) error {
+func (r *Repository) MarkRead(_ context.Context, in domain.Inbox, id domain.NotificationID, at time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.all {
-		if r.all[i].ID == id && r.all[i].Recipient == user {
+		if r.all[i].ID == id && in.Holds(r.all[i]) {
 			if !r.all[i].Read() {
 				r.all[i].ReadAt = at
 			}
@@ -77,11 +77,11 @@ func (r *Repository) MarkRead(_ context.Context, user domain.UserID, id domain.N
 	return domain.ErrNotificationNotFound
 }
 
-func (r *Repository) MarkAllRead(_ context.Context, user domain.UserID, at time.Time) error {
+func (r *Repository) MarkAllRead(_ context.Context, in domain.Inbox, at time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i := range r.all {
-		if r.all[i].Recipient == user && !r.all[i].Read() {
+		if in.Holds(r.all[i]) && !r.all[i].Read() {
 			r.all[i].ReadAt = at
 		}
 	}

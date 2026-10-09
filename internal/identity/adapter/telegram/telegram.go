@@ -19,8 +19,9 @@ import (
 
 var ErrInvalidLogin = errors.New("invalid Telegram login")
 
-// MaxAge bounds replay of a captured login link; Telegram recommends checking auth_date.
-const MaxAge = 24 * time.Hour
+// MaxAge bounds replay of a captured widget payload (Telegram recommends checking auth_date);
+// the widget posts it immediately, so minutes are plenty.
+const MaxAge = 5 * time.Minute
 
 // clockSkew tolerates a slightly fast Telegram clock.
 const clockSkew = time.Minute

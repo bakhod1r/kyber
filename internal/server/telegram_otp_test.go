@@ -137,3 +137,24 @@ func TestS40TelegramOTPDisabled(t *testing.T) {
 		expect(t, code, 404, b)
 	})
 }
+
+// Regression (review): a cross-site <form enctype="text/plain"> must not drive the OTP login
+// (login CSRF: the victim would be signed into the attacker's account).
+func TestS40OTPRejectsNonJSON(t *testing.T) {
+	api := newBotAPI(t)
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		for _, path := range []string{"/api/v1/auth/telegram/otp", "/api/v1/auth/telegram/otp/verify"} {
+			req, _ := http.NewRequest("POST", anon.srv.URL+path, strings.NewReader(`{"id":"x","code":"123456"}`))
+			req.Header.Set("Content-Type", "text/plain")
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			spec.check(t, req, res)
+			res.Body.Close()
+			if res.StatusCode != http.StatusForbidden {
+				t.Fatalf("%s with text/plain = %d, want 403", path, res.StatusCode)
+			}
+		}
+	}, server.WithSocial(identityhttp.Social{TelegramBot: "kyber_bot"}), server.WithTelegramBot(telegram.NewBot("TOKEN", api.URL), 0))
+}

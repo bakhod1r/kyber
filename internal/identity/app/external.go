@@ -48,6 +48,19 @@ func (s *Service) LoginExternal(ctx context.Context, p ExternalProfile) (string,
 }
 
 func (s *Service) externalUser(ctx context.Context, p ExternalProfile) (*domain.User, error) {
+	u, err := s.findOrCreate(ctx, p)
+	if errors.Is(err, errLostRace) { // a concurrent first login created the account: use it
+		u, err = s.findOrCreate(ctx, p)
+	}
+	return u, err
+}
+
+// syntheticDomain addresses belong to provider accounts without an email; signup refuses it.
+const syntheticDomain = "users.kyber.invalid"
+
+var errLostRace = errors.New("account created concurrently")
+
+func (s *Service) findOrCreate(ctx context.Context, p ExternalProfile) (*domain.User, error) {
 	id, err := s.external.LinkedUser(ctx, p.Provider, p.Subject)
 	if err == nil {
 		return s.users.ByID(ctx, id)
@@ -55,24 +68,29 @@ func (s *Service) externalUser(ctx context.Context, p ExternalProfile) (*domain.
 	if !errors.Is(err, domain.ErrNotLinked) {
 		return nil, err
 	}
+	// Providers without a (valid) email get an address only this provider account can own.
+	synthetic := domain.Email(fmt.Sprintf("%s-%s@%s", p.Provider, p.Subject, syntheticDomain))
 	email, emailErr := domain.ParseEmail(p.Email)
 	if emailErr != nil {
-		email = domain.Email(fmt.Sprintf("%s-%s@users.kyber.invalid", p.Provider, p.Subject))
+		email = synthetic
 	}
 	u, err := s.users.ByEmail(ctx, email)
 	switch {
-	case err == nil && !p.EmailVerified:
-		return nil, domain.ErrEmailTaken
+	case err == nil && !p.EmailVerified && email != synthetic:
+		return nil, domain.ErrEmailTaken // unverified emails never take over accounts
 	case errors.Is(err, domain.ErrUserNotFound):
 		id := domain.UserID(s.newID())
 		if u, err = domain.NewUser(id, email, p.Name, ""); errors.Is(err, domain.ErrEmptyName) {
 			u, _ = domain.NewUser(id, email, fmt.Sprintf("%s user %s", providerTitle[p.Provider], p.Subject), "")
 		}
-		if err := s.users.Create(ctx, u); err != nil {
+		if err := s.users.Create(ctx, u); errors.Is(err, domain.ErrEmailTaken) {
+			return nil, errLostRace
+		} else if err != nil {
 			return nil, err
 		}
 	case err != nil:
 		return nil, err
 	}
+	// Linking is idempotent, so a link lost to a failure is repaired on the next login.
 	return u, s.external.Link(ctx, domain.ExternalIdentity{Provider: p.Provider, Subject: p.Subject, UserID: u.ID()})
 }

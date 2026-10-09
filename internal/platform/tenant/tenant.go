@@ -3,6 +3,9 @@ package tenant
 
 import "context"
 
+// Default is the workspace of single-tenant installs (workspace/domain.DefaultID).
+const Default = "00000000-0000-4000-8000-000000000001"
+
 type key struct{}
 
 // With scopes ctx to a workspace.

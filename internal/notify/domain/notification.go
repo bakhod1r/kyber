@@ -28,6 +28,7 @@ const (
 type Notification struct {
 	ID          NotificationID
 	Recipient   UserID
+	Workspace   string // the issue's workspace: inboxes are per workspace (ADR-0004)
 	Kind        Kind
 	IssueKey    string
 	IssueTitle  string
@@ -83,14 +84,27 @@ func ParseMentions(body string) []string {
 	return out
 }
 
+// Inbox is one user's notifications within one workspace.
+type Inbox struct {
+	Workspace string
+	User      UserID
+}
+
+func (in Inbox) holds(n Notification) bool {
+	return n.Recipient == in.User && n.Workspace == in.Workspace
+}
+
+// Holds reports whether n belongs to the inbox (for in-memory adapters).
+func (in Inbox) Holds(n Notification) bool { return in.holds(n) }
+
 // Repository is the persistence port for notifications.
 type Repository interface {
 	// Add stores n unless (SourceEvent, Recipient) already exists (idempotent delivery).
 	Add(ctx context.Context, n Notification) error
 	// ListFor returns the user's notifications, newest first.
-	ListFor(ctx context.Context, user UserID, unreadOnly bool, limit int) ([]Notification, error)
-	UnreadCount(ctx context.Context, user UserID) (int, error)
-	// MarkRead fails with ErrNotificationNotFound unless id belongs to user.
-	MarkRead(ctx context.Context, user UserID, id NotificationID, at time.Time) error
-	MarkAllRead(ctx context.Context, user UserID, at time.Time) error
+	ListFor(ctx context.Context, in Inbox, unreadOnly bool, limit int) ([]Notification, error)
+	UnreadCount(ctx context.Context, in Inbox) (int, error)
+	// MarkRead fails with ErrNotificationNotFound unless id belongs to the inbox.
+	MarkRead(ctx context.Context, in Inbox, id NotificationID, at time.Time) error
+	MarkAllRead(ctx context.Context, in Inbox, at time.Time) error
 }

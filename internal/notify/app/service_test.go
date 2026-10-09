@@ -13,6 +13,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/notify/app"
 	"github.com/bakhod1r/kyber/internal/notify/domain"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
 type fakes struct {
@@ -36,6 +37,14 @@ func (f *fakes) UserIDByEmail(_ context.Context, email string) (string, bool, er
 	id, ok := f.emails[email]
 	return id, ok, nil
 }
+
+// Every project of these tests is in the default workspace.
+func (f *fakes) WorkspaceOf(_ context.Context, project string) (string, error) {
+	if project == "BROKEN" {
+		return "", errors.New("db down")
+	}
+	return tenant.Default, nil
+}
 func (f *fakes) DisplayName(_ context.Context, id string) (string, error) { return f.names[id], nil }
 
 func setup() (*app.Service, *memory.Repository) {
@@ -48,7 +57,7 @@ func setup() (*app.Service, *memory.Repository) {
 	repo := memory.NewRepository()
 	n := 0
 	return app.NewService(app.Deps{
-		Repo: repo, Issues: f, Members: f, Users: f,
+		Repo: repo, Issues: f, Members: f, Workspaces: f, Users: f,
 		NewID: func() string { n++; return fmt.Sprintf("n-%02d", n) },
 		Now:   func() time.Time { return time.Date(2026, 4, 1, 10, n, 0, 0, time.UTC) },
 	}), repo
@@ -177,5 +186,17 @@ func TestLegacyAssignedEventWithoutActor(t *testing.T) {
 	}
 	if got := inbox(t, s, "bob"); got != "assigned:KYB-1:Someone" {
 		t.Fatalf("bob = %s", got)
+	}
+}
+
+// If the issue's workspace cannot be resolved, delivery fails so the relay retries later.
+func TestDeliveryNeedsTheWorkspace(t *testing.T) {
+	s, _ := setup()
+	f := &fakes{issues: map[string]app.IssueInfo{"BROKEN-1": {Project: "BROKEN", Title: "x"}}, members: map[string]bool{"BROKEN/bob": true},
+		names: map[string]string{"alice": "Alice"}}
+	s = app.NewService(app.Deps{Repo: memory.NewRepository(), Issues: f, Members: f, Workspaces: f, Users: f,
+		NewID: func() string { return "n" }, Now: time.Now})
+	if err := s.OnIssueAssigned(context.Background(), msg(1, "issue.assigned", `{"key":"BROKEN-1","to":"bob","by":"alice"}`)); err == nil {
+		t.Fatal("expected the workspace lookup error")
 	}
 }
