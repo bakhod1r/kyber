@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
+	"strings"
 )
 
 var (
@@ -32,3 +34,16 @@ func NewIssueKey(project string, number int) (IssueKey, error) {
 func (k IssueKey) Project() string { return k.project }
 func (k IssueKey) Number() int     { return k.number }
 func (k IssueKey) String() string  { return fmt.Sprintf("%s-%d", k.project, k.number) }
+
+// ParseIssueKey parses the "PROJECT-NUMBER" form, e.g. "KYB-12".
+func ParseIssueKey(s string) (IssueKey, error) {
+	i := strings.LastIndexByte(s, '-')
+	if i < 0 {
+		return IssueKey{}, ErrInvalidProjectKey
+	}
+	n, err := strconv.Atoi(s[i+1:])
+	if err != nil {
+		return IssueKey{}, ErrInvalidIssueNumber
+	}
+	return NewIssueKey(s[:i], n)
+}

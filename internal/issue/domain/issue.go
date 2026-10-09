@@ -5,7 +5,11 @@ import (
 	"strings"
 )
 
-var ErrEmptyTitle = errors.New("issue title must not be empty")
+var (
+	ErrEmptyTitle       = errors.New("issue title must not be empty")
+	ErrInvalidIssueType = errors.New("issue type must be one of epic, story, task, bug, subtask")
+	ErrIssueNotFound    = errors.New("issue not found")
+)
 
 type IssueID string
 
@@ -19,6 +23,24 @@ const (
 	TypeSubtask IssueType = "subtask"
 )
 
+// NormalizeTitle trims a title and rejects blank ones.
+func NormalizeTitle(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", ErrEmptyTitle
+	}
+	return s, nil
+}
+
+// ParseIssueType validates a raw issue type.
+func ParseIssueType(s string) (IssueType, error) {
+	switch t := IssueType(s); t {
+	case TypeEpic, TypeStory, TypeTask, TypeBug, TypeSubtask:
+		return t, nil
+	}
+	return "", ErrInvalidIssueType
+}
+
 // Issue is the aggregate root of the Issue Tracking context.
 type Issue struct {
 	id     IssueID
@@ -30,9 +52,9 @@ type Issue struct {
 }
 
 func NewIssue(id IssueID, key IssueKey, title string, typ IssueType, wf *Workflow) (*Issue, error) {
-	title = strings.TrimSpace(title)
-	if title == "" {
-		return nil, ErrEmptyTitle
+	title, err := NormalizeTitle(title)
+	if err != nil {
+		return nil, err
 	}
 	is := &Issue{id: id, key: key, title: title, typ: typ, status: wf.Initial()}
 	is.record(IssueCreated{ID: id, Key: key})

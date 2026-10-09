@@ -1,7 +1,7 @@
 package domain
 
 // Event is a domain event raised by an aggregate and published via the outbox.
-type Event interface{ eventName() string }
+type Event interface{ EventName() string }
 
 type IssueCreated struct {
 	ID  IssueID
@@ -13,5 +13,5 @@ type IssueTransitioned struct {
 	From, To StatusID
 }
 
-func (IssueCreated) eventName() string      { return "issue.created" }
-func (IssueTransitioned) eventName() string { return "issue.transitioned" }
+func (IssueCreated) EventName() string      { return "issue.created" }
+func (IssueTransitioned) EventName() string { return "issue.transitioned" }

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Kyber logo">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#5ad8ff" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#5ad8ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="l" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e6fbff"/><stop offset="1" stop-color="#3fb6ff"/>
+    </linearGradient>
+    <linearGradient id="r" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7fdcff"/><stop offset="1" stop-color="#0b5fd1"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="62" fill="url(#glow)"/>
+  <!-- elongated hexagonal crystal: tip, shoulders, base -->
+  <polygon points="64,8 84,34 84,94 64,120 64,8" fill="url(#r)"/>
+  <polygon points="64,8 44,34 44,94 64,120 64,8" fill="url(#l)"/>
+  <polygon points="64,8 74,34 74,94 64,120" fill="#ffffff" opacity=".35"/>
+  <polyline points="44,34 64,44 84,34" fill="none" stroke="#e6fbff" stroke-width="1.5" opacity=".8"/>
+  <polyline points="44,94 64,104 84,94" fill="none" stroke="#bfefff" stroke-width="1.5" opacity=".6"/>
+  <line x1="64" y1="44" x2="64" y2="104" stroke="#e6fbff" stroke-width="1" opacity=".5"/>
+  <polygon points="64,8 84,34 84,94 64,120 44,94 44,34" fill="none" stroke="#bff3ff" stroke-width="2" stroke-linejoin="round"/>
+</svg>

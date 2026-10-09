@@ -51,3 +51,22 @@ func (w *Workflow) CanTransition(from, to StatusID) bool {
 	_, ok := w.transitions[from][to]
 	return ok
 }
+
+const (
+	StatusTodo       StatusID = "todo"
+	StatusInProgress StatusID = "in_progress"
+	StatusDone       StatusID = "done"
+)
+
+// DefaultWorkflow is todo ⇄ in_progress ⇄ done.
+func DefaultWorkflow() *Workflow {
+	wf, err := NewWorkflow(StatusTodo, map[StatusID][]StatusID{
+		StatusTodo:       {StatusInProgress},
+		StatusInProgress: {StatusTodo, StatusDone},
+		StatusDone:       {StatusInProgress},
+	})
+	if err != nil {
+		panic(err) // static definition; covered by tests
+	}
+	return wf
+}
