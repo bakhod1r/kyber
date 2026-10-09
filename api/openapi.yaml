@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.9.0
+  version: 0.10.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -57,6 +57,7 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/auth/login:
     post:
       operationId: login
@@ -87,6 +88,7 @@ paths:
           headers:
             Retry-After: { schema: { type: integer }, description: Seconds until the next attempt is allowed. }
           content: { application/problem+json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/auth/providers:
     get:
       operationId: authProviders
@@ -105,6 +107,7 @@ paths:
                   google: { type: boolean }
                   telegram_bot: { type: [string, "null"], description: Bot username for the Telegram Login Widget; null when disabled. }
                   telegram_otp: { type: boolean, description: The bot sends one-time login codes. }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/auth/google/start:
     get:
       operationId: googleStart
@@ -221,6 +224,7 @@ paths:
       responses:
         "204": { description: Session ended. }
         "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/me:
     get:
       operationId: me
@@ -228,6 +232,40 @@ paths:
         "200": { description: Current user, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
         "401": { $ref: "#/components/responses/Error" }
 
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/workspaces:
+    get:
+      operationId: listWorkspaces
+      description: The caller's workspaces (ADR-0004). Served on the apex domain and on workspace subdomains.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: { items: { type: array, items: { $ref: "#/components/schemas/Workspace" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createWorkspace
+      description: Creates a workspace (its subdomain is `slug`); the caller becomes its owner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, name]
+              properties: { slug: { type: string, example: acme }, name: { type: string } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Workspace" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/projects:
     get:
       operationId: listProjects
@@ -235,6 +273,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProjectList" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createProject
       requestBody:
@@ -254,6 +293,7 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -659,6 +699,7 @@ paths:
                   items: { type: array, items: { $ref: "#/components/schemas/Notification" } }
                   unread: { type: integer, minimum: 0 }
         "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/notifications/{id}/read:
     parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
     post:
@@ -673,6 +714,7 @@ paths:
       responses:
         "204": { description: All marked as read. }
         "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/transitions:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
     post:
@@ -744,6 +786,16 @@ components:
             required: [status]
             properties: { status: { type: string, enum: [ok, unavailable] } }
   schemas:
+    Workspace:
+      type: object
+      additionalProperties: false
+      required: [id, slug, name, role, url]
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [owner, admin, member, ""] }
+        url: { type: string, description: "https://<slug>.<base domain>/ (\"/\" in single-tenant mode)" }
     ImportReport:
       type: object
       additionalProperties: false

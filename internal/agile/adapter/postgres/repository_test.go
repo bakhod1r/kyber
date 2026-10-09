@@ -14,8 +14,8 @@ func TestContract(t *testing.T) {
 	repotest.Run(t, func(t *testing.T) (domain.Repository, func() []string) {
 		pool := dbtest.New(t)
 		ctx := context.Background()
-		if _, err := pool.Exec(ctx, `INSERT INTO projects (id, key, name) VALUES
-			('10000000-0000-4000-8000-000000000001','KYB','Kyber'), ('10000000-0000-4000-8000-000000000002','OPS','Ops')`); err != nil {
+		if _, err := pool.Exec(ctx, `INSERT INTO projects (id, key, name, workspace_id) VALUES
+			('10000000-0000-4000-8000-000000000001','KYB','Kyber','00000000-0000-4000-8000-000000000001'), ('10000000-0000-4000-8000-000000000002','OPS','Ops','00000000-0000-4000-8000-000000000001')`); err != nil {
 			t.Fatal(err)
 		}
 		outbox := func() []string {

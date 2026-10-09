@@ -38,3 +38,12 @@ the hosted service, while a self-hosted single-company install must keep working
 - ⚠️ Every request pays a slug lookup (cached in memory, invalidated on rename).
 - ⚠️ The Host header becomes security-relevant: only the configured base domain is accepted.
 - ⚠️ Workspace rename changes the URL; old slugs redirect for 90 days and cannot be reused meanwhile.
+
+## Implementation note — phase 1 (shipped)
+- `workspace` context (domain/app/memory/pgx), migration 0014 (existing projects → `default`).
+- `tenant.Resolve` middleware maps the host to a workspace; `RequireMember` hides a workspace's API from
+  non-members; projects are filtered through the Project context, the single authorization choke point
+  every other context already uses. Adding someone to a project makes them a workspace member.
+- **Limitation:** project keys are still unique per installation (they are foreign keys in issues and
+  sprints); per-workspace key namespaces are phase 2. The apex → subdomain session hand-off (needed for
+  Google/Telegram sign-in on subdomains) is also phase 2; password login works on each subdomain.

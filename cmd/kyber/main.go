@@ -75,10 +75,11 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		Telegram:    telegram.NewVerifier(cfg.TelegramBotToken, time.Now),
 		TelegramBot: cfg.TelegramBotName,
 	})
+	common := append([]server.Option{social, server.WithContext(ctx), server.WithBaseDomain(cfg.BaseDomain)}, telegramBot(cfg)...)
 	url := cfg.DatabaseURL
 	if url == "" {
 		log.Warn("KYBER_DATABASE_URL not set: running in-memory dev mode, data is lost on restart")
-		return server.NewInMemory(log, append([]server.Option{social, server.WithContext(ctx)}, telegramBot(cfg)...)...), func() {}, nil
+		return server.NewInMemory(log, common...), func() {}, nil
 	}
 	pool, err := db.Open(ctx, url)
 	if err != nil {
@@ -90,7 +91,7 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 	}
 	log.Info("database ready")
 	server.StartJobs(ctx, log, pool, cfg.SessionPurgeEvery)
-	opts := append([]server.Option{social, server.WithContext(ctx)}, telegramBot(cfg)...)
+	opts := common
 	cleanup := pool.Close
 	if cfg.RedisURL != "" {
 		ropts, err := redis.ParseURL(cfg.RedisURL)

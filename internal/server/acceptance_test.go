@@ -26,6 +26,7 @@ type client struct {
 	t     *testing.T
 	srv   *httptest.Server
 	token string
+	host  string // overrides the Host header (workspace subdomains)
 }
 
 // backends returns the server factories under test: memory always, Postgres when configured.
@@ -66,7 +67,7 @@ func (c *client) signedIn(email string) *client {
 	c.do("POST", "/api/v1/auth/signup", map[string]string{"email": email, "name": "Tester", "password": "long enough pw"})
 	code, body := c.do("POST", "/api/v1/auth/login", map[string]string{"email": email, "password": "long enough pw"})
 	expect(c.t, code, 200, body)
-	return &client{t: c.t, srv: c.srv, token: body["token"].(string)}
+	return &client{t: c.t, srv: c.srv, token: body["token"].(string), host: c.host}
 }
 
 func (c *client) do(method, path string, body any) (int, map[string]any) {
@@ -87,6 +88,9 @@ func (c *client) raw(method, path string, body any, cookie *http.Cookie) *http.R
 	}
 	req, _ := http.NewRequest(method, c.srv.URL+path, r)
 	req.Header.Set("Content-Type", "application/json")
+	if c.host != "" {
+		req.Host = c.host
+	}
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}

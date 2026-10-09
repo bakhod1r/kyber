@@ -2,3 +2,6 @@
 ./internal/access/domain
 ./internal/identity/adapter/google
 ./internal/identity/adapter/telegram
+./internal/workspace/domain
+./internal/workspace/app
+./internal/platform/tenant

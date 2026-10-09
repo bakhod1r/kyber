@@ -20,8 +20,12 @@ var (
 
 var keyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 
+// DefaultWorkspace holds every project in single-tenant mode (see workspace/domain.DefaultID).
+const DefaultWorkspace WorkspaceID = "00000000-0000-4000-8000-000000000001"
+
 type (
-	ProjectID string
+	WorkspaceID string
+	ProjectID   string
 	// UserID is the Identity context's user identifier (published language).
 	UserID string
 	Role   string
@@ -69,15 +73,16 @@ type Member struct {
 
 // Project is the aggregate root of the Project context. It owns membership and the issue sequence.
 type Project struct {
-	id       ProjectID
-	key      string
-	name     string
-	issueSeq int
-	members  map[UserID]Role
+	id        ProjectID
+	workspace WorkspaceID
+	key       string
+	name      string
+	issueSeq  int
+	members   map[UserID]Role
 }
 
 // NewProject creates a project whose creator becomes its first admin.
-func NewProject(id ProjectID, key, name string, creator UserID) (*Project, error) {
+func NewProject(id ProjectID, workspace WorkspaceID, key, name string, creator UserID) (*Project, error) {
 	if !keyRe.MatchString(key) {
 		return nil, ErrInvalidKey
 	}
@@ -85,12 +90,12 @@ func NewProject(id ProjectID, key, name string, creator UserID) (*Project, error
 	if name == "" {
 		return nil, ErrEmptyName
 	}
-	return &Project{id: id, key: key, name: name, members: map[UserID]Role{creator: RoleAdmin}}, nil
+	return &Project{id: id, workspace: workspace, key: key, name: name, members: map[UserID]Role{creator: RoleAdmin}}, nil
 }
 
 // Rehydrate rebuilds a persisted project (repository use only).
-func Rehydrate(id ProjectID, key, name string, issueSeq int, members []Member) *Project {
-	p := &Project{id: id, key: key, name: name, issueSeq: issueSeq, members: make(map[UserID]Role, len(members))}
+func Rehydrate(id ProjectID, workspace WorkspaceID, key, name string, issueSeq int, members []Member) *Project {
+	p := &Project{id: id, workspace: workspace, key: key, name: name, issueSeq: issueSeq, members: make(map[UserID]Role, len(members))}
 	for _, m := range members {
 		p.members[m.UserID] = m.Role
 	}
@@ -98,8 +103,11 @@ func Rehydrate(id ProjectID, key, name string, issueSeq int, members []Member) *
 }
 
 func (p *Project) ID() ProjectID { return p.id }
-func (p *Project) Key() string   { return p.key }
-func (p *Project) Name() string  { return p.name }
+
+// Workspace is the tenant the project belongs to (ADR-0004).
+func (p *Project) Workspace() WorkspaceID { return p.workspace }
+func (p *Project) Key() string            { return p.key }
+func (p *Project) Name() string           { return p.name }
 
 // IssueSeq is the last allocated issue number.
 func (p *Project) IssueSeq() int { return p.issueSeq }

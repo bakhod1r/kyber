@@ -25,14 +25,14 @@ func TestRepository(t *testing.T) {
 	}
 	repo := postgres.NewRepository(pool)
 
-	kyb, _ := domain.NewProject("20000000-0000-4000-8000-000000000001", "KYB", "Kyber", alice)
-	zed, _ := domain.NewProject("20000000-0000-4000-8000-000000000002", "ZED", "Zed", bob)
+	kyb, _ := domain.NewProject("20000000-0000-4000-8000-000000000001", domain.DefaultWorkspace, "KYB", "Kyber", alice)
+	zed, _ := domain.NewProject("20000000-0000-4000-8000-000000000002", domain.DefaultWorkspace, "ZED", "Zed", bob)
 	for _, p := range []*domain.Project{kyb, zed} {
 		if err := repo.Create(ctx, p); err != nil {
 			t.Fatal(err)
 		}
 	}
-	dup, _ := domain.NewProject("20000000-0000-4000-8000-000000000003", "KYB", "Dup", bob)
+	dup, _ := domain.NewProject("20000000-0000-4000-8000-000000000003", domain.DefaultWorkspace, "KYB", "Dup", bob)
 	if err := repo.Create(ctx, dup); !errors.Is(err, domain.ErrKeyTaken) {
 		t.Fatalf("dup err = %v", err)
 	}

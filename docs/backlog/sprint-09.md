@@ -45,3 +45,13 @@ guard's server-rendered `adminui` (requires guard sessions, Postgres + Redis).
 ## S38 — Hosted sign-up ("use Kyber like Jira Cloud")
 Anyone can sign up on the site, create a workspace and invite their team; depends on S33 (workspaces).
 Email verification (emailx), password reset, invitations by email, per-workspace limits configured by super admins.
+
+## S33 — Workspaces, phase 1 ✅ (shipped; see ADR-0004 implementation note)
+
+## S41 — Pomodoro on issues, with history
+As a developer I want to work on an issue in Pomodoro sessions and keep a history of them.
+- Start a 25-minute focus session on an issue (configurable 15–60), pause/resume, stop early, 5/15-minute breaks.
+- One running session per user; the timer survives reloads (server-side start time, client countdown).
+- Every finished or stopped session is stored as a work-log entry (issue, user, start, end, focused minutes,
+  completed or interrupted) and appears in the issue's history; "time spent" sums them (Jira worklog parity).
+- Reports: focus time per person/day and per sprint; streaks.

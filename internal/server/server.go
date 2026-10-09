@@ -62,6 +62,11 @@ import (
 	projectpg "github.com/bakhod1r/kyber/internal/project/adapter/postgres"
 	projectapp "github.com/bakhod1r/kyber/internal/project/app"
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
+	workspacehttp "github.com/bakhod1r/kyber/internal/workspace/adapter/httpapi"
+	workspacememory "github.com/bakhod1r/kyber/internal/workspace/adapter/memory"
+	workspacepg "github.com/bakhod1r/kyber/internal/workspace/adapter/postgres"
+	workspaceapp "github.com/bakhod1r/kyber/internal/workspace/app"
+	workspacedomain "github.com/bakhod1r/kyber/internal/workspace/domain"
 	"github.com/bakhod1r/kyber/web"
 )
 
@@ -84,6 +89,8 @@ type deps struct {
 	notes        notifydomain.Repository
 	activity     insightsdomain.Repository
 	mappings     importerdomain.MappingRepository
+	workspaces   workspacedomain.Repository
+	baseDomain   string // "" = single-tenant (ADR-0004)
 	outbox       outbox.Store
 	ctx          context.Context // lifetime of background work (outbox relay)
 	relayEvery   time.Duration
@@ -104,6 +111,9 @@ func WithTelegramBot(bot *telegram.Bot, wait time.Duration) Option {
 	return func(d *deps) { d.telegramBot, d.telegramWait = bot, wait }
 }
 
+// WithBaseDomain enables workspaces on subdomains of domain (ADR-0004).
+func WithBaseDomain(domain string) Option { return func(d *deps) { d.baseDomain = domain } }
+
 // Option configures optional infrastructure.
 type Option func(*deps)
 
@@ -118,9 +128,9 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		sprints: sprintRepo, notes: notifymemory.NewRepository(), activity: insightsmemory.NewRepository(),
-		mappings: importermemory.NewRepository(),
-		outbox:   outbox.NewMemoryStore(events(issueRepo.Outbox), events(sprintRepo.Outbox)),
-		users:    ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
+		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox), events(sprintRepo.Outbox)),
+		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
 		o(&d)
@@ -159,7 +169,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		sprints: agilepg.NewRepository(pool), notes: notifypg.NewRepository(pool), outbox: outbox.NewPostgresStore(pool),
-		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool),
+		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
@@ -183,7 +193,9 @@ func (systemClock) Now() time.Time { return time.Now() }
 
 func build(log *slog.Logger, d deps) http.Handler {
 	users := identitydir.New(d.users)
-	projects := projectapp.NewService(d.projects, users, id.New)
+	workspaces := workspaceapp.NewService(d.workspaces, id.New)
+	tenancy := workspacehttp.New(workspaces, log, d.baseDomain, d.cookieSecure)
+	projects := projectapp.NewService(d.projects, users, id.New).WithWorkspaces(workspaces)
 	acl := projectacl.New(projects, users)
 	// Issue Tracking and Agile depend on each other through ports; the sprint
 	// ACL is bound once both services exist.
@@ -247,6 +259,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	notifyhttp.New(notify, log).Register(api)
 	insightshttp.New(insights, log).Register(api)
 	importerhttp.New(importer, log).Register(api)
+	tenancy.Register(api)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -264,9 +277,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
-	mux.Handle("/api/v1/", auth.RequireAuth(api))
+	mux.Handle("/api/v1/", auth.RequireAuth(tenancy.RequireMember(api)))
 	mux.Handle("/", web.Handler(web.Dist()))
-	return observe(log, m, recoverer(log, mux))
+	return observe(log, m, recoverer(log, tenancy.Resolve(mux)))
 }
 
 func observe(log *slog.Logger, m *metrics.HTTP, next http.Handler) http.Handler {

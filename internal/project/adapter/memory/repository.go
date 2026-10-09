@@ -18,7 +18,7 @@ func NewRepository() *Repository { return &Repository{byKey: map[string]*domain.
 
 // clone deep-copies a project so callers never share the stored membership map.
 func clone(p *domain.Project) *domain.Project {
-	return domain.Rehydrate(p.ID(), p.Key(), p.Name(), p.IssueSeq(), p.Members())
+	return domain.Rehydrate(p.ID(), p.Workspace(), p.Key(), p.Name(), p.IssueSeq(), p.Members())
 }
 
 func (r *Repository) Create(_ context.Context, p *domain.Project) error {

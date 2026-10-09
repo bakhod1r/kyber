@@ -15,7 +15,7 @@ const (
 
 func newProject(t *testing.T) *domain.Project {
 	t.Helper()
-	p, err := domain.NewProject("p-1", "KYB", "Kyber", alice)
+	p, err := domain.NewProject("p-1", domain.DefaultWorkspace, "KYB", "Kyber", alice)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestNewProject(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, err := domain.NewProject("p-1", tt.key, tt.title, alice)
+			p, err := domain.NewProject("p-1", domain.DefaultWorkspace, tt.key, tt.title, alice)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("err = %v, want %v", err, tt.wantErr)
 			}
@@ -111,8 +111,8 @@ func TestNextIssueNumberAndRehydrate(t *testing.T) {
 			t.Fatalf("got %d, want %d", got, want)
 		}
 	}
-	r := domain.Rehydrate("p-1", "KYB", "Kyber", 41, []domain.Member{{UserID: bob, Role: domain.RoleAdmin}})
-	if r.IssueSeq() != 41 || r.NextIssueNumber() != 42 {
+	r := domain.Rehydrate("p-1", "w-1", "KYB", "Kyber", 41, []domain.Member{{UserID: bob, Role: domain.RoleAdmin}})
+	if r.IssueSeq() != 41 || r.Workspace() != "w-1" || r.NextIssueNumber() != 42 {
 		t.Fatalf("seq = %d", r.IssueSeq())
 	}
 	if err := r.Authorize(bob, domain.PermAdmin); err != nil {

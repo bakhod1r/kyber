@@ -25,8 +25,8 @@ type querier interface {
 
 func (r *Repository) Create(ctx context.Context, p *domain.Project) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `INSERT INTO projects (id, key, name, issue_seq) VALUES ($1, $2, $3, $4)`,
-			string(p.ID()), p.Key(), p.Name(), p.IssueSeq())
+		_, err := tx.Exec(ctx, `INSERT INTO projects (id, workspace_id, key, name, issue_seq) VALUES ($1, $2, $3, $4, $5)`,
+			string(p.ID()), string(p.Workspace()), p.Key(), p.Name(), p.IssueSeq())
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return domain.ErrKeyTaken
@@ -82,9 +82,9 @@ func (r *Repository) ListForUser(ctx context.Context, u domain.UserID) ([]*domai
 }
 
 func load(ctx context.Context, q querier, where string, args ...any) (*domain.Project, error) {
-	var id, key, name string
+	var id, ws, key, name string
 	var seq int
-	err := q.QueryRow(ctx, `SELECT id::text, key, name, issue_seq FROM projects `+where, args...).Scan(&id, &key, &name, &seq)
+	err := q.QueryRow(ctx, `SELECT id::text, workspace_id::text, key, name, issue_seq FROM projects `+where, args...).Scan(&id, &ws, &key, &name, &seq)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrProjectNotFound
 	}
@@ -103,7 +103,7 @@ func load(ctx context.Context, q querier, where string, args ...any) (*domain.Pr
 	if err != nil {
 		return nil, err
 	}
-	return domain.Rehydrate(domain.ProjectID(id), key, name, seq, members), nil
+	return domain.Rehydrate(domain.ProjectID(id), domain.WorkspaceID(ws), key, name, seq, members), nil
 }
 
 // writeMembers replaces the stored membership with the aggregate's.

@@ -16,9 +16,9 @@ func TestBackfillOrphanedProjects(t *testing.T) {
 		INSERT INTO users (id, email, name, password_hash) VALUES
 			('40000000-0000-4000-8000-000000000001', 'a@x.uz', 'A', 'h'),
 			('40000000-0000-4000-8000-000000000002', 'b@x.uz', 'B', 'h');
-		INSERT INTO projects (id, key, name) VALUES
-			('50000000-0000-4000-8000-000000000001', 'OLD', 'Legacy'),
-			('50000000-0000-4000-8000-000000000002', 'NEW', 'Owned');
+		INSERT INTO projects (id, key, name, workspace_id) VALUES
+			('50000000-0000-4000-8000-000000000001', 'OLD', 'Legacy', '00000000-0000-4000-8000-000000000001'),
+			('50000000-0000-4000-8000-000000000002', 'NEW', 'Owned', '00000000-0000-4000-8000-000000000001');
 		INSERT INTO project_members VALUES
 			('50000000-0000-4000-8000-000000000002', '40000000-0000-4000-8000-000000000002', 'admin');`)
 	if err != nil {

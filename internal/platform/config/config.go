@@ -17,6 +17,8 @@ type Config struct {
 	SessionPurgeEvery time.Duration `env:"KYBER_SESSION_PURGE_EVERY" default:"1h"`
 	// PublicURL is the external base URL (OAuth redirect URIs are built from it).
 	PublicURL string `env:"KYBER_PUBLIC_URL" default:"http://localhost:8080"`
+	// BaseDomain enables workspaces on subdomains (<slug>.<BaseDomain>, ADR-0004); empty = single-tenant.
+	BaseDomain string `env:"KYBER_BASE_DOMAIN"`
 	// Sign in with Google: create an OAuth client (Web application) in Google Cloud and add
 	// <PublicURL>/api/v1/auth/google/callback as an authorized redirect URI.
 	GoogleClientID     string `env:"KYBER_GOOGLE_CLIENT_ID"`
