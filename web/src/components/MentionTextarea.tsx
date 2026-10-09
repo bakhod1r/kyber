@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useId, useRef, useState } from "react";
+import { type KeyboardEvent, useId, useLayoutEffect, useRef, useState } from "react";
 import type { Member } from "../api";
 
 type Props = {
@@ -30,6 +30,16 @@ export function MentionTextarea({ label, value, onChange, members, rows = 3, pla
   const [caret, setCaret] = useState(0);
   const [active, setActive] = useState(0);
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+  // Caret to restore after inserting a mention; applied synchronously after the re-render, so
+  // keys typed right after Enter land after the mention (rAF was too late for fast typists).
+  const pendingCaret = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const pos = pendingCaret.current;
+    if (pos === null || !ref.current) return;
+    pendingCaret.current = null;
+    ref.current.focus();
+    ref.current.setSelectionRange(pos, pos);
+  });
 
   const token = activeToken(value, caret);
   const options = token && token.start !== dismissedAt ? members.filter((m) => matches(m, token.query)).slice(0, MAX) : [];
@@ -48,10 +58,7 @@ export function MentionTextarea({ label, value, onChange, members, rows = 3, pla
     onChange(next);
     setCaret(pos);
     setActive(0);
-    requestAnimationFrame(() => {
-      ref.current?.focus();
-      ref.current?.setSelectionRange(pos, pos);
-    });
+    pendingCaret.current = pos;
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
