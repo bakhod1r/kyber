@@ -26,6 +26,7 @@ jobs:
           go-version-file: go.mod
       - run: make lint
       - run: make test
+      - run: make cover-strict
       - run: make build
       - name: ctxsentinel (context.Context misuse)
         run: go run github.com/bakhod1r/ctxsentinel/cmd/ctxsentinel@v0.1.0 ./...

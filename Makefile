@@ -1,4 +1,4 @@
-.PHONY: test lint run build docker cover web web-test e2e
+.PHONY: test cover-strict lint run build docker cover web web-test e2e
 
 COVER_MIN ?= 85
 
@@ -7,6 +7,12 @@ test: ## set KYBER_TEST_DATABASE_URL to include Postgres integration tests
 	@total=$$(go tool cover -func=coverage.out | awk '/^total:/ {sub("%","",$$3); print $$3}'); \
 	echo "total coverage: $$total% (min $(COVER_MIN)%)"; \
 	awk -v t=$$total -v m=$(COVER_MIN) 'BEGIN { exit (t+0 < m+0) }'
+
+cover-strict: ## packages listed in .cover-strict must stay at 100% statement coverage
+	@fail=0; for p in $$(grep -v '^#' .cover-strict); do \
+	  c=$$(go test -cover $$p | grep -o '[0-9.]*% of statements' | cut -d% -f1); \
+	  if [ "$$c" != "100.0" ]; then echo "FAIL $$p: $$c% (need 100%)"; fail=1; else echo "ok   $$p: 100%"; fi; \
+	done; exit $$fail
 
 lint:
 	@test -z "$$(gofmt -l .)" || (gofmt -l . && echo "gofmt needed" && exit 1)

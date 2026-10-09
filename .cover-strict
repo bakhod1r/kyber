@@ -1,0 +1,2 @@
+# Packages that must keep 100% statement coverage (ADR-0003). Add every new package here.
+./internal/access/domain
