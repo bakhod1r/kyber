@@ -15,6 +15,7 @@ export type Issue = {
   description: string;
   priority: Priority;
   assignee_id: string | null;
+  reporter_id: string | null;
   sprint_id: string | null;
   rank: string;
   version: number;
@@ -29,6 +30,18 @@ export type Sprint = {
   started_at: string | null;
   completed_at: string | null;
 };
+export type NotificationKind = "assigned" | "commented" | "mentioned";
+export type Notification = {
+  id: string;
+  kind: NotificationKind;
+  issue_key: string;
+  issue_title: string;
+  actor_name: string;
+  excerpt: string;
+  read: boolean;
+  created_at: string;
+};
+export type Inbox = { items: Notification[]; unread: number };
 export type Completion = { sprint: Sprint; completed: number; returned: number };
 export type IssuePatch = {
   version: number;
@@ -111,6 +124,9 @@ export const api = {
   createSprint: (key: string, name: string, goal: string) =>
     request<Sprint>("POST", `/api/v1/projects/${seg(key)}/sprints`, { name, goal }),
   startSprint: (id: string) => request<Sprint>("POST", `/api/v1/sprints/${seg(id)}/start`),
+  notifications: () => request<Inbox>("GET", "/api/v1/notifications"),
+  markNotificationRead: (id: string) => request<undefined>("POST", `/api/v1/notifications/${seg(id)}/read`),
+  markAllNotificationsRead: () => request<undefined>("POST", "/api/v1/notifications/read-all"),
   completeSprint: (id: string) => request<Completion>("POST", `/api/v1/sprints/${seg(id)}/complete`),
   createIssue: (key: string, title: string, type: IssueType) =>
     request<Issue>("POST", `/api/v1/projects/${seg(key)}/issues`, { title, type }),

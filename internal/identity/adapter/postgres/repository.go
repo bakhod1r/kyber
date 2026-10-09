@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/bakhod1r/kyber/internal/identity/domain"
+	"github.com/bakhod1r/kyber/internal/platform/id"
 )
 
 type Repository struct{ pool *pgxpool.Pool }
@@ -33,8 +34,11 @@ func (r *Repository) ByEmail(ctx context.Context, e domain.Email) (*domain.User,
 	return scanUser(r.pool.QueryRow(ctx, userCols+` WHERE email = $1`, e.String()))
 }
 
-func (r *Repository) ByID(ctx context.Context, id domain.UserID) (*domain.User, error) {
-	return scanUser(r.pool.QueryRow(ctx, userCols+` WHERE id = $1`, string(id)))
+func (r *Repository) ByID(ctx context.Context, uid domain.UserID) (*domain.User, error) {
+	if !id.Valid(string(uid)) { // e.g. legacy events without an actor
+		return nil, domain.ErrUserNotFound
+	}
+	return scanUser(r.pool.QueryRow(ctx, userCols+` WHERE id = $1`, string(uid)))
 }
 
 func scanUser(row pgx.Row) (*domain.User, error) {

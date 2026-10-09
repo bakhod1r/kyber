@@ -166,3 +166,16 @@ func TestReadState(t *testing.T) {
 		t.Fatalf("after read-all unread = %d", unread)
 	}
 }
+
+// Regression (QA-06-1): issue.assigned events written before 0.6 have no "by";
+// they must still be delivered (actor shown as "Someone"), never block the relay.
+func TestLegacyAssignedEventWithoutActor(t *testing.T) {
+	ctx := context.Background()
+	s, _ := setup()
+	if err := s.OnIssueAssigned(ctx, msg(1, "issue.assigned", `{"key":"KYB-1","from":"","to":"bob"}`)); err != nil {
+		t.Fatalf("legacy event err = %v", err)
+	}
+	if got := inbox(t, s, "bob"); got != "assigned:KYB-1:Someone" {
+		t.Fatalf("bob = %s", got)
+	}
+}

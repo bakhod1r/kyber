@@ -170,3 +170,26 @@ textarea { font: inherit; color: var(--text); background: var(--surface); border
 .status-in_progress { color: var(--accent); }
 .notice { margin: 0; padding: 0.5rem 0.75rem; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); }
 .create-sprint { grid-template-columns: 1fr 2fr auto; max-width: none; margin-top: 0; }
+
+/* Sprint 06: notifications */
+.bell { position: relative; }
+.bell-button { position: relative; display: grid; place-items: center; padding: 0.45rem 0.6rem; }
+.badge {
+  position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px;
+  background: var(--danger); color: #fff; font-size: 0.7rem; line-height: 18px; text-align: center;
+}
+.bell-panel { position: absolute; right: 0; top: calc(100% + 8px); width: min(380px, 90vw); max-height: 70vh; overflow: auto; z-index: 20; padding: 0.75rem; }
+.bell-panel header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.bell-panel h2 { margin: 0; }
+.bell-panel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; }
+.note {
+  display: grid; gap: 0.15rem; width: 100%; text-align: left; background: none; color: var(--text);
+  border: 1px solid transparent; border-radius: 8px; padding: 0.5rem 0.6rem; font-weight: 400;
+}
+.note:hover { background: var(--surface-2); }
+.note.unread { border-color: var(--border); background: var(--surface-2); }
+.note.unread .note-line::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 0.4rem; }
+.note-title { font-weight: 600; }
+.note-excerpt { color: var(--muted); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note time { color: var(--muted); font-size: 0.75rem; }
+.people { margin: -0.5rem 0 0; font-size: 0.85rem; }

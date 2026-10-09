@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { NavLink, useParams } from "react-router-dom";
+import { NavLink, useParams, useSearchParams } from "react-router-dom";
 import { type Role, api } from "../api";
 import { Backlog } from "../components/Backlog";
 import { Board } from "../components/Board";
@@ -10,7 +10,15 @@ export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" }) 
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
   const project = projects.data?.find((p) => p.key === key);
-  const [open, setOpen] = useState<string | null>(null);
+  // The open issue lives in the URL (?issue=KEY-1), so notifications and links can deep-link to it.
+  const [params, setParams] = useSearchParams();
+  const open = params.get("issue");
+  const setOpen = (issueKey: string | null) =>
+    setParams((p) => {
+      if (issueKey) p.set("issue", issueKey);
+      else p.delete("issue");
+      return p;
+    });
   return (
     <div className="project">
       <h1>

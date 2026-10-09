@@ -72,6 +72,11 @@ export function IssuePanel({ issueKey, projectKey, onClose }: { issueKey: string
           </button>
         </header>
         {issue.isError && <p role="alert" className="error">{issue.error.message}</p>}
+        {loaded && (
+          <p className="muted people">
+            Reporter: {loaded.reporter_id ? (members.data?.find((m) => m.user_id === loaded.reporter_id)?.name ?? "Former member") : "Unknown"}
+          </p>
+        )}
         {draft && (
           <form onSubmit={onSubmit} className="issue-form">
             <label>
@@ -156,7 +161,7 @@ function Comments({ issueKey }: { issueKey: string }) {
       >
         <label>
           Add a comment
-          <textarea rows={3} value={body} onChange={(e) => setBody(e.target.value)} />
+          <textarea rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write a comment. Mention someone with @email" />
         </label>
         {add.isError && <p role="alert" className="error">{add.error.message}</p>}
         <button type="submit" disabled={add.isPending}>

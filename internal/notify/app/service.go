@@ -120,9 +120,13 @@ func (s *Service) deliverTo(ctx context.Context, event int64, issueKey string, i
 	if len(recipients) == 0 {
 		return nil
 	}
-	actorName, err := s.d.Users.DisplayName(ctx, actor)
-	if err != nil {
-		return err
+	actorName := "Someone" // legacy events (before 0.6) do not record the actor
+	if actor != "" {
+		name, err := s.d.Users.DisplayName(ctx, actor)
+		if err != nil {
+			return err
+		}
+		actorName = name
 	}
 	for u, kind := range recipients {
 		ok, err := s.d.Members.IsMember(ctx, info.Project, string(u))

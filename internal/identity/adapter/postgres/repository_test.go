@@ -33,8 +33,10 @@ func TestRepository(t *testing.T) {
 	if _, err := r.ByEmail(ctx, "none@x.uz"); !errors.Is(err, domain.ErrUserNotFound) {
 		t.Fatalf("err = %v", err)
 	}
-	if _, err := r.ByID(ctx, "30000000-0000-4000-8000-000000000009"); !errors.Is(err, domain.ErrUserNotFound) {
-		t.Fatalf("err = %v", err)
+	for _, missing := range []domain.UserID{"30000000-0000-4000-8000-000000000009", "", "not-a-uuid"} {
+		if _, err := r.ByID(ctx, missing); !errors.Is(err, domain.ErrUserNotFound) {
+			t.Fatalf("ByID(%q) err = %v (legacy events carry empty ids; must be not-found, never a uuid cast error)", missing, err)
+		}
 	}
 
 	exp := time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond)

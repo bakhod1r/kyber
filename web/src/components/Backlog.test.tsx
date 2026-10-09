@@ -8,7 +8,7 @@ import { Board } from "./Board";
 
 const issue = (n: number, sprint: string | null, status: Issue["status"] = "todo"): Issue => ({
   id: `i-${n}`, key: `KYB-${n}`, title: `Issue ${n}`, type: "task", status,
-  description: "", priority: "medium", assignee_id: null, sprint_id: sprint, rank: `a${n}`, version: 1,
+  description: "", priority: "medium", assignee_id: null, reporter_id: null, sprint_id: sprint, rank: `a${n}`, version: 1,
 });
 const sprint = (id: string, name: string, state: Sprint["state"], goal = ""): Sprint => ({
   id, project_key: "KYB", name, goal, state, started_at: state === "planned" ? null : "2026-03-01T09:00:00Z", completed_at: null,

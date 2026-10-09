@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { type User, api } from "../api";
+import { NotificationBell } from "./NotificationBell";
 
 export function Layout({ user, children }: { user: User; children: ReactNode }) {
   const qc = useQueryClient();
@@ -21,6 +22,7 @@ export function Layout({ user, children }: { user: User; children: ReactNode }) 
           Kyber
         </Link>
         <span className="spacer" />
+        <NotificationBell />
         <span className="user">{user.name}</span>
         <button className="ghost" onClick={() => logout.mutate()}>
           Log out
