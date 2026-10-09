@@ -56,7 +56,7 @@ func toDTO(u *domain.User) userDTO {
 
 func codeFor(err error) (string, bool) {
 	switch {
-	case errors.Is(err, domain.ErrInvalidEmail), errors.Is(err, domain.ErrWeakPassword), errors.Is(err, domain.ErrEmptyName):
+	case errors.Is(err, domain.ErrInvalidEmail), errors.Is(err, domain.ErrWeakPassword), errors.Is(err, domain.ErrEmptyName), errors.Is(err, domain.ErrInvalidName):
 		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrEmailTaken):
 		return httpx.CodeEmailTaken, true

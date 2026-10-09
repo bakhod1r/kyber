@@ -4,10 +4,12 @@ import (
 	"errors"
 	"math"
 	"strings"
+	"unicode/utf8"
 )
 
 var (
 	ErrEmptyTitle       = errors.New("issue title must not be empty")
+	ErrInvalidTitle     = errors.New("issue title must be one line of at most 255 characters")
 	ErrInvalidIssueType = errors.New("issue type must be one of epic, story, task, bug, subtask")
 	ErrIssueNotFound    = errors.New("issue not found")
 	// ErrConcurrentModification means the issue was changed by someone else since it was loaded.
@@ -70,11 +72,17 @@ const (
 	TypeSubtask IssueType = "subtask"
 )
 
-// NormalizeTitle trims a title and rejects blank ones.
+// MaxTitle is Jira's summary limit.
+const MaxTitle = 255
+
+// NormalizeTitle trims a title and rejects blank, multi-line or overlong ones (Jira summary rules).
 func NormalizeTitle(s string) (string, error) {
 	s = strings.TrimSpace(s)
-	if s == "" {
+	switch {
+	case s == "":
 		return "", ErrEmptyTitle
+	case strings.ContainsAny(s, "\r\n") || utf8.RuneCountInString(s) > MaxTitle:
+		return "", ErrInvalidTitle
 	}
 	return s, nil
 }

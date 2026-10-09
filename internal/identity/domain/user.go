@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/bakhod1r/emailx"
 )
@@ -14,6 +15,7 @@ var (
 	ErrInvalidEmail    = errors.New("invalid email address")
 	ErrWeakPassword    = errors.New("password must be 10-128 characters")
 	ErrEmptyName       = errors.New("name must not be empty")
+	ErrInvalidName     = errors.New("name must be one line of at most 100 characters")
 	ErrEmailTaken      = errors.New("email already registered")
 	ErrUserNotFound    = errors.New("user not found")
 	ErrSessionNotFound = errors.New("session not found")
@@ -55,6 +57,9 @@ func NewUser(id UserID, email Email, name, passwordHash string) (*User, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, ErrEmptyName
+	}
+	if strings.ContainsAny(name, "\r\n\t") || utf8.RuneCountInString(name) > 100 {
+		return nil, ErrInvalidName
 	}
 	return &User{id: id, email: email, name: name, passwordHash: passwordHash}, nil
 }

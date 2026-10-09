@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/bakhod1r/kyber/internal/issue/domain"
@@ -141,5 +142,17 @@ func TestRehydrateAndVersion(t *testing.T) {
 	}
 	if newIssue(t).Version() != 0 {
 		t.Fatal("new issue must have version 0")
+	}
+}
+
+// QA-4: Jira summary rules.
+func TestNormalizeTitleLimits(t *testing.T) {
+	if _, err := domain.NormalizeTitle(strings.Repeat("é", domain.MaxTitle)); err != nil {
+		t.Fatalf("255 runes must be accepted: %v", err)
+	}
+	for _, bad := range []string{strings.Repeat("x", domain.MaxTitle+1), "a\nb", "a\rb"} {
+		if _, err := domain.NormalizeTitle(bad); !errors.Is(err, domain.ErrInvalidTitle) {
+			t.Errorf("%q err = %v", bad[:3], err)
+		}
 	}
 }

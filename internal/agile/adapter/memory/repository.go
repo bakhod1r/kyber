@@ -5,6 +5,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/bakhod1r/kyber/internal/agile/domain"
 )
@@ -19,6 +20,7 @@ type Repository struct {
 	byID   map[domain.SprintID]entry
 	seq    int
 	outbox []domain.Event
+	outAt  []time.Time // when each event was recorded (the outbox created_at)
 }
 
 func NewRepository() *Repository { return &Repository{byID: map[domain.SprintID]entry{}} }
@@ -49,7 +51,7 @@ func (r *Repository) Save(_ context.Context, s *domain.Sprint, events []domain.E
 	s.MarkPersisted()
 	e.snap = snapshot(s)
 	r.byID[s.ID()] = e
-	r.outbox = append(r.outbox, events...)
+	r.outbox, r.outAt = append(r.outbox, events...), appendNow(r.outAt, len(events))
 	return nil
 }
 
@@ -115,4 +117,19 @@ func (r *Repository) Outbox() []domain.Event {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]domain.Event(nil), r.outbox...)
+}
+
+func appendNow(ts []time.Time, n int) []time.Time {
+	now := time.Now()
+	for range n {
+		ts = append(ts, now)
+	}
+	return ts
+}
+
+// OutboxTimes are the recording times of Outbox(), index by index.
+func (r *Repository) OutboxTimes() []time.Time {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]time.Time(nil), r.outAt...)
 }

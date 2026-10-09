@@ -61,3 +61,11 @@ func TestNewUser(t *testing.T) {
 		t.Fatalf("u = %+v, %v", u, err)
 	}
 }
+
+func TestNameLimits(t *testing.T) {
+	for _, bad := range []string{strings.Repeat("n", 101), "a\nb"} {
+		if _, err := domain.NewUser("u", "a@b.uz", bad, "h"); !errors.Is(err, domain.ErrInvalidName) {
+			t.Errorf("err = %v", err)
+		}
+	}
+}

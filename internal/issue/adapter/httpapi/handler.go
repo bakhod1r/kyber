@@ -75,7 +75,7 @@ func codeFor(err error) (string, bool) {
 	switch {
 	case errors.Is(err, app.ErrInvalidKey):
 		return httpx.CodeInvalidIssueKey, true
-	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidIssueType),
+	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidTitle), errors.Is(err, domain.ErrInvalidIssueType),
 		errors.Is(err, domain.ErrInvalidPriority), errors.Is(err, domain.ErrDescriptionTooLong),
 		errors.Is(err, domain.ErrInvalidCommentBody), errors.Is(err, app.ErrInvalidAssignee), errors.Is(err, errMissingVersion),
 		errors.Is(err, app.ErrInvalidSprint), errors.Is(err, app.ErrInvalidAnchor), errors.Is(err, domain.ErrInvalidEstimate):

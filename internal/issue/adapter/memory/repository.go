@@ -5,6 +5,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/bakhod1r/kyber/internal/issue/domain"
 )
@@ -13,6 +14,7 @@ type Repository struct {
 	mu     sync.Mutex
 	byKey  map[string]domain.Issue
 	outbox []domain.Event
+	outAt  []time.Time // when each event was recorded (the outbox created_at)
 }
 
 func NewRepository() *Repository { return &Repository{byKey: map[string]domain.Issue{}} }
@@ -28,7 +30,7 @@ func (r *Repository) Save(_ context.Context, is *domain.Issue, events []domain.E
 	}
 	is.MarkPersisted()
 	r.byKey[is.Key().String()] = *is
-	r.outbox = append(r.outbox, events...)
+	r.outbox, r.outAt = append(r.outbox, events...), appendNow(r.outAt, len(events))
 	return nil
 }
 
@@ -128,5 +130,20 @@ func (r *Repository) PrevRank(_ context.Context, project string, before domain.R
 func (r *Repository) appendOutbox(events []domain.Event) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.outbox = append(r.outbox, events...)
+	r.outbox, r.outAt = append(r.outbox, events...), appendNow(r.outAt, len(events))
+}
+
+func appendNow(ts []time.Time, n int) []time.Time {
+	now := time.Now()
+	for range n {
+		ts = append(ts, now)
+	}
+	return ts
+}
+
+// OutboxTimes are the recording times of Outbox(), index by index.
+func (r *Repository) OutboxTimes() []time.Time {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]time.Time(nil), r.outAt...)
 }

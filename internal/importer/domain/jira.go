@@ -90,13 +90,22 @@ func ParseJiraCSV(r io.Reader) ([]Row, error) {
 			return ""
 		}
 		rows = append(rows, Row{
-			Line: line, Key: get("key"), Summary: get("summary"), Type: get("type"), Status: get("status"),
+			Line: line, Key: get("key"), Summary: unguard(get("summary")), Type: get("type"), Status: get("status"),
 			StatusCategory: get("status_category"), Priority: get("priority"), Assignee: get("assignee"),
 			Reporter: get("reporter"), Created: get("created"), Resolved: get("resolved"),
-			Description: strings.ReplaceAll(get("description"), "\r\n", "\n"), StoryPoints: get("points"),
+			Description: unguard(strings.ReplaceAll(get("description"), "\r\n", "\n")), StoryPoints: get("points"),
 		})
 	}
 	return rows, nil
+}
+
+// unguard removes the apostrophe WriteJiraCSV puts before formula-like text (safeCell), so an
+// export imports back unchanged.
+func unguard(s string) string {
+	if len(s) > 1 && s[0] == '\'' && strings.ContainsRune("=+-@\t\r", rune(s[1])) {
+		return s[1:]
+	}
+	return s
 }
 
 // MapType maps a Jira issue type; unknown types become "task" with a warning.
@@ -262,6 +271,9 @@ func Plan(rows []Row, members []Member, alreadyImported map[string]bool) ImportP
 }
 
 func matchMember(s string, members []Member) string {
+	if s = strings.TrimSpace(s); s == "" {
+		return "" // an empty cell must not match a member with an empty name
+	}
 	for _, m := range members {
 		if strings.EqualFold(m.Email, s) || strings.EqualFold(m.Name, s) {
 			return m.ID

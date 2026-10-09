@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
 )
@@ -20,7 +21,7 @@ func quiet() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)
 func TestRelayDispatchesInOrderOnce(t *testing.T) {
 	ctx := context.Background()
 	var a, b []outbox.Event
-	store := outbox.NewMemoryStore(func() []outbox.Event { return a }, func() []outbox.Event { return b })
+	store := outbox.NewMemoryStore(stamped(func() []outbox.Event { return a }), stamped(func() []outbox.Event { return b }))
 	var got []string
 	relay := outbox.NewRelay(store, quiet())
 	relay.Handle("x.created", func(_ context.Context, m outbox.Message) error {
@@ -51,7 +52,7 @@ func TestRelayDispatchesInOrderOnce(t *testing.T) {
 func TestRelayRetriesFailedEventsAndKeepsOrder(t *testing.T) {
 	ctx := context.Background()
 	src := []outbox.Event{ev{"e"}, ev{"e"}, ev{"e"}}
-	store := outbox.NewMemoryStore(func() []outbox.Event { return src })
+	store := outbox.NewMemoryStore(stamped(func() []outbox.Event { return src }))
 	var seen []int64
 	fail := true
 	relay := outbox.NewRelay(store, quiet())
@@ -76,7 +77,7 @@ func TestRelayRetriesFailedEventsAndKeepsOrder(t *testing.T) {
 }
 
 func TestRelayRunStopsOnCancel(t *testing.T) {
-	store := outbox.NewMemoryStore(func() []outbox.Event { return []outbox.Event{ev{"e"}} })
+	store := outbox.NewMemoryStore(stamped(func() []outbox.Event { return []outbox.Event{ev{"e"}} }))
 	relay := outbox.NewRelay(store, quiet())
 	done := make(chan struct{})
 	handled := make(chan struct{}, 1)
@@ -92,4 +93,28 @@ func TestRelayRunStopsOnCancel(t *testing.T) {
 	<-handled
 	cancel()
 	<-done
+}
+
+// stamped stamps every event with t0, as a repository would at write time.
+func stamped(log func() []outbox.Event) outbox.Source {
+	return func() ([]outbox.Event, []time.Time) {
+		events := log()
+		at := make([]time.Time, len(events))
+		for i := range at {
+			at[i] = t0
+		}
+		return events, at
+	}
+}
+
+var t0 = time.Date(2026, 5, 4, 9, 0, 0, 0, time.UTC)
+
+// QA-2: a message carries the time its event was recorded, not when the relay saw it.
+func TestMemoryStoreKeepsRecordTime(t *testing.T) {
+	store := outbox.NewMemoryStore(stamped(func() []outbox.Event { return []outbox.Event{ev{"e"}} }))
+	var got time.Time
+	_, _ = store.Process(context.Background(), 10, func(m outbox.Message) error { got = m.At; return nil })
+	if !got.Equal(t0) {
+		t.Fatalf("At = %s, want the recording time %s", got, t0)
+	}
 }

@@ -84,17 +84,20 @@ func (r *Relay) Run(ctx context.Context, every time.Duration) {
 	})
 }
 
+// Source is an in-memory repository's full, append-only event log with the time each event
+// was recorded (like the outbox table's created_at).
+type Source func() ([]Event, []time.Time)
+
 // MemoryStore relays events kept by in-memory repositories (dev mode and tests).
-// Each source returns its full, append-only event log.
 type MemoryStore struct {
 	mu      sync.Mutex
-	sources []func() []Event
+	sources []Source
 	cursors []int
 	nextID  int64
 	pending []Message
 }
 
-func NewMemoryStore(sources ...func() []Event) *MemoryStore {
+func NewMemoryStore(sources ...Source) *MemoryStore {
 	return &MemoryStore{sources: sources, cursors: make([]int, len(sources))}
 }
 
@@ -102,14 +105,14 @@ func (s *MemoryStore) Process(_ context.Context, limit int, fn func(Message) err
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, src := range s.sources {
-		events := src()
-		for _, e := range events[s.cursors[i]:] {
+		events, at := src()
+		for j, e := range events[s.cursors[i]:] {
 			payload, err := json.Marshal(e)
 			if err != nil {
 				return 0, err
 			}
 			s.nextID++
-			s.pending = append(s.pending, Message{ID: s.nextID, Name: e.EventName(), Payload: payload, At: time.Now()})
+			s.pending = append(s.pending, Message{ID: s.nextID, Name: e.EventName(), Payload: payload, At: at[s.cursors[i]+j]})
 		}
 		s.cursors[i] = len(events)
 	}

@@ -70,6 +70,9 @@ func TestScheduleAndTimetable(t *testing.T) {
 func TestCancel(t *testing.T) {
 	s, ctx := setup()
 	m, _ := s.Schedule(ctx, "lead", app.Schedule{Title: "Retro", Start: t0, End: t0.Add(time.Hour), Attendees: []string{"dev"}})
+	if err := s.Cancel(ctx, "stranger", string(m.ID)); !errors.Is(err, domain.ErrMeetingNotFound) {
+		t.Fatalf("outsider cancel err = %v (no existence leak)", err)
+	}
 	if err := s.Cancel(ctx, "dev", string(m.ID)); !errors.Is(err, app.ErrForbidden) {
 		t.Fatalf("attendee cancel err = %v", err)
 	}

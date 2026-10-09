@@ -1086,7 +1086,7 @@ func TestS30CSVExport(t *testing.T) {
 			t.Fatalf("re-import = %v", run)
 		}
 		_, got := lead.do("GET", "/api/v1/issues/NEW-1", nil)
-		if got["title"] != "'=cmd, \"quoted\"" || got["type"] != "bug" || got["status"] != "in_progress" || got["priority"] != "highest" ||
+		if got["title"] != "=cmd, \"quoted\"" || got["type"] != "bug" || got["status"] != "in_progress" || got["priority"] != "highest" ||
 			got["estimate"] != 2.5 || got["assignee_id"] != me["id"] || got["description"] != "multi\nline" {
 			t.Fatalf("round trip = %v", got)
 		}

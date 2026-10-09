@@ -22,6 +22,9 @@ func TestExportRoundTrips(t *testing.T) {
 	if !strings.HasPrefix(buf.String(), "\xef\xbb\xbfIssue key,Summary,Issue Type,Status,Status Category,Priority,Assignee,Reporter,Description,Story Points\r\n") {
 		t.Fatalf("header = %q", strings.SplitN(buf.String(), "\n", 2)[0])
 	}
+	if !strings.Contains(buf.String(), `'=HYPERLINK`) {
+		t.Fatal("the exported file must defuse formulas")
+	}
 	rows, err := domain.ParseJiraCSV(&buf)
 	if err != nil {
 		t.Fatal(err)
@@ -36,8 +39,8 @@ func TestExportRoundTrips(t *testing.T) {
 		a.AssigneeID != "u-ali" || a.ReporterID != "u-lead" || a.Description != "line 1\nline 2" || a.Points == nil || *a.Points != 2.5 || len(a.Warnings) != 0 {
 		t.Fatalf("round trip a = %+v", a)
 	}
-	// Spreadsheet formula injection is neutralised with a leading apostrophe.
-	if b.Summary != "'=HYPERLINK(\"x\")" || b.Type != "epic" || b.Status != "done" || b.Priority != "lowest" || b.Points != nil {
+	// Export neutralises formulas with a leading apostrophe; import removes it again (QA-3).
+	if b.Summary != "=HYPERLINK(\"x\")" || b.Type != "epic" || b.Status != "done" || b.Priority != "lowest" || b.Points != nil || b.ReporterID != "" {
 		t.Fatalf("round trip b = %+v", b)
 	}
 }

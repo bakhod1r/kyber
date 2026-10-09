@@ -102,7 +102,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusCreated, h.dto(ws, actor))
 }
 
-// apexAPI are the API paths served on the apex domain in multi-tenant mode.
+// apexAPI are the API paths served on the apex domain in multi-tenant mode
+// (entries ending in "/" are prefixes, the others exact paths).
 var apexAPI = []string{"/api/v1/auth/", "/api/v1/me", "/api/v1/workspaces"}
 
 // probes answer on any host (load balancers and Prometheus use IPs).
@@ -110,7 +111,7 @@ var probes = []string{"/healthz", "/readyz", "/metrics"}
 
 func hasPrefix(path string, list []string) bool {
 	for _, p := range list {
-		if path == p || strings.HasPrefix(path, p) {
+		if path == p || (strings.HasSuffix(p, "/") && strings.HasPrefix(path, p)) {
 			return true
 		}
 	}

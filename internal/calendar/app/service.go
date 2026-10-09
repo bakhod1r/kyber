@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/calendar/domain"
@@ -75,6 +76,9 @@ func (s *Service) Cancel(ctx context.Context, actor, id string) error {
 		return domain.ErrMeetingNotFound
 	}
 	if string(m.Organizer) != actor {
+		if !slices.Contains(m.Attendees, domain.UserID(actor)) {
+			return domain.ErrMeetingNotFound // outsiders cannot learn that it exists
+		}
 		return ErrForbidden
 	}
 	return s.repo.Delete(ctx, m.ID)

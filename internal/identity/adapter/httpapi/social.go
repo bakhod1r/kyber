@@ -82,7 +82,7 @@ func (h *Handler) failed(w http.ResponseWriter, r *http.Request, provider string
 
 func (h *Handler) googleStart(w http.ResponseWriter, r *http.Request) {
 	if !h.googleOn() {
-		http.NotFound(w, r)
+		httpx.Error(w, r, h.log, errProviderDisabled, codeFor)
 		return
 	}
 	f := google.NewFlow()
@@ -98,7 +98,7 @@ func (h *Handler) googleStart(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) googleCallback(w http.ResponseWriter, r *http.Request) {
 	if !h.googleOn() {
-		http.NotFound(w, r)
+		httpx.Error(w, r, h.log, errProviderDisabled, codeFor)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: flowCookie, Value: "", Path: "/api/v1/auth/google/", MaxAge: -1, HttpOnly: true, Secure: h.cookieSecure})

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bakhod1r/errorx"
@@ -145,7 +146,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		sprints: sprintRepo, notes: notifymemory.NewRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
-		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox), events(sprintRepo.Outbox)),
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxTimes), events(sprintRepo.Outbox, sprintRepo.OutboxTimes)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
@@ -155,14 +156,15 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 }
 
 // events adapts a context's typed event log to the relay's generic one.
-func events[E outbox.Event](log func() []E) func() []outbox.Event {
-	return func() []outbox.Event {
-		src := log()
+func events[E outbox.Event](log func() []E, times func() []time.Time) outbox.Source {
+	return func() ([]outbox.Event, []time.Time) {
+		at := times() // read first: never more times than events
+		src := log()[:len(at)]
 		out := make([]outbox.Event, len(src))
 		for i, e := range src {
 			out[i] = e
 		}
-		return out
+		return out, at
 	}
 }
 
@@ -300,7 +302,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
-	mux.Handle("/api/v1/", auth.RequireAuth(tenancy.RequireMember(api)))
+	mux.Handle("/api/v1/", auth.RequireAuth(tenancy.RequireMember(problemFallback(api))))
 	mux.Handle("/", web.Handler(web.Dist()))
 	return observe(log, m, recoverer(log, tenancy.Resolve(mux)))
 }
@@ -340,3 +342,38 @@ func recoverer(log *slog.Logger, next http.Handler) http.Handler {
 
 // lateSprints breaks the construction cycle between Issue Tracking and Agile.
 type lateSprints struct{ *agileacl.Sprints }
+
+// problemFallback turns the router's plain-text 404/405 into RFC 9457 problems, so every API
+// error has the same shape (the Allow header of a 405 is kept).
+func problemFallback(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(&fallbackWriter{ResponseWriter: w, r: r}, r)
+	})
+}
+
+type fallbackWriter struct {
+	http.ResponseWriter
+	r        *http.Request
+	replaced bool
+}
+
+func (f *fallbackWriter) WriteHeader(code int) {
+	plain := strings.HasPrefix(f.Header().Get("Content-Type"), "text/plain")
+	switch {
+	case plain && code == http.StatusNotFound:
+		f.replaced = true
+		httpx.Problem(f.ResponseWriter, f.r, errorx.New(httpx.CodeNotFound, "no such endpoint"))
+	case plain && code == http.StatusMethodNotAllowed:
+		f.replaced = true
+		httpx.Problem(f.ResponseWriter, f.r, errorx.New(httpx.CodeMethodNotAllowed, "method not allowed"))
+	default:
+		f.ResponseWriter.WriteHeader(code)
+	}
+}
+
+func (f *fallbackWriter) Write(b []byte) (int, error) {
+	if f.replaced {
+		return len(b), nil // drop the router's plain-text body
+	}
+	return f.ResponseWriter.Write(b)
+}
