@@ -22,6 +22,15 @@ Chain: **architect decides → engineer implements → quality verifies → rele
 
 Large features: `/flow <goal>`. Every PR: `/review`.
 
+## Method: DDD + TDD (mandatory)
+
+- **DDD**: follow bounded contexts in `docs/PLAN.md` §3.5. Each context = `domain/` (pure, no I/O),
+  `app/` (use cases), `adapter/` (postgres, http). Cross-aggregate references by ID only;
+  side effects via domain events + outbox. Use the ubiquitous language in code names.
+- **TDD**: red → green → refactor. Write the failing test first, run it, see it fail, then
+  implement the minimum. Fakes over mocks. Bug fix starts with a reproducing test.
+  `go test -race ./...` must pass before every commit.
+
 ## Conventions
 
 - Go: `go fmt`, `go vet`, `golangci-lint`; table-driven tests; `internal/` packages; no globals.

@@ -97,7 +97,7 @@ murakkablik; modullar orasidagi chegara keyinchalik ajratish imkonini saqlaydi.
 kyber/
 ├── api/openapi.yaml               # yagona kontrakt
 ├── cmd/kyber/main.go              # server, migrate, admin CLI (cobra)
-├── internal/
+├── internal/                      # har bir context: domain/ app/ adapter/ (§3.5)
 │   ├── platform/                  # config, db, httpx, log, otel, authz, outbox
 │   ├── identity/                  # users, sessions, tokens, oidc
 │   ├── workspace/
@@ -124,7 +124,7 @@ kyber/
 `issue_labels`, `attachments`, `sprints`, `boards`, `board_columns`, `watchers`,
 `notifications`, `activity_log`, `outbox`, `webhooks`.
 
-Muhim qarorlar:
+Muhim qarorlar (persistence ko'rinishi; domain modeli §3.5 da):
 - Issue raqami per-project ketma-ketlik: `UPDATE projects SET issue_seq = issue_seq + 1 RETURNING` (tranzaksiyada).
 - Har bir yozish → `activity_log` + `outbox` bitta tranzaksiyada (history, realtime, webhook uchun).
 - Tenant izolyatsiyasi: barcha query'larda `workspace_id`; v0.5 da Postgres RLS ko'rib chiqiladi (ADR).
@@ -146,6 +146,72 @@ Muhim qarorlar:
 Asosiy sahifalar: Login/Signup → Workspace switcher → Projects list → Board → Backlog →
 Issue detail (modal + to'liq sahifa) → Search (KQL) → Project settings (workflow, members) →
 Profile/Notifications. Klaviatura yorliqlari (`c` — yangi issue, `/` — qidiruv) birinchi kundan.
+
+## 3.5 Domain-Driven Design
+
+### Ubiquitous language (yagona til)
+| Atama | Ma'nosi |
+|---|---|
+| Workspace | Tenant; barcha ma'lumotlar uning ichida |
+| Project | Issue'lar konteyneri, `Key` (`KYB`) ga ega |
+| Issue | Ish birligi; `IssueKey` = `ProjectKey-Number` |
+| Workflow | Status'lar va ruxsat etilgan Transition'lar grafi |
+| Transition | Issue'ni bir status'dan boshqasiga o'tkazish qoidasi |
+| Sprint | Vaqt bilan cheklangan iteratsiya: Planned → Active → Closed |
+| Rank | Backlog/board'dagi tartib (LexoRank) |
+
+### Bounded context'lar va context map
+| Context | Turi | Aggregate root'lar | Bog'liqlik |
+|---|---|---|---|
+| **Identity** | Generic | `User`, `Session`, `ApiToken` | Upstream (OHS) |
+| **Workspace** | Supporting | `Workspace`, `Membership` | Identity → Conformist |
+| **Project** | Core | `Project` (members, roles, issue types) | Workspace |
+| **Issue Tracking** | **Core** | `Issue` (comments, links, labels — ichki entity/VO) | Project, Workflow (ACL orqali) |
+| **Workflow** | **Core** | `Workflow` (statuses, transitions) | Published language: `StatusID`, `Category` |
+| **Agile** | Core | `Board`, `Sprint` | Issue (faqat ID va event orqali) |
+| **Search** | Supporting | read model (CQRS) | Issue event'lariga obuna |
+| **Notification** | Generic | `Notification`, `Subscription` | Domain event'larga obuna |
+
+### Taktik qoidalar
+- **Aggregate** — bitta tranzaksiya = bitta aggregate. Boshqa aggregate'ga faqat **ID** orqali murojaat.
+- **Invariantlar aggregate ichida**: masalan `Issue.Transition()` workflow ruxsat bermasa xato qaytaradi;
+  `Sprint.Start()` faqat bitta Active sprint bo'lishiga ruxsat beradi.
+- **Value object**'lar immutable va konstruktorda validatsiya qilinadi: `IssueKey`, `ProjectKey`, `Priority`, `Email`, `Rank`.
+- **Domain event**'lar (`IssueCreated`, `IssueTransitioned`, `IssueAssigned`, `SprintStarted`, `CommentAdded`)
+  aggregate'da yig'iladi → repository saqlashda **outbox**'ga yoziladi → Search/Notify/Realtime/Webhook.
+- **Repository** interfeysi `domain` paketida, implementatsiya `adapter/postgres`da (hexagonal / ports & adapters).
+- **Domain qatlami** `database/sql`, `net/http`, JSON teglaridan **toza** — faqat stdlib va o'z tiplari.
+
+### Har bir context paketi
+```
+internal/issue/
+├── domain/        # aggregate, entity, value object, event, repository port  (I/O yo'q)
+├── app/           # use case'lar (command/query handler), tranzaksiya chegarasi
+├── adapter/
+│   ├── postgres/  # repository implementatsiyasi (sqlc)
+│   └── http/      # OpenAPI handler → app
+└── issue.go       # modul wiring
+```
+
+## 3.6 Test-Driven Development
+
+**Red → Green → Refactor** majburiy: hech qanday production kod muvaffaqiyatsiz testsiz yozilmaydi.
+
+| Qatlam | Test turi | Vosita | Tezlik |
+|---|---|---|---|
+| `domain` | Unit, table-driven; invariant va event tekshiruvi | `testing` | ms |
+| `app` | Use case testi, in-memory fake repository | `testing` | ms |
+| `adapter/postgres` | Integration, haqiqiy Postgres | `testcontainers-go` | s |
+| `adapter/http` | Contract: javob OpenAPI'ga mos | `kin-openapi` validator | s |
+| Frontend | Komponent (TDD), hook'lar | Vitest + Testing Library + MSW | ms |
+| E2E | Acceptance (BDD-uslub: Given/When/Then) | Playwright | min |
+
+Qoidalar:
+- Har bir user story **acceptance test** bilan boshlanadi (outside-in TDD), keyin domain unit testlari.
+- Domain coverage ≥ 95%, umumiy backend ≥ 80%; CI'da `go test -race` majburiy.
+- Bug fix = avval bug'ni qayta hosil qiluvchi test.
+- Mock o'rniga **fake** (in-memory repository) — `domain` port'lariga qarshi.
+- Commit tartibi: `test: ...` (red) → `feat: ...` (green) → `refactor: ...`.
 
 ---
 
@@ -226,6 +292,8 @@ Katta feature'lar uchun: `/flow "Sprint va backlog moduli"` — har bosqichdan k
 | 0004 | Multi-tenancy | Shared schema + `workspace_id`; RLS keyinroq |
 | 0005 | Auth | Opaque session cookie (web) + PAT (API), argon2id |
 | 0006 | Ranking | LexoRank (string), qayta balanslash job |
+| 0008 | DDD | Bounded context'lar, hexagonal paketlar, outbox orqali domain event'lar |
+| 0009 | TDD | Red-green-refactor, test piramidasi, coverage chegaralari |
 | 0007 | Litsenziya | **AGPL-3.0** (SaaS forklardan himoya) yoki MIT — *qaror kerak* |
 
 ---
