@@ -1,0 +1,31 @@
+# Sprint 09 — Multi-tenant workspaces, attachments (MinIO), realtime (SSE)
+
+Product owner priorities, in order. Each story ships DDD + TDD with acceptance tests on all backends.
+
+## S33 — Workspaces (multi-tenant)
+
+One Kyber installation hosts many organizations; their data never mixes.
+
+- New **Workspace** bounded context: workspace (slug, name), members with roles owner/admin/member, invitations.
+- Every project belongs to exactly one workspace; project keys are unique per workspace, not globally.
+- Tenant isolation: every table carrying tenant data gets `workspace_id NOT NULL`; every repository query
+  filters by it; the workspace is resolved from the URL (`/api/v1/w/{slug}/...`) and checked against membership.
+- PostgreSQL Row-Level Security as a second line of defence (`SET LOCAL kyber.workspace_id`), decided in ADR.
+- Migration: existing data moves into a "default" workspace owned by the existing project admins.
+- Acceptance: a user of workspace A gets 404 for every URL of workspace B (contract-tested across all endpoints).
+
+## S34 — Attachments on MinIO (S3 API)
+
+- Upload/download/delete files on an issue; stored in MinIO (any S3-compatible store) behind a `BlobStore` port.
+- Direct-to-storage presigned uploads, 25 MB limit, content-type sniffing, image thumbnails.
+- `docker compose` gains a MinIO service; memory blob store for tests.
+
+## S35 — Realtime board updates over SSE
+
+- `GET /api/v1/projects/{key}/events` streams Server-Sent Events fed by the outbox relay.
+- Board, backlog and issue panel update without reload; reconnect with `Last-Event-ID` resumes from the outbox id.
+- Works behind proxies (heartbeat comments every 15 s); per-user authorization on every event.
+
+## Carry-over from Sprint 08
+
+S30 CSV export, S31 @mention autocomplete, S32 MCP server (needs personal API tokens).
