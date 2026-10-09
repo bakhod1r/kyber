@@ -1,3 +1,4 @@
+import { MentionTextarea } from "./MentionTextarea";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { ApiError, type Issue, PRIORITIES, type Priority, api } from "../api";
@@ -128,13 +129,14 @@ export function IssuePanel({ issueKey, projectKey, onClose }: { issueKey: string
             </div>
           </form>
         )}
-        <Comments issueKey={issueKey} />
+        <Comments issueKey={issueKey} projectKey={projectKey} />
       </div>
     </div>
   );
 }
 
-function Comments({ issueKey }: { issueKey: string }) {
+function Comments({ issueKey, projectKey }: { issueKey: string; projectKey: string }) {
+  const members = useQuery({ queryKey: ["members", projectKey], queryFn: () => api.members(projectKey) });
   const qc = useQueryClient();
   const comments = useQuery({ queryKey: ["comments", issueKey], queryFn: () => api.comments(issueKey) });
   const [body, setBody] = useState("");
@@ -165,10 +167,13 @@ function Comments({ issueKey }: { issueKey: string }) {
           if (body.trim()) add.mutate();
         }}
       >
-        <label>
-          Add a comment
-          <textarea rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write a comment. Mention someone with @email" />
-        </label>
+        <MentionTextarea
+          label="Add a comment"
+          value={body}
+          onChange={setBody}
+          members={members.data ?? []}
+          placeholder="Write a comment. Type @ to mention someone"
+        />
         {add.isError && <p role="alert" className="error">{add.error.message}</p>}
         <button type="submit" disabled={add.isPending}>
           Comment

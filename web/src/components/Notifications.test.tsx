@@ -69,7 +69,7 @@ describe("Notifications (KYB-S24)", () => {
 });
 
 describe("Issue panel people (KYB-S21 AC2, S24 AC3)", () => {
-  it("shows the reporter and hints @email mentions", async () => {
+  it("shows the reporter and hints @ mentions (autocomplete since S31)", async () => {
     mockApi({
       "GET /api/v1/issues/KYB-1": { status: 200, body: { id: "i", key: "KYB-1", title: "Login", type: "task", status: "todo", description: "", priority: "medium", assignee_id: null, reporter_id: "u-ali", estimate: null, sprint_id: null, rank: "a0", version: 1 } },
       "GET /api/v1/projects/KYB/members": { status: 200, body: { items: [{ user_id: "u-ali", email: "ali@x.uz", name: "Ali Valiyev", role: "admin" }] } },
@@ -77,6 +77,6 @@ describe("Issue panel people (KYB-S21 AC2, S24 AC3)", () => {
     });
     renderWithProviders(<IssuePanel issueKey="KYB-1" projectKey="KYB" onClose={vi.fn()} />);
     expect(await screen.findByText("Reporter: Ali Valiyev")).toBeInTheDocument();
-    expect(screen.getByLabelText("Add a comment")).toHaveAttribute("placeholder", expect.stringContaining("@email"));
+    expect(screen.getByLabelText("Add a comment")).toHaveAttribute("placeholder", expect.stringContaining("Type @ to mention"));
   });
 });
