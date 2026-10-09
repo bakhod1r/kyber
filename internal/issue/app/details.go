@@ -30,7 +30,7 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 		return nil, domain.ErrConcurrentModification
 	}
 	if cmd.AssigneeSet && cmd.Assignee != "" {
-		ok, err := s.directory.IsMember(ctx, is.Key().Project(), cmd.Assignee)
+		ok, err := s.directory.IsAssignable(ctx, is.Key().Project(), cmd.Assignee)
 		if err != nil {
 			return nil, err
 		}

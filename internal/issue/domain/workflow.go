@@ -58,12 +58,13 @@ const (
 	StatusDone       StatusID = "done"
 )
 
-// DefaultWorkflow is todo ⇄ in_progress ⇄ done.
+// DefaultWorkflow is Jira's simplified workflow: To Do, In Progress and Done, with every
+// status reachable from every other one. Restrictive workflows are configured per project.
 func DefaultWorkflow() *Workflow {
 	wf, err := NewWorkflow(StatusTodo, map[StatusID][]StatusID{
-		StatusTodo:       {StatusInProgress},
+		StatusTodo:       {StatusInProgress, StatusDone},
 		StatusInProgress: {StatusTodo, StatusDone},
-		StatusDone:       {StatusInProgress},
+		StatusDone:       {StatusTodo, StatusInProgress},
 	})
 	if err != nil {
 		panic(err) // static definition; covered by tests

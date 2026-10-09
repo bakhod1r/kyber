@@ -171,7 +171,7 @@ func TestTransitionIssue(t *testing.T) {
 	_, _ = s.Create(ctx, dev, app.CreateIssue{Project: "KYB", Title: "Login", Type: "task"})
 	rec.reset()
 
-	if _, err := s.Transition(ctx, dev, "KYB-1", "done"); !errors.Is(err, domain.ErrTransitionNotAllowed) {
+	if _, err := s.Transition(ctx, dev, "KYB-1", "todo"); !errors.Is(err, domain.ErrTransitionNotAllowed) { // to itself
 		t.Fatalf("err = %v", err)
 	}
 	if is, _ := s.Get(ctx, dev, "KYB-1"); is.Status() != domain.StatusTodo {
@@ -243,5 +243,19 @@ func TestAccessControl(t *testing.T) {
 		if !errors.Is(err, app.ErrProjectNotFound) {
 			t.Fatalf("outsider err = %v, want ErrProjectNotFound", err)
 		}
+	}
+}
+
+func (f fakeAccess) IsAssignable(_ context.Context, project, user string) (bool, error) {
+	return f[project][user] == "w", nil
+}
+
+// QA parity: like Jira's Assignable User permission, viewers cannot be assignees.
+func TestViewerIsNotAssignable(t *testing.T) {
+	ctx := context.Background()
+	s, _ := setup()
+	is, _ := s.Create(ctx, dev, app.CreateIssue{Project: "KYB", Title: "Login", Type: "task"})
+	if _, err := s.Edit(ctx, dev, "KYB-1", app.EditIssue{Version: is.Version(), AssigneeSet: true, Assignee: viewer}); !errors.Is(err, app.ErrInvalidAssignee) {
+		t.Fatalf("viewer assignee err = %v", err)
 	}
 }

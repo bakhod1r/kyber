@@ -106,7 +106,7 @@ export function IssuePanel({ issueKey, projectKey, onClose }: { issueKey: string
                 Assignee
                 <select value={draft.assignee} onChange={(e) => setDraft({ ...draft, assignee: e.target.value })}>
                   <option value="">Unassigned</option>
-                  {members.data?.map((m) => (
+                  {members.data?.filter((m) => m.role !== "viewer").map((m) => (
                     <option key={m.user_id} value={m.user_id}>
                       {m.name}
                     </option>

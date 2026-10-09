@@ -290,7 +290,8 @@ func testIssues(t *testing.T, anon *client) {
 		expect(t, code, 404, body)
 	})
 	t.Run("S4 transitions", func(t *testing.T) {
-		code, body := c.do("POST", "/api/v1/issues/KYB-2/transitions", map[string]string{"to": "done"})
+		// Jira's simplified workflow allows any move except to the current status.
+		code, body := c.do("POST", "/api/v1/issues/KYB-2/transitions", map[string]string{"to": "todo"})
 		expect(t, code, 409, body)
 		code, body = c.do("POST", "/api/v1/issues/KYB-2/transitions", map[string]string{"to": "in_progress"})
 		expect(t, code, 200, body)
@@ -460,6 +461,7 @@ func TestS15IssueDetails(t *testing.T) {
 		alice := anon.signedIn("alice@x.uz")
 		bob := anon.signedIn("bob@x.uz")
 		carol := anon.signedIn("carol@x.uz")
+		_, aliceMe := alice.do("GET", "/api/v1/me", nil)
 		_, bobMe := bob.do("GET", "/api/v1/me", nil)
 		_, carolMe := carol.do("GET", "/api/v1/me", nil)
 		alice.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
@@ -474,10 +476,10 @@ func TestS15IssueDetails(t *testing.T) {
 		var version any = created["version"]
 		t.Run("AC2 edit and assign", func(t *testing.T) {
 			code, body := alice.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{
-				"version": version, "title": "Login v2", "description": "Steps\n1. open", "priority": "high", "assignee_id": bobMe["id"],
+				"version": version, "title": "Login v2", "description": "Steps\n1. open", "priority": "high", "assignee_id": aliceMe["id"],
 			})
 			expect(t, code, 200, body)
-			if body["title"] != "Login v2" || body["priority"] != "high" || body["assignee_id"] != bobMe["id"] || body["version"] != float64(2) {
+			if body["title"] != "Login v2" || body["priority"] != "high" || body["assignee_id"] != aliceMe["id"] || body["version"] != float64(2) {
 				t.Fatalf("body = %v", body)
 			}
 			version = body["version"]
@@ -504,6 +506,9 @@ func TestS15IssueDetails(t *testing.T) {
 		})
 		t.Run("AC4 permissions", func(t *testing.T) {
 			code, body := alice.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": version, "assignee_id": carolMe["id"]})
+			expect(t, code, 422, body)
+			// Jira's Assignable User: viewers cannot be assignees.
+			code, body = alice.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": version, "assignee_id": bobMe["id"]})
 			expect(t, code, 422, body)
 			code, body = bob.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": version, "title": "x"})
 			expect(t, code, 403, body)
@@ -562,7 +567,7 @@ func TestProblemDetails(t *testing.T) {
 		}
 
 		// Business rule rejections carry the specific reason in detail.
-		code, body := c.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "done"})
+		code, body := c.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "todo"}) // already To Do
 		expect(t, code, 409, body)
 		if body["code"] != "ISSUE_TRANSITION_NOT_ALLOWED" || body["detail"] != "transition not allowed by workflow" {
 			t.Fatalf("problem = %v", body)

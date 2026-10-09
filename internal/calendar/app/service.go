@@ -15,6 +15,7 @@ var (
 	ErrNotMember = errors.New("every attendee must be a member of the workspace")
 	ErrForbidden = errors.New("only the organizer can cancel a meeting")
 	ErrRange     = errors.New("the time table range must be between 1 minute and 62 days")
+	ErrInPast    = errors.New("a meeting cannot start in the past")
 )
 
 // Members is the anti-corruption port to the Workspace context.
@@ -48,6 +49,9 @@ type Schedule struct {
 
 // Schedule books a meeting in the request's workspace; the organizer always attends.
 func (s *Service) Schedule(ctx context.Context, actor string, in Schedule) (*domain.Meeting, error) {
+	if in.Start.Before(s.now().Add(-time.Minute)) {
+		return nil, ErrInPast
+	}
 	ws := workspace(ctx)
 	attendees := make([]domain.UserID, 0, len(in.Attendees))
 	for _, a := range in.Attendees {

@@ -51,18 +51,13 @@ func TestDefaultWorkflow(t *testing.T) {
 	if wf.Initial() != domain.StatusTodo {
 		t.Fatalf("initial = %q", wf.Initial())
 	}
-	allowed := []struct{ from, to domain.StatusID }{
-		{domain.StatusTodo, domain.StatusInProgress},
-		{domain.StatusInProgress, domain.StatusTodo},
-		{domain.StatusInProgress, domain.StatusDone},
-		{domain.StatusDone, domain.StatusInProgress},
-	}
-	for _, a := range allowed {
-		if !wf.CanTransition(a.from, a.to) {
-			t.Errorf("%s -> %s should be allowed", a.from, a.to)
+	// Jira's simplified workflow: any status to any other status (QA parity), never to itself.
+	all := []domain.StatusID{domain.StatusTodo, domain.StatusInProgress, domain.StatusDone}
+	for _, from := range all {
+		for _, to := range all {
+			if got := wf.CanTransition(from, to); got != (from != to) {
+				t.Errorf("%s -> %s allowed = %v", from, to, got)
+			}
 		}
-	}
-	if wf.CanTransition(domain.StatusTodo, domain.StatusDone) {
-		t.Error("todo -> done must be rejected")
 	}
 }

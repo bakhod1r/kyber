@@ -38,7 +38,7 @@ func codeFor(err error) (string, bool) {
 	case errors.Is(err, app.ErrForbidden):
 		return httpx.CodeMeetingForbidden, true
 	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidTime), errors.Is(err, app.ErrNotMember),
-		errors.Is(err, app.ErrRange), errors.Is(err, errBadRange):
+		errors.Is(err, app.ErrRange), errors.Is(err, errBadRange), errors.Is(err, app.ErrInPast):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true

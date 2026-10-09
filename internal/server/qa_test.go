@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -93,4 +94,41 @@ func TestQA7MeetingsNeedMembership(t *testing.T) {
 		code, b = on(stranger, "zeta.kyber.test").do("GET", "/api/v1/me", nil)
 		expect(t, code, 200, b) // /me itself stays available everywhere
 	}, server.WithBaseDomain("kyber.test"))
+}
+
+// QA parity: Jira permissions and data hygiene.
+func TestQAParity(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		vic := anon.signedIn("vic@x.uz")
+		_, vicMe := vic.do("GET", "/api/v1/me", nil)
+		lead.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		lead.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "vic@x.uz", "role": "viewer"})
+		_, is := lead.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "t", "type": "task"})
+
+		// Assignable User: a viewer cannot be the assignee.
+		code, b := lead.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": is["version"], "assignee_id": vicMe["id"]})
+		expect(t, code, 422, b)
+		// Work On Issues: a viewer cannot log focus time, but can read the log.
+		code, b = vic.do("POST", "/api/v1/focus", map[string]any{"issue_key": "KYB-1"})
+		expect(t, code, 403, b)
+		code, b = vic.do("GET", "/api/v1/issues/KYB-1/focus", nil)
+		expect(t, code, 200, b)
+		// Simplified workflow: To Do → Done directly.
+		code, b = lead.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "done"})
+		expect(t, code, 200, b)
+		// Meetings cannot be booked in the past.
+		past := time.Now().UTC().Add(-2 * time.Hour)
+		code, b = lead.do("POST", "/api/v1/meetings", map[string]any{"title": "Old", "starts_at": past, "ends_at": past.Add(time.Hour)})
+		expect(t, code, 422, b)
+		// Re-importing the project's own export does not duplicate its issues.
+		res := lead.raw("GET", "/api/v1/projects/KYB/export.csv", nil, nil)
+		csv, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		code, run := lead.do("POST", "/api/v1/projects/KYB/import/jira?dry_run=false", map[string]string{"csv": string(csv)})
+		expect(t, code, 201, run)
+		if len(run["items"].([]any)) != 0 || len(run["skipped"].([]any)) != 1 {
+			t.Fatalf("self re-import = %v", run)
+		}
+	})
 }

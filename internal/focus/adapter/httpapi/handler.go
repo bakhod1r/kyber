@@ -46,6 +46,8 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeFocusNotFound, true
 	case errors.Is(err, domain.ErrNotRunning), errors.Is(err, domain.ErrNotPaused), errors.Is(err, domain.ErrFinished):
 		return httpx.CodeFocusState, true
+	case errors.Is(err, app.ErrCannotWork):
+		return httpx.CodeForbidden, true
 	case errors.Is(err, app.ErrIssueNotFound):
 		return httpx.CodeIssueNotFound, true
 	case errors.Is(err, domain.ErrInvalidLength), errors.Is(err, domain.ErrNoIssue):

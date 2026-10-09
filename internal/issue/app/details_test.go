@@ -19,12 +19,12 @@ func TestEditIssue(t *testing.T) {
 
 	got, err := s.Edit(ctx, dev, "KYB-1", app.EditIssue{
 		Version: is.Version(), Title: str("Login v2"), Description: str("details"), Priority: str("high"),
-		AssigneeSet: true, Assignee: viewer,
+		AssigneeSet: true, Assignee: dev,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Title() != "Login v2" || got.Description() != "details" || got.Priority() != domain.PriorityHigh || got.Assignee() != viewer {
+	if got.Title() != "Login v2" || got.Description() != "details" || got.Priority() != domain.PriorityHigh || got.Assignee() != dev {
 		t.Fatalf("edited = %+v", got)
 	}
 	names := []string{}

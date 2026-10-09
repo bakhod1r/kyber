@@ -14,7 +14,7 @@ var (
 	ErrProjectNotFound = errors.New("project not found")
 	ErrInvalidKey      = errors.New("invalid issue key")
 	ErrForbidden       = errors.New("insufficient project role")
-	ErrInvalidAssignee = errors.New("assignee must be a member of the project")
+	ErrInvalidAssignee = errors.New("assignee must be a project member who can work on issues (not a viewer)")
 	ErrInvalidSprint   = errors.New("sprint must be a planned or active sprint of this project")
 	ErrInvalidAnchor   = errors.New("give exactly one of after/before: an issue key of the same project")
 )
@@ -28,6 +28,8 @@ type Sprints interface {
 // Directory answers membership and naming questions about users (ACL to Project/Identity).
 type Directory interface {
 	IsMember(ctx context.Context, project, user string) (bool, error)
+	// IsAssignable: may the user be assigned issues (Jira's Assignable User; viewers may not).
+	IsAssignable(ctx context.Context, project, user string) (bool, error)
 	DisplayName(ctx context.Context, user string) (string, error)
 }
 

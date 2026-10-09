@@ -10,7 +10,10 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
-var ErrIssueNotFound = errors.New("issue not found")
+var (
+	ErrIssueNotFound = errors.New("issue not found")
+	ErrCannotWork    = errors.New("your project role cannot work on issues (viewers can only read)")
+)
 
 // Ports to other contexts (anti-corruption layers live in adapter/acl).
 type (
@@ -18,9 +21,11 @@ type (
 	Calendar interface {
 		Busy(ctx context.Context, user string, from, to time.Time) ([]domain.Busy, error)
 	}
-	// Issues returns ErrIssueNotFound unless user may view the issue.
+	// Issues returns ErrIssueNotFound unless user may view the issue, and ErrCannotWork
+	// when they may view but not work on it (Jira's Work On Issues).
 	Issues interface {
 		CanView(ctx context.Context, user, key string) error
+		CanWorkOn(ctx context.Context, user, key string) error
 	}
 	Clock interface{ Now() time.Time }
 )
@@ -72,7 +77,7 @@ func (s *Service) Current(ctx context.Context, user string) (*domain.Session, er
 
 // Start begins a Pomodoro on an issue the user can see, unless a meeting is in the way.
 func (s *Service) Start(ctx context.Context, user, issue string, minutes int) (*domain.Session, error) {
-	if err := s.d.Issues.CanView(ctx, user, issue); err != nil {
+	if err := s.d.Issues.CanWorkOn(ctx, user, issue); err != nil {
 		return nil, err
 	}
 	if _, err := s.current(ctx, user); err == nil {

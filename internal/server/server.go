@@ -242,7 +242,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	calendar := calendarapp.NewService(d.meetings, calendaracl.NewMembers(workspaces, d.users), id.New, time.Now)
 	focus := focusapp.NewService(focusapp.Deps{Sessions: d.focusSessions, Calendar: focusacl.NewCalendar(calendar),
-		Issues: focusacl.NewIssues(issues), NewID: id.New, Clock: systemClock{}})
+		Issues: focusacl.NewIssues(issues, projects), NewID: id.New, Clock: systemClock{}})
 	relay := outbox.NewRelay(d.outbox, log)
 	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated", "issue.imported"} {
 		relay.Handle(name, insights.OnIssueEvent)

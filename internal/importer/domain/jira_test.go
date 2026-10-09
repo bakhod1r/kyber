@@ -132,3 +132,11 @@ func hasWarning(it domain.Item, field string) bool {
 	}
 	return false
 }
+
+// Missing cells default quietly; only unknown values warn.
+func TestPlanEmptyCellsDoNotWarn(t *testing.T) {
+	p := domain.Plan([]domain.Row{{Line: 2, Key: "P-1", Summary: "x"}}, nil, nil)
+	if len(p.Items) != 1 || len(p.Items[0].Warnings) != 0 || p.Items[0].Type != "task" || p.Items[0].Status != "todo" {
+		t.Fatalf("item = %+v", p.Items)
+	}
+}

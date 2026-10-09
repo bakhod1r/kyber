@@ -27,13 +27,12 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   const done = page.getByRole("region", { name: "Done" });
   await expect(todo.getByText("Ship the board")).toBeVisible();
 
-  // Disallowed move (todo → done) is rejected and the card returns.
+  // Jira's simplified workflow: any column to any column (todo → done, then back to in progress).
   await todo.getByText("Ship the board").dragTo(done);
-  await expect(page.getByRole("alert")).toContainText("transition not allowed");
-  await expect(todo.getByText("Ship the board")).toBeVisible();
+  await expect(done.getByText("Ship the board")).toBeVisible();
 
-  // Allowed move persists across a reload.
-  await todo.getByText("Ship the board").dragTo(inProgress);
+  // A move persists across a reload.
+  await done.getByText("Ship the board").dragTo(inProgress);
   await expect(inProgress.getByText("Ship the board")).toBeVisible();
   await page.reload();
   await expect(page.getByRole("region", { name: "In Progress" }).getByText("Ship the board")).toBeVisible();

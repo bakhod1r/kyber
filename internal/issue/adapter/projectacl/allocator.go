@@ -73,3 +73,12 @@ func translate(err error) error {
 	}
 	return err
 }
+
+// IsAssignable: members and admins can be assigned issues; viewers and outsiders cannot.
+func (a *Adapter) IsAssignable(ctx context.Context, project, user string) (bool, error) {
+	err := a.projects.Authorize(ctx, projectdomain.UserID(user), project, projectdomain.PermWrite)
+	if errors.Is(err, projectdomain.ErrProjectNotFound) || errors.Is(err, projectdomain.ErrForbidden) {
+		return false, nil
+	}
+	return err == nil, err
+}

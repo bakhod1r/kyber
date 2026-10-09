@@ -113,6 +113,16 @@ func (s *Service) Import(ctx context.Context, actor, project, csv string, dryRun
 	for k := range done {
 		imported[k] = true
 	}
+	// The project's own issues (e.g. re-importing its export) are already here.
+	if s.d.Source != nil {
+		own, err := s.d.Source.ExportRows(ctx, project)
+		if err != nil {
+			return Report{}, err
+		}
+		for _, r := range own {
+			imported[r.Key] = true
+		}
+	}
 	plan := domain.Plan(rows, members, imported)
 	r := Report{DryRun: dryRun, Errors: plan.Errors, Skipped: plan.Skipped}
 	for _, it := range plan.Items {

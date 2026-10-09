@@ -106,3 +106,10 @@ func TestTimetableStorageError(t *testing.T) {
 		t.Fatal("storage errors surface")
 	}
 }
+
+func TestNoMeetingsInThePast(t *testing.T) {
+	s, ctx := setup()
+	if _, err := s.Schedule(ctx, "lead", app.Schedule{Title: "Old", Start: t0.Add(-time.Hour), End: t0}); !errors.Is(err, app.ErrInPast) {
+		t.Fatalf("err = %v", err)
+	}
+}

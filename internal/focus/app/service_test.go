@@ -41,11 +41,21 @@ func (f *fakeCalendar) Busy(_ context.Context, user string, from, to time.Time) 
 	return out, nil
 }
 
-type fakeIssues map[string]bool // "user/KEY" readable
+type fakeIssues map[string]bool // "user/KEY" readable; "viewer" may only read
 
 func (f fakeIssues) CanView(_ context.Context, user, key string) error {
 	if !f[user+"/"+key] {
 		return app.ErrIssueNotFound
+	}
+	return nil
+}
+
+func (f fakeIssues) CanWorkOn(ctx context.Context, user, key string) error {
+	if err := f.CanView(ctx, user, key); err != nil {
+		return err
+	}
+	if user == "viewer" {
+		return app.ErrCannotWork
 	}
 	return nil
 }
@@ -223,5 +233,17 @@ func TestStorageAndCalendarErrors(t *testing.T) {
 	repo.op = "list"
 	if _, _, err := s.IssueLog(ctx, "ann", "KYB-1"); !errors.Is(err, errDB) {
 		t.Fatalf("list err = %v", err)
+	}
+}
+
+// QA parity: like Jira's Work On Issues permission, viewers can read the log but not focus.
+func TestViewerCannotFocus(t *testing.T) {
+	s := app.NewService(app.Deps{Sessions: memory.NewRepository(), Calendar: &fakeCalendar{meetings: map[string][]domain.Busy{}},
+		Issues: fakeIssues{"viewer/KYB-1": true}, NewID: func() string { return "s" }, Clock: &clock{now: t0}})
+	if _, err := s.Start(context.Background(), "viewer", "KYB-1", 25); !errors.Is(err, app.ErrCannotWork) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, _, err := s.IssueLog(context.Background(), "viewer", "KYB-1"); err != nil {
+		t.Fatalf("viewers still read the log: %v", err)
 	}
 }

@@ -234,10 +234,10 @@ func Plan(rows []Row, members []Member, alreadyImported map[string]bool) ImportP
 		it := Item{Row: r}
 		warn := func(format string, args ...any) { it.Warnings = append(it.Warnings, fmt.Sprintf(format, args...)) }
 		var ok bool
-		if it.Type, ok = MapType(r.Type); !ok {
+		if it.Type, ok = MapType(r.Type); !ok && r.Type != "" {
 			warn("unknown type %q imported as task", r.Type)
 		}
-		if it.Status, ok = MapStatus(r.Status, r.StatusCategory); !ok {
+		if it.Status, ok = MapStatus(r.Status, r.StatusCategory); !ok && r.Status+r.StatusCategory != "" {
 			warn("unknown status %q imported as To Do", r.Status)
 		}
 		if it.Priority, ok = MapPriority(r.Priority); !ok {
