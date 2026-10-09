@@ -33,18 +33,19 @@ func (h *Handler) Register(mux *http.ServeMux) {
 }
 
 type issueDTO struct {
-	ID          string  `json:"id"`
-	Key         string  `json:"key"`
-	Title       string  `json:"title"`
-	Type        string  `json:"type"`
-	Status      string  `json:"status"`
-	Description string  `json:"description"`
-	Priority    string  `json:"priority"`
-	AssigneeID  *string `json:"assignee_id"`
-	SprintID    *string `json:"sprint_id"`
-	ReporterID  *string `json:"reporter_id"`
-	Rank        string  `json:"rank"`
-	Version     int     `json:"version"`
+	ID          string   `json:"id"`
+	Key         string   `json:"key"`
+	Title       string   `json:"title"`
+	Type        string   `json:"type"`
+	Status      string   `json:"status"`
+	Description string   `json:"description"`
+	Priority    string   `json:"priority"`
+	AssigneeID  *string  `json:"assignee_id"`
+	SprintID    *string  `json:"sprint_id"`
+	ReporterID  *string  `json:"reporter_id"`
+	Estimate    *float64 `json:"estimate"`
+	Rank        string   `json:"rank"`
+	Version     int      `json:"version"`
 }
 
 func toDTO(is *domain.Issue) issueDTO {
@@ -54,6 +55,10 @@ func toDTO(is *domain.Issue) issueDTO {
 	if a := is.Assignee(); a != "" {
 		s := string(a)
 		d.AssigneeID = &s
+	}
+	if p, ok := is.Estimate(); ok {
+		f := p.Float()
+		d.Estimate = &f
 	}
 	if r := is.Reporter(); r != "" {
 		s := string(r)
@@ -73,7 +78,7 @@ func codeFor(err error) (string, bool) {
 	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidIssueType),
 		errors.Is(err, domain.ErrInvalidPriority), errors.Is(err, domain.ErrDescriptionTooLong),
 		errors.Is(err, domain.ErrInvalidCommentBody), errors.Is(err, app.ErrInvalidAssignee), errors.Is(err, errMissingVersion),
-		errors.Is(err, app.ErrInvalidSprint), errors.Is(err, app.ErrInvalidAnchor):
+		errors.Is(err, app.ErrInvalidSprint), errors.Is(err, app.ErrInvalidAnchor), errors.Is(err, domain.ErrInvalidEstimate):
 		return httpx.CodeValidation, true
 	case errors.Is(err, app.ErrProjectNotFound):
 		return httpx.CodeProjectNotFound, true
@@ -151,6 +156,7 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		Priority    *string         `json:"priority"`
 		AssigneeID  json.RawMessage `json:"assignee_id"`
 		SprintID    json.RawMessage `json:"sprint_id"`
+		Estimate    json.RawMessage `json:"estimate"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
@@ -177,6 +183,17 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 				httpx.Error(w, r, h.log, httpx.ErrBadJSON, codeFor)
 				return
 			}
+		}
+	}
+	if in.Estimate != nil {
+		cmd.EstimateSet = true
+		if string(in.Estimate) != "null" {
+			var f float64
+			if err := json.Unmarshal(in.Estimate, &f); err != nil {
+				httpx.Error(w, r, h.log, httpx.ErrBadJSON, codeFor)
+				return
+			}
+			cmd.Estimate = &f
 		}
 	}
 	is, err := h.svc.Edit(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"), cmd)

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"math"
 	"strings"
 )
 
@@ -13,7 +14,23 @@ var (
 	ErrConcurrentModification = errors.New("issue was modified concurrently")
 	ErrInvalidPriority        = errors.New("priority must be one of lowest, low, medium, high, highest")
 	ErrDescriptionTooLong     = errors.New("description must be at most 20000 characters")
+	ErrInvalidEstimate        = errors.New("estimate must be 0-999 story points in steps of 0.1")
 )
+
+// Points are story points in tenths (2.5 points = 25), so sums are exact.
+type Points int
+
+// ParsePoints converts client points (at most one decimal) to Points.
+func ParsePoints(f float64) (Points, error) {
+	t := math.Round(f * 10)
+	if f < 0 || f > 999 || math.Abs(f*10-t) > 1e-9 {
+		return 0, ErrInvalidEstimate
+	}
+	return Points(t), nil
+}
+
+// Float returns the points as a decimal number (for JSON).
+func (p Points) Float() float64 { return float64(p) / 10 }
 
 // SprintID identifies a sprint of the Agile context ("" = backlog).
 type SprintID string
@@ -82,6 +99,7 @@ type Issue struct {
 	priority    Priority
 	assignee    UserID   // "" = unassigned
 	reporter    UserID   // creator; "" for issues created before 0.6
+	estimate    *Points  // nil = unestimated
 	rank        Rank     // backlog order
 	sprint      SprintID // "" = backlog
 	version     int      // 0 = never persisted
@@ -109,6 +127,7 @@ type Snapshot struct {
 	Priority    Priority
 	Assignee    UserID
 	Reporter    UserID
+	Estimate    *Points
 	Rank        Rank
 	Sprint      SprintID
 	Version     int
@@ -120,7 +139,7 @@ func Rehydrate(s Snapshot) *Issue {
 		s.Priority = PriorityMedium
 	}
 	return &Issue{id: s.ID, key: s.Key, title: s.Title, typ: s.Type, status: s.Status,
-		description: s.Description, priority: s.Priority, assignee: s.Assignee, reporter: s.Reporter, rank: s.Rank, sprint: s.Sprint,
+		description: s.Description, priority: s.Priority, assignee: s.Assignee, reporter: s.Reporter, estimate: s.Estimate, rank: s.Rank, sprint: s.Sprint,
 		version: s.Version}
 }
 
@@ -140,7 +159,37 @@ func (i *Issue) Priority() Priority  { return i.priority }
 func (i *Issue) Assignee() UserID    { return i.assignee }
 func (i *Issue) Rank() Rank          { return i.rank }
 func (i *Issue) Reporter() UserID    { return i.reporter }
-func (i *Issue) Sprint() SprintID    { return i.sprint }
+
+// Estimate returns the story points and whether the issue is estimated.
+func (i *Issue) Estimate() (Points, bool) {
+	if i.estimate == nil {
+		return 0, false
+	}
+	return *i.estimate, true
+}
+
+// SetEstimate sets (or with nil clears) the story points.
+func (i *Issue) SetEstimate(p *Points) {
+	old, had := i.Estimate()
+	if (p == nil && !had) || (p != nil && had && *p == old) {
+		return
+	}
+	var from, to *float64
+	if had {
+		f := old.Float()
+		from = &f
+	}
+	if p != nil {
+		v := *p
+		i.estimate = &v
+		f := v.Float()
+		to = &f
+	} else {
+		i.estimate = nil
+	}
+	i.record(IssueEstimated{ID: i.id, Key: i.key, From: from, To: to})
+}
+func (i *Issue) Sprint() SprintID { return i.sprint }
 
 // Rerank places the issue at r in the project's backlog order.
 func (i *Issue) Rerank(r Rank) { i.rank = r }

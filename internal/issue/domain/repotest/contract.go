@@ -134,16 +134,25 @@ func Run(t *testing.T, newRepo Factory) {
 			t.Fatal(err)
 		}
 		loaded.Assign(domain.UserID(Assignee), "u-actor")
+		pts := domain.Points(25)
+		loaded.SetEstimate(&pts)
 		if err := repo.Save(ctx, loaded, loaded.PullEvents()); err != nil {
 			t.Fatal(err)
 		}
 		got, _ := repo.ByKey(ctx, is.Key())
+		if e, ok := got.Estimate(); !ok || e != 25 {
+			t.Fatalf("estimate = %v %v", e, ok)
+		}
 		if got.Description() != desc || got.Priority() != prio || got.Assignee() != domain.UserID(Assignee) {
 			t.Fatalf("loaded %q %q %q", got.Description(), got.Priority(), got.Assignee())
 		}
 		got.Assign("", "u-actor")
+		got.SetEstimate(nil)
 		_ = repo.Save(ctx, got, nil)
 		if again, _ := repo.ByKey(ctx, is.Key()); again.Assignee() != "" {
+			t.Fatalf("unassign not persisted: %q", again.Assignee())
+		}
+		if again, _ := repo.ByKey(ctx, is.Key()); func() bool { _, ok := again.Estimate(); return ok }() {
 			t.Fatalf("unassign not persisted: %q", again.Assignee())
 		}
 	})

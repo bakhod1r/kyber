@@ -818,3 +818,47 @@ func TestS23Notifications(t *testing.T) {
 		}
 	})
 }
+
+func TestS25EstimatesAndSprintDates(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		c := anon.signedIn("est@x.uz")
+		c.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		_, is := c.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "t", "type": "story"})
+		if is["estimate"] != nil {
+			t.Fatalf("new issue estimate = %v", is["estimate"])
+		}
+		code, body := c.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": is["version"], "estimate": 2.5})
+		expect(t, code, 200, body)
+		if body["estimate"] != 2.5 {
+			t.Fatalf("estimate = %v", body["estimate"])
+		}
+		for _, bad := range []any{-1, 1000, 1.25} {
+			code, b := c.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": body["version"], "estimate": bad})
+			expect(t, code, 422, b)
+		}
+		code, body = c.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": body["version"], "estimate": nil})
+		expect(t, code, 200, body)
+		if body["estimate"] != nil {
+			t.Fatalf("cleared estimate = %v", body["estimate"])
+		}
+
+		_, s1 := c.do("POST", "/api/v1/projects/KYB/sprints", map[string]string{"name": "S1"})
+		code, body = c.do("POST", "/api/v1/sprints/"+s1["id"].(string)+"/start", map[string]string{"ends_at": "2001-01-01T00:00:00Z"})
+		expect(t, code, 422, body)
+		end := time.Now().Add(7 * 24 * time.Hour).UTC().Truncate(time.Second)
+		code, body = c.do("POST", "/api/v1/sprints/"+s1["id"].(string)+"/start", map[string]string{"ends_at": end.Format(time.RFC3339)})
+		expect(t, code, 200, body)
+		if got, _ := time.Parse(time.RFC3339, body["ends_at"].(string)); !got.Equal(end) {
+			t.Fatalf("ends_at = %v, want %v", body["ends_at"], end)
+		}
+		_, s2 := c.do("POST", "/api/v1/projects/KYB/sprints", map[string]string{"name": "S2"})
+		c.do("POST", "/api/v1/sprints/"+s1["id"].(string)+"/complete", nil)
+		code, body = c.do("POST", "/api/v1/sprints/"+s2["id"].(string)+"/start", nil) // no body: default 14 days
+		expect(t, code, 200, body)
+		st, _ := time.Parse(time.RFC3339, body["started_at"].(string))
+		en, _ := time.Parse(time.RFC3339, body["ends_at"].(string))
+		if d := en.Sub(st); d < 14*24*time.Hour-time.Second || d > 14*24*time.Hour+time.Second {
+			t.Fatalf("default length = %v", d)
+		}
+	})
+}

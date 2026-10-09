@@ -106,3 +106,22 @@ func TestComments(t *testing.T) {
 		t.Fatalf("missing issue err = %v", err)
 	}
 }
+
+func TestEditEstimate(t *testing.T) {
+	ctx := context.Background()
+	s, _ := setup()
+	is, _ := s.Create(ctx, dev, app.CreateIssue{Project: "KYB", Title: "x", Type: "task"})
+	five := 5.5
+	got, err := s.Edit(ctx, dev, "KYB-1", app.EditIssue{Version: is.Version(), EstimateSet: true, Estimate: &five})
+	if p, ok := got.Estimate(); err != nil || !ok || p != 55 {
+		t.Fatalf("estimate = %v %v, %v", p, ok, err)
+	}
+	bad := 1.25
+	if _, err := s.Edit(ctx, dev, "KYB-1", app.EditIssue{Version: got.Version(), EstimateSet: true, Estimate: &bad}); !errors.Is(err, domain.ErrInvalidEstimate) {
+		t.Fatalf("err = %v", err)
+	}
+	got, _ = s.Edit(ctx, dev, "KYB-1", app.EditIssue{Version: got.Version(), EstimateSet: true, Estimate: nil})
+	if _, ok := got.Estimate(); ok {
+		t.Fatal("estimate must be cleared")
+	}
+}

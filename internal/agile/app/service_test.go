@@ -87,26 +87,26 @@ func TestStartOneActivePerProject(t *testing.T) {
 	b, _ := s.Create(ctx, dev, "KYB", "B", "")
 	o, _ := s.Create(ctx, dev, "OPS", "O", "")
 
-	if _, err := s.Start(ctx, dev, string(a.ID())); err != nil {
+	if _, err := s.Start(ctx, dev, string(a.ID()), time.Time{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Start(ctx, dev, string(b.ID())); !errors.Is(err, domain.ErrAnotherSprintLive) {
+	if _, err := s.Start(ctx, dev, string(b.ID()), time.Time{}); !errors.Is(err, domain.ErrAnotherSprintLive) {
 		t.Fatalf("second start err = %v", err)
 	}
-	if _, err := s.Start(ctx, dev, string(o.ID())); err != nil {
+	if _, err := s.Start(ctx, dev, string(o.ID()), time.Time{}); err != nil {
 		t.Fatalf("other project: %v", err)
 	}
-	if _, err := s.Start(ctx, dev, string(a.ID())); !errors.Is(err, domain.ErrSprintState) {
+	if _, err := s.Start(ctx, dev, string(a.ID()), time.Time{}); !errors.Is(err, domain.ErrSprintState) {
 		t.Fatalf("restart err = %v", err)
 	}
-	if _, err := s.Start(ctx, viewer, string(b.ID())); !errors.Is(err, app.ErrForbidden) {
+	if _, err := s.Start(ctx, viewer, string(b.ID()), time.Time{}); !errors.Is(err, app.ErrForbidden) {
 		t.Fatalf("viewer start err = %v", err)
 	}
 	// Outsiders cannot tell a sprint exists.
-	if _, err := s.Start(ctx, alien, string(b.ID())); !errors.Is(err, domain.ErrSprintNotFound) {
+	if _, err := s.Start(ctx, alien, string(b.ID()), time.Time{}); !errors.Is(err, domain.ErrSprintNotFound) {
 		t.Fatalf("outsider err = %v", err)
 	}
-	if _, err := s.Start(ctx, dev, "s-404"); !errors.Is(err, domain.ErrSprintNotFound) {
+	if _, err := s.Start(ctx, dev, "s-404", time.Time{}); !errors.Is(err, domain.ErrSprintNotFound) {
 		t.Fatalf("missing err = %v", err)
 	}
 }
@@ -121,7 +121,7 @@ func TestComplete(t *testing.T) {
 	if len(issues.calls) != 0 {
 		t.Fatal("issues must not move when completion is rejected")
 	}
-	_, _ = s.Start(ctx, dev, string(a.ID()))
+	_, _ = s.Start(ctx, dev, string(a.ID()), time.Time{})
 	res, err := s.Complete(ctx, dev, string(a.ID()))
 	if err != nil || res.Completed != 3 || res.Returned != 2 || res.Sprint.State() != domain.StateClosed {
 		t.Fatalf("Complete = %+v, %v", res, err)
@@ -138,7 +138,7 @@ func TestComplete(t *testing.T) {
 
 	// If returning issues fails the sprint stays active, so completion can be retried.
 	b, _ := s.Create(ctx, dev, "KYB", "B", "")
-	_, _ = s.Start(ctx, dev, string(b.ID()))
+	_, _ = s.Start(ctx, dev, string(b.ID()), time.Time{})
 	issues.err = errors.New("db down")
 	if _, err := s.Complete(ctx, dev, string(b.ID())); err == nil {
 		t.Fatal("expected error")
@@ -160,9 +160,26 @@ func TestCanHold(t *testing.T) {
 			t.Fatalf("CanHold(%v) err = %v", c, err)
 		}
 	}
-	_, _ = s.Start(ctx, dev, string(a.ID()))
+	_, _ = s.Start(ctx, dev, string(a.ID()), time.Time{})
 	_, _ = s.Complete(ctx, dev, string(a.ID()))
 	if err := s.CanHold(ctx, "KYB", string(a.ID())); !errors.Is(err, app.ErrInvalidSprint) {
 		t.Fatalf("closed sprint err = %v", err)
+	}
+}
+
+func TestStartEndDate(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := setup()
+	a, _ := s.Create(ctx, dev, "KYB", "A", "")
+	started, err := s.Start(ctx, dev, string(a.ID()), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := started.EndsAt().Sub(started.StartedAt()); got != 14*24*time.Hour {
+		t.Fatalf("default duration = %v, want 14 days", got)
+	}
+	b, _ := s.Create(ctx, dev, "OPS", "B", "")
+	if _, err := s.Start(ctx, dev, string(b.ID()), time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)); !errors.Is(err, domain.ErrInvalidSprintDates) {
+		t.Fatalf("end in the past err = %v", err)
 	}
 }

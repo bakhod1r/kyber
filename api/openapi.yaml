@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -227,6 +227,7 @@ paths:
                 priority: { $ref: "#/components/schemas/Priority" }
                 assignee_id: { type: [string, "null"], format: uuid }
                 sprint_id: { type: [string, "null"], description: "A planned or active sprint of the project; null = backlog." }
+                estimate: { type: [number, "null"], minimum: 0, maximum: 999, description: "Story points, one decimal; null clears." }
       responses:
         "200": { description: Updated issue, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
         "400": { $ref: "#/components/responses/Error" }
@@ -294,12 +295,21 @@ paths:
     parameters: [{ $ref: "#/components/parameters/SprintID" }]
     post:
       operationId: startSprint
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ends_at: { type: string, format: date-time, description: Defaults to start + 14 days. }
       responses:
         "200": { description: Active sprint, content: { application/json: { schema: { $ref: "#/components/schemas/Sprint" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/sprints/{id}/complete:
     parameters: [{ $ref: "#/components/parameters/SprintID" }]
     post:
@@ -473,7 +483,7 @@ components:
     Priority: { type: string, enum: [lowest, low, medium, high, highest] }
     Issue:
       type: object
-      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, rank, version]
+      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, version]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -485,12 +495,13 @@ components:
         priority: { $ref: "#/components/schemas/Priority" }
         assignee_id: { type: [string, "null"], format: uuid }
         reporter_id: { type: [string, "null"], format: uuid, description: Creator; null for issues created before 0.6. }
+        estimate: { type: [number, "null"], minimum: 0, maximum: 999, description: Story points (one decimal). }
         sprint_id: { type: [string, "null"], format: uuid }
         rank: { type: string, description: Fractional backlog rank; compare byte-wise. }
         version: { type: integer, minimum: 1 }
     Sprint:
       type: object
-      required: [id, project_key, name, goal, state, started_at, completed_at]
+      required: [id, project_key, name, goal, state, started_at, ends_at, completed_at]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -499,6 +510,7 @@ components:
         goal: { type: string }
         state: { type: string, enum: [planned, active, closed] }
         started_at: { type: [string, "null"], format: date-time }
+        ends_at: { type: [string, "null"], format: date-time }
         completed_at: { type: [string, "null"], format: date-time }
     Notification:
       type: object

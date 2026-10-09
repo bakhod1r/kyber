@@ -34,6 +34,7 @@ type sprintDTO struct {
 	Goal        string     `json:"goal"`
 	State       string     `json:"state"`
 	StartedAt   *time.Time `json:"started_at"`
+	EndsAt      *time.Time `json:"ends_at"`
 	CompletedAt *time.Time `json:"completed_at"`
 }
 
@@ -42,6 +43,10 @@ func toDTO(s *domain.Sprint) sprintDTO {
 	if t := s.StartedAt(); !t.IsZero() {
 		u := t.UTC()
 		d.StartedAt = &u
+	}
+	if t := s.EndsAt(); !t.IsZero() {
+		u := t.UTC()
+		d.EndsAt = &u
 	}
 	if t := s.CompletedAt(); !t.IsZero() {
 		u := t.UTC()
@@ -52,7 +57,7 @@ func toDTO(s *domain.Sprint) sprintDTO {
 
 func codeFor(err error) (string, bool) {
 	switch {
-	case errors.Is(err, domain.ErrInvalidSprint):
+	case errors.Is(err, domain.ErrInvalidSprint), errors.Is(err, domain.ErrInvalidSprintDates), errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrSprintNotFound):
 		return httpx.CodeSprintNotFound, true
@@ -98,7 +103,17 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
-	s, err := h.svc.Start(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	// The body is optional: {"ends_at": "<RFC 3339>"}; without it the sprint lasts 14 days.
+	var in struct {
+		EndsAt time.Time `json:"ends_at"`
+	}
+	if r.ContentLength != 0 {
+		if err := httpx.Decode(r, &in); err != nil {
+			httpx.Error(w, r, h.log, err, codeFor)
+			return
+		}
+	}
+	s, err := h.svc.Start(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.EndsAt)
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return

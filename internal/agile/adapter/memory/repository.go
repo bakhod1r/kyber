@@ -25,7 +25,7 @@ func NewRepository() *Repository { return &Repository{byID: map[domain.SprintID]
 
 func snapshot(s *domain.Sprint) domain.Snapshot {
 	return domain.Snapshot{ID: s.ID(), Project: s.Project(), Name: s.Name(), Goal: s.Goal(), State: s.State(),
-		StartedAt: s.StartedAt(), CompletedAt: s.CompletedAt(), Version: s.Version()}
+		StartedAt: s.StartedAt(), EndsAt: s.EndsAt(), CompletedAt: s.CompletedAt(), Version: s.Version()}
 }
 
 func (r *Repository) Save(_ context.Context, s *domain.Sprint, events []domain.Event) error {

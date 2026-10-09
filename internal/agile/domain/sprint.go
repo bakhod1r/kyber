@@ -9,11 +9,12 @@ import (
 )
 
 var (
-	ErrInvalidSprint     = errors.New("sprint name must be 1-100 characters and goal at most 2000")
-	ErrSprintState       = errors.New("sprint is not in a state that allows this")
-	ErrSprintNotFound    = errors.New("sprint not found")
-	ErrAnotherSprintLive = errors.New("project already has an active sprint")
-	ErrSprintConflict    = errors.New("sprint was changed concurrently")
+	ErrInvalidSprint      = errors.New("sprint name must be 1-100 characters and goal at most 2000")
+	ErrSprintState        = errors.New("sprint is not in a state that allows this")
+	ErrSprintNotFound     = errors.New("sprint not found")
+	ErrAnotherSprintLive  = errors.New("project already has an active sprint")
+	ErrSprintConflict     = errors.New("sprint was changed concurrently")
+	ErrInvalidSprintDates = errors.New("sprint must end after it starts")
 )
 
 type (
@@ -35,6 +36,7 @@ type Sprint struct {
 	name, goal  string
 	state       State
 	startedAt   time.Time
+	endsAt      time.Time
 	completedAt time.Time
 	version     int // optimistic lock; 0 = never persisted
 	events      []Event
@@ -56,6 +58,7 @@ type Snapshot struct {
 	Name, Goal  string
 	State       State
 	StartedAt   time.Time
+	EndsAt      time.Time
 	CompletedAt time.Time
 	Version     int
 }
@@ -63,7 +66,7 @@ type Snapshot struct {
 // Rehydrate rebuilds a persisted sprint without emitting events.
 func Rehydrate(s Snapshot) *Sprint {
 	return &Sprint{id: s.ID, project: s.Project, name: s.Name, goal: s.Goal, state: s.State,
-		startedAt: s.StartedAt, completedAt: s.CompletedAt, version: s.Version}
+		startedAt: s.StartedAt, endsAt: s.EndsAt, completedAt: s.CompletedAt, version: s.Version}
 }
 
 // Version is the optimistic-locking version; MarkPersisted is called by repositories.
@@ -77,17 +80,21 @@ func (s *Sprint) Goal() string           { return s.goal }
 func (s *Sprint) State() State           { return s.state }
 func (s *Sprint) StartedAt() time.Time   { return s.startedAt }
 func (s *Sprint) CompletedAt() time.Time { return s.completedAt }
+func (s *Sprint) EndsAt() time.Time      { return s.endsAt }
 
 // CanHoldIssues: issues may be planned into planned or active sprints only.
 func (s *Sprint) CanHoldIssues() bool { return s.state != StateClosed }
 
 // Start activates a planned sprint. "Only one active sprint per project" spans
 // aggregates, so the application layer checks it (and the database enforces it).
-func (s *Sprint) Start(at time.Time) error {
+func (s *Sprint) Start(at, endsAt time.Time) error {
 	if s.state != StatePlanned {
 		return ErrSprintState
 	}
-	s.state, s.startedAt = StateActive, at
+	if !endsAt.After(at) {
+		return ErrInvalidSprintDates
+	}
+	s.state, s.startedAt, s.endsAt = StateActive, at, endsAt
 	s.record(SprintStarted{ID: s.id, Project: s.project})
 	return nil
 }

@@ -70,7 +70,10 @@ func (s *Service) load(ctx context.Context, actor, id string, write bool) (*doma
 	return sp, nil
 }
 
-func (s *Service) Start(ctx context.Context, actor, id string) (*domain.Sprint, error) {
+// DefaultSprintLength is used when Start is given no end date (Jira's default).
+const DefaultSprintLength = 14 * 24 * time.Hour
+
+func (s *Service) Start(ctx context.Context, actor, id string, endsAt time.Time) (*domain.Sprint, error) {
 	sp, err := s.load(ctx, actor, id, true)
 	if err != nil {
 		return nil, err
@@ -84,7 +87,11 @@ func (s *Service) Start(ctx context.Context, actor, id string) (*domain.Sprint, 
 			return nil, domain.ErrAnotherSprintLive
 		}
 	}
-	if err := sp.Start(s.d.Now()); err != nil {
+	now := s.d.Now()
+	if endsAt.IsZero() {
+		endsAt = now.Add(DefaultSprintLength)
+	}
+	if err := sp.Start(now, endsAt); err != nil {
 		return nil, err
 	}
 	return sp, s.d.Sprints.Save(ctx, sp, sp.PullEvents()) // the DB index catches a concurrent start

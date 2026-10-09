@@ -24,13 +24,15 @@ func (r *Repository) Save(ctx context.Context, s *domain.Sprint, events []domain
 		var tag pgconn.CommandTag
 		var err error
 		if s.Version() == 0 {
-			tag, err = tx.Exec(ctx, `INSERT INTO sprints (id, project_key, name, goal, state, started_at, completed_at, version)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, 1) ON CONFLICT (id) DO NOTHING`,
-				string(s.ID()), s.Project(), s.Name(), s.Goal(), string(s.State()), nullTime(s.StartedAt()), nullTime(s.CompletedAt()))
+			tag, err = tx.Exec(ctx, `INSERT INTO sprints (id, project_key, name, goal, state, started_at, ends_at, completed_at, version)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1) ON CONFLICT (id) DO NOTHING`,
+				string(s.ID()), s.Project(), s.Name(), s.Goal(), string(s.State()), nullTime(s.StartedAt()),
+				nullTime(s.EndsAt()), nullTime(s.CompletedAt()))
 		} else {
 			tag, err = tx.Exec(ctx, `UPDATE sprints SET name = $2, goal = $3, state = $4, started_at = $5,
-				completed_at = $6, version = version + 1 WHERE id = $1 AND version = $7`,
-				string(s.ID()), s.Name(), s.Goal(), string(s.State()), nullTime(s.StartedAt()), nullTime(s.CompletedAt()), s.Version())
+				ends_at = $6, completed_at = $7, version = version + 1 WHERE id = $1 AND version = $8`,
+				string(s.ID()), s.Name(), s.Goal(), string(s.State()), nullTime(s.StartedAt()), nullTime(s.EndsAt()),
+				nullTime(s.CompletedAt()), s.Version())
 		}
 		if err != nil {
 			return err
@@ -51,7 +53,7 @@ func (r *Repository) Save(ctx context.Context, s *domain.Sprint, events []domain
 	return nil
 }
 
-const cols = `SELECT id::text, project_key, name, goal, state, started_at, completed_at, version FROM sprints`
+const cols = `SELECT id::text, project_key, name, goal, state, started_at, ends_at, completed_at, version FROM sprints`
 
 func (r *Repository) ByID(ctx context.Context, sid domain.SprintID) (*domain.Sprint, error) {
 	if !id.Valid(string(sid)) { // never let client input reach a uuid cast
@@ -77,9 +79,12 @@ func (r *Repository) ListByProject(ctx context.Context, project string) ([]*doma
 
 func scan(row pgx.Row) (*domain.Sprint, error) {
 	var s domain.Snapshot
-	var started, completed *time.Time
-	if err := row.Scan(&s.ID, &s.Project, &s.Name, &s.Goal, &s.State, &started, &completed, &s.Version); err != nil {
+	var started, ends, completed *time.Time
+	if err := row.Scan(&s.ID, &s.Project, &s.Name, &s.Goal, &s.State, &started, &ends, &completed, &s.Version); err != nil {
 		return nil, err
+	}
+	if ends != nil {
+		s.EndsAt = *ends
 	}
 	if started != nil {
 		s.StartedAt = *started

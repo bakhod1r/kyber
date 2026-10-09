@@ -41,13 +41,13 @@ func TestSprintLifecycle(t *testing.T) {
 	if err := s.Complete(t0); !errors.Is(err, domain.ErrSprintState) {
 		t.Fatalf("complete planned err = %v", err)
 	}
-	if err := s.Start(t0); err != nil {
+	if err := s.Start(t0, t0.Add(14*24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if s.State() != domain.StateActive || !s.StartedAt().Equal(t0) {
 		t.Fatalf("after start: %q %v", s.State(), s.StartedAt())
 	}
-	if err := s.Start(t0); !errors.Is(err, domain.ErrSprintState) {
+	if err := s.Start(t0, t0.Add(14*24*time.Hour)); !errors.Is(err, domain.ErrSprintState) {
 		t.Fatalf("double start err = %v", err)
 	}
 	if err := s.Complete(t0.Add(time.Hour)); err != nil {
@@ -73,7 +73,7 @@ func TestCanHoldIssues(t *testing.T) {
 	if !s.CanHoldIssues() {
 		t.Fatal("planned sprint must accept issues")
 	}
-	_ = s.Start(t0)
+	_ = s.Start(t0, t0.Add(14*24*time.Hour))
 	if !s.CanHoldIssues() {
 		t.Fatal("active sprint must accept issues")
 	}
@@ -94,5 +94,25 @@ func TestVersion(t *testing.T) {
 	s.MarkPersisted()
 	if s.Version() != 1 || domain.Rehydrate(domain.Snapshot{Version: 7}).Version() != 7 {
 		t.Fatal("version not tracked")
+	}
+}
+
+func TestStartRequiresEndAfterStart(t *testing.T) {
+	s := newSprint(t)
+	if err := s.Start(t0, t0); !errors.Is(err, domain.ErrInvalidSprintDates) {
+		t.Fatalf("end == start err = %v", err)
+	}
+	if err := s.Start(t0, t0.Add(-time.Hour)); !errors.Is(err, domain.ErrInvalidSprintDates) {
+		t.Fatalf("end before start err = %v", err)
+	}
+	if s.State() != domain.StatePlanned {
+		t.Fatal("rejected start must not change state")
+	}
+	end := t0.Add(14 * 24 * time.Hour)
+	if err := s.Start(t0, end); err != nil || !s.EndsAt().Equal(end) {
+		t.Fatalf("start = %v ends %v", err, s.EndsAt())
+	}
+	if !domain.Rehydrate(domain.Snapshot{EndsAt: end}).EndsAt().Equal(end) {
+		t.Fatal("rehydrate EndsAt")
 	}
 }

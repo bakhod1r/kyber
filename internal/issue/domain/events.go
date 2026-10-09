@@ -56,3 +56,12 @@ type IssueSprintChanged struct {
 }
 
 func (IssueSprintChanged) EventName() string { return "issue.sprint_changed" }
+
+type IssueEstimated struct {
+	ID   IssueID  `json:"id"`
+	Key  IssueKey `json:"key"`
+	From *float64 `json:"from"`
+	To   *float64 `json:"to"`
+}
+
+func (IssueEstimated) EventName() string { return "issue.estimated" }

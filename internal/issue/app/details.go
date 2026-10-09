@@ -17,6 +17,8 @@ type EditIssue struct {
 	Assignee    string
 	SprintSet   bool // move to Sprint ("" = backlog)
 	Sprint      string
+	EstimateSet bool     // set Estimate (nil = clear)
+	Estimate    *float64 // story points, one decimal
 }
 
 func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue) (*domain.Issue, error) {
@@ -41,6 +43,14 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 			return nil, err
 		}
 	}
+	var estimate *domain.Points
+	if cmd.EstimateSet && cmd.Estimate != nil {
+		p, err := domain.ParsePoints(*cmd.Estimate)
+		if err != nil {
+			return nil, err
+		}
+		estimate = &p
+	}
 	changes := domain.Changes{Title: cmd.Title, Description: cmd.Description}
 	if cmd.Priority != nil {
 		p := domain.Priority(*cmd.Priority)
@@ -54,6 +64,9 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 	}
 	if cmd.SprintSet {
 		is.MoveToSprint(domain.SprintID(cmd.Sprint))
+	}
+	if cmd.EstimateSet {
+		is.SetEstimate(estimate)
 	}
 	return is, s.save(ctx, is)
 }

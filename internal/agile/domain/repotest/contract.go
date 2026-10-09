@@ -32,12 +32,12 @@ func Run(t *testing.T, newRepo Factory) {
 		if err != nil || got.Name() != "Sprint 1" || got.Goal() != "Goal" || got.State() != domain.StatePlanned || got.Project() != "KYB" {
 			t.Fatalf("ByID = %+v, %v", got, err)
 		}
-		_ = got.Start(t0)
+		_ = got.Start(t0, t0.Add(14*24*time.Hour))
 		if err := repo.Save(ctx, got, got.PullEvents()); err != nil {
 			t.Fatal(err)
 		}
 		again, _ := repo.ByID(ctx, id(1))
-		if again.State() != domain.StateActive || !again.StartedAt().Equal(t0) {
+		if again.State() != domain.StateActive || !again.StartedAt().Equal(t0) || !again.EndsAt().Equal(t0.Add(14*24*time.Hour)) {
 			t.Fatalf("after start: %q %v", again.State(), again.StartedAt())
 		}
 		if ev := strings.Join(outbox(), ","); ev != "sprint.created,sprint.started" {
@@ -51,11 +51,11 @@ func Run(t *testing.T, newRepo Factory) {
 		_ = repo.Save(ctx, s, s.PullEvents())
 		x, _ := repo.ByID(ctx, id(1))
 		y, _ := repo.ByID(ctx, id(1))
-		_ = x.Start(t0)
+		_ = x.Start(t0, t0.Add(14*24*time.Hour))
 		if err := repo.Save(ctx, x, x.PullEvents()); err != nil {
 			t.Fatal(err)
 		}
-		_ = y.Start(t0.Add(time.Minute)) // y was loaded before x was saved
+		_ = y.Start(t0.Add(time.Minute), t0.Add(15*24*time.Hour)) // y was loaded before x was saved
 		if err := repo.Save(ctx, y, y.PullEvents()); !errors.Is(err, domain.ErrSprintConflict) {
 			t.Fatalf("stale save err = %v, want ErrSprintConflict", err)
 		}
@@ -88,15 +88,15 @@ func Run(t *testing.T, newRepo Factory) {
 		for _, s := range []*domain.Sprint{a, b, o} {
 			_ = repo.Save(ctx, s, nil)
 		}
-		_ = a.Start(t0)
+		_ = a.Start(t0, t0.Add(14*24*time.Hour))
 		if err := repo.Save(ctx, a, a.PullEvents()); err != nil {
 			t.Fatal(err)
 		}
-		_ = o.Start(t0)
+		_ = o.Start(t0, t0.Add(14*24*time.Hour))
 		if err := repo.Save(ctx, o, nil); err != nil {
 			t.Fatalf("other project may have its own active sprint: %v", err)
 		}
-		_ = b.Start(t0)
+		_ = b.Start(t0, t0.Add(14*24*time.Hour))
 		before := len(outbox())
 		if err := repo.Save(ctx, b, b.PullEvents()); !errors.Is(err, domain.ErrAnotherSprintLive) {
 			t.Fatalf("second active err = %v", err)
@@ -120,12 +120,12 @@ func Run(t *testing.T, newRepo Factory) {
 		c1, c2 := mk(1, "closed-old"), mk(2, "closed-new")
 		p1, act, p2 := mk(3, "planned-old"), mk(4, "active"), mk(5, "planned-new")
 		for i, s := range []*domain.Sprint{c1, c2} {
-			_ = s.Start(t0)
+			_ = s.Start(t0, t0.Add(14*24*time.Hour))
 			_ = repo.Save(ctx, s, nil)
 			_ = s.Complete(t0.Add(time.Duration(i+1) * time.Hour))
 			_ = repo.Save(ctx, s, nil)
 		}
-		_ = act.Start(t0)
+		_ = act.Start(t0, t0.Add(14*24*time.Hour))
 		_ = repo.Save(ctx, act, nil)
 		_, _ = p1, p2
 		list, err := repo.ListByProject(ctx, "KYB")
