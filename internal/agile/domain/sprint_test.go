@@ -85,3 +85,14 @@ func TestRehydrate(t *testing.T) {
 		t.Fatalf("rehydrated = %+v", s)
 	}
 }
+
+func TestVersion(t *testing.T) {
+	s := newSprint(t)
+	if s.Version() != 0 {
+		t.Fatal("new sprint must be unpersisted")
+	}
+	s.MarkPersisted()
+	if s.Version() != 1 || domain.Rehydrate(domain.Snapshot{Version: 7}).Version() != 7 {
+		t.Fatal("version not tracked")
+	}
+}

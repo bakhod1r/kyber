@@ -21,13 +21,22 @@ func NewRepository(pool *pgxpool.Pool) *Repository { return &Repository{pool: po
 
 func (r *Repository) Save(ctx context.Context, s *domain.Sprint, events []domain.Event) error {
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `INSERT INTO sprints (id, project_key, name, goal, state, started_at, completed_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, goal = EXCLUDED.goal, state = EXCLUDED.state,
-				started_at = EXCLUDED.started_at, completed_at = EXCLUDED.completed_at`,
-			string(s.ID()), s.Project(), s.Name(), s.Goal(), string(s.State()), nullTime(s.StartedAt()), nullTime(s.CompletedAt()))
+		var tag pgconn.CommandTag
+		var err error
+		if s.Version() == 0 {
+			tag, err = tx.Exec(ctx, `INSERT INTO sprints (id, project_key, name, goal, state, started_at, completed_at, version)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, 1) ON CONFLICT (id) DO NOTHING`,
+				string(s.ID()), s.Project(), s.Name(), s.Goal(), string(s.State()), nullTime(s.StartedAt()), nullTime(s.CompletedAt()))
+		} else {
+			tag, err = tx.Exec(ctx, `UPDATE sprints SET name = $2, goal = $3, state = $4, started_at = $5,
+				completed_at = $6, version = version + 1 WHERE id = $1 AND version = $7`,
+				string(s.ID()), s.Name(), s.Goal(), string(s.State()), nullTime(s.StartedAt()), nullTime(s.CompletedAt()), s.Version())
+		}
 		if err != nil {
 			return err
+		}
+		if tag.RowsAffected() != 1 {
+			return domain.ErrSprintConflict
 		}
 		return db.WriteOutbox(ctx, tx, events)
 	})
@@ -35,10 +44,14 @@ func (r *Repository) Save(ctx context.Context, s *domain.Sprint, events []domain
 	if errors.As(err, &pgErr) && pgErr.ConstraintName == "sprints_one_active" {
 		return domain.ErrAnotherSprintLive
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	s.MarkPersisted()
+	return nil
 }
 
-const cols = `SELECT id::text, project_key, name, goal, state, started_at, completed_at FROM sprints`
+const cols = `SELECT id::text, project_key, name, goal, state, started_at, completed_at, version FROM sprints`
 
 func (r *Repository) ByID(ctx context.Context, sid domain.SprintID) (*domain.Sprint, error) {
 	if !id.Valid(string(sid)) { // never let client input reach a uuid cast
@@ -65,7 +78,7 @@ func (r *Repository) ListByProject(ctx context.Context, project string) ([]*doma
 func scan(row pgx.Row) (*domain.Sprint, error) {
 	var s domain.Snapshot
 	var started, completed *time.Time
-	if err := row.Scan(&s.ID, &s.Project, &s.Name, &s.Goal, &s.State, &started, &completed); err != nil {
+	if err := row.Scan(&s.ID, &s.Project, &s.Name, &s.Goal, &s.State, &started, &completed, &s.Version); err != nil {
 		return nil, err
 	}
 	if started != nil {

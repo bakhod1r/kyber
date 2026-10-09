@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { useParams } from "react-router-dom";
+import { NavLink, useParams } from "react-router-dom";
 import { type Role, api } from "../api";
+import { Backlog } from "../components/Backlog";
 import { Board } from "../components/Board";
 import { IssuePanel } from "../components/IssuePanel";
 
-export function ProjectPage() {
+export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" }) {
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
   const project = projects.data?.find((p) => p.key === key);
@@ -15,8 +16,14 @@ export function ProjectPage() {
       <h1>
         <span className="key">{key}</span> {project?.name ?? ""}
       </h1>
+      <nav className="tabs" aria-label="Project views">
+        <NavLink to={`/projects/${encodeURIComponent(key)}`} end>
+          Board
+        </NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/backlog`}>Backlog</NavLink>
+      </nav>
       <div className="project-grid">
-        <Board projectKey={key} onOpen={setOpen} />
+        {view === "board" ? <Board projectKey={key} onOpen={setOpen} /> : <Backlog projectKey={key} onOpen={setOpen} />}
         <Members projectKey={key} />
       </div>
       {open && <IssuePanel issueKey={open} projectKey={key} onClose={() => setOpen(null)} />}

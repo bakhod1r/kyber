@@ -15,14 +15,28 @@ export type Issue = {
   description: string;
   priority: Priority;
   assignee_id: string | null;
+  sprint_id: string | null;
+  rank: string;
   version: number;
 };
+export type SprintState = "planned" | "active" | "closed";
+export type Sprint = {
+  id: string;
+  project_key: string;
+  name: string;
+  goal: string;
+  state: SprintState;
+  started_at: string | null;
+  completed_at: string | null;
+};
+export type Completion = { sprint: Sprint; completed: number; returned: number };
 export type IssuePatch = {
   version: number;
   title?: string;
   description?: string;
   priority?: Priority;
   assignee_id?: string | null;
+  sprint_id?: string | null;
 };
 export type Comment = { id: string; author_id: string; author_name: string; body: string; created_at: string };
 export type Role = "admin" | "member" | "viewer";
@@ -88,7 +102,16 @@ export const api = {
   setMember: (key: string, email: string, role: Role) =>
     request<undefined>("POST", `/api/v1/projects/${seg(key)}/members`, { email, role }),
 
-  issues: (key: string) => request<List<Issue>>("GET", `/api/v1/projects/${seg(key)}/issues`).then((r) => r.items),
+  /** Issues in backlog rank order; `sprint` filters to a sprint id or "backlog". */
+  issues: (key: string, sprint?: string) =>
+    request<List<Issue>>("GET", `/api/v1/projects/${seg(key)}/issues${sprint ? `?sprint=${seg(sprint)}` : ""}`).then((r) => r.items),
+  rankIssue: (issueKey: string, anchor: { after: string } | { before: string }) =>
+    request<Issue>("POST", `/api/v1/issues/${seg(issueKey)}/rank`, anchor),
+  sprints: (key: string) => request<List<Sprint>>("GET", `/api/v1/projects/${seg(key)}/sprints`).then((r) => r.items),
+  createSprint: (key: string, name: string, goal: string) =>
+    request<Sprint>("POST", `/api/v1/projects/${seg(key)}/sprints`, { name, goal }),
+  startSprint: (id: string) => request<Sprint>("POST", `/api/v1/sprints/${seg(id)}/start`),
+  completeSprint: (id: string) => request<Completion>("POST", `/api/v1/sprints/${seg(id)}/complete`),
   createIssue: (key: string, title: string, type: IssueType) =>
     request<Issue>("POST", `/api/v1/projects/${seg(key)}/issues`, { title, type }),
   transition: (issueKey: string, to: Status) =>

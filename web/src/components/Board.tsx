@@ -11,8 +11,15 @@ export function initials(name: string): string {
 
 export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (issueKey: string) => void }) {
   const qc = useQueryClient();
-  const queryKey = ["issues", projectKey];
-  const issues = useQuery({ queryKey, queryFn: () => api.issues(projectKey) });
+  // With an active sprint the board shows only that sprint (Scrum); otherwise every issue (Kanban).
+  const sprints = useQuery({ queryKey: ["sprints", projectKey], queryFn: () => api.sprints(projectKey) });
+  const active = sprints.data?.find((s) => s.state === "active");
+  const queryKey = ["issues", projectKey, active?.id ?? "all"];
+  const issues = useQuery({
+    queryKey,
+    queryFn: () => api.issues(projectKey, active?.id),
+    enabled: !sprints.isPending,
+  });
   const members = useQuery({ queryKey: ["members", projectKey], queryFn: () => api.members(projectKey) });
   const byId = new Map<string, Member>((members.data ?? []).map((m) => [m.user_id, m]));
   const [error, setError] = useState<string | null>(null);
@@ -43,12 +50,18 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
     if (issue && issue.status !== to) move.mutate({ key, to });
   }
 
-  if (issues.isPending) return <p className="muted">Loading board…</p>;
+  if (sprints.isPending || issues.isPending) return <p className="muted">Loading board…</p>;
   if (issues.isError) return <p role="alert" className="error">{issues.error.message}</p>;
 
   return (
     <div className="board-wrap">
-      <QuickAdd projectKey={projectKey} />
+      {active && (
+        <p className="sprint-banner">
+          <strong>{active.name}</strong>
+          {active.goal && <span> — {active.goal}</span>}
+        </p>
+      )}
+      <QuickAdd projectKey={projectKey} sprintId={active?.id} />
       {error && (
         <p role="alert" className="error">
           {error}
@@ -107,12 +120,17 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
   );
 }
 
-function QuickAdd({ projectKey }: { projectKey: string }) {
+// QuickAdd creates an issue; during an active sprint it joins that sprint (as in Jira),
+// otherwise it would land in the backlog and vanish from the sprint board.
+function QuickAdd({ projectKey, sprintId }: { projectKey: string; sprintId?: string }) {
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
   const [type, setType] = useState<IssueType>("task");
   const create = useMutation({
-    mutationFn: () => api.createIssue(projectKey, title, type),
+    mutationFn: async () => {
+      const created = await api.createIssue(projectKey, title, type);
+      if (sprintId) await api.editIssue(created.key, { version: created.version, sprint_id: sprintId });
+    },
     onSuccess: () => {
       setTitle("");
       return qc.invalidateQueries({ queryKey: ["issues", projectKey] });

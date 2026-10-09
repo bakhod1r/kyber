@@ -13,6 +13,7 @@ var (
 	ErrSprintState       = errors.New("sprint is not in a state that allows this")
 	ErrSprintNotFound    = errors.New("sprint not found")
 	ErrAnotherSprintLive = errors.New("project already has an active sprint")
+	ErrSprintConflict    = errors.New("sprint was changed concurrently")
 )
 
 type (
@@ -35,6 +36,7 @@ type Sprint struct {
 	state       State
 	startedAt   time.Time
 	completedAt time.Time
+	version     int // optimistic lock; 0 = never persisted
 	events      []Event
 }
 
@@ -55,13 +57,18 @@ type Snapshot struct {
 	State       State
 	StartedAt   time.Time
 	CompletedAt time.Time
+	Version     int
 }
 
 // Rehydrate rebuilds a persisted sprint without emitting events.
 func Rehydrate(s Snapshot) *Sprint {
 	return &Sprint{id: s.ID, project: s.Project, name: s.Name, goal: s.Goal, state: s.State,
-		startedAt: s.StartedAt, completedAt: s.CompletedAt}
+		startedAt: s.StartedAt, completedAt: s.CompletedAt, version: s.Version}
 }
+
+// Version is the optimistic-locking version; MarkPersisted is called by repositories.
+func (s *Sprint) Version() int   { return s.version }
+func (s *Sprint) MarkPersisted() { s.version++ }
 
 func (s *Sprint) ID() SprintID           { return s.id }
 func (s *Sprint) Project() string        { return s.project }
@@ -126,9 +133,9 @@ func (SprintCreated) EventName() string   { return "sprint.created" }
 func (SprintStarted) EventName() string   { return "sprint.started" }
 func (SprintCompleted) EventName() string { return "sprint.completed" }
 
-// Repository is the persistence port for sprints. Save inserts or updates and
-// writes events to the outbox atomically; a second active sprint in a project
-// must fail with ErrAnotherSprintLive.
+// Repository is the persistence port for sprints. Save inserts (version 0) or
+// updates (version must match, else ErrSprintConflict) and writes events to the
+// outbox atomically; a second active sprint in a project fails with ErrAnotherSprintLive.
 type Repository interface {
 	Save(ctx context.Context, s *Sprint, events []Event) error
 	ByID(ctx context.Context, id SprintID) (*Sprint, error) // ErrSprintNotFound

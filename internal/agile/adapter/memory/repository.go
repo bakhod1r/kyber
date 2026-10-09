@@ -25,7 +25,7 @@ func NewRepository() *Repository { return &Repository{byID: map[domain.SprintID]
 
 func snapshot(s *domain.Sprint) domain.Snapshot {
 	return domain.Snapshot{ID: s.ID(), Project: s.Project(), Name: s.Name(), Goal: s.Goal(), State: s.State(),
-		StartedAt: s.StartedAt(), CompletedAt: s.CompletedAt()}
+		StartedAt: s.StartedAt(), CompletedAt: s.CompletedAt(), Version: s.Version()}
 }
 
 func (r *Repository) Save(_ context.Context, s *domain.Sprint, events []domain.Event) error {
@@ -39,10 +39,14 @@ func (r *Repository) Save(_ context.Context, s *domain.Sprint, events []domain.E
 		}
 	}
 	e, ok := r.byID[s.ID()]
+	if ok != (s.Version() > 0) || (ok && e.snap.Version != s.Version()) {
+		return domain.ErrSprintConflict
+	}
 	if !ok {
 		r.seq++
 		e.seq = r.seq
 	}
+	s.MarkPersisted()
 	e.snap = snapshot(s)
 	r.byID[s.ID()] = e
 	r.outbox = append(r.outbox, events...)

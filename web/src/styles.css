@@ -142,3 +142,31 @@ textarea { font: inherit; color: var(--text); background: var(--surface); border
 .comments label { width: 100%; }
 .comment-meta { font-size: 0.8rem; color: var(--muted); }
 .comment-body { margin: 0.2rem 0 0; white-space: pre-wrap; }
+
+/* Sprint 05: tabs, backlog, sprints */
+.tabs { display: flex; gap: 0.25rem; margin: -0.5rem 0 1rem; border-bottom: 1px solid var(--border); }
+.tabs a { padding: 0.5rem 0.9rem; color: var(--muted); border-bottom: 2px solid transparent; font-weight: 600; }
+.tabs a:hover { text-decoration: none; color: var(--text); }
+.tabs a.active { color: var(--accent); border-bottom-color: var(--accent); }
+.sprint-banner { margin: 0 0 0.75rem; padding: 0.5rem 0.75rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.backlog { display: grid; gap: 1rem; }
+.backlog-section { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem; }
+.backlog-section.over { border-color: var(--glow); box-shadow: 0 0 0 3px rgb(90 216 255 / 25%); }
+.backlog-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.backlog-head h2 { display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; margin: 0; }
+.goal { margin: 0.25rem 0 0; font-size: 0.85rem; }
+.backlog-rows { list-style: none; padding: 0; margin: 0.75rem 0 0; display: grid; gap: 0.35rem; }
+.backlog-row {
+  display: grid; grid-template-columns: 70px 1fr auto 12px 70px; align-items: center; gap: 0.75rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.45rem 0.75rem; cursor: grab;
+}
+.backlog-row .key { text-align: right; color: var(--muted); }
+.row-open { background: none; border: 0; color: var(--text); text-align: left; font-weight: 500; padding: 0; }
+.row-open:hover { color: var(--accent); }
+.empty { padding: 0.75rem; text-align: center; border: 1px dashed var(--border); border-radius: 8px; }
+.state, .status { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; padding: 0.1rem 0.45rem; border-radius: 999px; background: var(--surface); color: var(--muted); }
+.state-active { background: var(--accent); color: var(--accent-text); }
+.status-done { color: #2e9e5b; }
+.status-in_progress { color: var(--accent); }
+.notice { margin: 0; padding: 0.5rem 0.75rem; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); }
+.create-sprint { grid-template-columns: 1fr 2fr auto; max-width: none; margin-top: 0; }

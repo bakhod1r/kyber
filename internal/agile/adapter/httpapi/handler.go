@@ -58,6 +58,8 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeSprintNotFound, true
 	case errors.Is(err, domain.ErrAnotherSprintLive):
 		return httpx.CodeSprintAlreadyActive, true
+	case errors.Is(err, domain.ErrSprintConflict):
+		return httpx.CodeSprintConflict, true
 	case errors.Is(err, domain.ErrSprintState):
 		return httpx.CodeSprintState, true
 	case errors.Is(err, app.ErrProjectNotFound):

@@ -59,6 +59,44 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await expect(page.getByRole("dialog").getByText("Looks great!")).toBeVisible();
   await page.keyboard.press("Escape");
 
+  // KYB-S18/19/20: plan a sprint in the backlog, start it, complete it.
+  await page.getByLabel("New issue title").fill("Write release notes");
+  await page.getByRole("button", { name: "Add issue" }).click();
+  await expect(page.getByRole("region", { name: "To Do" }).getByText("Write release notes")).toBeVisible();
+  await page.getByRole("link", { name: "Backlog" }).click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${key}/backlog$`));
+  await page.getByLabel("Sprint name").fill("Sprint 1");
+  await page.getByLabel("Goal").fill("Ship v1");
+  await page.getByRole("button", { name: "Create sprint" }).click();
+  const sprint1 = page.getByRole("region", { name: "Sprint 1" });
+  await expect(sprint1).toBeVisible();
+  const backlog = page.getByRole("region", { name: "Backlog" });
+  // Rank: move "Write release notes" above "Ship the board" inside the backlog.
+  await backlog.getByRole("listitem").filter({ hasText: "Write release notes" }).dragTo(backlog.getByRole("listitem").filter({ hasText: "Ship the board" }));
+  await expect(backlog.getByRole("listitem").first()).toContainText("Write release notes");
+  // Plan both issues into the sprint.
+  await backlog.getByRole("listitem").filter({ hasText: "Ship the board" }).dragTo(sprint1);
+  await expect(sprint1.getByText("Ship the board")).toBeVisible();
+  await backlog.getByRole("listitem").filter({ hasText: "Write release notes" }).dragTo(sprint1);
+  await expect(sprint1.getByText("Write release notes")).toBeVisible();
+  await expect(backlog.getByText("Drag issues here")).toBeVisible();
+  await sprint1.getByRole("button", { name: "Start sprint" }).click();
+  await expect(sprint1.getByText("active")).toBeVisible();
+  // The board now shows the active sprint.
+  await page.getByRole("link", { name: "Board" }).click();
+  await expect(page.getByText("Sprint 1")).toBeVisible();
+  await expect(page.getByText("— Ship v1")).toBeVisible();
+  const ip = page.getByRole("region", { name: "In Progress" });
+  await ip.getByText("Ship the board").dragTo(page.getByRole("region", { name: "Done" }));
+  await expect(page.getByRole("region", { name: "Done" }).getByText("Ship the board")).toBeVisible();
+  // Complete: the unfinished issue returns to the backlog.
+  await page.getByRole("link", { name: "Backlog" }).click();
+  await page.getByRole("region", { name: "Sprint 1" }).getByRole("button", { name: "Complete sprint" }).click();
+  await expect(page.getByRole("status")).toContainText("Sprint 1 completed: 1 done, 1 returned to the backlog.");
+  await expect(page.getByRole("region", { name: "Sprint 1" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Backlog" }).getByText("Write release notes")).toBeVisible();
+  await page.getByRole("link", { name: "Board" }).click();
+
   // Inviting an unknown email surfaces the server error.
   await page.getByLabel("Invite by email").fill("nobody@example.com");
   await page.getByRole("button", { name: "Invite" }).click();

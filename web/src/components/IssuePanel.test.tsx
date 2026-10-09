@@ -8,7 +8,7 @@ import { IssuePanel } from "./IssuePanel";
 
 const base: Issue = {
   id: "i-1", key: "KYB-1", title: "Login page", type: "task", status: "todo",
-  description: "Steps", priority: "medium", assignee_id: null, version: 3,
+  description: "Steps", priority: "medium", assignee_id: null, sprint_id: null, rank: "a1", version: 3,
 };
 const members = {
   items: [

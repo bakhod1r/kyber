@@ -45,6 +45,32 @@ func Run(t *testing.T, newRepo Factory) {
 		}
 	})
 
+	t.Run("stale copy is rejected (optimistic locking)", func(t *testing.T) {
+		repo, outbox := newRepo(t)
+		s, _ := domain.NewSprint(id(1), "KYB", "A", "")
+		_ = repo.Save(ctx, s, s.PullEvents())
+		x, _ := repo.ByID(ctx, id(1))
+		y, _ := repo.ByID(ctx, id(1))
+		_ = x.Start(t0)
+		if err := repo.Save(ctx, x, x.PullEvents()); err != nil {
+			t.Fatal(err)
+		}
+		_ = y.Start(t0.Add(time.Minute)) // y was loaded before x was saved
+		if err := repo.Save(ctx, y, y.PullEvents()); !errors.Is(err, domain.ErrSprintConflict) {
+			t.Fatalf("stale save err = %v, want ErrSprintConflict", err)
+		}
+		if got := strings.Join(outbox(), ","); got != "sprint.created,sprint.started" {
+			t.Fatalf("outbox = %s (duplicate events)", got)
+		}
+		if again, _ := repo.ByID(ctx, id(1)); !again.StartedAt().Equal(t0) {
+			t.Fatalf("stale save overwrote started_at: %v", again.StartedAt())
+		}
+		dup, _ := domain.NewSprint(id(1), "KYB", "dup", "")
+		if err := repo.Save(ctx, dup, nil); !errors.Is(err, domain.ErrSprintConflict) {
+			t.Fatalf("re-inserting an existing id err = %v", err)
+		}
+	})
+
 	t.Run("not found", func(t *testing.T) {
 		repo, _ := newRepo(t)
 		for _, missing := range []domain.SprintID{id(9), "not-a-uuid", ""} {

@@ -2,9 +2,10 @@
 <h1 align="center">Kyber</h1>
 <p align="center">Open-source, self-hosted issue &amp; project tracker — the core of Jira, in one Go binary.</p>
 
-> Status: **v0.4 (Sprint 04)** — issue details & comments, Kanban board, project roles, OpenAPI contract, localized problem details (en/uz/ru), PostgreSQL, optional Redis.
+> Status: **v0.5 (Sprint 05)** — Scrum backlog & sprints, ranked backlog, issue details & comments, Kanban board, project roles, OpenAPI contract, localized errors (en/uz/ru), PostgreSQL, optional Redis.
 
 <p align="center"><img src="docs/assets/board.png" alt="Kyber Kanban board" width="820"></p>
+<p align="center"><img src="docs/assets/backlog.png" alt="Kyber backlog with sprints" width="820"></p>
 <p align="center"><img src="docs/assets/issue-panel.png" alt="Kyber issue panel with comments" width="820"></p>
 > Roadmap: [`docs/PLAN.md`](docs/PLAN.md) · Backlog: [`docs/backlog`](docs/backlog) · QA: [`docs/qa`](docs/qa)
 
@@ -45,6 +46,9 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/probl
 | POST / GET | `/api/v1/projects/{key}/issues[?status=]` | Create / list issues |
 | GET · PATCH | `/api/v1/issues/{KEY-N}` | Get issue · edit title/description/priority/assignee (with `version`) |
 | GET · POST | `/api/v1/issues/{KEY-N}/comments` | List · add comments |
+| POST | `/api/v1/issues/{KEY-N}/rank` | Move in the backlog (`after` / `before` another issue) |
+| GET · POST | `/api/v1/projects/{key}/sprints` | List · create sprints |
+| POST | `/api/v1/sprints/{id}/start` · `/complete` | Start · complete (unfinished issues return to the backlog) |
 | POST | `/api/v1/issues/{KEY-N}/transitions` | Move issue (`todo ⇄ in_progress ⇄ done`) |
 
 ## Development
