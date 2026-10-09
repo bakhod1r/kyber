@@ -2,9 +2,11 @@ package httpapi
 
 import (
 	"context"
+
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"github.com/bakhod1r/errorx"
 	"net/http"
 	"net/url"
 	"strings"
@@ -20,7 +22,8 @@ import (
 type Social struct {
 	Google      GoogleClient
 	Telegram    TelegramVerifier
-	TelegramBot string // bot username for the login widget
+	TelegramBot string // bot username for the login widget and the code bot
+	TelegramOTP bool   // the bot sends one-time login codes (needs the bot token)
 }
 
 type GoogleClient interface {
@@ -46,6 +49,8 @@ func (h *Handler) registerSocial(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/auth/google/start", h.googleStart)
 	mux.HandleFunc("GET /api/v1/auth/google/callback", h.googleCallback)
 	mux.HandleFunc("POST /api/v1/auth/telegram", h.telegram)
+	mux.HandleFunc("POST /api/v1/auth/telegram/otp", h.otpStart)
+	mux.HandleFunc("POST /api/v1/auth/telegram/otp/verify", h.otpVerify)
 }
 
 func (h *Handler) googleOn() bool   { return h.social.Google != nil && h.social.Google.Enabled() }
@@ -55,7 +60,8 @@ func (h *Handler) providers(w http.ResponseWriter, _ *http.Request) {
 	out := struct {
 		Google      bool    `json:"google"`
 		TelegramBot *string `json:"telegram_bot"`
-	}{Google: h.googleOn()}
+		TelegramOTP bool    `json:"telegram_otp"`
+	}{Google: h.googleOn(), TelegramOTP: h.social.TelegramOTP}
 	if h.telegramOn() {
 		out.TelegramBot = &h.social.TelegramBot
 	}
@@ -169,4 +175,45 @@ func (h *Handler) setSession(w http.ResponseWriter, token string) {
 		Name: CookieName, Value: token, Path: "/", HttpOnly: true, Secure: h.cookieSecure,
 		SameSite: http.SameSiteLaxMode, Expires: time.Now().Add(app.SessionTTL),
 	})
+}
+
+// otpStart begins "log in with a Telegram code": the browser opens the deep link, presses
+// Start in the bot and receives a code there.
+func (h *Handler) otpStart(w http.ResponseWriter, r *http.Request) {
+	if !h.social.TelegramOTP {
+		httpx.Error(w, r, h.log, errProviderDisabled, codeFor)
+		return
+	}
+	c, err := h.svc.StartTelegramOTP(r.Context(), clientIP(r))
+	var tooMany *app.TooManyAttemptsError
+	if errors.As(err, &tooMany) {
+		httpx.Problem(w, r, errorx.New(httpx.CodeTooManyAttempts, err.Error()).WithDetails(err.Error()).WithRetryAfter(tooMany.RetryAfter))
+		return
+	}
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, map[string]any{
+		"id": c.ID, "link": "https://t.me/" + url.PathEscape(h.social.TelegramBot) + "?start=" + c.Nonce, "expires_at": c.ExpiresAt,
+	})
+}
+
+func (h *Handler) otpVerify(w http.ResponseWriter, r *http.Request) {
+	if !h.social.TelegramOTP {
+		httpx.Error(w, r, h.log, errProviderDisabled, codeFor)
+		return
+	}
+	var in struct{ ID, Code string }
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	token, _, err := h.svc.VerifyTelegramOTP(r.Context(), in.ID, strings.TrimSpace(in.Code))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	h.setSession(w, token)
+	httpx.JSON(w, http.StatusOK, map[string]string{"token": token})
 }

@@ -33,6 +33,8 @@ type Service struct {
 	dummy    string // hash verified for unknown users to equalise timing
 	limiter  LoginLimiter
 	external domain.ExternalIdentities // nil = Google/Telegram sign-in disabled
+	otps     domain.OTPChallenges      // nil = Telegram code login disabled
+	bot      Messenger
 }
 
 // Option customises the service.

@@ -78,7 +78,7 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 	url := cfg.DatabaseURL
 	if url == "" {
 		log.Warn("KYBER_DATABASE_URL not set: running in-memory dev mode, data is lost on restart")
-		return server.NewInMemory(log, social), func() {}, nil
+		return server.NewInMemory(log, append([]server.Option{social, server.WithContext(ctx)}, telegramBot(cfg)...)...), func() {}, nil
 	}
 	pool, err := db.Open(ctx, url)
 	if err != nil {
@@ -90,7 +90,7 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 	}
 	log.Info("database ready")
 	server.StartJobs(ctx, log, pool, cfg.SessionPurgeEvery)
-	opts := []server.Option{social}
+	opts := append([]server.Option{social, server.WithContext(ctx)}, telegramBot(cfg)...)
 	cleanup := pool.Close
 	if cfg.RedisURL != "" {
 		ropts, err := redis.ParseURL(cfg.RedisURL)
@@ -110,4 +110,12 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		log.Warn("KYBER_REDIS_URL not set: login limiter is per process (fine for a single instance)")
 	}
 	return server.NewPostgres(log, pool, cfg.CookieSecure, opts...), cleanup, nil
+}
+
+// telegramBot enables login codes from the bot when a bot token is configured.
+func telegramBot(cfg *config.Config) []server.Option {
+	if cfg.TelegramBotToken == "" || cfg.TelegramBotName == "" {
+		return nil
+	}
+	return []server.Option{server.WithTelegramBot(telegram.NewBot(cfg.TelegramBotToken, ""), 50*time.Second)}
 }

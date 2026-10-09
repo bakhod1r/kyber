@@ -14,11 +14,12 @@ type Repository struct {
 	users    map[domain.UserID]domain.User
 	sessions map[string]domain.Session
 	external map[domain.Provider]map[string]domain.UserID
+	otps     map[string]domain.OTPChallenge
 }
 
 func NewRepository() *Repository {
 	return &Repository{users: map[domain.UserID]domain.User{}, sessions: map[string]domain.Session{},
-		external: map[domain.Provider]map[string]domain.UserID{}}
+		external: map[domain.Provider]map[string]domain.UserID{}, otps: map[string]domain.OTPChallenge{}}
 }
 
 func (r *Repository) Create(_ context.Context, u *domain.User) error {
@@ -110,4 +111,43 @@ func (r *Repository) Link(_ context.Context, id domain.ExternalIdentity) error {
 		r.external[id.Provider][id.Subject] = id.UserID
 	}
 	return nil
+}
+
+func (r *Repository) CreateOTP(_ context.Context, c *domain.OTPChallenge) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.otps[c.ID] = *c
+	return nil
+}
+
+func (r *Repository) OTPByID(_ context.Context, id string) (*domain.OTPChallenge, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if c, ok := r.otps[id]; ok {
+		return &c, nil
+	}
+	return nil, domain.ErrOTPNotFound
+}
+
+func (r *Repository) OTPByNonce(_ context.Context, nonce string) (*domain.OTPChallenge, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, c := range r.otps {
+		if c.Nonce == nonce {
+			return &c, nil
+		}
+	}
+	return nil, domain.ErrOTPNotFound
+}
+
+func (r *Repository) UpdateOTP(_ context.Context, id string, fn func(*domain.OTPChallenge) error) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c, ok := r.otps[id]
+	if !ok {
+		return domain.ErrOTPNotFound
+	}
+	err := fn(&c)
+	r.otps[id] = c
+	return err
 }

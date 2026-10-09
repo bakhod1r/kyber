@@ -62,7 +62,14 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeEmailTaken, true
 	case errors.Is(err, app.ErrInvalidCredentials):
 		return httpx.CodeInvalidCredentials, true
-	case errors.Is(err, errProviderDisabled):
+	case errors.Is(err, domain.ErrOTPWrongCode), errors.Is(err, domain.ErrOTPExpired), errors.Is(err, domain.ErrOTPUsed),
+		errors.Is(err, domain.ErrOTPNotFound):
+		return httpx.CodeOTPInvalid, true
+	case errors.Is(err, domain.ErrOTPNotDelivered):
+		return httpx.CodeOTPPending, true
+	case errors.Is(err, domain.ErrOTPTooManyAttempts):
+		return httpx.CodeTooManyAttempts, true
+	case errors.Is(err, errProviderDisabled), errors.Is(err, app.ErrExternalDisabled):
 		return httpx.CodeProviderDisabled, true
 	case errors.Is(err, app.ErrUnauthenticated):
 		return httpx.CodeAuthRequired, true

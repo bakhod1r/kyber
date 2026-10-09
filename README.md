@@ -31,7 +31,7 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 | `KYBER_REDIS_URL` | — | Optional; shares the login limiter across replicas (guard) |
 | `KYBER_PUBLIC_URL` | `http://localhost:8080` | External base URL; OAuth redirect URIs are built from it |
 | `KYBER_GOOGLE_CLIENT_ID` / `KYBER_GOOGLE_CLIENT_SECRET` | — | Enables "Continue with Google". Google Cloud → APIs & Services → Credentials → OAuth client (Web); authorized redirect URI `<KYBER_PUBLIC_URL>/api/v1/auth/google/callback` |
-| `KYBER_TELEGRAM_BOT_TOKEN` / `KYBER_TELEGRAM_BOT_NAME` | — | Enables the Telegram Login Widget. Create a bot with @BotFather, then `/setdomain` to your site's domain (the widget only renders there) |
+| `KYBER_TELEGRAM_BOT_TOKEN` / `KYBER_TELEGRAM_BOT_NAME` | — | Enables Telegram sign-in. Create a bot with @BotFather. With both set the bot also sends **one-time login codes** (works on any domain; Kyber long-polls the bot, so run one replica with the token). The Login Widget additionally needs `/setdomain` to your site's domain |
 | `KYBER_COOKIE_SECURE` | `true` | Set `false` only for plain-HTTP local use |
 | `KYBER_SESSION_PURGE_EVERY` | `1h` | Expired-session cleanup interval (jittered) |
 

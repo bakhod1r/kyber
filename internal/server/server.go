@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/bakhod1r/errorx"
@@ -23,6 +24,7 @@ import (
 	identityhttp "github.com/bakhod1r/kyber/internal/identity/adapter/httpapi"
 	identitymemory "github.com/bakhod1r/kyber/internal/identity/adapter/memory"
 	identitypg "github.com/bakhod1r/kyber/internal/identity/adapter/postgres"
+	"github.com/bakhod1r/kyber/internal/identity/adapter/telegram"
 	identityapp "github.com/bakhod1r/kyber/internal/identity/app"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
 	importeracl "github.com/bakhod1r/kyber/internal/importer/adapter/acl"
@@ -72,6 +74,9 @@ type deps struct {
 	users        identitydomain.Users
 	external     identitydomain.ExternalIdentities
 	social       identityhttp.Social
+	otps         identitydomain.OTPChallenges
+	telegramBot  *telegram.Bot
+	telegramWait time.Duration
 	sessions     identitydomain.Sessions
 	ready        func(context.Context) error
 	cookieSecure bool
@@ -93,6 +98,12 @@ func WithRelayEvery(every time.Duration) Option { return func(d *deps) { d.relay
 // WithSocial enables sign-in with Google and/or Telegram.
 func WithSocial(s identityhttp.Social) Option { return func(d *deps) { d.social = s } }
 
+// WithTelegramBot lets the bot send one-time login codes; Kyber long-polls the bot's
+// updates with the given wait (run one replica with the token, or a webhook later).
+func WithTelegramBot(bot *telegram.Bot, wait time.Duration) Option {
+	return func(d *deps) { d.telegramBot, d.telegramWait = bot, wait }
+}
+
 // Option configures optional infrastructure.
 type Option func(*deps)
 
@@ -109,7 +120,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		sprints: sprintRepo, notes: notifymemory.NewRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(),
 		outbox:   outbox.NewMemoryStore(events(issueRepo.Outbox), events(sprintRepo.Outbox)),
-		users:    ids, sessions: ids, external: ids, ready: func(context.Context) error { return nil },
+		users:    ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
 		o(&d)
@@ -149,7 +160,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		sprints: agilepg.NewRepository(pool), notes: notifypg.NewRepository(pool), outbox: outbox.NewPostgresStore(pool),
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool),
-		users: ids, sessions: ids, external: ids, ready: pool.Ping, cookieSecure: cookieSecure,
+		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
 		o(&d)
@@ -214,7 +225,17 @@ func build(log *slog.Logger, d deps) http.Handler {
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
 	}
+	if d.telegramBot != nil {
+		identityOpts = append(identityOpts, identityapp.WithTelegramOTP(d.otps, d.telegramBot))
+		d.social.TelegramOTP = true
+	}
 	identity := identityapp.NewService(d.users, d.sessions, argon2.New(), systemClock{}, id.New, identityOpts...)
+	if d.telegramBot != nil {
+		go d.telegramBot.Poll(d.ctx, log, d.telegramWait, 5*time.Second,
+			func(ctx context.Context, nonce string, from telegram.User, chat string) error {
+				return identity.OnTelegramStart(ctx, nonce, strconv.FormatInt(from.ID, 10), chat, from.DisplayName())
+			})
+	}
 	auth := identityhttp.New(identity, log, d.cookieSecure).WithSocial(d.social)
 	m := metrics.NewHTTP()
 

@@ -96,3 +96,56 @@ func (r *Repository) Link(ctx context.Context, id domain.ExternalIdentity) error
 		ON CONFLICT (provider, subject) DO NOTHING`, string(id.Provider), id.Subject, string(id.UserID))
 	return err
 }
+
+const otpColumns = `id::text, nonce, expires_at, telegram_id, name, code_hash, attempts, used`
+
+func scanOTP(row pgx.Row) (*domain.OTPChallenge, error) {
+	var c domain.OTPChallenge
+	err := row.Scan(&c.ID, &c.Nonce, &c.ExpiresAt, &c.TelegramID, &c.Name, &c.CodeHash, &c.Attempts, &c.Used)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrOTPNotFound
+	}
+	return &c, err
+}
+
+func (r *Repository) CreateOTP(ctx context.Context, c *domain.OTPChallenge) error {
+	_, err := r.pool.Exec(ctx, `INSERT INTO otp_challenges (id, nonce, expires_at) VALUES ($1, $2, $3)`, c.ID, c.Nonce, c.ExpiresAt)
+	return err
+}
+
+func (r *Repository) OTPByID(ctx context.Context, oid string) (*domain.OTPChallenge, error) {
+	if !id.Valid(oid) {
+		return nil, domain.ErrOTPNotFound
+	}
+	return scanOTP(r.pool.QueryRow(ctx, `SELECT `+otpColumns+` FROM otp_challenges WHERE id = $1`, oid))
+}
+
+func (r *Repository) OTPByNonce(ctx context.Context, nonce string) (*domain.OTPChallenge, error) {
+	return scanOTP(r.pool.QueryRow(ctx, `SELECT `+otpColumns+` FROM otp_challenges WHERE nonce = $1`, nonce))
+}
+
+// UpdateOTP locks the row so concurrent guesses are counted one by one; the changes made by
+// fn are committed even when fn fails (a wrong code must still count).
+func (r *Repository) UpdateOTP(ctx context.Context, oid string, fn func(*domain.OTPChallenge) error) error {
+	if !id.Valid(oid) {
+		return domain.ErrOTPNotFound
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	c, err := scanOTP(tx.QueryRow(ctx, `SELECT `+otpColumns+` FROM otp_challenges WHERE id = $1 FOR UPDATE`, oid))
+	if err != nil {
+		return err
+	}
+	fnErr := fn(c)
+	if _, err := tx.Exec(ctx, `UPDATE otp_challenges SET telegram_id = $2, name = $3, code_hash = $4, attempts = $5, used = $6 WHERE id = $1`,
+		oid, c.TelegramID, c.Name, c.CodeHash, c.Attempts, c.Used); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	return fnErr
+}

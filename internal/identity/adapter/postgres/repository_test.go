@@ -86,3 +86,5 @@ func TestExternalIdentitiesContract(t *testing.T) {
 		}
 	})
 }
+
+func TestOTPContract(t *testing.T) { externaltest.RunOTP(t, postgres.NewRepository(dbtest.New(t))) }

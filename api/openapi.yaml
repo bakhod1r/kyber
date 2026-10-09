@@ -100,10 +100,11 @@ paths:
               schema:
                 type: object
                 additionalProperties: false
-                required: [google, telegram_bot]
+                required: [google, telegram_bot, telegram_otp]
                 properties:
                   google: { type: boolean }
                   telegram_bot: { type: [string, "null"], description: Bot username for the Telegram Login Widget; null when disabled. }
+                  telegram_otp: { type: boolean, description: The bot sends one-time login codes. }
   /api/v1/auth/google/start:
     get:
       operationId: googleStart
@@ -164,6 +165,56 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/telegram/otp:
+    post:
+      operationId: telegramOtpStart
+      security: []
+      description: >-
+        Starts "log in with a Telegram code". Open `link` (a t.me deep link) and press Start: the bot sends a
+        6-digit code valid for 5 minutes. Throttled per client IP.
+      responses:
+        "201":
+          description: Challenge created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [id, link, expires_at]
+                properties:
+                  id: { type: string, description: Keep it in the browser; needed to verify the code. }
+                  link: { type: string, example: "https://t.me/kyber_bot?start=AbC123" }
+                  expires_at: { type: string, format: date-time }
+        "404": { $ref: "#/components/responses/Error" }
+        "429":
+          description: Too many code requests from this IP.
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content: { application/problem+json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /api/v1/auth/telegram/otp/verify:
+    post:
+      operationId: telegramOtpVerify
+      security: []
+      description: Checks the code from the bot (5 attempts, single use) and signs in like `login`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, code]
+              properties: { id: { type: string }, code: { type: string, example: "123456" } }
+      responses:
+        "200":
+          description: Logged in; also sets the `kyber_session` cookie.
+          content:
+            application/json:
+              schema: { type: object, required: [token], properties: { token: { type: string } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
   /api/v1/auth/logout:
     post:
       operationId: logout

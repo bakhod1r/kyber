@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { type TelegramUser, api } from "../api";
+import { TelegramCode } from "./TelegramCode";
 
 declare global {
   interface Window {
@@ -52,7 +53,8 @@ export function SocialSignIn() {
   }, [bot]);
 
   const error = ERRORS[params.get("error") ?? ""] ?? (telegram.isError ? telegram.error.message : null);
-  const any = providers.data?.google || bot;
+  const otp = providers.data?.telegram_otp ?? false;
+  const any = providers.data?.google || bot || otp;
   return (
     <>
       {error && (
@@ -75,6 +77,7 @@ export function SocialSignIn() {
             </a>
           )}
           {bot && <div ref={widget} className="social-telegram" />}
+          {otp && <TelegramCode />}
         </div>
       )}
     </>

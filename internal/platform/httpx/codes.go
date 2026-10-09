@@ -13,6 +13,8 @@ const (
 	CodeEmailTaken           = "EMAIL_TAKEN"
 	CodeCSRF                 = "CSRF_REJECTED"
 	CodeProviderDisabled     = "AUTH_PROVIDER_DISABLED"
+	CodeOTPInvalid           = "AUTH_OTP_INVALID"
+	CodeOTPPending           = "AUTH_OTP_PENDING"
 	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
 	CodeProjectKeyTaken      = "PROJECT_KEY_TAKEN"
 	CodeForbidden            = "PROJECT_FORBIDDEN"
@@ -48,6 +50,8 @@ var codes = []code{
 	{CodeEmailTaken, "6033", 409, "This email is already registered.", "Bu email allaqachon ro'yxatdan o'tgan.", "Этот email уже зарегистрирован.", errorx.CategoryBusiness},
 	{CodeCSRF, "6034", 403, "Request rejected by CSRF protection.", "So'rov CSRF himoyasi tomonidan rad etildi.", "Запрос отклонён защитой от CSRF.", errorx.CategorySecurity},
 	{CodeProviderDisabled, "6035", 404, "This sign-in method is not enabled.", "Bu kirish usuli yoqilmagan.", "Этот способ входа не включён.", errorx.CategoryBusiness},
+	{CodeOTPInvalid, "6036", 401, "The code is wrong or expired.", "Kod noto'g'ri yoki muddati o'tgan.", "Код неверный или устарел.", errorx.CategorySecurity},
+	{CodeOTPPending, "6037", 409, "Open the Telegram bot and press Start to get your code.", "Kodni olish uchun Telegram botni ochib, Start tugmasini bosing.", "Откройте Telegram-бота и нажмите Start, чтобы получить код.", errorx.CategoryBusiness},
 	{CodeProjectNotFound, "6002", 404, "Project not found.", "Loyiha topilmadi.", "Проект не найден.", errorx.CategoryBusiness},
 	{CodeProjectKeyTaken, "6003", 409, "This project key is already taken.", "Bu loyiha kaliti band.", "Этот ключ проекта уже занят.", errorx.CategoryBusiness},
 	{CodeForbidden, "6004", 403, "Your project role does not allow this.", "Loyihadagi rolingiz bunga ruxsat bermaydi.", "Ваша роль в проекте не позволяет это сделать.", errorx.CategorySecurity},
