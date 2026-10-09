@@ -92,7 +92,7 @@ func TestDecide(t *testing.T) {
 		{"reporter sees own confidential", dev, domain.BrowseProjects, secret, true, "role member"},
 		{"viewer cannot see confidential", viewer, domain.BrowseProjects, secret, false, "security level confidential"},
 		{"hidden issue cannot be edited either", qa, domain.TransitionIssues, secret, false, "security level confidential"},
-		{"unknown level hides the issue", lead, domain.BrowseProjects, issue(dev, "", "todo", "ghost"), false, "unknown security level ghost"},
+		{"unknown level hides the issue", lead, domain.BrowseProjects, issue(dev, "", "todo", "ghost"), false, "unknown security level"},
 		// ABAC: read-only statuses.
 		{"closed issue is read-only", dev, domain.EditIssues, closed, false, "status done is read-only"},
 		{"closed issue can still be reopened", dev, domain.TransitionIssues, closed, true, "role member"},

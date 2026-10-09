@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+
+	guard "github.com/bakhod1r/guard/access/domain"
 )
 
 var (
@@ -97,19 +99,6 @@ type IssueAttrs struct {
 	SecurityLevel      string // "" = visible to everyone who can browse
 }
 
-func (g Grant) matches(s Subject, is *IssueAttrs) bool {
-	switch g.kind {
-	case holderRole:
-		return slices.Contains(s.Roles, RoleID(g.value))
-	case holderUser:
-		return s.User == UserID(g.value)
-	case holderReporter:
-		return is != nil && is.Reporter == s.User
-	default:
-		return is != nil && is.Assignee == s.User
-	}
-}
-
 // SecurityLevel restricts who can see an issue (issue-level security).
 type SecurityLevel struct {
 	ID, Name string
@@ -185,16 +174,8 @@ func (d Decision) Err() error {
 	return fmt.Errorf("%w: %s requires %s", ErrForbidden, d.Reason, d.perm)
 }
 
-func (s *Scheme) match(p Permission, sub Subject, is *IssueAttrs) (Grant, bool) {
-	for _, g := range s.grants[p] {
-		if g.matches(sub, is) {
-			return g, true
-		}
-	}
-	return Grant{}, false
-}
-
 // Decide answers whether sub may exercise p, on the issue when is != nil. Default deny.
+// The scheme is compiled into guard ABAC policies; guard's engine makes the decision.
 func (s *Scheme) Decide(sub Subject, p Permission, is *IssueAttrs) Decision {
 	deny := func(hidden bool, reason string) Decision { return Decision{Reason: reason, perm: p, hidden: hidden} }
 	switch {
@@ -203,27 +184,19 @@ func (s *Scheme) Decide(sub Subject, p Permission, is *IssueAttrs) Decision {
 	case !slices.Contains(permissions, p):
 		return deny(false, "unknown permission")
 	}
-	browse, ok := s.match(BrowseProjects, sub, nil)
-	if !ok {
+	policies := s.policies()
+	browse := guard.Decide(request(sub, BrowseProjects, nil), policies)
+	if !browse.Allowed {
 		return deny(true, "cannot browse project")
 	}
 	if is != nil && is.SecurityLevel != "" {
-		level, known := s.levels[is.SecurityLevel]
-		if !known {
-			return deny(true, "unknown security level "+is.SecurityLevel)
-		}
-		if !slices.ContainsFunc(level.Grants, func(g Grant) bool { return g.matches(sub, is) }) {
-			return deny(true, "hidden by security level "+level.ID)
+		if v := guard.Decide(request(sub, levelAction, is), policies); !v.Allowed {
+			return deny(true, reason(v))
 		}
 	}
 	if p == BrowseProjects {
-		return Decision{Allowed: true, Reason: browse.String(), perm: p}
+		return Decision{Allowed: true, Reason: reason(browse), perm: p}
 	}
-	if is != nil && slices.Contains(s.locked, is.Status) && slices.Contains(editing, p) {
-		return deny(false, "status "+is.Status+" is read-only")
-	}
-	if g, ok := s.match(p, sub, is); ok {
-		return Decision{Allowed: true, Reason: g.String(), perm: p}
-	}
-	return deny(false, "no grant")
+	d := guard.Decide(request(sub, p, is), policies)
+	return Decision{Allowed: d.Allowed, Reason: reason(d), perm: p}
 }

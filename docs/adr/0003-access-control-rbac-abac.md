@@ -13,6 +13,12 @@ attributes.
 ## Decision
 1. **New bounded context `access`** with a pure `domain/` (no I/O): one function decides
    `Decide(Subject, Permission, Resource) → Decision{Allowed, Reason}`.
+   **The decision engine is guard's ABAC** (`github.com/bakhod1r/guard/access/domain.Decide`, already a
+   dependency): a Kyber scheme is compiled into guard policies — grants become `allow` policies whose
+   conditions test `subject.project_roles`, `subject.id` or `$resource.reporter/assignee`; read-only
+   statuses and security levels become `deny` policies that win by priority. Kyber keeps only its
+   ubiquitous language (schemes, holders, levels). Compiled policies pass guard's own `Validate`, so they
+   can later be stored in guard's Postgres tables and edited in guard's admin UI.
 2. **RBAC — permission schemes.** A scheme maps each `Permission` to a list of `Grant`s. A grant's holder is
    a *project role* (admin, member, viewer or custom), a *specific user*, or an *attribute holder*
    (`reporter`, `assignee`). Schemes are shared by projects; a default scheme reproduces today's behaviour.
