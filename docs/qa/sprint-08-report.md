@@ -16,7 +16,7 @@
 | Input limits | 10 MB CSV enforced in the service; HTTP body capped at 2× + 1 KB for JSON escaping → 413 `IMPORT_TOO_LARGE` |
 | CSV injection (export) | cells starting with `= + - @ TAB CR` are prefixed with `'` — verified by unit and acceptance tests |
 | Notification flood | a single `issue.imported` event; notify does not subscribe to it |
-| Untrusted file content | parsed with `encoding/csv` (`LazyQuotes` off), never evaluated; errors report line numbers only |
+| Untrusted file content | parsed with `encoding/csv` (`LazyQuotes` on to tolerate real Jira exports), never evaluated or executed; errors report line numbers only |
 
 ## Found & fixed this sprint
 | ID | Severity | Finding | Fix |
