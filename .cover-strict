@@ -5,3 +5,5 @@
 ./internal/workspace/domain
 ./internal/workspace/app
 ./internal/platform/tenant
+./internal/calendar/domain
+./internal/focus/domain
