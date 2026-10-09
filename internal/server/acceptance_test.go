@@ -294,3 +294,68 @@ func testIssues(t *testing.T, anon *client) {
 		}
 	})
 }
+
+func TestS11Membership(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		alice := anon.signedIn("alice@x.uz")
+		bob := anon.signedIn("bob@x.uz")
+		alice.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		alice.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "Secret", "type": "task"})
+
+		t.Run("AC2 outsiders see nothing", func(t *testing.T) {
+			for _, p := range []string{"/api/v1/projects/KYB", "/api/v1/projects/KYB/issues", "/api/v1/issues/KYB-1", "/api/v1/issues/KYB-999", "/api/v1/projects/KYB/members"} {
+				code, body := bob.do("GET", p, nil)
+				expect(t, code, 404, body)
+			}
+			code, body := bob.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "x", "type": "task"})
+			expect(t, code, 404, body)
+			_, body = bob.do("GET", "/api/v1/projects", nil)
+			if items := body["items"].([]any); len(items) != 0 {
+				t.Fatalf("bob sees %v", items)
+			}
+		})
+		t.Run("AC4 admin manages members", func(t *testing.T) {
+			code, body := alice.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "bob@x.uz", "role": "viewer"})
+			expect(t, code, 204, body)
+			code, body = alice.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "ghost@x.uz", "role": "viewer"})
+			expect(t, code, 404, body)
+			code, body = alice.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "bob@x.uz", "role": "owner"})
+			expect(t, code, 422, body)
+			code, body = bob.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "bob@x.uz", "role": "admin"})
+			expect(t, code, 403, body)
+		})
+		t.Run("AC3 viewer is read-only", func(t *testing.T) {
+			code, body := bob.do("GET", "/api/v1/issues/KYB-1", nil)
+			expect(t, code, 200, body)
+			code, body = bob.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "x", "type": "task"})
+			expect(t, code, 403, body)
+			code, body = bob.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "in_progress"})
+			expect(t, code, 403, body)
+		})
+		t.Run("AC4 re-adding updates role", func(t *testing.T) {
+			alice.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "bob@x.uz", "role": "member"})
+			code, body := bob.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "in_progress"})
+			expect(t, code, 200, body)
+		})
+		t.Run("AC5 list members", func(t *testing.T) {
+			code, body := bob.do("GET", "/api/v1/projects/KYB/members", nil)
+			expect(t, code, 200, body)
+			items := body["items"].([]any)
+			if len(items) != 2 {
+				t.Fatalf("members = %v", items)
+			}
+			roles := map[string]string{}
+			for _, it := range items {
+				m := it.(map[string]any)
+				roles[m["email"].(string)] = m["role"].(string)
+			}
+			if roles["alice@x.uz"] != "admin" || roles["bob@x.uz"] != "member" {
+				t.Fatalf("roles = %v", roles)
+			}
+		})
+		t.Run("AC6 last admin stays", func(t *testing.T) {
+			code, body := alice.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "alice@x.uz", "role": "member"})
+			expect(t, code, 409, body)
+		})
+	})
+}

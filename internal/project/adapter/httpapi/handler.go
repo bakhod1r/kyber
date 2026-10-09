@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/bakhod1r/kyber/internal/platform/auth"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 	"github.com/bakhod1r/kyber/internal/project/app"
 	"github.com/bakhod1r/kyber/internal/project/domain"
@@ -22,6 +23,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/projects", h.create)
 	mux.HandleFunc("GET /api/v1/projects", h.list)
 	mux.HandleFunc("GET /api/v1/projects/{key}", h.get)
+	mux.HandleFunc("GET /api/v1/projects/{key}/members", h.members)
+	mux.HandleFunc("POST /api/v1/projects/{key}/members", h.setMember)
 }
 
 type projectDTO struct {
@@ -36,12 +39,14 @@ func toDTO(p *domain.Project) projectDTO {
 
 func statusFor(err error) (int, bool) {
 	switch {
-	case errors.Is(err, domain.ErrInvalidKey), errors.Is(err, domain.ErrEmptyName):
+	case errors.Is(err, domain.ErrInvalidKey), errors.Is(err, domain.ErrEmptyName), errors.Is(err, domain.ErrInvalidRole):
 		return http.StatusUnprocessableEntity, true
-	case errors.Is(err, domain.ErrKeyTaken):
+	case errors.Is(err, domain.ErrKeyTaken), errors.Is(err, domain.ErrLastAdmin):
 		return http.StatusConflict, true
-	case errors.Is(err, domain.ErrProjectNotFound):
+	case errors.Is(err, domain.ErrProjectNotFound), errors.Is(err, app.ErrUnknownUser):
 		return http.StatusNotFound, true
+	case errors.Is(err, domain.ErrForbidden):
+		return http.StatusForbidden, true
 	}
 	return 0, false
 }
@@ -52,7 +57,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return
 	}
-	p, err := h.svc.Create(r.Context(), in.Key, in.Name)
+	p, err := h.svc.Create(r.Context(), actor(r), in.Key, in.Name)
 	if err != nil {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return
@@ -61,7 +66,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-	p, err := h.svc.Get(r.Context(), r.PathValue("key"))
+	p, err := h.svc.Get(r.Context(), actor(r), r.PathValue("key"))
 	if err != nil {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return
@@ -70,7 +75,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	ps, err := h.svc.List(r.Context())
+	ps, err := h.svc.List(r.Context(), actor(r))
 	if err != nil {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return
@@ -80,4 +85,39 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		items = append(items, toDTO(p))
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func actor(r *http.Request) domain.UserID { return domain.UserID(auth.Actor(r.Context())) }
+
+type memberDTO struct {
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+	Name   string `json:"name"`
+	Role   string `json:"role"`
+}
+
+func (h *Handler) members(w http.ResponseWriter, r *http.Request) {
+	ms, err := h.svc.Members(r.Context(), actor(r), r.PathValue("key"))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, statusFor)
+		return
+	}
+	items := make([]memberDTO, 0, len(ms))
+	for _, m := range ms {
+		items = append(items, memberDTO{UserID: string(m.ID), Email: m.Email, Name: m.Name, Role: string(m.Role)})
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *Handler) setMember(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Email, Role string }
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, r, h.log, err, statusFor)
+		return
+	}
+	if err := h.svc.SetMember(r.Context(), actor(r), r.PathValue("key"), in.Email, in.Role); err != nil {
+		httpx.Error(w, r, h.log, err, statusFor)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

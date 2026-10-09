@@ -8,6 +8,7 @@ import (
 
 	"github.com/bakhod1r/kyber/internal/issue/app"
 	"github.com/bakhod1r/kyber/internal/issue/domain"
+	"github.com/bakhod1r/kyber/internal/platform/auth"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 )
 
@@ -46,6 +47,8 @@ func statusFor(err error) (int, bool) {
 		return http.StatusUnprocessableEntity, true
 	case errors.Is(err, app.ErrProjectNotFound), errors.Is(err, domain.ErrIssueNotFound):
 		return http.StatusNotFound, true
+	case errors.Is(err, app.ErrForbidden):
+		return http.StatusForbidden, true
 	case errors.Is(err, domain.ErrTransitionNotAllowed), errors.Is(err, domain.ErrConcurrentModification):
 		return http.StatusConflict, true
 	}
@@ -58,7 +61,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return
 	}
-	is, err := h.svc.Create(r.Context(), app.CreateIssue{Project: r.PathValue("key"), Title: in.Title, Type: in.Type})
+	is, err := h.svc.Create(r.Context(), auth.Actor(r.Context()), app.CreateIssue{Project: r.PathValue("key"), Title: in.Title, Type: in.Type})
 	if err != nil {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return
@@ -67,7 +70,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
-	is, err := h.svc.Get(r.Context(), r.PathValue("issueKey"))
+	is, err := h.svc.Get(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"))
 	if err != nil {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return
@@ -81,7 +84,7 @@ func (h *Handler) transition(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return
 	}
-	is, err := h.svc.Transition(r.Context(), r.PathValue("issueKey"), in.To)
+	is, err := h.svc.Transition(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"), in.To)
 	if err != nil {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return
@@ -90,7 +93,7 @@ func (h *Handler) transition(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	list, err := h.svc.List(r.Context(), r.PathValue("key"), r.URL.Query().Get("status"))
+	list, err := h.svc.List(r.Context(), auth.Actor(r.Context()), r.PathValue("key"), r.URL.Query().Get("status"))
 	if err != nil {
 		httpx.Error(w, r, h.log, err, statusFor)
 		return

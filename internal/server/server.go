@@ -25,6 +25,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/id"
 	"github.com/bakhod1r/kyber/internal/platform/metrics"
 	projecthttp "github.com/bakhod1r/kyber/internal/project/adapter/httpapi"
+	"github.com/bakhod1r/kyber/internal/project/adapter/identitydir"
 	projectmemory "github.com/bakhod1r/kyber/internal/project/adapter/memory"
 	projectpg "github.com/bakhod1r/kyber/internal/project/adapter/postgres"
 	projectapp "github.com/bakhod1r/kyber/internal/project/app"
@@ -64,8 +65,9 @@ type systemClock struct{}
 func (systemClock) Now() time.Time { return time.Now() }
 
 func build(log *slog.Logger, d deps) http.Handler {
-	projects := projectapp.NewService(d.projects, id.New)
-	issues := issueapp.NewService(d.issues, projectacl.New(projects), issuedomain.DefaultWorkflow(), id.New)
+	projects := projectapp.NewService(d.projects, identitydir.New(d.users), id.New)
+	acl := projectacl.New(projects)
+	issues := issueapp.NewService(d.issues, acl, acl, issuedomain.DefaultWorkflow(), id.New)
 	identity := identityapp.NewService(d.users, d.sessions, argon2.New(), systemClock{}, id.New)
 	auth := identityhttp.New(identity, log, d.cookieSecure)
 	m := metrics.NewHTTP()

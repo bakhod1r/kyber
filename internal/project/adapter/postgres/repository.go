@@ -16,64 +16,106 @@ type Repository struct{ pool *pgxpool.Pool }
 
 func NewRepository(pool *pgxpool.Pool) *Repository { return &Repository{pool: pool} }
 
-const uniqueViolation = "23505"
+// querier is satisfied by both the pool and a transaction.
+type querier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
 
 func (r *Repository) Create(ctx context.Context, p *domain.Project) error {
-	_, err := r.pool.Exec(ctx, `INSERT INTO projects (id, key, name, issue_seq) VALUES ($1, $2, $3, $4)`,
-		string(p.ID()), p.Key(), p.Name(), p.IssueSeq())
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
-		return domain.ErrKeyTaken
-	}
-	return err
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO projects (id, key, name, issue_seq) VALUES ($1, $2, $3, $4)`,
+			string(p.ID()), p.Key(), p.Name(), p.IssueSeq())
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return domain.ErrKeyTaken
+		}
+		if err != nil {
+			return err
+		}
+		return writeMembers(ctx, tx, p)
+	})
 }
 
 // Update locks the project row (SELECT … FOR UPDATE) for the duration of fn.
 func (r *Repository) Update(ctx context.Context, key string, fn func(*domain.Project) error) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		p, err := scan(tx.QueryRow(ctx, selectCols+` WHERE key = $1 FOR UPDATE`, key))
+		p, err := load(ctx, tx, `WHERE key = $1 FOR UPDATE`, key)
 		if err != nil {
 			return err
 		}
 		if err := fn(p); err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `UPDATE projects SET name = $2, issue_seq = $3 WHERE key = $1`, p.Key(), p.Name(), p.IssueSeq())
-		return err
+		if _, err := tx.Exec(ctx, `UPDATE projects SET name = $2, issue_seq = $3 WHERE id = $1`,
+			string(p.ID()), p.Name(), p.IssueSeq()); err != nil {
+			return err
+		}
+		return writeMembers(ctx, tx, p)
 	})
 }
 
 func (r *Repository) ByKey(ctx context.Context, key string) (*domain.Project, error) {
-	return scan(r.pool.QueryRow(ctx, selectCols+` WHERE key = $1`, key))
+	return load(ctx, r.pool, `WHERE key = $1`, key)
 }
 
-func (r *Repository) List(ctx context.Context) ([]*domain.Project, error) {
-	rows, err := r.pool.Query(ctx, selectCols+` ORDER BY key`)
+func (r *Repository) ListForUser(ctx context.Context, u domain.UserID) ([]*domain.Project, error) {
+	rows, err := r.pool.Query(ctx, `SELECT p.key FROM projects p
+		JOIN project_members m ON m.project_id = p.id WHERE m.user_id = $1 ORDER BY p.key`, string(u))
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []*domain.Project
-	for rows.Next() {
-		p, err := scan(rows)
+	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*domain.Project, 0, len(keys))
+	for _, k := range keys {
+		p, err := r.ByKey(ctx, k)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, p)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-const selectCols = `SELECT id::text, key, name, issue_seq FROM projects`
-
-func scan(row pgx.Row) (*domain.Project, error) {
+func load(ctx context.Context, q querier, where string, args ...any) (*domain.Project, error) {
 	var id, key, name string
 	var seq int
-	if err := row.Scan(&id, &key, &name, &seq); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, domain.ErrProjectNotFound
-		}
+	err := q.QueryRow(ctx, `SELECT id::text, key, name, issue_seq FROM projects `+where, args...).Scan(&id, &key, &name, &seq)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrProjectNotFound
+	}
+	if err != nil {
 		return nil, err
 	}
-	return domain.Rehydrate(domain.ProjectID(id), key, name, seq), nil
+	rows, err := q.Query(ctx, `SELECT user_id::text, role FROM project_members WHERE project_id = $1`, id)
+	if err != nil {
+		return nil, err
+	}
+	members, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Member, error) {
+		var m domain.Member
+		err := row.Scan(&m.UserID, &m.Role)
+		return m, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return domain.Rehydrate(domain.ProjectID(id), key, name, seq, members), nil
+}
+
+// writeMembers replaces the stored membership with the aggregate's.
+func writeMembers(ctx context.Context, tx pgx.Tx, p *domain.Project) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM project_members WHERE project_id = $1`, string(p.ID())); err != nil {
+		return err
+	}
+	for _, m := range p.Members() {
+		if _, err := tx.Exec(ctx, `INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, $3)`,
+			string(p.ID()), string(m.UserID), string(m.Role)); err != nil {
+			return err
+		}
+	}
+	return nil
 }

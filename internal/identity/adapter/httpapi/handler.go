@@ -11,6 +11,7 @@ import (
 
 	"github.com/bakhod1r/kyber/internal/identity/app"
 	"github.com/bakhod1r/kyber/internal/identity/domain"
+	"github.com/bakhod1r/kyber/internal/platform/auth"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 )
 
@@ -126,7 +127,8 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 			httpx.Error(w, r, h.log, err, statusFor)
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, u)))
+		ctx := context.WithValue(r.Context(), ctxKey{}, u)
+		next.ServeHTTP(w, r.WithContext(auth.WithActor(ctx, string(u.ID()))))
 	})
 }
 

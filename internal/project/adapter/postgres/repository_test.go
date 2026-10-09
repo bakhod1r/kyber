@@ -8,68 +8,93 @@ import (
 
 	"github.com/bakhod1r/kyber/internal/platform/db/dbtest"
 	"github.com/bakhod1r/kyber/internal/project/adapter/postgres"
-	"github.com/bakhod1r/kyber/internal/project/app"
 	"github.com/bakhod1r/kyber/internal/project/domain"
+)
+
+const (
+	alice domain.UserID = "30000000-0000-4000-8000-00000000000a"
+	bob   domain.UserID = "30000000-0000-4000-8000-00000000000b"
 )
 
 func TestRepository(t *testing.T) {
 	ctx := context.Background()
-	repo := postgres.NewRepository(dbtest.New(t))
-	ids := []string{"20000000-0000-4000-8000-000000000001", "20000000-0000-4000-8000-000000000002", "20000000-0000-4000-8000-000000000003"}
-	i := 0
-	svc := app.NewService(repo, func() string { i++; return ids[i-1] })
+	pool := dbtest.New(t)
+	if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, name, password_hash) VALUES
+		($1, 'a@x.uz', 'A', 'h'), ($2, 'b@x.uz', 'B', 'h')`, string(alice), string(bob)); err != nil {
+		t.Fatal(err)
+	}
+	repo := postgres.NewRepository(pool)
 
-	if _, err := svc.Create(ctx, "ZED", "Zed"); err != nil {
-		t.Fatal(err)
+	kyb, _ := domain.NewProject("20000000-0000-4000-8000-000000000001", "KYB", "Kyber", alice)
+	zed, _ := domain.NewProject("20000000-0000-4000-8000-000000000002", "ZED", "Zed", bob)
+	for _, p := range []*domain.Project{kyb, zed} {
+		if err := repo.Create(ctx, p); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if _, err := svc.Create(ctx, "KYB", "Kyber"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.Create(ctx, "KYB", "Dup"); !errors.Is(err, domain.ErrKeyTaken) {
+	dup, _ := domain.NewProject("20000000-0000-4000-8000-000000000003", "KYB", "Dup", bob)
+	if err := repo.Create(ctx, dup); !errors.Is(err, domain.ErrKeyTaken) {
 		t.Fatalf("dup err = %v", err)
 	}
-	p, err := svc.Get(ctx, "KYB")
-	if err != nil || p.Name() != "Kyber" || string(p.ID()) != ids[1] {
-		t.Fatalf("Get = %+v, %v", p, err)
+
+	got, err := repo.ByKey(ctx, "KYB")
+	if err != nil || got.Name() != "Kyber" || got.ID() != kyb.ID() {
+		t.Fatalf("ByKey = %+v, %v", got, err)
 	}
-	if _, err := svc.Get(ctx, "NOPE"); !errors.Is(err, domain.ErrProjectNotFound) {
+	if role, ok := got.RoleOf(alice); !ok || role != domain.RoleAdmin {
+		t.Fatalf("creator role = %q %v", role, ok)
+	}
+	if _, err := repo.ByKey(ctx, "NOPE"); !errors.Is(err, domain.ErrProjectNotFound) {
 		t.Fatalf("err = %v", err)
 	}
-	ps, _ := svc.List(ctx)
-	if len(ps) != 2 || ps[0].Key() != "KYB" {
-		t.Fatalf("List = %v", ps)
+
+	// Membership changes persist through Update.
+	if err := repo.Update(ctx, "KYB", func(p *domain.Project) error { return p.SetMember(bob, domain.RoleViewer) }); err != nil {
+		t.Fatal(err)
+	}
+	if ps, _ := repo.ListForUser(ctx, bob); len(ps) != 2 || ps[0].Key() != "KYB" || ps[1].Key() != "ZED" {
+		t.Fatalf("ListForUser(bob) = %v", ps)
+	}
+	if ps, _ := repo.ListForUser(ctx, alice); len(ps) != 1 {
+		t.Fatalf("ListForUser(alice) = %v", ps)
+	}
+	// A failing mutation leaves state untouched.
+	boom := errors.New("boom")
+	if err := repo.Update(ctx, "KYB", func(p *domain.Project) error { _ = p.SetMember(bob, domain.RoleAdmin); return boom }); !errors.Is(err, boom) {
+		t.Fatalf("err = %v", err)
+	}
+	if p, _ := repo.ByKey(ctx, "KYB"); func() domain.Role { r, _ := p.RoleOf(bob); return r }() != domain.RoleViewer {
+		t.Fatal("failed update must roll back")
+	}
+	if err := repo.Update(ctx, "NOPE", func(*domain.Project) error { return nil }); !errors.Is(err, domain.ErrProjectNotFound) {
+		t.Fatalf("err = %v", err)
 	}
 
 	// S7 AC2: concurrent allocation yields unique sequential numbers (row lock).
 	const n = 40
-	got := make(chan int, n)
+	nums := make(chan int, n)
 	var wg sync.WaitGroup
 	for range n {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			v, err := svc.NextIssueNumber(ctx, "KYB")
-			if err != nil {
+			var v int
+			if err := repo.Update(ctx, "KYB", func(p *domain.Project) error { v = p.NextIssueNumber(); return nil }); err != nil {
 				t.Error(err)
 			}
-			got <- v
+			nums <- v
 		}()
 	}
 	wg.Wait()
-	close(got)
+	close(nums)
 	seen := map[int]bool{}
-	for v := range got {
+	for v := range nums {
 		seen[v] = true
 	}
 	if len(seen) != n || !seen[1] || !seen[n] {
 		t.Fatalf("numbers = %v", seen)
 	}
-	if _, err := svc.NextIssueNumber(ctx, "NOPE"); !errors.Is(err, domain.ErrProjectNotFound) {
-		t.Fatalf("err = %v", err)
-	}
-	// Persisted sequence survives reload (restart).
-	p, _ = svc.Get(ctx, "KYB")
-	if v, _ := svc.NextIssueNumber(ctx, "KYB"); v != n+1 {
-		t.Fatalf("next after reload = %d", v)
+	if p, _ := repo.ByKey(ctx, "KYB"); p.IssueSeq() != n {
+		t.Fatalf("persisted seq = %d", p.IssueSeq())
 	}
 }
