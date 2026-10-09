@@ -7,9 +7,9 @@ import { mockApi, renderWithProviders } from "./test-utils";
 const me = { id: "u-1", email: "ali@x.uz", name: "Ali" };
 
 describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
-  it("redirects anonymous users to the login page", async () => {
+  it("redirects anonymous users from app pages to the login page (/ is the landing page since S36)", async () => {
     mockApi({ "GET /api/v1/me": { status: 401, body: { type: "about:blank", title: "Error", status: 400, code: "TEST", detail: "authentication required" } } });
-    renderWithProviders(<AppRoutes />, "/");
+    renderWithProviders(<AppRoutes />, "/projects/KYB");
     expect(await screen.findByRole("heading", { name: "Log in to Kyber" })).toBeInTheDocument();
   });
 
@@ -33,7 +33,7 @@ describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
     expect(calls.find((c) => c.key === "POST /api/v1/auth/login")?.body).toEqual({ email: "ali@x.uz", password: "long enough pw" });
   });
 
-  it("regression: logging in after being redirected from / lands on projects", async () => {
+  it("regression: logging in after being redirected from an app page lands on projects", async () => {
     let loggedIn = false;
     mockApi({
       "GET /api/v1/me": () => (loggedIn ? { status: 200, body: me } : { status: 401, body: { type: "about:blank", title: "Error", status: 400, code: "TEST", detail: "authentication required" } }),
@@ -43,7 +43,7 @@ describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
       },
       "GET /api/v1/projects": { status: 200, body: { items: [] } },
     });
-    renderWithProviders(<AppRoutes />, "/"); // caches "anonymous", redirects to /login
+    renderWithProviders(<AppRoutes />, "/projects/KYB"); // caches "anonymous", redirects to /login
     await userEvent.type(await screen.findByLabelText("Email"), "ali@x.uz");
     await userEvent.type(screen.getByLabelText("Password"), "long enough pw");
     await userEvent.click(screen.getByRole("button", { name: "Log in" }));

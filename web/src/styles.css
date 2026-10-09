@@ -257,3 +257,29 @@ textarea { font: inherit; color: var(--text); background: var(--surface); border
 .mention-list li[aria-selected="true"] { background: var(--accent); color: var(--surface); }
 .mention-email { font-size: 0.8125rem; color: var(--muted); }
 .mention-list li[aria-selected="true"] .mention-email { color: inherit; opacity: 0.85; }
+
+/* Landing page (S36) */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.landing { min-height: 100vh; display: flex; flex-direction: column; }
+.landing main { flex: 1; width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+.landing-nav, .landing-foot { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  max-width: 1080px; width: 100%; margin: 0 auto; padding: 1rem 16px; }
+.landing-nav nav { display: flex; align-items: center; gap: 1rem; }
+.brand { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 700; color: var(--text); }
+a.button { display: inline-block; padding: 0.55rem 1rem; border-radius: var(--radius); background: var(--accent);
+  color: var(--accent-text); font-weight: 600; text-decoration: none; }
+a.button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--border); }
+.hero { text-align: center; padding: 4rem 0 3rem; }
+.hero-logo { filter: drop-shadow(0 0 24px var(--glow)); }
+.hero h1 { font-size: clamp(1.8rem, 5vw, 3rem); line-height: 1.15; margin: 1.5rem auto 1rem; max-width: 18ch; }
+.lead { font-size: 1.1rem; color: var(--muted); max-width: 60ch; margin: 0 auto 2rem; }
+.cta { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem; }
+.features ul { list-style: none; padding: 0; margin: 0 0 3rem; display: grid; gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.features li { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+.features h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+.features p { margin: 0; color: var(--muted); }
+.selfhost { text-align: center; margin-bottom: 3rem; }
+.selfhost pre { display: inline-block; max-width: 100%; overflow-x: auto; text-align: left; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem; }
+.landing-foot { color: var(--muted); font-size: 0.875rem; border-top: 1px solid var(--border); }

@@ -1,14 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-// KYB-S14 end-to-end: sign up → project → issue → drag across the board → invite → log out.
+// KYB-S14/S36 end-to-end: landing → sign up → project → issue → drag across the board → invite → log out.
 test("a new user runs a project on the Kanban board", async ({ page }) => {
   const id = Date.now().toString(36).toUpperCase().slice(-5);
   const email = `e2e-${id.toLowerCase()}@example.com`;
   const key = `E${id}`.slice(0, 6);
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Log in to Kyber" })).toBeVisible();
-  await page.getByRole("link", { name: "Create an account" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: /Plan, track and ship/ })).toBeVisible();
+  await page.getByRole("link", { name: "Start free" }).first().click();
   await page.getByLabel("Name").fill("E2E User");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill("a very long password");

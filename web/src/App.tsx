@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ApiError, api } from "./api";
 import { Layout } from "./components/Layout";
 import { AuthPage } from "./pages/AuthPage";
+import { LandingPage } from "./pages/LandingPage";
 import { ProjectPage } from "./pages/ProjectPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 
@@ -25,12 +26,25 @@ function RequireUser({ children }: { children: ReactNode }) {
   return <Layout user={me.data}>{children}</Layout>;
 }
 
+/** "/" is the landing page for visitors and the project list for signed-in users. */
+function Home() {
+  const me = useMe();
+  if (me.isPending) return <p className="muted center">Loading…</p>;
+  if (me.isError) return <p role="alert" className="error center">{me.error.message}</p>;
+  if (!me.data) return <LandingPage />;
+  return (
+    <Layout user={me.data}>
+      <ProjectsPage />
+    </Layout>
+  );
+}
+
 export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<AuthPage mode="login" />} />
       <Route path="/signup" element={<AuthPage mode="signup" />} />
-      <Route path="/" element={<RequireUser><ProjectsPage /></RequireUser>} />
+      <Route path="/" element={<Home />} />
       <Route path="/projects/:key" element={<RequireUser><ProjectPage /></RequireUser>} />
       <Route path="/projects/:key/backlog" element={<RequireUser><ProjectPage view="backlog" /></RequireUser>} />
       <Route path="/projects/:key/reports" element={<RequireUser><ProjectPage view="reports" /></RequireUser>} />
