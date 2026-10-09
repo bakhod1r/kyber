@@ -293,3 +293,22 @@ a.button.ghost { background: transparent; color: var(--accent); border: 1px soli
 .otp { display: grid; gap: 0.6rem; text-align: left; }
 .otp ol { margin: 0; padding-left: 1.2rem; color: var(--muted); }
 .otp input { letter-spacing: 0.35em; font-variant-numeric: tabular-nums; font-size: 1.1rem; }
+
+/* Pomodoro (S41) and time table (S42) */
+.nav-link { margin-left: 1rem; color: var(--muted); font-weight: 600; }
+.focus-timer { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0.6rem; border: 1px solid var(--border);
+  border-radius: 999px; background: var(--surface); font-variant-numeric: tabular-nums; }
+.focus-timer.paused { opacity: 0.75; }
+.focus-timer button { padding: 0.15rem 0.5rem; }
+.issue-focus { display: grid; gap: 0.5rem; margin: 1rem 0; }
+.issue-focus .row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.focus-log { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.25rem; font-size: 0.875rem; }
+.state.completed { color: var(--accent); }
+.meetings { display: grid; gap: 1rem; max-width: 760px; }
+.meeting-list { list-style: none; display: grid; gap: 0.5rem; }
+.meeting-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.meeting-list button { margin-left: auto; }
+.meetings fieldset { border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.check { display: inline-flex; align-items: center; gap: 0.35rem; }
+/* The top bar (Pomodoro timer, notifications) stays usable above the issue panel overlay. */
+.topbar { position: relative; z-index: 11; }

@@ -5,6 +5,7 @@ import { ApiError, api } from "./api";
 import { Layout } from "./components/Layout";
 import { AuthPage } from "./pages/AuthPage";
 import { LandingPage } from "./pages/LandingPage";
+import { MeetingsPage } from "./pages/MeetingsPage";
 import { ProjectPage } from "./pages/ProjectPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 
@@ -49,6 +50,7 @@ export function AppRoutes() {
       <Route path="/projects/:key/backlog" element={<RequireUser><ProjectPage view="backlog" /></RequireUser>} />
       <Route path="/projects/:key/reports" element={<RequireUser><ProjectPage view="reports" /></RequireUser>} />
       <Route path="/projects/:key/import" element={<RequireUser><ProjectPage view="import" /></RequireUser>} />
+      <Route path="/meetings" element={<RequireUser><MeetingsPage /></RequireUser>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

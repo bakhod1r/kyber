@@ -104,6 +104,21 @@ export type OtpChallenge = { id: string; link: string; expires_at: string };
 /** The Telegram Login Widget's user object, forwarded unchanged for server-side verification. */
 export type TelegramUser = { id: number; auth_date: number; hash: string; first_name?: string; last_name?: string; username?: string; photo_url?: string };
 
+export type FocusState = "running" | "paused" | "completed" | "interrupted";
+export type FocusSession = {
+  id: string;
+  issue_key: string;
+  user_id: string;
+  state: FocusState;
+  planned_minutes: number;
+  started_at: string;
+  ended_at: string | null;
+  focused_seconds: number;
+  remaining_seconds: number;
+  reason: string;
+};
+export type Meeting = { id: string; title: string; starts_at: string; ends_at: string; organizer_id: string; attendee_ids: string[] };
+
 export const ISSUE_TYPES: IssueType[] = ["task", "story", "bug", "epic", "subtask"];
 export const PRIORITIES: Priority[] = ["highest", "high", "medium", "low", "lowest"];
 
@@ -175,6 +190,16 @@ export const api = {
   /** Previews (dryRun) or runs a Jira CSV import; admins only. */
   importJira: (key: string, csv: string, dryRun: boolean) =>
     request<ImportReport>("POST", `/api/v1/projects/${seg(key)}/import/jira?dry_run=${dryRun}`, { csv }),
+  focus: () => request<{ session: FocusSession | null }>("GET", "/api/v1/focus").then((r) => r.session),
+  startFocus: (issueKey: string, minutes: number) => request<FocusSession>("POST", "/api/v1/focus", { issue_key: issueKey, minutes }),
+  focusAction: (action: "pause" | "resume" | "stop") => request<FocusSession>("POST", `/api/v1/focus/${action}`),
+  issueFocus: (issueKey: string) =>
+    request<{ items: FocusSession[]; total_focused_seconds: number }>("GET", `/api/v1/issues/${seg(issueKey)}/focus`),
+  meetings: (from?: string, to?: string) =>
+    request<List<Meeting>>("GET", `/api/v1/meetings${from && to ? `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` : ""}`).then((r) => r.items),
+  scheduleMeeting: (m: { title: string; starts_at: string; ends_at: string; attendee_ids: string[] }) =>
+    request<Meeting>("POST", "/api/v1/meetings", m),
+  cancelMeeting: (id: string) => request<undefined>("DELETE", `/api/v1/meetings/${seg(id)}`),
   reportSummary: (key: string) => request<ReportSummary>("GET", `/api/v1/projects/${seg(key)}/reports/summary`),
   reportCreatedVsResolved: (key: string, days: number) =>
     request<{ days: DayStat[] }>("GET", `/api/v1/projects/${seg(key)}/reports/created-vs-resolved?days=${days}`),

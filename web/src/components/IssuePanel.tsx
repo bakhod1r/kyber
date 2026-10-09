@@ -1,3 +1,4 @@
+import { IssueFocus } from "./Focus";
 import { MentionTextarea } from "./MentionTextarea";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useId, useState } from "react";
@@ -129,6 +130,7 @@ export function IssuePanel({ issueKey, projectKey, onClose }: { issueKey: string
             </div>
           </form>
         )}
+        <IssueFocus issueKey={issueKey} />
         <Comments issueKey={issueKey} projectKey={projectKey} />
       </div>
     </div>
