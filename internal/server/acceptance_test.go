@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -30,13 +31,18 @@ type client struct {
 func backends(t *testing.T) map[string]func(t *testing.T) http.Handler {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	b := map[string]func(t *testing.T) http.Handler{
-		"memory": func(*testing.T) http.Handler { return server.NewInMemory(log) },
+		"memory": func(t *testing.T) http.Handler {
+			return server.NewInMemory(log, server.WithContext(t.Context()), server.WithRelayEvery(20*time.Millisecond))
+		},
 	}
 	if os.Getenv("KYBER_TEST_DATABASE_URL") != "" {
-		b["postgres"] = func(t *testing.T) http.Handler { return server.NewPostgres(log, dbtest.New(t), false) }
+		b["postgres"] = func(t *testing.T) http.Handler {
+			return server.NewPostgres(log, dbtest.New(t), false, server.WithContext(t.Context()), server.WithRelayEvery(20*time.Millisecond))
+		}
 		b["postgres+redis"] = func(t *testing.T) http.Handler {
 			rdb := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
-			return server.NewPostgres(log, dbtest.New(t), false, server.WithRedis(rdb))
+			return server.NewPostgres(log, dbtest.New(t), false, server.WithRedis(rdb),
+				server.WithContext(t.Context()), server.WithRelayEvery(20*time.Millisecond))
 		}
 	}
 	return b
@@ -718,5 +724,97 @@ func TestS19Sprints(t *testing.T) {
 		expect(t, code, 422, body) // closed sprints take no issues
 		code, body = alice.do("POST", "/api/v1/sprints/"+s2["id"].(string)+"/start", nil)
 		expect(t, code, 200, body) // the next sprint can start now
+	})
+}
+
+// inbox polls until the user's notifications satisfy ok (the relay delivers asynchronously).
+func inbox(t *testing.T, c *client, ok func(items []any, unread float64) bool) ([]any, float64) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		code, body := c.do("GET", "/api/v1/notifications", nil)
+		expect(t, code, 200, body)
+		items, unread := body["items"].([]any), body["unread"].(float64)
+		if ok(items, unread) {
+			return items, unread
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("notifications never matched; last = %v (unread %v)", items, unread)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+func TestS21Reporter(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		alice := anon.signedIn("alice@x.uz")
+		_, me := alice.do("GET", "/api/v1/me", nil)
+		alice.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		code, is := alice.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "t", "type": "task"})
+		expect(t, code, 201, is)
+		if is["reporter_id"] != me["id"] {
+			t.Fatalf("reporter_id = %v, want %v", is["reporter_id"], me["id"])
+		}
+	})
+}
+
+func TestS23Notifications(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		alice := anon.signedIn("alice@x.uz")
+		bob := anon.signedIn("bob@x.uz")
+		carol := anon.signedIn("carol@x.uz")
+		eve := anon.signedIn("eve@x.uz") // not a member
+		_, bobMe := bob.do("GET", "/api/v1/me", nil)
+		alice.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		alice.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "bob@x.uz", "role": "member"})
+		alice.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "carol@x.uz", "role": "member"})
+		_, is := alice.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "Login page", "type": "task"})
+
+		// AC1: assigned.
+		code, body := alice.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": is["version"], "assignee_id": bobMe["id"]})
+		expect(t, code, 200, body)
+		items, _ := inbox(t, bob, func(items []any, unread float64) bool { return len(items) == 1 && unread == 1 })
+		n := items[0].(map[string]any)
+		if n["kind"] != "assigned" || n["issue_key"] != "KYB-1" || n["issue_title"] != "Login page" || n["actor_name"] != "Tester" || n["read"] != false {
+			t.Fatalf("assigned notification = %v", n)
+		}
+
+		// AC2 + AC3: Carol comments mentioning Bob and an outsider; Alice (reporter) is told, Bob is mentioned once.
+		code, body = carol.do("POST", "/api/v1/issues/KYB-1/comments", map[string]string{"body": "@bob@x.uz @eve@x.uz can you check?"})
+		expect(t, code, 201, body)
+		items, _ = inbox(t, bob, func(items []any, _ float64) bool { return len(items) == 2 })
+		if k := items[0].(map[string]any)["kind"]; k != "mentioned" {
+			t.Fatalf("bob newest = %v (mention wins over commented)", k)
+		}
+		items, _ = inbox(t, alice, func(items []any, _ float64) bool { return len(items) == 1 })
+		if k := items[0].(map[string]any)["kind"]; k != "commented" {
+			t.Fatalf("reporter got %v", k)
+		}
+		// The author and the non-member get nothing (give the relay time to prove a negative).
+		time.Sleep(300 * time.Millisecond)
+		if _, body := carol.do("GET", "/api/v1/notifications", nil); len(body["items"].([]any)) != 0 {
+			t.Fatalf("author notified: %v", body)
+		}
+		if _, body := eve.do("GET", "/api/v1/notifications", nil); len(body["items"].([]any)) != 0 {
+			t.Fatalf("non-member notified: %v", body)
+		}
+
+		// AC4: read state; users only touch their own notifications.
+		bobItems, _ := inbox(t, bob, func(items []any, _ float64) bool { return len(items) == 2 })
+		first := bobItems[0].(map[string]any)["id"].(string)
+		code, body = alice.do("POST", "/api/v1/notifications/"+first+"/read", nil)
+		expect(t, code, 404, body)
+		code, body = bob.do("POST", "/api/v1/notifications/"+first+"/read", nil)
+		expect(t, code, 204, body)
+		code, body = bob.do("GET", "/api/v1/notifications?unread=true", nil)
+		expect(t, code, 200, body)
+		if len(body["items"].([]any)) != 1 || body["unread"] != float64(1) {
+			t.Fatalf("unread view = %v", body)
+		}
+		code, body = bob.do("POST", "/api/v1/notifications/read-all", nil)
+		expect(t, code, 204, body)
+		if _, body := bob.do("GET", "/api/v1/notifications", nil); body["unread"] != float64(0) {
+			t.Fatalf("after read-all = %v", body)
+		}
 	})
 }

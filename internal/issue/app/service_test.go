@@ -111,6 +111,9 @@ func TestCreateIssue(t *testing.T) {
 	if is1.Key().String() != "KYB-1" || is2.Key().String() != "KYB-2" || other.Key().String() != "OPS-1" {
 		t.Fatalf("keys = %s %s %s", is1.Key(), is2.Key(), other.Key())
 	}
+	if is1.Reporter() != dev {
+		t.Fatalf("reporter = %q, want the creator", is1.Reporter())
+	}
 	if is1.Status() != domain.StatusTodo {
 		t.Fatalf("status = %s", is1.Status())
 	}

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/bakhod1r/kyber/internal/issue/domain"
 )
@@ -89,4 +90,14 @@ func (s *Service) ReturnUnfinished(ctx context.Context, project, sprint string) 
 		returned++
 	}
 	return completed, returned, nil
+}
+
+// Peek loads an issue without authorization, for other bounded contexts reacting
+// to events (they decide visibility themselves). Never expose it over HTTP.
+func (s *Service) Peek(ctx context.Context, rawKey string) (*domain.Issue, error) {
+	key, err := domain.ParseIssueKey(rawKey)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidKey, err)
+	}
+	return s.issues.ByKey(ctx, key)
 }

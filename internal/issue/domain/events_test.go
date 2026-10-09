@@ -13,7 +13,7 @@ func TestEventJSONContract(t *testing.T) {
 	_ = is.Transition(domain.StatusInProgress, domain.DefaultWorkflow())
 	ev := is.PullEvents()
 	want := []string{
-		`{"id":"i-1","key":"KYB-1","type":"task","title":"Login page"}`,
+		`{"id":"i-1","key":"KYB-1","type":"task","title":"Login page","reporter":"u-reporter"}`,
 		`{"id":"i-1","key":"KYB-1","from":"todo","to":"in_progress"}`,
 	}
 	for i, e := range ev {
@@ -31,16 +31,16 @@ func TestAllEventContracts(t *testing.T) {
 		name     string
 		wantJSON string
 	}{
-		{domain.IssueCreated{ID: "i-1", Key: key, Type: domain.TypeBug, Title: "t"}, "issue.created",
-			`{"id":"i-1","key":"KYB-1","type":"bug","title":"t"}`},
+		{domain.IssueCreated{ID: "i-1", Key: key, Type: domain.TypeBug, Title: "t", Reporter: "u-1"}, "issue.created",
+			`{"id":"i-1","key":"KYB-1","type":"bug","title":"t","reporter":"u-1"}`},
 		{domain.IssueTransitioned{ID: "i-1", Key: key, From: "todo", To: "done"}, "issue.transitioned",
 			`{"id":"i-1","key":"KYB-1","from":"todo","to":"done"}`},
 		{domain.IssueEdited{ID: "i-1", Key: key, Fields: []string{"title"}}, "issue.edited",
 			`{"id":"i-1","key":"KYB-1","fields":["title"]}`},
-		{domain.IssueAssigned{ID: "i-1", Key: key, From: "", To: "u-1"}, "issue.assigned",
-			`{"id":"i-1","key":"KYB-1","from":"","to":"u-1"}`},
-		{domain.CommentAdded{ID: "c-1", IssueID: "i-1", IssueKey: key, Author: "u-1"}, "comment.added",
-			`{"id":"c-1","issue_id":"i-1","issue_key":"KYB-1","author":"u-1"}`},
+		{domain.IssueAssigned{ID: "i-1", Key: key, From: "", To: "u-1", By: "u-2"}, "issue.assigned",
+			`{"id":"i-1","key":"KYB-1","from":"","to":"u-1","by":"u-2"}`},
+		{domain.CommentAdded{ID: "c-1", IssueID: "i-1", IssueKey: key, Author: "u-1", Body: "hi @a@x.uz"}, "comment.added",
+			`{"id":"c-1","issue_id":"i-1","issue_key":"KYB-1","author":"u-1","body":"hi @a@x.uz"}`},
 	}
 	for _, tt := range tests {
 		if tt.e.EventName() != tt.name {

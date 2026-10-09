@@ -42,6 +42,7 @@ type issueDTO struct {
 	Priority    string  `json:"priority"`
 	AssigneeID  *string `json:"assignee_id"`
 	SprintID    *string `json:"sprint_id"`
+	ReporterID  *string `json:"reporter_id"`
 	Rank        string  `json:"rank"`
 	Version     int     `json:"version"`
 }
@@ -53,6 +54,10 @@ func toDTO(is *domain.Issue) issueDTO {
 	if a := is.Assignee(); a != "" {
 		s := string(a)
 		d.AssigneeID = &s
+	}
+	if r := is.Reporter(); r != "" {
+		s := string(r)
+		d.ReporterID = &s
 	}
 	if sp := is.Sprint(); sp != "" {
 		s := string(sp)

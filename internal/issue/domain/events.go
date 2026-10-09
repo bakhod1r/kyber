@@ -5,10 +5,11 @@ package domain
 type Event interface{ EventName() string }
 
 type IssueCreated struct {
-	ID    IssueID   `json:"id"`
-	Key   IssueKey  `json:"key"`
-	Type  IssueType `json:"type"`
-	Title string    `json:"title"`
+	ID       IssueID   `json:"id"`
+	Key      IssueKey  `json:"key"`
+	Type     IssueType `json:"type"`
+	Title    string    `json:"title"`
+	Reporter UserID    `json:"reporter"`
 }
 
 type IssueTransitioned struct {
@@ -32,6 +33,7 @@ type IssueAssigned struct {
 	Key  IssueKey `json:"key"`
 	From UserID   `json:"from"`
 	To   UserID   `json:"to"`
+	By   UserID   `json:"by"`
 }
 
 type CommentAdded struct {
@@ -39,6 +41,7 @@ type CommentAdded struct {
 	IssueID  IssueID   `json:"issue_id"`
 	IssueKey IssueKey  `json:"issue_key"`
 	Author   UserID    `json:"author"`
+	Body     string    `json:"body"`
 }
 
 func (IssueEdited) EventName() string   { return "issue.edited" }

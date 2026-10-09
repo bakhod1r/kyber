@@ -35,7 +35,7 @@ func Run(t *testing.T, newRepo Factory) {
 	mk := func(t *testing.T, n int, title string) *domain.Issue {
 		t.Helper()
 		key, _ := domain.NewIssueKey("KYB", n)
-		is, err := domain.NewIssue(domain.IssueID(uuidFor(n)), key, title, domain.TypeTask, domain.DefaultWorkflow())
+		is, err := domain.NewIssue(domain.IssueID(uuidFor(n)), key, title, domain.TypeTask, domain.UserID(Assignee), domain.DefaultWorkflow())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -121,14 +121,19 @@ func Run(t *testing.T, newRepo Factory) {
 
 	t.Run("details round-trip", func(t *testing.T) {
 		repo, _ := newRepo(t)
-		is := mk(t, 1, "First")
+		key1, _ := domain.NewIssueKey("KYB", 1)
+		is, _ := domain.NewIssue(domain.IssueID(uuidFor(1)), key1, "First", domain.TypeTask, domain.UserID(Assignee), domain.DefaultWorkflow())
+		is.Rerank("b01")
 		_ = repo.Save(ctx, is, nil)
 		loaded, _ := repo.ByKey(ctx, is.Key())
+		if loaded.Reporter() != domain.UserID(Assignee) {
+			t.Fatalf("reporter = %q", loaded.Reporter())
+		}
 		desc, prio := "Line 1\nLine 2 ✓", domain.PriorityHighest
 		if err := loaded.Edit(domain.Changes{Description: &desc, Priority: &prio}); err != nil {
 			t.Fatal(err)
 		}
-		loaded.Assign(domain.UserID(Assignee))
+		loaded.Assign(domain.UserID(Assignee), "u-actor")
 		if err := repo.Save(ctx, loaded, loaded.PullEvents()); err != nil {
 			t.Fatal(err)
 		}
@@ -136,7 +141,7 @@ func Run(t *testing.T, newRepo Factory) {
 		if got.Description() != desc || got.Priority() != prio || got.Assignee() != domain.UserID(Assignee) {
 			t.Fatalf("loaded %q %q %q", got.Description(), got.Priority(), got.Assignee())
 		}
-		got.Assign("")
+		got.Assign("", "u-actor")
 		_ = repo.Save(ctx, got, nil)
 		if again, _ := repo.ByKey(ctx, is.Key()); again.Assignee() != "" {
 			t.Fatalf("unassign not persisted: %q", again.Assignee())

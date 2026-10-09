@@ -29,7 +29,7 @@ func NewComment(id CommentID, issueID IssueID, issueKey IssueKey, author UserID,
 		return nil, ErrInvalidCommentBody
 	}
 	c := &Comment{id: id, issueID: issueID, author: author, body: body, createdAt: at}
-	c.events = append(c.events, CommentAdded{ID: id, IssueID: issueID, IssueKey: issueKey, Author: author})
+	c.events = append(c.events, CommentAdded{ID: id, IssueID: issueID, IssueKey: issueKey, Author: author, Body: body})
 	return c, nil
 }
 

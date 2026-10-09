@@ -20,7 +20,7 @@ func TestCommentContract(t *testing.T) {
 	repotest.RunComments(t, func(t *testing.T) (domain.CommentRepository, *domain.Issue, func() []string) {
 		r := memory.NewRepository()
 		key, _ := domain.NewIssueKey("KYB", 1)
-		is, _ := domain.NewIssue("00000000-0000-4000-8000-000000000001", key, "t", domain.TypeTask, domain.DefaultWorkflow())
+		is, _ := domain.NewIssue("00000000-0000-4000-8000-000000000001", key, "t", domain.TypeTask, repotest.Assignee, domain.DefaultWorkflow())
 		_ = r.Save(context.Background(), is, nil)
 		return memory.NewCommentRepository(r), is, r.OutboxNames
 	})

@@ -81,19 +81,20 @@ type Issue struct {
 	description string
 	priority    Priority
 	assignee    UserID   // "" = unassigned
+	reporter    UserID   // creator; "" for issues created before 0.6
 	rank        Rank     // backlog order
 	sprint      SprintID // "" = backlog
 	version     int      // 0 = never persisted
 	events      []Event
 }
 
-func NewIssue(id IssueID, key IssueKey, title string, typ IssueType, wf *Workflow) (*Issue, error) {
+func NewIssue(id IssueID, key IssueKey, title string, typ IssueType, reporter UserID, wf *Workflow) (*Issue, error) {
 	title, err := NormalizeTitle(title)
 	if err != nil {
 		return nil, err
 	}
-	is := &Issue{id: id, key: key, title: title, typ: typ, status: wf.Initial(), priority: PriorityMedium}
-	is.record(IssueCreated{ID: id, Key: key, Type: typ, Title: title})
+	is := &Issue{id: id, key: key, title: title, typ: typ, status: wf.Initial(), priority: PriorityMedium, reporter: reporter}
+	is.record(IssueCreated{ID: id, Key: key, Type: typ, Title: title, Reporter: reporter})
 	return is, nil
 }
 
@@ -107,6 +108,7 @@ type Snapshot struct {
 	Description string
 	Priority    Priority
 	Assignee    UserID
+	Reporter    UserID
 	Rank        Rank
 	Sprint      SprintID
 	Version     int
@@ -118,7 +120,7 @@ func Rehydrate(s Snapshot) *Issue {
 		s.Priority = PriorityMedium
 	}
 	return &Issue{id: s.ID, key: s.Key, title: s.Title, typ: s.Type, status: s.Status,
-		description: s.Description, priority: s.Priority, assignee: s.Assignee, rank: s.Rank, sprint: s.Sprint,
+		description: s.Description, priority: s.Priority, assignee: s.Assignee, reporter: s.Reporter, rank: s.Rank, sprint: s.Sprint,
 		version: s.Version}
 }
 
@@ -137,6 +139,7 @@ func (i *Issue) Description() string { return i.description }
 func (i *Issue) Priority() Priority  { return i.priority }
 func (i *Issue) Assignee() UserID    { return i.assignee }
 func (i *Issue) Rank() Rank          { return i.rank }
+func (i *Issue) Reporter() UserID    { return i.reporter }
 func (i *Issue) Sprint() SprintID    { return i.sprint }
 
 // Rerank places the issue at r in the project's backlog order.
@@ -201,14 +204,15 @@ func (i *Issue) Edit(c Changes) error {
 	return nil
 }
 
-// Assign sets (or with "" clears) the assignee. Membership is checked by the application layer.
-func (i *Issue) Assign(u UserID) {
+// Assign sets (or with "" clears) the assignee; by is the acting user, recorded in the
+// event so that notifications can name them and skip them. Membership is checked by the application layer.
+func (i *Issue) Assign(u, by UserID) {
 	if u == i.assignee {
 		return
 	}
 	from := i.assignee
 	i.assignee = u
-	i.record(IssueAssigned{ID: i.id, Key: i.key, From: from, To: u})
+	i.record(IssueAssigned{ID: i.id, Key: i.key, From: from, To: u, By: by})
 }
 
 // Transition moves the issue to another status if the workflow allows it.

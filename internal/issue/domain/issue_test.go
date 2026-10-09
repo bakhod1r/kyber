@@ -51,7 +51,7 @@ func newWorkflow(t *testing.T) *domain.Workflow {
 func newIssue(t *testing.T) *domain.Issue {
 	t.Helper()
 	key, _ := domain.NewIssueKey("KYB", 1)
-	is, err := domain.NewIssue(domain.IssueID("i-1"), key, "Login page", domain.TypeTask, newWorkflow(t))
+	is, err := domain.NewIssue(domain.IssueID("i-1"), key, "Login page", domain.TypeTask, "u-reporter", newWorkflow(t))
 	if err != nil {
 		t.Fatalf("NewIssue: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestNewIssue(t *testing.T) {
 
 func TestNewIssueRejectsBlankTitle(t *testing.T) {
 	key, _ := domain.NewIssueKey("KYB", 1)
-	_, err := domain.NewIssue("i-1", key, "   ", domain.TypeTask, newWorkflow(t))
+	_, err := domain.NewIssue("i-1", key, "   ", domain.TypeTask, "u-reporter", newWorkflow(t))
 	if !errors.Is(err, domain.ErrEmptyTitle) {
 		t.Fatalf("err = %v, want ErrEmptyTitle", err)
 	}

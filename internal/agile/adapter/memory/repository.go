@@ -109,3 +109,10 @@ func (r *Repository) OutboxNames() []string {
 	}
 	return names
 }
+
+// Outbox returns all events written so far.
+func (r *Repository) Outbox() []domain.Event {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]domain.Event(nil), r.outbox...)
+}

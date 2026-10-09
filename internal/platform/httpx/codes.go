@@ -25,6 +25,7 @@ const (
 	CodeSprintState          = "SPRINT_STATE"
 	CodeSprintAlreadyActive  = "SPRINT_ALREADY_ACTIVE"
 	CodeSprintConflict       = "SPRINT_CONFLICT"
+	CodeNotificationNotFound = "NOTIFICATION_NOT_FOUND"
 	CodeInternal             = "INTERNAL"
 )
 
@@ -56,6 +57,7 @@ var codes = []code{
 	{CodeSprintState, "6021", 409, "The sprint is not in a state that allows this.", "Sprint holati bunga ruxsat bermaydi.", "Текущее состояние спринта этого не допускает.", errorx.CategoryBusiness},
 	{CodeSprintAlreadyActive, "6022", 409, "This project already has an active sprint.", "Bu loyihada allaqachon faol sprint bor.", "В этом проекте уже есть активный спринт.", errorx.CategoryBusiness},
 	{CodeSprintConflict, "6023", 409, "Someone else changed this sprint. Reload and try again.", "Sprintni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Спринт изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
+	{CodeNotificationNotFound, "6040", 404, "Notification not found.", "Bildirishnoma topilmadi.", "Уведомление не найдено.", errorx.CategoryBusiness},
 	{CodeInternal, "6099", 500, "Something went wrong.", "Nimadir noto'g'ri ketdi.", "Что-то пошло не так.", errorx.CategorySystem},
 }
 

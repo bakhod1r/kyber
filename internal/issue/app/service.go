@@ -89,7 +89,7 @@ func (s *Service) Create(ctx context.Context, actor string, cmd CreateIssue) (*d
 	if err != nil {
 		return nil, err
 	}
-	is, err := domain.NewIssue(domain.IssueID(s.newID()), key, cmd.Title, typ, s.workflow)
+	is, err := domain.NewIssue(domain.IssueID(s.newID()), key, cmd.Title, typ, domain.UserID(actor), s.workflow)
 	if err != nil {
 		return nil, err
 	}

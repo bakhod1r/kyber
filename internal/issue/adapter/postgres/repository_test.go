@@ -45,7 +45,7 @@ func TestCommentContract(t *testing.T) {
 		}
 		issues := postgres.NewRepository(pool)
 		key, _ := domain.NewIssueKey("KYB", 1)
-		is, _ := domain.NewIssue("00000000-0000-4000-8000-000000000001", key, "t", domain.TypeTask, domain.DefaultWorkflow())
+		is, _ := domain.NewIssue("00000000-0000-4000-8000-000000000001", key, "t", domain.TypeTask, repotest.Assignee, domain.DefaultWorkflow())
 		if err := issues.Save(ctx, is, nil); err != nil {
 			t.Fatal(err)
 		}

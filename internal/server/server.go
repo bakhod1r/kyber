@@ -32,9 +32,16 @@ import (
 	"github.com/bakhod1r/kyber/internal/issue/adapter/projectacl"
 	issueapp "github.com/bakhod1r/kyber/internal/issue/app"
 	issuedomain "github.com/bakhod1r/kyber/internal/issue/domain"
+	notifyacl "github.com/bakhod1r/kyber/internal/notify/adapter/acl"
+	notifyhttp "github.com/bakhod1r/kyber/internal/notify/adapter/httpapi"
+	notifymemory "github.com/bakhod1r/kyber/internal/notify/adapter/memory"
+	notifypg "github.com/bakhod1r/kyber/internal/notify/adapter/postgres"
+	notifyapp "github.com/bakhod1r/kyber/internal/notify/app"
+	notifydomain "github.com/bakhod1r/kyber/internal/notify/domain"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 	"github.com/bakhod1r/kyber/internal/platform/id"
 	"github.com/bakhod1r/kyber/internal/platform/metrics"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	projecthttp "github.com/bakhod1r/kyber/internal/project/adapter/httpapi"
 	"github.com/bakhod1r/kyber/internal/project/adapter/identitydir"
 	projectmemory "github.com/bakhod1r/kyber/internal/project/adapter/memory"
@@ -55,7 +62,17 @@ type deps struct {
 	ready        func(context.Context) error
 	cookieSecure bool
 	redis        redis.UniversalClient // optional: shared login limiter (guard)
+	notes        notifydomain.Repository
+	outbox       outbox.Store
+	ctx          context.Context // lifetime of background work (outbox relay)
+	relayEvery   time.Duration
 }
+
+// WithContext bounds background work (the outbox relay) to ctx.
+func WithContext(ctx context.Context) Option { return func(d *deps) { d.ctx = ctx } }
+
+// WithRelayEvery sets how often the outbox relay polls (default 1s).
+func WithRelayEvery(every time.Duration) Option { return func(d *deps) { d.relayEvery = every } }
 
 // Option configures optional infrastructure.
 type Option func(*deps)
@@ -64,14 +81,32 @@ type Option func(*deps)
 func WithRedis(rdb redis.UniversalClient) Option { return func(d *deps) { d.redis = rdb } }
 
 // NewInMemory builds the API on in-memory adapters (dev mode and tests).
-func NewInMemory(log *slog.Logger) http.Handler {
+func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	ids := identitymemory.NewRepository()
 	issueRepo := issuememory.NewRepository()
-	return build(log, deps{
+	sprintRepo := agilememory.NewRepository()
+	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
-		sprints: agilememory.NewRepository(),
-		users:   ids, sessions: ids, ready: func(context.Context) error { return nil },
-	})
+		sprints: sprintRepo, notes: notifymemory.NewRepository(),
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox), events(sprintRepo.Outbox)),
+		users:  ids, sessions: ids, ready: func(context.Context) error { return nil },
+	}
+	for _, o := range opts {
+		o(&d)
+	}
+	return build(log, d)
+}
+
+// events adapts a context's typed event log to the relay's generic one.
+func events[E outbox.Event](log func() []E) func() []outbox.Event {
+	return func() []outbox.Event {
+		src := log()
+		out := make([]outbox.Event, len(src))
+		for i, e := range src {
+			out[i] = e
+		}
+		return out
+	}
 }
 
 // StartJobs runs background maintenance (expired-session purge) until ctx ends.
@@ -92,8 +127,8 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	ids := identitypg.NewRepository(pool)
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
-		sprints: agilepg.NewRepository(pool),
-		users:   ids, sessions: ids, ready: pool.Ping, cookieSecure: cookieSecure,
+		sprints: agilepg.NewRepository(pool), notes: notifypg.NewRepository(pool), outbox: outbox.NewPostgresStore(pool),
+		users: ids, sessions: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
 		o(&d)
@@ -129,6 +164,20 @@ func build(log *slog.Logger, d deps) http.Handler {
 		Sprints: d.sprints, Issues: issues, Access: agileprojectacl.New(projects), NewID: id.New, Now: time.Now,
 	})
 	sprintACL.Sprints = agileacl.New(agile)
+	notify := notifyapp.NewService(notifyapp.Deps{
+		Repo: d.notes, Issues: notifyacl.NewIssues(issues), Members: notifyacl.NewMembers(projects),
+		Users: notifyacl.NewUsers(d.users), NewID: id.New, Now: time.Now, Log: log,
+	})
+	relay := outbox.NewRelay(d.outbox, log)
+	relay.Handle("issue.assigned", notify.OnIssueAssigned)
+	relay.Handle("comment.added", notify.OnCommentAdded)
+	if d.ctx == nil {
+		d.ctx = context.Background()
+	}
+	if d.relayEvery == 0 {
+		d.relayEvery = time.Second
+	}
+	go relay.Run(d.ctx, d.relayEvery)
 	var identityOpts []identityapp.Option
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
@@ -142,6 +191,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	projecthttp.New(projects, log).Register(api)
 	issuehttp.New(issues, log).Register(api)
 	agilehttp.New(agile, log).Register(api)
+	notifyhttp.New(notify, log).Register(api)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

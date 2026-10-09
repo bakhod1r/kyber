@@ -50,7 +50,7 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 		return nil, err
 	}
 	if cmd.AssigneeSet {
-		is.Assign(domain.UserID(cmd.Assignee))
+		is.Assign(domain.UserID(cmd.Assignee), domain.UserID(actor))
 	}
 	if cmd.SprintSet {
 		is.MoveToSprint(domain.SprintID(cmd.Sprint))

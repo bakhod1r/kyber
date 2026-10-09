@@ -23,11 +23,11 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 		var err error
 		if is.Version() == 0 {
 			tag, err = tx.Exec(ctx, `INSERT INTO issues (id, project_key, number, title, type, status,
-				description, priority, assignee_id, rank, sprint_id, version)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 1) ON CONFLICT DO NOTHING`,
+				description, priority, assignee_id, rank, sprint_id, reporter_id, version)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 1) ON CONFLICT DO NOTHING`,
 				string(is.ID()), is.Key().Project(), is.Key().Number(), is.Title(), string(is.Type()), string(is.Status()),
 				is.Description(), string(is.Priority()), nullable(string(is.Assignee())), string(is.Rank()),
-				nullable(string(is.Sprint())))
+				nullable(string(is.Sprint())), nullable(string(is.Reporter())))
 		} else {
 			tag, err = tx.Exec(ctx, `UPDATE issues SET title = $2, type = $3, status = $4, description = $5,
 				priority = $6, assignee_id = $7, rank = $8, sprint_id = $9, version = version + 1, updated_at = now()
@@ -52,7 +52,7 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 }
 
 const selectCols = `SELECT id::text, project_key, number, title, type, status, description, priority,
-	COALESCE(assignee_id::text, ''), rank, COALESCE(sprint_id::text, ''), version FROM issues`
+	COALESCE(assignee_id::text, ''), rank, COALESCE(sprint_id::text, ''), COALESCE(reporter_id::text, ''), version FROM issues`
 
 func (r *Repository) ByKey(ctx context.Context, key domain.IssueKey) (*domain.Issue, error) {
 	is, err := scan(r.pool.QueryRow(ctx, selectCols+` WHERE project_key = $1 AND number = $2`, key.Project(), key.Number()))
@@ -118,7 +118,7 @@ func scan(row pgx.Row) (*domain.Issue, error) {
 	var project string
 	var number int
 	if err := row.Scan(&s.ID, &project, &number, &s.Title, &s.Type, &s.Status, &s.Description,
-		&s.Priority, &s.Assignee, &s.Rank, &s.Sprint, &s.Version); err != nil {
+		&s.Priority, &s.Assignee, &s.Rank, &s.Sprint, &s.Reporter, &s.Version); err != nil {
 		return nil, err
 	}
 	key, err := domain.NewIssueKey(project, number)
