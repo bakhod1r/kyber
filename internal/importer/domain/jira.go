@@ -178,6 +178,7 @@ type Item struct {
 	Row
 	Type, Status, Priority string
 	AssigneeID             string
+	ReporterID             string // "" = not a project member; the importing user reports it
 	Points                 *float64
 	Created                time.Time
 	Resolved               *time.Time
@@ -238,6 +239,7 @@ func Plan(rows []Row, members []Member, alreadyImported map[string]bool) ImportP
 				warn("assignee %q is not a project member; left unassigned", r.Assignee)
 			}
 		}
+		it.ReporterID = matchMember(r.Reporter, members)
 		if r.StoryPoints != "" {
 			f, err := strconv.ParseFloat(r.StoryPoints, 64)
 			if err != nil || f < 0 || f > 999 || math.Abs(f*10-math.Round(f*10)) > 1e-9 {

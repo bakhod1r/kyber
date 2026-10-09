@@ -127,3 +127,32 @@ func TestBurndownAndVelocityUseSprintWindows(t *testing.T) {
 		t.Fatalf("velocity = %+v, %v", v, err)
 	}
 }
+
+func TestIngestImported(t *testing.T) {
+	ctx := context.Background()
+	s, repo := setup()
+	created, resolved := t0.Add(-240*time.Hour), t0.Add(-200*time.Hour)
+	for _, msg := range []outbox.Message{
+		m(7, "issue.imported", `{"id":"i-9","key":"KYB-9","status":"done","estimate":3,"created_at":"`+created.Format(time.RFC3339)+`","resolved_at":"`+resolved.Format(time.RFC3339)+`"}`, t0),
+		m(7, "issue.imported", `{"id":"i-9","key":"KYB-9","status":"done","estimate":3,"created_at":"`+created.Format(time.RFC3339)+`","resolved_at":"`+resolved.Format(time.RFC3339)+`"}`, t0), // redelivery
+		m(8, "issue.imported", `{"id":"i-10","key":"KYB-10","status":"todo","estimate":null,"created_at":"`+created.Format(time.RFC3339)+`","resolved_at":null}`, t0),
+	} {
+		if err := s.OnIssueEvent(ctx, msg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, _ := repo.ForProject(ctx, "KYB")
+	if len(got) != 4 {
+		t.Fatalf("entries = %+v (created+estimate+status for i-9, created for i-10)", got)
+	}
+	for _, e := range got {
+		switch {
+		case e.Kind == domain.KindCreated && (!e.At.Equal(created) || e.To != "todo"):
+			t.Fatalf("created at original time = %+v", e)
+		case e.Kind == domain.KindEstimate && (e.ToPoints == nil || *e.ToPoints != 30 || !e.At.Equal(created)):
+			t.Fatalf("estimate = %+v", e)
+		case e.Kind == domain.KindStatus && (e.From != "todo" || e.To != "done" || !e.At.Equal(resolved)):
+			t.Fatalf("resolution at original time = %+v", e)
+		}
+	}
+}

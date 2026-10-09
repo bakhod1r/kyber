@@ -26,6 +26,8 @@ const (
 	CodeSprintAlreadyActive  = "SPRINT_ALREADY_ACTIVE"
 	CodeSprintConflict       = "SPRINT_CONFLICT"
 	CodeNotificationNotFound = "NOTIFICATION_NOT_FOUND"
+	CodeImportTooLarge       = "IMPORT_TOO_LARGE"
+	CodeImportInvalidFile    = "IMPORT_INVALID_FILE"
 	CodeInternal             = "INTERNAL"
 )
 
@@ -58,6 +60,8 @@ var codes = []code{
 	{CodeSprintAlreadyActive, "6022", 409, "This project already has an active sprint.", "Bu loyihada allaqachon faol sprint bor.", "В этом проекте уже есть активный спринт.", errorx.CategoryBusiness},
 	{CodeSprintConflict, "6023", 409, "Someone else changed this sprint. Reload and try again.", "Sprintni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Спринт изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeNotificationNotFound, "6040", 404, "Notification not found.", "Bildirishnoma topilmadi.", "Уведомление не найдено.", errorx.CategoryBusiness},
+	{CodeImportTooLarge, "6050", 413, "The file is too large to import (10 MB max).", "Fayl import uchun juda katta (ko'pi bilan 10 MB).", "Файл слишком большой для импорта (не более 10 МБ).", errorx.CategoryValidation},
+	{CodeImportInvalidFile, "6051", 422, "This is not a Jira CSV export.", "Bu Jira CSV eksport fayli emas.", "Это не CSV-экспорт из Jira.", errorx.CategoryValidation},
 	{CodeInternal, "6099", 500, "Something went wrong.", "Nimadir noto'g'ri ketdi.", "Что-то пошло не так.", errorx.CategorySystem},
 }
 

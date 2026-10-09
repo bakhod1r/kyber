@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -332,6 +332,35 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/import/jira:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    post:
+      operationId: importJira
+      description: >-
+        Imports a Jira CSV export (project admins only, 10 MB max). `dry_run=true` (default) previews without
+        changing anything. A run is idempotent: issues imported earlier are listed in `skipped`. Imported issues
+        keep their status and original created/resolved dates in reports, and notify nobody. A run that fails
+        midway answers 207 with what it created; running it again resumes.
+      parameters:
+        - { name: dry_run, in: query, schema: { type: string, enum: ["true", "false"], default: "true" } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [csv]
+              properties: { csv: { type: string, description: CSV text as exported by Jira } }
+      responses:
+        "200": { description: Preview, content: { application/json: { schema: { $ref: "#/components/schemas/ImportReport" } } } }
+        "201": { description: Imported, content: { application/json: { schema: { $ref: "#/components/schemas/ImportReport" } } } }
+        "207": { description: Stopped midway; re-run to resume, content: { application/json: { schema: { $ref: "#/components/schemas/ImportReport" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/reports/summary:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -576,6 +605,39 @@ components:
             required: [status]
             properties: { status: { type: string, enum: [ok, unavailable] } }
   schemas:
+    ImportReport:
+      type: object
+      additionalProperties: false
+      required: [dry_run, items, errors, skipped]
+      properties:
+        dry_run: { type: boolean }
+        skipped: { type: array, items: { type: string }, description: External keys imported by an earlier run }
+        errors:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [line, external_key, message]
+            properties: { line: { type: integer }, external_key: { type: string }, message: { type: string } }
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [line, external_key, issue_key, title, type, status, priority, assignee_id, points, created_at, resolved_at, warnings]
+            properties:
+              line: { type: integer }
+              external_key: { type: string, example: PROJ-12 }
+              issue_key: { type: [string, "null"], description: null in a preview }
+              title: { type: string }
+              type: { type: string }
+              status: { type: string }
+              priority: { type: string }
+              assignee_id: { type: [string, "null"] }
+              points: { type: [number, "null"] }
+              created_at: { type: [string, "null"], format: date-time }
+              resolved_at: { type: [string, "null"], format: date-time }
+              warnings: { type: array, items: { type: string } }
     Error:
       type: object
       required: [type, title, status, code]

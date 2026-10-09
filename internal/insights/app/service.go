@@ -75,6 +75,10 @@ func (s *Service) OnIssueEvent(ctx context.Context, m outbox.Message) error {
 	var e struct {
 		ID, Key  string
 		From, To json.RawMessage
+		Status   string
+		Estimate json.RawMessage
+		Created  time.Time  `json:"created_at"`
+		Resolved *time.Time `json:"resolved_at"`
 	}
 	if err := json.Unmarshal(m.Payload, &e); err != nil || e.ID == "" || e.Key == "" {
 		s.d.Log.ErrorContext(ctx, "insights: skipping malformed event", "id", m.ID, "name", m.Name)
@@ -95,6 +99,8 @@ func (s *Service) OnIssueEvent(ctx context.Context, m outbox.Message) error {
 		return &t
 	}
 	switch m.Name {
+	case "issue.imported":
+		return s.recordImported(ctx, entry, e.Status, pts(e.Estimate), e.Created, e.Resolved)
 	case "issue.created":
 		entry.Kind, entry.To = domain.KindCreated, "todo"
 	case "issue.transitioned":
@@ -107,6 +113,30 @@ func (s *Service) OnIssueEvent(ctx context.Context, m outbox.Message) error {
 		return nil
 	}
 	return s.d.Repo.Record(ctx, entry)
+}
+
+// recordImported replays an imported issue's history at its original timestamps:
+// created, then its estimate, then its move to the imported status (at resolution when known).
+func (s *Service) recordImported(ctx context.Context, base domain.Entry, status string, points *int, created time.Time, resolved *time.Time) error {
+	if !created.IsZero() {
+		base.At = created.UTC()
+	}
+	entries := []domain.Entry{base}
+	entries[0].Kind, entries[0].To = domain.KindCreated, "todo"
+	if points != nil {
+		e := base
+		e.Kind, e.ToPoints = domain.KindEstimate, points
+		entries = append(entries, e)
+	}
+	if status != "" && status != "todo" {
+		e := base
+		e.Kind, e.From, e.To = domain.KindStatus, "todo", status
+		if resolved != nil && status == "done" && resolved.After(base.At) {
+			e.At = resolved.UTC()
+		}
+		entries = append(entries, e)
+	}
+	return s.d.Repo.Record(ctx, entries...)
 }
 
 // Count is one slice of a distribution.

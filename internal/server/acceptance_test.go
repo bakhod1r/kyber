@@ -977,3 +977,77 @@ func eventuallyJSON(t *testing.T, c *client, path string, ok func(map[string]any
 		time.Sleep(25 * time.Millisecond)
 	}
 }
+
+func TestS29JiraImport(t *testing.T) {
+	const jira = "\xef\xbb\xbfSummary,Issue key,Issue Type,Status,Priority,Assignee,Created,Resolved,Custom field (Story Points)\n" +
+		"Login fails,PROJ-1,Bug,Done,Major,dev@x.uz,01/Mar/26 9:00 AM,03/Mar/26 5:00 PM,3\n" +
+		"Add SSO,PROJ-2,Story,In Progress,Minor,ghost@x.uz,02/Mar/26 10:00 AM,,5\n" +
+		",PROJ-3,Task,To Do,,,,,\n"
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		lead.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		lead.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "dev@x.uz", "role": "member"})
+		_, devMe := dev.do("GET", "/api/v1/me", nil)
+		body := map[string]string{"csv": jira}
+
+		// AC1 preview changes nothing.
+		code, pre := lead.do("POST", "/api/v1/projects/KYB/import/jira?dry_run=true", body)
+		expect(t, code, 200, pre)
+		items := pre["items"].([]any)
+		if pre["dry_run"] != true || len(items) != 2 || len(pre["errors"].([]any)) != 1 {
+			t.Fatalf("preview = %v", pre)
+		}
+		first := items[0].(map[string]any)
+		if first["issue_key"] != nil || first["assignee_id"] != devMe["id"] || first["status"] != "done" || first["priority"] != "high" {
+			t.Fatalf("preview item = %v", first)
+		}
+		if len(items[1].(map[string]any)["warnings"].([]any)) != 1 {
+			t.Fatalf("unknown assignee must warn: %v", items[1])
+		}
+		_, list := lead.do("GET", "/api/v1/projects/KYB/issues", nil)
+		if n := len(list["items"].([]any)); n != 0 {
+			t.Fatalf("preview created %d issues", n)
+		}
+
+		// AC2 run maps keys; AC3 re-running is idempotent.
+		code, run := lead.do("POST", "/api/v1/projects/KYB/import/jira?dry_run=false", body)
+		expect(t, code, 201, run)
+		got := run["items"].([]any)
+		if got[0].(map[string]any)["issue_key"] != "KYB-1" || got[1].(map[string]any)["issue_key"] != "KYB-2" {
+			t.Fatalf("run = %v", run)
+		}
+		_, is := lead.do("GET", "/api/v1/issues/KYB-1", nil)
+		if is["title"] != "Login fails" || is["status"] != "done" || is["type"] != "bug" || is["estimate"] != float64(3) {
+			t.Fatalf("imported issue = %v", is)
+		}
+		code, again := lead.do("POST", "/api/v1/projects/KYB/import/jira?dry_run=false", body)
+		expect(t, code, 201, again)
+		if len(again["items"].([]any)) != 0 || len(again["skipped"].([]any)) != 2 {
+			t.Fatalf("re-run = %v", again)
+		}
+
+		// AC4 history keeps original dates: both created in March, one resolved.
+		eventuallyJSON(t, lead, "/api/v1/projects/KYB/reports/summary", func(b map[string]any) bool {
+			return b["total"] == float64(2) && b["done"] == float64(1)
+		})
+
+		// AC5 importing notifies nobody, even the matched assignee.
+		_, notes := dev.do("GET", "/api/v1/notifications", nil)
+		if n := len(notes["items"].([]any)); n != 0 {
+			t.Fatalf("notifications = %v", notes)
+		}
+
+		// AC6 guards.
+		code, b := dev.do("POST", "/api/v1/projects/KYB/import/jira", body)
+		expect(t, code, 403, b)
+		code, b = anon.signedIn("out@x.uz").do("POST", "/api/v1/projects/KYB/import/jira", body)
+		expect(t, code, 404, b)
+		code, b = lead.do("POST", "/api/v1/projects/KYB/import/jira", map[string]string{"csv": "a,b\n1,2\n"})
+		expect(t, code, 422, b)
+		code, b = lead.do("POST", "/api/v1/projects/KYB/import/jira?dry_run=maybe", body)
+		expect(t, code, 422, b)
+		code, b = lead.do("POST", "/api/v1/projects/KYB/import/jira", map[string]string{"csv": strings.Repeat("x", 10<<20+1)})
+		expect(t, code, 413, b)
+	})
+}
