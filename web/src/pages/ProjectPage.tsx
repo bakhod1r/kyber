@@ -5,8 +5,9 @@ import { type Role, api } from "../api";
 import { Backlog } from "../components/Backlog";
 import { Board } from "../components/Board";
 import { IssuePanel } from "../components/IssuePanel";
+import { Reports } from "./ReportsPage";
 
-export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" }) {
+export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "reports" }) {
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
   const project = projects.data?.find((p) => p.key === key);
@@ -29,9 +30,12 @@ export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" }) 
           Board
         </NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/backlog`}>Backlog</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/reports`}>Reports</NavLink>
       </nav>
       <div className="project-grid">
-        {view === "board" ? <Board projectKey={key} onOpen={setOpen} /> : <Backlog projectKey={key} onOpen={setOpen} />}
+        {view === "board" && <Board projectKey={key} onOpen={setOpen} />}
+        {view === "backlog" && <Backlog projectKey={key} onOpen={setOpen} />}
+        {view === "reports" && <Reports projectKey={key} />}
         <Members projectKey={key} />
       </div>
       {open && <IssuePanel issueKey={open} projectKey={key} onClose={() => setOpen(null)} />}

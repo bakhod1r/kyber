@@ -2,13 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { ApiError, type Issue, PRIORITIES, type Priority, api } from "../api";
 
-type Draft = { title: string; description: string; priority: Priority; assignee: string };
+type Draft = { title: string; description: string; priority: Priority; assignee: string; estimate: string };
 
 const toDraft = (i: Issue): Draft => ({
   title: i.title,
   description: i.description,
   priority: i.priority,
   assignee: i.assignee_id ?? "",
+  estimate: i.estimate === null ? "" : String(i.estimate),
 });
 
 export function IssuePanel({ issueKey, projectKey, onClose }: { issueKey: string; projectKey: string; onClose: () => void }) {
@@ -39,6 +40,7 @@ export function IssuePanel({ issueKey, projectKey, onClose }: { issueKey: string
         description: d.description,
         priority: d.priority,
         assignee_id: d.assignee || null,
+        estimate: d.estimate.trim() === "" ? null : Number(d.estimate),
       }),
     onSuccess: (updated) => {
       qc.setQueryData(["issue", issueKey], updated);
@@ -110,6 +112,10 @@ export function IssuePanel({ issueKey, projectKey, onClose }: { issueKey: string
                 </select>
               </label>
             </div>
+            <label className="narrow">
+              Story points
+              <input type="number" min={0} max={999} step={0.5} value={draft.estimate} onChange={(e) => setDraft({ ...draft, estimate: e.target.value })} />
+            </label>
             <div className="row end">
               {notice && (
                 <span role={notice.kind === "error" ? "alert" : "status"} className={notice.kind === "error" ? "error" : "muted"}>

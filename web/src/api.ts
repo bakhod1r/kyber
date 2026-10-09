@@ -16,6 +16,7 @@ export type Issue = {
   priority: Priority;
   assignee_id: string | null;
   reporter_id: string | null;
+  estimate: number | null;
   sprint_id: string | null;
   rank: string;
   version: number;
@@ -42,6 +43,21 @@ export type Notification = {
   created_at: string;
 };
 export type Inbox = { items: Notification[]; unread: number };
+export type Bucket = { key: string; count: number; points: number };
+export type ReportSummary = {
+  total: number; open: number; done: number; unassigned: number; total_points: number; open_points: number;
+  by_status: Bucket[]; by_type: Bucket[]; by_priority: Bucket[];
+  workload: { user_id: string | null; name: string; count: number; points: number }[];
+  cycle_time: { count: number; average_hours: number; median_hours: number };
+};
+export type DayStat = { date: string; created: number; resolved: number; cum_created: number; cum_resolved: number };
+export type BurndownSample = { at: string; remaining_points: number; remaining_issues: number };
+export type Burndown = {
+  sprint: { id: string; name: string; state: SprintState; started_at: string | null; ends_at: string | null; completed_at: string | null };
+  start_points: number; start_issues: number; added_points: number; added_issues: number; removed_issues: number;
+  samples: BurndownSample[]; ideal: BurndownSample[];
+};
+export type Velocity = { sprints: { id: string; name: string; committed_points: number; completed_points: number; completed_issues: number }[] };
 export type Completion = { sprint: Sprint; completed: number; returned: number };
 export type IssuePatch = {
   version: number;
@@ -50,6 +66,7 @@ export type IssuePatch = {
   priority?: Priority;
   assignee_id?: string | null;
   sprint_id?: string | null;
+  estimate?: number | null;
 };
 export type Comment = { id: string; author_id: string; author_name: string; body: string; created_at: string };
 export type Role = "admin" | "member" | "viewer";
@@ -123,7 +140,13 @@ export const api = {
   sprints: (key: string) => request<List<Sprint>>("GET", `/api/v1/projects/${seg(key)}/sprints`).then((r) => r.items),
   createSprint: (key: string, name: string, goal: string) =>
     request<Sprint>("POST", `/api/v1/projects/${seg(key)}/sprints`, { name, goal }),
-  startSprint: (id: string) => request<Sprint>("POST", `/api/v1/sprints/${seg(id)}/start`),
+  startSprint: (id: string, endsAt?: string) =>
+    request<Sprint>("POST", `/api/v1/sprints/${seg(id)}/start`, endsAt ? { ends_at: endsAt } : undefined),
+  reportSummary: (key: string) => request<ReportSummary>("GET", `/api/v1/projects/${seg(key)}/reports/summary`),
+  reportCreatedVsResolved: (key: string, days: number) =>
+    request<{ days: DayStat[] }>("GET", `/api/v1/projects/${seg(key)}/reports/created-vs-resolved?days=${days}`),
+  reportVelocity: (key: string) => request<Velocity>("GET", `/api/v1/projects/${seg(key)}/reports/velocity`),
+  burndown: (sprintId: string) => request<Burndown>("GET", `/api/v1/sprints/${seg(sprintId)}/burndown`),
   notifications: () => request<Inbox>("GET", "/api/v1/notifications"),
   markNotificationRead: (id: string) => request<undefined>("POST", `/api/v1/notifications/${seg(id)}/read`),
   markAllNotificationsRead: () => request<undefined>("POST", "/api/v1/notifications/read-all"),

@@ -37,7 +37,8 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
   });
 
   const start = useMutation({
-    mutationFn: (id: string) => api.startSprint(id),
+    mutationFn: ({ id, endDate }: { id: string; endDate: string }) =>
+      api.startSprint(id, endDate ? `${endDate}T23:59:59.000Z` : undefined),
     onMutate: () => setError(null),
     onError: (err) => setError(err.message),
     onSettled: refresh,
@@ -97,18 +98,17 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
                 <h2>
                   {sec.title} {sec.sprint && <span className={`state state-${sec.sprint.state}`}>{sec.sprint.state}</span>}
                   <span className="count">{rows.length}</span>
+                  {rows.some((i) => i.estimate !== null) && (
+                    <span className="count">{fmt(rows.reduce((sum, i) => sum + (i.estimate ?? 0), 0))} pts</span>
+                  )}
                 </h2>
                 {sec.sprint?.goal && <p className="muted goal">{sec.sprint.goal}</p>}
               </div>
               {sec.sprint?.state === "planned" && (
-                <button
-                  type="button"
+                <StartSprint
                   disabled={hasActive || start.isPending}
-                  title={hasActive ? "Complete the active sprint first" : undefined}
-                  onClick={() => start.mutate(sec.sprint!.id)}
-                >
-                  Start sprint
-                </button>
+                  onStart={(endDate) => start.mutate({ id: sec.sprint!.id, endDate })}
+                />
               )}
               {sec.sprint?.state === "active" && (
                 <button type="button" disabled={complete.isPending} onClick={() => complete.mutate(sec.sprint!.id)}>
@@ -136,6 +136,9 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
                   </button>
                   <span className={`status status-${i.status}`}>{i.status.replace("_", " ")}</span>
                   <span className={`prio prio-${i.priority}`} aria-label={`Priority: ${i.priority}`} />
+                  <span className="points" aria-label={i.estimate === null ? "Not estimated" : `Story points: ${fmt(i.estimate)}`}>
+                    {i.estimate === null ? "–" : fmt(i.estimate)}
+                  </span>
                   <small className="key">{i.key}</small>
                 </li>
               ))}
@@ -144,6 +147,24 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
         );
       })}
       <CreateSprint projectKey={projectKey} />
+    </div>
+  );
+}
+
+const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+
+function StartSprint({ disabled, onStart }: { disabled: boolean; onStart: (endDate: string) => void }) {
+  // Jira asks for the sprint length on start; two weeks is the default.
+  const [end, setEnd] = useState(() => new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10));
+  return (
+    <div className="start-sprint">
+      <label>
+        End date
+        <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+      </label>
+      <button type="button" disabled={disabled} title={disabled ? "Complete the active sprint first" : undefined} onClick={() => onStart(end)}>
+        Start sprint
+      </button>
     </div>
   );
 }

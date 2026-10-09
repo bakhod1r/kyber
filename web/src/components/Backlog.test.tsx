@@ -8,7 +8,7 @@ import { Board } from "./Board";
 
 const issue = (n: number, sprint: string | null, status: Issue["status"] = "todo"): Issue => ({
   id: `i-${n}`, key: `KYB-${n}`, title: `Issue ${n}`, type: "task", status,
-  description: "", priority: "medium", assignee_id: null, reporter_id: null, sprint_id: sprint, rank: `a${n}`, version: 1,
+  description: "", priority: "medium", assignee_id: null, reporter_id: null, estimate: null, sprint_id: sprint, rank: `a${n}`, version: 1,
 });
 const sprint = (id: string, name: string, state: Sprint["state"], goal = ""): Sprint => ({
   id, project_key: "KYB", name, goal, state, started_at: state === "planned" ? null : "2026-03-01T09:00:00Z", completed_at: null,
@@ -146,5 +146,33 @@ describe("Quick-add during an active sprint (Jira parity)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Add issue" }));
     expect(await within(screen.getByRole("region", { name: "To Do" })).findByText("Issue 7")).toBeInTheDocument();
     expect(calls.find((c) => c.key === "PATCH /api/v1/issues/KYB-7")?.body).toEqual({ version: 1, sprint_id: "s-1" });
+  });
+});
+
+describe("Estimates and sprint dates (KYB-S28 AC3)", () => {
+  it("backlog rows show story points and sections total them", async () => {
+    mockApi({
+      "GET /api/v1/projects/KYB/sprints": { status: 200, body: { items: [sprint("s-1", "Sprint 1", "planned")] } },
+      "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [{ ...issue(1, "s-1"), estimate: 3 }, { ...issue(2, "s-1"), estimate: 2.5 }, issue(3, null)] } },
+    });
+    renderWithProviders(<Backlog projectKey="KYB" />);
+    const s1 = await screen.findByRole("region", { name: "Sprint 1" });
+    expect(within(s1).getByLabelText("Story points: 3")).toBeInTheDocument();
+    expect(within(s1).getByText("5.5 pts")).toBeInTheDocument();
+  });
+
+  it("starting a sprint sends the chosen end date", async () => {
+    const calls = mockApi({
+      "GET /api/v1/projects/KYB/sprints": { status: 200, body: { items: [sprint("s-1", "Sprint 1", "planned")] } },
+      "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [] } },
+      "POST /api/v1/sprints/s-1/start": { status: 200, body: sprint("s-1", "Sprint 1", "active") },
+    });
+    renderWithProviders(<Backlog projectKey="KYB" />);
+    const s1 = await screen.findByRole("region", { name: "Sprint 1" });
+    const end = within(s1).getByLabelText("End date");
+    await userEvent.clear(end);
+    await userEvent.type(end, "2026-12-24");
+    await userEvent.click(within(s1).getByRole("button", { name: "Start sprint" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "POST /api/v1/sprints/s-1/start")?.body).toEqual({ ends_at: "2026-12-24T23:59:59.000Z" }));
   });
 });

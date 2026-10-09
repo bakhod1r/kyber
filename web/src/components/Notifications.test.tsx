@@ -30,7 +30,7 @@ describe("Notifications (KYB-S24)", () => {
       "GET /api/v1/projects/KYB/sprints": { status: 200, body: { items: [] } },
       "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [] } },
       "GET /api/v1/projects/KYB/members": { status: 200, body: { items: [] } },
-      "GET /api/v1/issues/KYB-1": { status: 200, body: { id: "i", key: "KYB-1", title: "Login page", type: "task", status: "todo", description: "", priority: "medium", assignee_id: null, reporter_id: null, sprint_id: null, rank: "a0", version: 1 } },
+      "GET /api/v1/issues/KYB-1": { status: 200, body: { id: "i", key: "KYB-1", title: "Login page", type: "task", status: "todo", description: "", priority: "medium", assignee_id: null, reporter_id: null, estimate: null, sprint_id: null, rank: "a0", version: 1 } },
       "GET /api/v1/issues/KYB-1/comments": { status: 200, body: { items: [] } },
     });
     renderWithProviders(<AppRoutes />, "/");
@@ -71,7 +71,7 @@ describe("Notifications (KYB-S24)", () => {
 describe("Issue panel people (KYB-S21 AC2, S24 AC3)", () => {
   it("shows the reporter and hints @email mentions", async () => {
     mockApi({
-      "GET /api/v1/issues/KYB-1": { status: 200, body: { id: "i", key: "KYB-1", title: "Login", type: "task", status: "todo", description: "", priority: "medium", assignee_id: null, reporter_id: "u-ali", sprint_id: null, rank: "a0", version: 1 } },
+      "GET /api/v1/issues/KYB-1": { status: 200, body: { id: "i", key: "KYB-1", title: "Login", type: "task", status: "todo", description: "", priority: "medium", assignee_id: null, reporter_id: "u-ali", estimate: null, sprint_id: null, rank: "a0", version: 1 } },
       "GET /api/v1/projects/KYB/members": { status: 200, body: { items: [{ user_id: "u-ali", email: "ali@x.uz", name: "Ali Valiyev", role: "admin" }] } },
       "GET /api/v1/issues/KYB-1/comments": { status: 200, body: { items: [] } },
     });

@@ -8,7 +8,7 @@ import { IssuePanel } from "./IssuePanel";
 
 const base: Issue = {
   id: "i-1", key: "KYB-1", title: "Login page", type: "task", status: "todo",
-  description: "Steps", priority: "medium", assignee_id: null, reporter_id: null, sprint_id: null, rank: "a1", version: 3,
+  description: "Steps", priority: "medium", assignee_id: null, reporter_id: null, estimate: null, sprint_id: null, rank: "a1", version: 3,
 };
 const members = {
   items: [
@@ -38,7 +38,7 @@ describe("IssuePanel (KYB-S17)", () => {
 
     await waitFor(() => expect(calls.some((c) => c.key === "PATCH /api/v1/issues/KYB-1")).toBe(true));
     expect(calls.find((c) => c.key === "PATCH /api/v1/issues/KYB-1")?.body).toEqual({
-      version: 3, title: "Login v2", description: "Steps", priority: "high", assignee_id: "u-bob",
+      version: 3, title: "Login v2", description: "Steps", priority: "high", assignee_id: "u-bob", estimate: null,
     });
     expect(await within(dialog).findByText("Saved")).toBeInTheDocument();
   });
@@ -112,5 +112,23 @@ describe("Board cards (KYB-S17 AC4)", () => {
     expect(await within(card).findByTitle("Ali Valiyev")).toHaveTextContent("AV");
     await userEvent.click(within(card).getByRole("button", { name: /Login page/ }));
     expect(onOpen).toHaveBeenCalledWith("KYB-1");
+  });
+});
+
+describe("Story points in the issue panel (KYB-S28 AC3)", () => {
+  it("edits the estimate", async () => {
+    const calls = mockApi({
+      "GET /api/v1/issues/KYB-1": { status: 200, body: { ...base, estimate: 3 } },
+      "GET /api/v1/projects/KYB/members": { status: 200, body: members },
+      "GET /api/v1/issues/KYB-1/comments": { status: 200, body: { items: [] } },
+      "PATCH /api/v1/issues/KYB-1": { status: 200, body: { ...base, estimate: 5, version: 4 } },
+    });
+    renderWithProviders(<IssuePanel issueKey="KYB-1" projectKey="KYB" onClose={vi.fn()} />);
+    const sp = await screen.findByLabelText("Story points");
+    await waitFor(() => expect(sp).toHaveValue(3));
+    await userEvent.clear(sp);
+    await userEvent.type(sp, "5");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "PATCH /api/v1/issues/KYB-1")?.body).toMatchObject({ version: 3, estimate: 5 }));
   });
 });
