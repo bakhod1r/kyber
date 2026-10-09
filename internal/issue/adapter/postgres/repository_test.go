@@ -25,7 +25,7 @@ func TestContract(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := pool.Exec(ctx, `INSERT INTO sprints (id, project_key, name, state) VALUES ($1, 'KYB', 'Sprint A', 'planned')`, repotest.SprintA); err != nil {
+		if _, err := pool.Exec(ctx, `INSERT INTO sprints (id, project_key, name, state, workspace_id) VALUES ($1, 'KYB', 'Sprint A', 'planned', '00000000-0000-4000-8000-000000000001')`, repotest.SprintA); err != nil {
 			t.Fatal(err)
 		}
 		outbox := outboxReader(t, pool)

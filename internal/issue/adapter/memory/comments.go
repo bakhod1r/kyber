@@ -20,11 +20,11 @@ func NewCommentRepository(issues *Repository) *CommentRepository {
 	return &CommentRepository{issues: issues}
 }
 
-func (r *CommentRepository) Add(_ context.Context, c *domain.Comment, events []domain.Event) error {
+func (r *CommentRepository) Add(ctx context.Context, c *domain.Comment, events []domain.Event) error {
 	r.mu.Lock()
 	r.comments = append(r.comments, *domain.RehydrateComment(c.ID(), c.IssueID(), c.Author(), c.Body(), c.CreatedAt()))
 	r.mu.Unlock()
-	r.issues.appendOutbox(events)
+	r.issues.appendOutbox(ctx, events)
 	return nil
 }
 

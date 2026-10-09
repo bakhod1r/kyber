@@ -15,3 +15,9 @@ func TestTenant(t *testing.T) {
 		t.Fatalf("scoped = %q %v", id, ok)
 	}
 }
+
+func TestWorkspaceDefault(t *testing.T) {
+	if tenant.Workspace(context.Background()) != tenant.Default || tenant.Workspace(tenant.With(context.Background(), "w")) != "w" {
+		t.Fatal("Workspace")
+	}
+}

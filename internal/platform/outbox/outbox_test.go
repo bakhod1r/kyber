@@ -3,6 +3,7 @@ package outbox_test
 import (
 	"context"
 	"errors"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 	"io"
 	"log/slog"
 	"strings"
@@ -97,11 +98,11 @@ func TestRelayRunStopsOnCancel(t *testing.T) {
 
 // stamped stamps every event with t0, as a repository would at write time.
 func stamped(log func() []outbox.Event) outbox.Source {
-	return func() ([]outbox.Event, []time.Time) {
+	return func() ([]outbox.Event, []outbox.Meta) {
 		events := log()
-		at := make([]time.Time, len(events))
+		at := make([]outbox.Meta, len(events))
 		for i := range at {
-			at[i] = t0
+			at[i] = outbox.Meta{At: t0, Workspace: "w-1"}
 		}
 		return events, at
 	}
@@ -116,5 +117,16 @@ func TestMemoryStoreKeepsRecordTime(t *testing.T) {
 	_, _ = store.Process(context.Background(), 10, func(m outbox.Message) error { got = m.At; return nil })
 	if !got.Equal(t0) {
 		t.Fatalf("At = %s, want the recording time %s", got, t0)
+	}
+}
+
+// Handlers run scoped to the event's workspace (ADR-0004 phase 2).
+func TestRelayScopesHandlersToTheWorkspace(t *testing.T) {
+	store := outbox.NewMemoryStore(stamped(func() []outbox.Event { return []outbox.Event{ev{"e"}} }))
+	relay := outbox.NewRelay(store, quiet())
+	var got string
+	relay.Handle("e", func(ctx context.Context, _ outbox.Message) error { got, _ = tenant.From(ctx); return nil })
+	if _, err := relay.ProcessOnce(context.Background()); err != nil || got != "w-1" {
+		t.Fatalf("tenant = %q, %v", got, err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 	"log/slog"
 	"sync"
 	"time"
@@ -19,10 +20,11 @@ type Event interface{ EventName() string }
 
 // Message is one stored event.
 type Message struct {
-	ID      int64
-	Name    string
-	Payload []byte
-	At      time.Time // when the event was recorded
+	ID        int64
+	Name      string
+	Payload   []byte
+	At        time.Time // when the event was recorded
+	Workspace string    // the tenant the event belongs to; handlers run scoped to it
 }
 
 // Store claims unpublished messages in order and marks those fn accepted as published.
@@ -59,8 +61,12 @@ func (r *Relay) ProcessOnce(ctx context.Context) (int, error) {
 		r.mu.RLock()
 		hs := r.handlers[m.Name]
 		r.mu.RUnlock()
+		hctx := ctx
+		if m.Workspace != "" {
+			hctx = tenant.With(ctx, m.Workspace)
+		}
 		for _, h := range hs {
-			if err := h(ctx, m); err != nil {
+			if err := h(hctx, m); err != nil {
 				return fmt.Errorf("outbox %d %s: %w", m.ID, m.Name, err)
 			}
 		}
@@ -84,9 +90,15 @@ func (r *Relay) Run(ctx context.Context, every time.Duration) {
 	})
 }
 
-// Source is an in-memory repository's full, append-only event log with the time each event
-// was recorded (like the outbox table's created_at).
-type Source func() ([]Event, []time.Time)
+// Meta is what the outbox table stores next to an event.
+type Meta struct {
+	At        time.Time
+	Workspace string
+}
+
+// Source is an in-memory repository's full, append-only event log with the time and
+// workspace of each event (like the outbox table's created_at and workspace_id).
+type Source func() ([]Event, []Meta)
 
 // MemoryStore relays events kept by in-memory repositories (dev mode and tests).
 type MemoryStore struct {
@@ -112,7 +124,7 @@ func (s *MemoryStore) Process(_ context.Context, limit int, fn func(Message) err
 				return 0, err
 			}
 			s.nextID++
-			s.pending = append(s.pending, Message{ID: s.nextID, Name: e.EventName(), Payload: payload, At: at[s.cursors[i]+j]})
+			s.pending = append(s.pending, Message{ID: s.nextID, Name: e.EventName(), Payload: payload, At: at[s.cursors[i]+j].At, Workspace: at[s.cursors[i]+j].Workspace})
 		}
 		s.cursors[i] = len(events)
 	}

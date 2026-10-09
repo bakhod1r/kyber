@@ -4,6 +4,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -41,7 +42,7 @@ func (r *Repository) Create(ctx context.Context, p *domain.Project) error {
 // Update locks the project row (SELECT … FOR UPDATE) for the duration of fn.
 func (r *Repository) Update(ctx context.Context, key string, fn func(*domain.Project) error) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		p, err := load(ctx, tx, `WHERE key = $1 FOR UPDATE`, key)
+		p, err := load(ctx, tx, `WHERE workspace_id = $2 AND key = $1 FOR UPDATE`, key, tenant.Workspace(ctx))
 		if err != nil {
 			return err
 		}
@@ -57,12 +58,12 @@ func (r *Repository) Update(ctx context.Context, key string, fn func(*domain.Pro
 }
 
 func (r *Repository) ByKey(ctx context.Context, key string) (*domain.Project, error) {
-	return load(ctx, r.pool, `WHERE key = $1`, key)
+	return load(ctx, r.pool, `WHERE workspace_id = $2 AND key = $1`, key, tenant.Workspace(ctx))
 }
 
 func (r *Repository) ListForUser(ctx context.Context, u domain.UserID) ([]*domain.Project, error) {
 	rows, err := r.pool.Query(ctx, `SELECT p.key FROM projects p
-		JOIN project_members m ON m.project_id = p.id WHERE m.user_id = $1 ORDER BY p.key`, string(u))
+		JOIN project_members m ON m.project_id = p.id WHERE m.user_id = $1 AND p.workspace_id = $2 ORDER BY p.key`, string(u), tenant.Workspace(ctx))
 	if err != nil {
 		return nil, err
 	}

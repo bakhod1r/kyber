@@ -146,7 +146,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		sprints: sprintRepo, notes: notifymemory.NewRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
-		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxTimes), events(sprintRepo.Outbox, sprintRepo.OutboxTimes)),
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
@@ -156,8 +156,8 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 }
 
 // events adapts a context's typed event log to the relay's generic one.
-func events[E outbox.Event](log func() []E, times func() []time.Time) outbox.Source {
-	return func() ([]outbox.Event, []time.Time) {
+func events[E outbox.Event](log func() []E, times func() []outbox.Meta) outbox.Source {
+	return func() ([]outbox.Event, []outbox.Meta) {
 		at := times() // read first: never more times than events
 		src := log()[:len(at)]
 		out := make([]outbox.Event, len(src))

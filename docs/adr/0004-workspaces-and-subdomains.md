@@ -47,3 +47,12 @@ the hosted service, while a self-hosted single-company install must keep working
 - **Limitation:** project keys are still unique per installation (they are foreign keys in issues and
   sprints); per-workspace key namespaces are phase 2. The apex → subdomain session hand-off (needed for
   Google/Telegram sign-in on subdomains) is also phase 2; password login works on each subdomain.
+
+## Implementation note — phase 2 (shipped)
+- Project keys are unique **per workspace** (`UNIQUE (workspace_id, key)`); issues, sprints, the activity log and
+  import mappings carry `workspace_id` and reference projects by `(workspace_id, key)` (migration 0017).
+- Repositories scope every query to the request's workspace (`tenant.Workspace(ctx)`; unscoped calls mean the
+  default workspace). Domain models are unchanged — the workspace is infrastructure context.
+- The outbox stores each event's workspace; the relay runs handlers with that workspace in the context, so
+  projections and notifications stay inside their tenant.
+- Remaining for phase 3: apex → subdomain session hand-off for Google/Telegram sign-in; Postgres RLS.

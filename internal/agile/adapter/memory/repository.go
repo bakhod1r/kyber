@@ -3,6 +3,8 @@ package memory
 
 import (
 	"context"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 	"sort"
 	"sync"
 	"time"
@@ -12,7 +14,8 @@ import (
 
 type entry struct {
 	snap domain.Snapshot
-	seq  int // creation order
+	seq  int    // creation order
+	ws   string // workspace (ADR-0004 phase 2)
 }
 
 type Repository struct {
@@ -20,7 +23,7 @@ type Repository struct {
 	byID   map[domain.SprintID]entry
 	seq    int
 	outbox []domain.Event
-	outAt  []time.Time // when each event was recorded (the outbox created_at)
+	outAt  []outbox.Meta // when and in which workspace each event was recorded
 }
 
 func NewRepository() *Repository { return &Repository{byID: map[domain.SprintID]entry{}} }
@@ -30,36 +33,39 @@ func snapshot(s *domain.Sprint) domain.Snapshot {
 		StartedAt: s.StartedAt(), EndsAt: s.EndsAt(), CompletedAt: s.CompletedAt(), Version: s.Version()}
 }
 
-func (r *Repository) Save(_ context.Context, s *domain.Sprint, events []domain.Event) error {
+func (r *Repository) Save(ctx context.Context, s *domain.Sprint, events []domain.Event) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if s.State() == domain.StateActive {
 		for id, e := range r.byID {
-			if id != s.ID() && e.snap.Project == s.Project() && e.snap.State == domain.StateActive {
+			if id != s.ID() && e.ws == tenant.Workspace(ctx) && e.snap.Project == s.Project() && e.snap.State == domain.StateActive {
 				return domain.ErrAnotherSprintLive
 			}
 		}
 	}
 	e, ok := r.byID[s.ID()]
+	if ok && e.ws != tenant.Workspace(ctx) {
+		return domain.ErrSprintConflict // another workspace's sprint
+	}
 	if ok != (s.Version() > 0) || (ok && e.snap.Version != s.Version()) {
 		return domain.ErrSprintConflict
 	}
 	if !ok {
 		r.seq++
-		e.seq = r.seq
+		e.seq, e.ws = r.seq, tenant.Workspace(ctx)
 	}
 	s.MarkPersisted()
 	e.snap = snapshot(s)
 	r.byID[s.ID()] = e
-	r.outbox, r.outAt = append(r.outbox, events...), appendNow(r.outAt, len(events))
+	r.outbox, r.outAt = append(r.outbox, events...), appendNow(ctx, r.outAt, len(events))
 	return nil
 }
 
-func (r *Repository) ByID(_ context.Context, id domain.SprintID) (*domain.Sprint, error) {
+func (r *Repository) ByID(ctx context.Context, id domain.SprintID) (*domain.Sprint, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	e, ok := r.byID[id]
-	if !ok {
+	if !ok || e.ws != tenant.Workspace(ctx) {
 		return nil, domain.ErrSprintNotFound
 	}
 	return domain.Rehydrate(e.snap), nil
@@ -75,12 +81,12 @@ func stateOrder(s domain.State) int {
 	return 2
 }
 
-func (r *Repository) ListByProject(_ context.Context, project string) ([]*domain.Sprint, error) {
+func (r *Repository) ListByProject(ctx context.Context, project string) ([]*domain.Sprint, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var list []entry
 	for _, e := range r.byID {
-		if e.snap.Project == project {
+		if e.ws == tenant.Workspace(ctx) && e.snap.Project == project {
 			list = append(list, e)
 		}
 	}
@@ -119,17 +125,17 @@ func (r *Repository) Outbox() []domain.Event {
 	return append([]domain.Event(nil), r.outbox...)
 }
 
-func appendNow(ts []time.Time, n int) []time.Time {
-	now := time.Now()
+func appendNow(ctx context.Context, ts []outbox.Meta, n int) []outbox.Meta {
+	m := outbox.Meta{At: time.Now(), Workspace: tenant.Workspace(ctx)}
 	for range n {
-		ts = append(ts, now)
+		ts = append(ts, m)
 	}
 	return ts
 }
 
-// OutboxTimes are the recording times of Outbox(), index by index.
-func (r *Repository) OutboxTimes() []time.Time {
+// OutboxMeta is the recording time and workspace of Outbox(), index by index.
+func (r *Repository) OutboxMeta() []outbox.Meta {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return append([]time.Time(nil), r.outAt...)
+	return append([]outbox.Meta(nil), r.outAt...)
 }

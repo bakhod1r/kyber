@@ -31,5 +31,5 @@ Simplified workflow (any → any), Assignable User (no viewer assignees), Work O
 no meetings in the past, idempotent re-import of a project's own export.
 
 ## Open
-- **QA-1 (High):** project keys are unique per installation, not per workspace (key existence across tenants) — next story.
+- ~~QA-1 (High): project keys unique per installation~~ — fixed: keys are per workspace (migration 0017, ADR-0004 phase 2), acceptance test on all backends.
 - Mentions use `@email` inserted by the autocomplete (Jira stores account ids); `@name` free text is not parsed.

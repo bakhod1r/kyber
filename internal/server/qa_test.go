@@ -132,3 +132,57 @@ func TestQAParity(t *testing.T) {
 		}
 	})
 }
+
+// QA-1: project keys are per workspace, like Jira sites — two tenants can both have KYB.
+func TestQA1KeysPerWorkspace(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		apex := on(anon, "kyber.test")
+		ann := apex.signedIn("ann@x.uz")
+		bob := apex.signedIn("bob@x.uz")
+		ann.do("POST", "/api/v1/workspaces", map[string]string{"slug": "acme", "name": "Acme"})
+		bob.do("POST", "/api/v1/workspaces", map[string]string{"slug": "zeta", "name": "Zeta"})
+		acme, zeta := on(ann, "acme.kyber.test"), on(bob, "zeta.kyber.test")
+		for _, w := range []struct {
+			c     *client
+			title string
+		}{{acme, "Acme secret"}, {zeta, "Zeta secret"}} {
+			code, b := w.c.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+			expect(t, code, 201, b)
+			code, b = w.c.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": w.title, "type": "task"})
+			if code != 201 || b["key"] != "KYB-1" {
+				t.Fatalf("issue = %d %v", code, b)
+			}
+			_, sp := w.c.do("POST", "/api/v1/projects/KYB/sprints", map[string]string{"name": "S1"})
+			_, is := w.c.do("GET", "/api/v1/issues/KYB-1", nil)
+			w.c.do("PATCH", "/api/v1/issues/KYB-1", map[string]any{"version": is["version"], "sprint_id": sp["id"], "estimate": 3})
+			code, b = w.c.do("POST", "/api/v1/sprints/"+sp["id"].(string)+"/start", nil)
+			expect(t, code, 200, b)
+		}
+		for _, w := range []struct {
+			c     *client
+			title string
+		}{{acme, "Acme secret"}, {zeta, "Zeta secret"}} {
+			_, is := w.c.do("GET", "/api/v1/issues/KYB-1", nil)
+			if is["title"] != w.title {
+				t.Fatalf("KYB-1 = %v, want %q", is["title"], w.title)
+			}
+			_, list := w.c.do("GET", "/api/v1/projects/KYB/issues", nil)
+			if n := len(list["items"].([]any)); n != 1 {
+				t.Fatalf("issues = %d", n)
+			}
+			eventuallyJSON(t, w.c, "/api/v1/projects/KYB/reports/summary", func(b map[string]any) bool { return b["total"] == float64(1) })
+			res := w.c.raw("GET", "/api/v1/projects/KYB/export.csv", nil, nil)
+			body, _ := io.ReadAll(res.Body)
+			res.Body.Close()
+			if !strings.Contains(string(body), w.title) || strings.Count(string(body), "secret") != 1 {
+				t.Fatalf("export = %s", body)
+			}
+			code, s := w.c.do("POST", "/api/v1/focus", map[string]any{"issue_key": "KYB-1", "minutes": 15})
+			expect(t, code, 201, s)
+			_, log := w.c.do("GET", "/api/v1/issues/KYB-1/focus", nil)
+			if n := len(log["items"].([]any)); n != 1 {
+				t.Fatalf("focus log = %d", n)
+			}
+		}
+	}, server.WithBaseDomain("kyber.test"))
+}

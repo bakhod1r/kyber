@@ -40,9 +40,9 @@ func TestTenantIsolation(t *testing.T) {
 	if err := s.Authorize(acme, alice, "KYB", domain.PermAdmin); err != nil {
 		t.Fatal(err)
 	}
-	// Internal callers (relay handlers, jobs) are not tenant-scoped.
-	if err := s.Authorize(context.Background(), alice, "KYB", domain.PermRead); err != nil {
-		t.Fatal(err)
+	// Unscoped callers see the default workspace only (the relay scopes handlers to each event's workspace).
+	if err := s.Authorize(context.Background(), alice, "KYB", domain.PermRead); !errors.Is(err, domain.ErrProjectNotFound) {
+		t.Fatalf("unscoped err = %v", err)
 	}
 	// Without a tenant, new projects go to the default workspace (single-tenant mode).
 	q, _ := s.Create(context.Background(), bob, "OPS", "Ops")
@@ -75,7 +75,7 @@ func TestSetMemberJoinsWorkspace(t *testing.T) {
 func TestWorkspaceOf(t *testing.T) {
 	s := newService(t)
 	_, _ = s.Create(tenant.With(context.Background(), "w-acme"), alice, "KYB", "Kyber")
-	if ws, err := s.WorkspaceOf(context.Background(), "KYB"); err != nil || ws != "w-acme" {
+	if ws, err := s.WorkspaceOf(tenant.With(context.Background(), "w-acme"), "KYB"); err != nil || ws != "w-acme" {
 		t.Fatalf("WorkspaceOf = %q %v", ws, err)
 	}
 	if _, err := s.WorkspaceOf(context.Background(), "NOPE"); !errors.Is(err, domain.ErrProjectNotFound) {

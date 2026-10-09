@@ -3,6 +3,7 @@ package memory
 
 import (
 	"context"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 	"sort"
 	"sync"
 
@@ -21,19 +22,24 @@ func clone(p *domain.Project) *domain.Project {
 	return domain.Rehydrate(p.ID(), p.Workspace(), p.Key(), p.Name(), p.IssueSeq(), p.Members())
 }
 
+// slot is the map key: project keys are unique per workspace (ADR-0004 phase 2).
+func slot(ws, key string) string { return ws + "/" + key }
+
 func (r *Repository) Create(_ context.Context, p *domain.Project) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.byKey[p.Key()]; ok {
+	k := slot(string(p.Workspace()), p.Key())
+	if _, ok := r.byKey[k]; ok {
 		return domain.ErrKeyTaken
 	}
-	r.byKey[p.Key()] = clone(p)
+	r.byKey[k] = clone(p)
 	return nil
 }
 
-func (r *Repository) Update(_ context.Context, key string, fn func(*domain.Project) error) error {
+func (r *Repository) Update(ctx context.Context, key string, fn func(*domain.Project) error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	key = slot(tenant.Workspace(ctx), key)
 	p, ok := r.byKey[key]
 	if !ok {
 		return domain.ErrProjectNotFound
@@ -46,22 +52,23 @@ func (r *Repository) Update(_ context.Context, key string, fn func(*domain.Proje
 	return nil
 }
 
-func (r *Repository) ByKey(_ context.Context, key string) (*domain.Project, error) {
+func (r *Repository) ByKey(ctx context.Context, key string) (*domain.Project, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	p, ok := r.byKey[key]
+	p, ok := r.byKey[slot(tenant.Workspace(ctx), key)]
 	if !ok {
 		return nil, domain.ErrProjectNotFound
 	}
 	return clone(p), nil
 }
 
-func (r *Repository) ListForUser(_ context.Context, u domain.UserID) ([]*domain.Project, error) {
+func (r *Repository) ListForUser(ctx context.Context, u domain.UserID) ([]*domain.Project, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	ws := domain.WorkspaceID(tenant.Workspace(ctx))
 	var out []*domain.Project
 	for _, p := range r.byKey {
-		if _, ok := p.RoleOf(u); ok {
+		if _, ok := p.RoleOf(u); ok && p.Workspace() == ws {
 			out = append(out, clone(p))
 		}
 	}

@@ -17,14 +17,14 @@ func (s *PostgresStore) Process(ctx context.Context, limit int, fn func(Message)
 	var published int
 	var handlerErr error
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT id, name, payload, created_at FROM outbox WHERE published_at IS NULL
+		rows, err := tx.Query(ctx, `SELECT id, name, payload, created_at, workspace_id::text FROM outbox WHERE published_at IS NULL
 			ORDER BY id LIMIT $1 FOR UPDATE SKIP LOCKED`, limit)
 		if err != nil {
 			return err
 		}
 		msgs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Message, error) {
 			var m Message
-			err := row.Scan(&m.ID, &m.Name, &m.Payload, &m.At)
+			err := row.Scan(&m.ID, &m.Name, &m.Payload, &m.At, &m.Workspace)
 			return m, err
 		})
 		if err != nil {

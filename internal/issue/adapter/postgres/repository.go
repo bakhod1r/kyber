@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,19 +24,19 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 		var err error
 		if is.Version() == 0 {
 			tag, err = tx.Exec(ctx, `INSERT INTO issues (id, project_key, number, title, type, status,
-				description, priority, assignee_id, rank, sprint_id, reporter_id, estimate_tenths, version)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1) ON CONFLICT DO NOTHING`,
+				description, priority, assignee_id, rank, sprint_id, reporter_id, estimate_tenths, version, workspace_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, $14) ON CONFLICT DO NOTHING`,
 				string(is.ID()), is.Key().Project(), is.Key().Number(), is.Title(), string(is.Type()), string(is.Status()),
 				is.Description(), string(is.Priority()), nullable(string(is.Assignee())), string(is.Rank()),
-				nullable(string(is.Sprint())), nullable(string(is.Reporter())), estimateCol(is))
+				nullable(string(is.Sprint())), nullable(string(is.Reporter())), estimateCol(is), tenant.Workspace(ctx))
 		} else {
 			tag, err = tx.Exec(ctx, `UPDATE issues SET title = $2, type = $3, status = $4, description = $5,
 				priority = $6, assignee_id = $7, rank = $8, sprint_id = $9, estimate_tenths = $11,
 				version = version + 1, updated_at = now()
-				WHERE id = $1 AND version = $10`,
+				WHERE id = $1 AND version = $10 AND workspace_id = $12`,
 				string(is.ID()), is.Title(), string(is.Type()), string(is.Status()), is.Description(),
 				string(is.Priority()), nullable(string(is.Assignee())), string(is.Rank()), nullable(string(is.Sprint())),
-				is.Version(), estimateCol(is))
+				is.Version(), estimateCol(is), tenant.Workspace(ctx))
 		}
 		if err != nil {
 			return err
@@ -56,7 +57,7 @@ const selectCols = `SELECT id::text, project_key, number, title, type, status, d
 	COALESCE(assignee_id::text, ''), rank, COALESCE(sprint_id::text, ''), COALESCE(reporter_id::text, ''), estimate_tenths, version FROM issues`
 
 func (r *Repository) ByKey(ctx context.Context, key domain.IssueKey) (*domain.Issue, error) {
-	is, err := scan(r.pool.QueryRow(ctx, selectCols+` WHERE project_key = $1 AND number = $2`, key.Project(), key.Number()))
+	is, err := scan(r.pool.QueryRow(ctx, selectCols+` WHERE workspace_id = $3 AND project_key = $1 AND number = $2`, key.Project(), key.Number(), tenant.Workspace(ctx)))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrIssueNotFound
 	}
@@ -64,7 +65,7 @@ func (r *Repository) ByKey(ctx context.Context, key domain.IssueKey) (*domain.Is
 }
 
 func (r *Repository) ListByProject(ctx context.Context, project string, f domain.ListFilter) ([]*domain.Issue, error) {
-	where, args := `WHERE project_key = $1`, []any{project}
+	where, args := `WHERE workspace_id = $2 AND project_key = $1`, []any{project, tenant.Workspace(ctx)}
 	if f.Status != nil {
 		args = append(args, string(*f.Status))
 		where += fmt.Sprintf(` AND status = $%d`, len(args))
@@ -94,15 +95,15 @@ func (r *Repository) ListByProject(ctx context.Context, project string, f domain
 }
 
 func (r *Repository) LastRank(ctx context.Context, project string) (domain.Rank, error) {
-	return r.rankQuery(ctx, `SELECT rank FROM issues WHERE project_key = $1 ORDER BY rank DESC LIMIT 1`, project)
+	return r.rankQuery(ctx, `SELECT rank FROM issues WHERE workspace_id = $2 AND project_key = $1 ORDER BY rank DESC LIMIT 1`, project, tenant.Workspace(ctx))
 }
 
 func (r *Repository) NextRank(ctx context.Context, project string, after domain.Rank) (domain.Rank, error) {
-	return r.rankQuery(ctx, `SELECT rank FROM issues WHERE project_key = $1 AND rank > $2 ORDER BY rank LIMIT 1`, project, string(after))
+	return r.rankQuery(ctx, `SELECT rank FROM issues WHERE workspace_id = $3 AND project_key = $1 AND rank > $2 ORDER BY rank LIMIT 1`, project, string(after), tenant.Workspace(ctx))
 }
 
 func (r *Repository) PrevRank(ctx context.Context, project string, before domain.Rank) (domain.Rank, error) {
-	return r.rankQuery(ctx, `SELECT rank FROM issues WHERE project_key = $1 AND rank < $2 ORDER BY rank DESC LIMIT 1`, project, string(before))
+	return r.rankQuery(ctx, `SELECT rank FROM issues WHERE workspace_id = $3 AND project_key = $1 AND rank < $2 ORDER BY rank DESC LIMIT 1`, project, string(before), tenant.Workspace(ctx))
 }
 
 func (r *Repository) rankQuery(ctx context.Context, sql string, args ...any) (domain.Rank, error) {

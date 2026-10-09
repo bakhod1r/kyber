@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -18,7 +19,8 @@ func WriteOutbox[E Event](ctx context.Context, tx pgx.Tx, events []E) error {
 		if err != nil {
 			return fmt.Errorf("marshal %s: %w", e.EventName(), err)
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO outbox (name, payload) VALUES ($1, $2)`, e.EventName(), payload); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO outbox (name, payload, workspace_id) VALUES ($1, $2, $3)`,
+			e.EventName(), payload, tenant.Workspace(ctx)); err != nil {
 			return err
 		}
 	}

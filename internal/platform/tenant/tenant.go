@@ -19,3 +19,11 @@ func From(ctx context.Context) (string, bool) {
 	id, ok := ctx.Value(key{}).(string)
 	return id, ok
 }
+
+// Workspace is the request's workspace, or the default one for unscoped calls.
+func Workspace(ctx context.Context) string {
+	if id, ok := From(ctx); ok {
+		return id
+	}
+	return Default
+}
