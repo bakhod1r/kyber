@@ -17,14 +17,23 @@ export const STATUSES: { id: Status; label: string }[] = [
 
 export const ISSUE_TYPES: IssueType[] = ["task", "story", "bug", "epic", "subtask"];
 
+/** RFC 9457 problem details as returned by the API (application/problem+json). */
+export type Problem = { type: string; title: string; status: number; code: string; detail?: string; numeric_code?: number };
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Stable Kyber error code (e.g. ISSUE_CONFLICT) — branch on this, not on message text. */
+    readonly code: string = "",
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+function isProblem(v: unknown): v is Problem {
+  return typeof v === "object" && v !== null && "title" in v && typeof v.title === "string";
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -37,11 +46,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const text = await res.text();
   const data: unknown = text ? JSON.parse(text) : undefined;
   if (!res.ok) {
-    const message =
-      typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
-        ? data.error
-        : `request failed (${res.status})`;
-    throw new ApiError(res.status, message);
+    if (isProblem(data)) throw new ApiError(res.status, data.detail || data.title, data.code);
+    throw new ApiError(res.status, `request failed (${res.status})`);
   }
   return data as T;
 }

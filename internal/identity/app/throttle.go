@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -8,81 +9,65 @@ import (
 )
 
 const (
-	maxFailures    = 5
-	throttleWindow = 15 * time.Minute
+	// LoginAttempts per LoginWindow are allowed for one email+IP pair.
+	LoginAttempts = 10
+	LoginWindow   = 15 * time.Minute
 )
 
-// TooManyAttemptsError is returned while an email+IP pair is locked out.
+// LoginLimiter counts login attempts per key. Production uses guard/ratelimit on
+// Redis (shared by all replicas); the default is an in-process sliding window.
+type LoginLimiter interface {
+	Allow(ctx context.Context, key string) (allowed bool, retryAfter time.Duration, err error)
+}
+
+// TooManyAttemptsError is returned while an email+IP pair is over its limit.
 type TooManyAttemptsError struct{ RetryAfter time.Duration }
 
 func (e *TooManyAttemptsError) Error() string {
 	return fmt.Sprintf("too many login attempts, retry in %s", e.RetryAfter.Round(time.Second))
 }
 
-// throttle counts failed logins per email+IP in a fixed window.
-// It is per-process: multi-instance deployments need a shared store (tracked in docs/qa).
-type throttle struct {
-	mu      sync.Mutex
-	clock   Clock
-	entries map[string]attempts
-}
-
-type attempts struct {
-	failures int
-	since    time.Time
-}
-
-func newThrottle(c Clock) *throttle { return &throttle{clock: c, entries: map[string]attempts{}} }
-
 func throttleKey(email, ip string) string {
-	return strings.ToLower(strings.TrimSpace(email)) + "|" + ip
+	return "login:" + strings.ToLower(strings.TrimSpace(email)) + "|" + ip
 }
 
-func (t *throttle) check(key string) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	a, ok := t.entries[key]
-	if !ok {
-		return nil
-	}
-	elapsed := t.clock.Now().Sub(a.since)
-	if elapsed >= throttleWindow {
-		delete(t.entries, key)
-		return nil
-	}
-	if a.failures >= maxFailures {
-		return &TooManyAttemptsError{RetryAfter: throttleWindow - elapsed}
-	}
-	return nil
+// localLimiter is a per-process sliding-window log (single-instance deployments only).
+type localLimiter struct {
+	mu    sync.Mutex
+	clock Clock
+	hits  map[string][]time.Time
 }
 
-func (t *throttle) fail(key string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	a, ok := t.entries[key]
-	if !ok || t.clock.Now().Sub(a.since) >= throttleWindow {
-		a = attempts{since: t.clock.Now()}
-	}
-	a.failures++
-	t.entries[key] = a
-	t.gc()
+func newLocalLimiter(c Clock) *localLimiter {
+	return &localLimiter{clock: c, hits: map[string][]time.Time{}}
 }
 
-func (t *throttle) reset(key string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	delete(t.entries, key)
+func (l *localLimiter) Allow(_ context.Context, key string) (bool, time.Duration, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.clock.Now()
+	recent := l.hits[key][:0]
+	for _, t := range l.hits[key] {
+		if now.Sub(t) < LoginWindow {
+			recent = append(recent, t)
+		}
+	}
+	if len(recent) >= LoginAttempts {
+		l.hits[key] = recent
+		return false, LoginWindow - now.Sub(recent[0]), nil
+	}
+	l.hits[key] = append(recent, now)
+	if len(l.hits) > 10_000 {
+		l.gc(now)
+	}
+	return true, 0, nil
 }
 
-// gc bounds memory by dropping expired windows once the map grows large.
-func (t *throttle) gc() {
-	if len(t.entries) < 10_000 {
-		return
-	}
-	now := t.clock.Now()
-	for k, a := range t.entries {
-		if now.Sub(a.since) >= throttleWindow {
-			delete(t.entries, k)
+// gc bounds memory by dropping keys whose window has fully expired.
+func (l *localLimiter) gc(now time.Time) {
+	for k, ts := range l.hits {
+		if len(ts) == 0 || now.Sub(ts[len(ts)-1]) >= LoginWindow {
+			delete(l.hits, k)
 		}
 	}
 }

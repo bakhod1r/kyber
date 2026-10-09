@@ -8,7 +8,7 @@ const me = { id: "u-1", email: "ali@x.uz", name: "Ali" };
 
 describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
   it("redirects anonymous users to the login page", async () => {
-    mockApi({ "GET /api/v1/me": { status: 401, body: { error: "authentication required" } } });
+    mockApi({ "GET /api/v1/me": { status: 401, body: { type: "about:blank", title: "Error", status: 400, code: "TEST", detail: "authentication required" } } });
     renderWithProviders(<AppRoutes />, "/");
     expect(await screen.findByRole("heading", { name: "Log in to Kyber" })).toBeInTheDocument();
   });
@@ -16,7 +16,7 @@ describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
   it("logs in and shows the user's projects", async () => {
     let loggedIn = false;
     const calls = mockApi({
-      "GET /api/v1/me": () => (loggedIn ? { status: 200, body: me } : { status: 401, body: { error: "authentication required" } }),
+      "GET /api/v1/me": () => (loggedIn ? { status: 200, body: me } : { status: 401, body: { type: "about:blank", title: "Error", status: 400, code: "TEST", detail: "authentication required" } }),
       "POST /api/v1/auth/login": () => {
         loggedIn = true;
         return { status: 200, body: { token: "t" } };
@@ -36,7 +36,7 @@ describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
   it("regression: logging in after being redirected from / lands on projects", async () => {
     let loggedIn = false;
     mockApi({
-      "GET /api/v1/me": () => (loggedIn ? { status: 200, body: me } : { status: 401, body: { error: "authentication required" } }),
+      "GET /api/v1/me": () => (loggedIn ? { status: 200, body: me } : { status: 401, body: { type: "about:blank", title: "Error", status: 400, code: "TEST", detail: "authentication required" } }),
       "POST /api/v1/auth/login": () => {
         loggedIn = true;
         return { status: 200, body: { token: "t" } };
@@ -52,8 +52,8 @@ describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
 
   it("shows login errors from the server", async () => {
     mockApi({
-      "GET /api/v1/me": { status: 401, body: { error: "authentication required" } },
-      "POST /api/v1/auth/login": { status: 401, body: { error: "invalid email or password" } },
+      "GET /api/v1/me": { status: 401, body: { type: "about:blank", title: "Error", status: 400, code: "TEST", detail: "authentication required" } },
+      "POST /api/v1/auth/login": { status: 401, body: { type: "about:blank", title: "Error", status: 400, code: "TEST", detail: "invalid email or password" } },
     });
     renderWithProviders(<AppRoutes />, "/login");
     await userEvent.type(await screen.findByLabelText("Email"), "ali@x.uz");
@@ -65,7 +65,7 @@ describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
   it("signs up, then logs in automatically", async () => {
     let loggedIn = false;
     const calls = mockApi({
-      "GET /api/v1/me": () => (loggedIn ? { status: 200, body: me } : { status: 401, body: { error: "authentication required" } }),
+      "GET /api/v1/me": () => (loggedIn ? { status: 200, body: me } : { status: 401, body: { type: "about:blank", title: "Error", status: 400, code: "TEST", detail: "authentication required" } }),
       "POST /api/v1/auth/signup": { status: 201, body: me },
       "POST /api/v1/auth/login": () => {
         loggedIn = true;

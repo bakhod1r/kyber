@@ -42,3 +42,9 @@ notifications, attachments, custom fields, backlog/sprints (Sprint 05).
 
 ### Decision recorded
 - ADR-0002: persistence stays hand-written `pgx` behind DDD repository ports — no `sqlc`, no ORM.
+
+### KYB-S12 (revised) — Login throttling on a shared store  ·  P0
+Revises Sprint 03 S12 so the limit holds across replicas, using `guard/ratelimit` (Redis sliding window).
+- AC1: at most **10 login attempts per email+IP per 15 minutes** (every attempt counts, success included) → `429` + `Retry-After`.
+- AC2: with `KYBER_REDIS_URL` set the limit is shared by all instances; without it an in-process limiter applies (single instance only).
+- Replaces "success resets the counter": guard's limiter counts attempts, which also caps password-spraying with a known-good account.

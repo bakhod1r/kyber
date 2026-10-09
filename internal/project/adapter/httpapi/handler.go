@@ -37,29 +37,33 @@ func toDTO(p *domain.Project) projectDTO {
 	return projectDTO{ID: string(p.ID()), Key: p.Key(), Name: p.Name()}
 }
 
-func statusFor(err error) (int, bool) {
+func codeFor(err error) (string, bool) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidKey), errors.Is(err, domain.ErrEmptyName), errors.Is(err, domain.ErrInvalidRole):
-		return http.StatusUnprocessableEntity, true
-	case errors.Is(err, domain.ErrKeyTaken), errors.Is(err, domain.ErrLastAdmin):
-		return http.StatusConflict, true
-	case errors.Is(err, domain.ErrProjectNotFound), errors.Is(err, app.ErrUnknownUser):
-		return http.StatusNotFound, true
+		return httpx.CodeValidation, true
+	case errors.Is(err, domain.ErrKeyTaken):
+		return httpx.CodeProjectKeyTaken, true
+	case errors.Is(err, domain.ErrLastAdmin):
+		return httpx.CodeLastAdmin, true
+	case errors.Is(err, domain.ErrProjectNotFound):
+		return httpx.CodeProjectNotFound, true
+	case errors.Is(err, app.ErrUnknownUser):
+		return httpx.CodeUserNotFound, true
 	case errors.Is(err, domain.ErrForbidden):
-		return http.StatusForbidden, true
+		return httpx.CodeForbidden, true
 	}
-	return 0, false
+	return "", false
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var in struct{ Key, Name string }
 	if err := httpx.Decode(r, &in); err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	p, err := h.svc.Create(r.Context(), actor(r), in.Key, in.Name)
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, toDTO(p))
@@ -68,7 +72,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	p, err := h.svc.Get(r.Context(), actor(r), r.PathValue("key"))
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, toDTO(p))
@@ -77,7 +81,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	ps, err := h.svc.List(r.Context(), actor(r))
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	items := make([]projectDTO, 0, len(ps))
@@ -99,7 +103,7 @@ type memberDTO struct {
 func (h *Handler) members(w http.ResponseWriter, r *http.Request) {
 	ms, err := h.svc.Members(r.Context(), actor(r), r.PathValue("key"))
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	items := make([]memberDTO, 0, len(ms))
@@ -112,11 +116,11 @@ func (h *Handler) members(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) setMember(w http.ResponseWriter, r *http.Request) {
 	var in struct{ Email, Role string }
 	if err := httpx.Decode(r, &in); err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	if err := h.svc.SetMember(r.Context(), actor(r), r.PathValue("key"), in.Email, in.Role); err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/bakhod1r/jitterx"
@@ -30,12 +31,25 @@ type Service struct {
 	clock    Clock
 	newID    func() string
 	dummy    string // hash verified for unknown users to equalise timing
-	throttle *throttle
+	limiter  LoginLimiter
 }
 
-func NewService(users domain.Users, sessions domain.Sessions, hasher domain.PasswordHasher, clock Clock, newID func() string) *Service {
+// Option customises the service.
+type Option func(*Service)
+
+// WithLoginLimiter replaces the in-process limiter (e.g. with guard's Redis limiter).
+func WithLoginLimiter(l LoginLimiter) Option { return func(s *Service) { s.limiter = l } }
+
+func NewService(users domain.Users, sessions domain.Sessions, hasher domain.PasswordHasher, clock Clock, newID func() string, opts ...Option) *Service {
 	dummy, _ := hasher.Hash("kyber-dummy-password")
-	return &Service{users: users, sessions: sessions, hasher: hasher, clock: clock, newID: newID, dummy: dummy, throttle: newThrottle(clock)}
+	s := &Service{users: users, sessions: sessions, hasher: hasher, clock: clock, newID: newID, dummy: dummy}
+	for _, o := range opts {
+		o(s)
+	}
+	if s.limiter == nil {
+		s.limiter = newLocalLimiter(clock)
+	}
+	return s
 }
 
 type Signup struct{ Email, Name, Password string }
@@ -63,20 +77,17 @@ func (s *Service) Signup(ctx context.Context, cmd Signup) (*domain.User, error) 
 }
 
 // Login returns an opaque bearer token; only its SHA-256 hash is stored.
-// Five failures per email+IP within 15 minutes lock that pair out (TooManyAttemptsError).
+// At most LoginAttempts per email+IP per LoginWindow (TooManyAttemptsError). A limiter
+// outage fails closed: logins are refused rather than left unthrottled.
 func (s *Service) Login(ctx context.Context, rawEmail, password, ip string) (string, error) {
-	key := throttleKey(rawEmail, ip)
-	if err := s.throttle.check(key); err != nil {
-		return "", err
+	allowed, retryAfter, err := s.limiter.Allow(ctx, throttleKey(rawEmail, ip))
+	if err != nil {
+		return "", fmt.Errorf("login rate limiter: %w", err)
 	}
-	token, err := s.login(ctx, rawEmail, password)
-	switch {
-	case errors.Is(err, ErrInvalidCredentials):
-		s.throttle.fail(key)
-	case err == nil:
-		s.throttle.reset(key)
+	if !allowed {
+		return "", &TooManyAttemptsError{RetryAfter: retryAfter}
 	}
-	return token, err
+	return s.login(ctx, rawEmail, password)
 }
 
 func (s *Service) login(ctx context.Context, rawEmail, password string) (string, error) {

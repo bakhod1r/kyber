@@ -10,14 +10,23 @@ services:
       test: ["CMD", "pg_isready", "-U", "kyber"]
       interval: 5s
       retries: 10
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
   kyber:
     build: .
     environment:
       KYBER_DATABASE_URL: postgres://kyber:kyber@postgres:5432/kyber?sslmode=disable
+      KYBER_REDIS_URL: redis://redis:6379/0 # optional: shares the login limiter across replicas
       KYBER_COOKIE_SECURE: "false" # set to true behind HTTPS
     ports: ["8080:8080"]
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 volumes:
   pgdata:

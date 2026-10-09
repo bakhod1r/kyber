@@ -22,13 +22,13 @@ type clock struct{ now time.Time }
 
 func (c *clock) Now() time.Time { return c.now }
 
-func setup() (*app.Service, *clock, *plainHasher) {
+func setup(opts ...app.Option) (*app.Service, *clock, *plainHasher) {
 	n := 0
 	ids := func() string { n++; return fmt.Sprintf("u-%d", n) }
 	c := &clock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 	h := &plainHasher{}
 	repo := memory.NewRepository()
-	return app.NewService(repo, repo, h, c, ids), c, h
+	return app.NewService(repo, repo, h, c, ids, opts...), c, h
 }
 
 func TestSignup(t *testing.T) {

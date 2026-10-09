@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
+
 	"github.com/bakhod1r/kyber/internal/platform/db/dbtest"
 	"github.com/bakhod1r/kyber/internal/server"
 )
@@ -31,6 +34,10 @@ func backends(t *testing.T) map[string]func(t *testing.T) http.Handler {
 	}
 	if os.Getenv("KYBER_TEST_DATABASE_URL") != "" {
 		b["postgres"] = func(t *testing.T) http.Handler { return server.NewPostgres(log, dbtest.New(t), false) }
+		b["postgres+redis"] = func(t *testing.T) http.Handler {
+			rdb := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
+			return server.NewPostgres(log, dbtest.New(t), false, server.WithRedis(rdb))
+		}
 	}
 	return b
 }
@@ -159,7 +166,7 @@ func TestS9Auth(t *testing.T) {
 			code2, b2 := c.do("POST", "/api/v1/auth/login", map[string]string{"email": "ghost@x.uz", "password": "wrong password"})
 			expect(t, code1, 401, b1)
 			expect(t, code2, 401, b2)
-			if b1["error"] != b2["error"] {
+			if b1["detail"] != b2["detail"] || b1["code"] != b2["code"] {
 				t.Fatalf("messages differ: %v vs %v", b1, b2)
 			}
 		})
@@ -200,8 +207,8 @@ func testS1(t *testing.T, anon *client) {
 	t.Run("AC2 invalid key", func(t *testing.T) {
 		code, body := c.do("POST", "/api/v1/projects", map[string]string{"key": "k", "name": "x"})
 		expect(t, code, 422, body)
-		if body["error"] == nil {
-			t.Fatalf("error message missing: %v", body)
+		if body["code"] != "VALIDATION_FAILED" || body["detail"] == nil {
+			t.Fatalf("problem body = %v", body)
 		}
 	})
 	t.Run("AC3 empty name", func(t *testing.T) {
@@ -364,7 +371,7 @@ func TestS11Membership(t *testing.T) {
 func TestS12LoginThrottling(t *testing.T) {
 	forEachBackend(t, func(t *testing.T, c *client) {
 		c.do("POST", "/api/v1/auth/signup", map[string]string{"email": "t@x.uz", "name": "T", "password": "long enough pw"})
-		for range 5 {
+		for range 10 { // KYB-S12 revised: 10 attempts per email+IP per 15 minutes
 			code, body := c.do("POST", "/api/v1/auth/login", map[string]string{"email": "t@x.uz", "password": "wrong password"})
 			expect(t, code, 401, body)
 		}
@@ -523,5 +530,53 @@ func TestS16Comments(t *testing.T) {
 		expect(t, code, 403, body)
 		code, body = carol.do("GET", "/api/v1/issues/KYB-1/comments", nil)
 		expect(t, code, 404, body)
+	})
+}
+
+func TestProblemDetails(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		c := anon.signedIn("problem@x.uz")
+		c.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		c.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "Login", "type": "task"})
+
+		res := c.raw("GET", "/api/v1/issues/KYB-404", nil, nil)
+		var p map[string]any
+		_ = json.NewDecoder(res.Body).Decode(&p)
+		res.Body.Close()
+		if res.Header.Get("Content-Type") != "application/problem+json" {
+			t.Fatalf("content type = %q", res.Header.Get("Content-Type"))
+		}
+		if p["status"] != float64(404) || p["code"] != "ISSUE_NOT_FOUND" || p["numeric_code"] != float64(6010) || p["instance"] != "/api/v1/issues/KYB-404" {
+			t.Fatalf("problem = %v", p)
+		}
+
+		// Business rule rejections carry the specific reason in detail.
+		code, body := c.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "done"})
+		expect(t, code, 409, body)
+		if body["code"] != "ISSUE_TRANSITION_NOT_ALLOWED" || body["detail"] != "transition not allowed by workflow" {
+			t.Fatalf("problem = %v", body)
+		}
+
+		// Titles are localized from Accept-Language (en, uz, ru).
+		req, _ := http.NewRequest("GET", c.srv.URL+"/api/v1/issues/KYB-404", nil)
+		req.Header.Set("Authorization", "Bearer "+c.token)
+		req.Header.Set("Accept-Language", "uz")
+		r2, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var uz map[string]any
+		_ = json.NewDecoder(r2.Body).Decode(&uz)
+		r2.Body.Close()
+		if uz["title"] != "Vazifa topilmadi." {
+			t.Fatalf("uz title = %v", uz["title"])
+		}
+
+		// Unauthenticated requests are problems too.
+		code, body = anon.do("GET", "/api/v1/me", nil)
+		expect(t, code, 401, body)
+		if body["code"] != "AUTH_REQUIRED" {
+			t.Fatalf("problem = %v", body)
+		}
 	})
 }

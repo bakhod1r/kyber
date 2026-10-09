@@ -86,7 +86,7 @@ paths:
           description: Too many failed attempts for this email and IP.
           headers:
             Retry-After: { schema: { type: integer }, description: Seconds until the next attempt is allowed. }
-          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+          content: { application/problem+json: { schema: { $ref: "#/components/schemas/Error" } } }
   /api/v1/auth/logout:
     post:
       operationId: logout
@@ -289,8 +289,8 @@ components:
     IssueKey: { name: issueKey, in: path, required: true, schema: { type: string }, example: KYB-12 }
   responses:
     Error:
-      description: Error
-      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+      description: RFC 9457 problem details; `title` is localized from Accept-Language (en, uz, ru).
+      content: { application/problem+json: { schema: { $ref: "#/components/schemas/Error" } } }
     Status:
       description: Probe result
       content:
@@ -302,9 +302,15 @@ components:
   schemas:
     Error:
       type: object
-      required: [error]
-      additionalProperties: false
-      properties: { error: { type: string } }
+      required: [type, title, status, code]
+      properties:
+        type: { type: string }
+        title: { type: string, description: Localized summary of the error code. }
+        status: { type: integer }
+        detail: { type: string, description: The specific reason for this occurrence. }
+        instance: { type: string }
+        code: { type: string, description: "Stable Kyber error code, e.g. ISSUE_NOT_FOUND. Branch on this." }
+        numeric_code: { type: integer }
     User:
       type: object
       required: [id, email, name]

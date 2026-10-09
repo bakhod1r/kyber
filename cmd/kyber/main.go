@@ -4,12 +4,15 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/bakhod1r/kyber/internal/platform/config"
 	"github.com/bakhod1r/kyber/internal/platform/db"
@@ -76,5 +79,24 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 	}
 	log.Info("database ready")
 	server.StartJobs(ctx, log, pool, cfg.SessionPurgeEvery)
-	return server.NewPostgres(log, pool, cfg.CookieSecure), pool.Close, nil
+	var opts []server.Option
+	cleanup := pool.Close
+	if cfg.RedisURL != "" {
+		ropts, err := redis.ParseURL(cfg.RedisURL)
+		if err != nil {
+			pool.Close()
+			return nil, nil, fmt.Errorf("parse KYBER_REDIS_URL: %w", err)
+		}
+		rdb := redis.NewClient(ropts)
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			pool.Close()
+			return nil, nil, fmt.Errorf("redis: %w", err)
+		}
+		log.Info("redis ready: login limiter shared across instances")
+		opts = append(opts, server.WithRedis(rdb))
+		cleanup = func() { _ = rdb.Close(); pool.Close() }
+	} else {
+		log.Warn("KYBER_REDIS_URL not set: login limiter is per process (fine for a single instance)")
+	}
+	return server.NewPostgres(log, pool, cfg.CookieSecure, opts...), cleanup, nil
 }

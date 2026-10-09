@@ -6,12 +6,14 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+
+	"github.com/bakhod1r/errorx"
 )
 
 var ErrBadJSON = errors.New("malformed JSON body")
 
-// StatusFor maps an error to an HTTP status; adapters pass their own mapping.
-type StatusFor func(error) (int, bool)
+// CodeFor maps an error to a registered Kyber error code; adapters pass their own mapping.
+type CodeFor func(error) (code string, ok bool)
 
 func Decode(r *http.Request, v any) error {
 	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20))
@@ -27,16 +29,22 @@ func JSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// Error writes {"error": msg}, mapping known errors and hiding unknown ones as 500.
-func Error(w http.ResponseWriter, r *http.Request, log *slog.Logger, err error, mapping StatusFor) {
+// Error writes an RFC 9457 problem. Known errors get their code and the error text as
+// detail; unknown errors are logged and hidden behind INTERNAL.
+func Error(w http.ResponseWriter, r *http.Request, log *slog.Logger, err error, mapping CodeFor) {
 	if errors.Is(err, ErrBadJSON) {
-		JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		Problem(w, r, errorx.New(CodeBadRequest, err.Error()).WithDetails(err.Error()))
 		return
 	}
-	if status, ok := mapping(err); ok {
-		JSON(w, status, map[string]string{"error": err.Error()})
+	if code, ok := mapping(err); ok {
+		Problem(w, r, errorx.New(code, err.Error()).WithDetails(err.Error()))
 		return
 	}
 	log.ErrorContext(r.Context(), "internal error", "err", err, "path", r.URL.Path)
-	JSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+	Problem(w, r, errorx.New(CodeInternal, err.Error()))
+}
+
+// Problem renders an errorx error with a title localized from Accept-Language.
+func Problem(w http.ResponseWriter, r *http.Request, err *errorx.AppError) {
+	_ = errorx.WriteProblemRequest(w, r, err)
 }

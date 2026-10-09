@@ -53,33 +53,37 @@ func toDTO(is *domain.Issue) issueDTO {
 	return d
 }
 
-func statusFor(err error) (int, bool) {
+func codeFor(err error) (string, bool) {
 	switch {
 	case errors.Is(err, app.ErrInvalidKey):
-		return http.StatusBadRequest, true
+		return httpx.CodeInvalidIssueKey, true
 	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidIssueType),
 		errors.Is(err, domain.ErrInvalidPriority), errors.Is(err, domain.ErrDescriptionTooLong),
 		errors.Is(err, domain.ErrInvalidCommentBody), errors.Is(err, app.ErrInvalidAssignee), errors.Is(err, errMissingVersion):
-		return http.StatusUnprocessableEntity, true
-	case errors.Is(err, app.ErrProjectNotFound), errors.Is(err, domain.ErrIssueNotFound):
-		return http.StatusNotFound, true
+		return httpx.CodeValidation, true
+	case errors.Is(err, app.ErrProjectNotFound):
+		return httpx.CodeProjectNotFound, true
+	case errors.Is(err, domain.ErrIssueNotFound):
+		return httpx.CodeIssueNotFound, true
 	case errors.Is(err, app.ErrForbidden):
-		return http.StatusForbidden, true
-	case errors.Is(err, domain.ErrTransitionNotAllowed), errors.Is(err, domain.ErrConcurrentModification):
-		return http.StatusConflict, true
+		return httpx.CodeForbidden, true
+	case errors.Is(err, domain.ErrTransitionNotAllowed):
+		return httpx.CodeTransitionNotAllowed, true
+	case errors.Is(err, domain.ErrConcurrentModification):
+		return httpx.CodeConcurrentModified, true
 	}
-	return 0, false
+	return "", false
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var in struct{ Title, Type string }
 	if err := httpx.Decode(r, &in); err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	is, err := h.svc.Create(r.Context(), auth.Actor(r.Context()), app.CreateIssue{Project: r.PathValue("key"), Title: in.Title, Type: in.Type})
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, toDTO(is))
@@ -88,7 +92,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	is, err := h.svc.Get(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"))
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, toDTO(is))
@@ -97,12 +101,12 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) transition(w http.ResponseWriter, r *http.Request) {
 	var in struct{ To string }
 	if err := httpx.Decode(r, &in); err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	is, err := h.svc.Transition(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"), in.To)
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, toDTO(is))
@@ -111,7 +115,7 @@ func (h *Handler) transition(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	list, err := h.svc.List(r.Context(), auth.Actor(r.Context()), r.PathValue("key"), r.URL.Query().Get("status"))
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	items := make([]issueDTO, 0, len(list))
@@ -133,11 +137,11 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		AssigneeID  json.RawMessage `json:"assignee_id"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	if in.Version == nil {
-		httpx.Error(w, r, h.log, errMissingVersion, statusFor)
+		httpx.Error(w, r, h.log, errMissingVersion, codeFor)
 		return
 	}
 	cmd := app.EditIssue{Version: *in.Version, Title: in.Title, Description: in.Description, Priority: in.Priority}
@@ -145,14 +149,14 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		cmd.AssigneeSet = true
 		if string(in.AssigneeID) != "null" {
 			if err := json.Unmarshal(in.AssigneeID, &cmd.Assignee); err != nil {
-				httpx.Error(w, r, h.log, httpx.ErrBadJSON, statusFor)
+				httpx.Error(w, r, h.log, httpx.ErrBadJSON, codeFor)
 				return
 			}
 		}
 	}
 	is, err := h.svc.Edit(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"), cmd)
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, toDTO(is))
@@ -174,7 +178,7 @@ func toCommentDTO(c app.CommentView) commentDTO {
 func (h *Handler) comments(w http.ResponseWriter, r *http.Request) {
 	list, err := h.svc.Comments(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"))
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	items := make([]commentDTO, 0, len(list))
@@ -187,18 +191,18 @@ func (h *Handler) comments(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 	var in struct{ Body string }
 	if err := httpx.Decode(r, &in); err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	actor := auth.Actor(r.Context())
 	c, err := h.svc.AddComment(r.Context(), actor, r.PathValue("issueKey"), in.Body)
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	name, err := h.svc.DisplayName(r.Context(), actor)
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, toCommentDTO(app.CommentView{Comment: c, AuthorName: name}))

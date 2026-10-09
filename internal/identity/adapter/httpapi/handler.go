@@ -5,13 +5,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"math"
 	"mime"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bakhod1r/errorx"
 
 	"github.com/bakhod1r/kyber/internal/identity/app"
 	"github.com/bakhod1r/kyber/internal/identity/domain"
@@ -53,27 +53,29 @@ func toDTO(u *domain.User) userDTO {
 	return userDTO{ID: string(u.ID()), Email: u.Email().String(), Name: u.Name()}
 }
 
-func statusFor(err error) (int, bool) {
+func codeFor(err error) (string, bool) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidEmail), errors.Is(err, domain.ErrWeakPassword), errors.Is(err, domain.ErrEmptyName):
-		return http.StatusUnprocessableEntity, true
+		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrEmailTaken):
-		return http.StatusConflict, true
-	case errors.Is(err, app.ErrInvalidCredentials), errors.Is(err, app.ErrUnauthenticated):
-		return http.StatusUnauthorized, true
+		return httpx.CodeEmailTaken, true
+	case errors.Is(err, app.ErrInvalidCredentials):
+		return httpx.CodeInvalidCredentials, true
+	case errors.Is(err, app.ErrUnauthenticated):
+		return httpx.CodeAuthRequired, true
 	}
-	return 0, false
+	return "", false
 }
 
 func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 	var in struct{ Email, Name, Password string }
 	if err := httpx.Decode(r, &in); err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	u, err := h.svc.Signup(r.Context(), app.Signup{Email: in.Email, Name: in.Name, Password: in.Password})
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, toDTO(u))
@@ -82,18 +84,18 @@ func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var in struct{ Email, Password string }
 	if err := httpx.Decode(r, &in); err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	token, err := h.svc.Login(r.Context(), in.Email, in.Password, clientIP(r))
 	var tooMany *app.TooManyAttemptsError
 	if errors.As(err, &tooMany) {
-		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(tooMany.RetryAfter.Seconds()))))
-		httpx.JSON(w, http.StatusTooManyRequests, map[string]string{"error": err.Error()})
+		httpx.Problem(w, r, errorx.New(httpx.CodeTooManyAttempts, err.Error()).
+			WithDetails(err.Error()).WithRetryAfter(tooMany.RetryAfter))
 		return
 	}
 	if err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -106,7 +108,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	token, _ := tokenFrom(r)
 	if err := h.svc.Logout(r.Context(), token); err != nil {
-		httpx.Error(w, r, h.log, err, statusFor)
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: CookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: h.cookieSecure})
@@ -131,16 +133,17 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 		token, fromCookie := tokenFrom(r)
 		if fromCookie && !safeMethod(r.Method) && !isJSON(r) {
 			// CSRF guard: browsers cannot send cross-site JSON without a CORS preflight.
-			httpx.JSON(w, http.StatusForbidden, map[string]string{"error": "cookie-authenticated writes require Content-Type: application/json"})
+			msg := "cookie-authenticated writes require Content-Type: application/json"
+			httpx.Problem(w, r, errorx.New(httpx.CodeCSRF, msg).WithDetails(msg))
 			return
 		}
 		if token == "" {
-			httpx.Error(w, r, h.log, app.ErrUnauthenticated, statusFor)
+			httpx.Error(w, r, h.log, app.ErrUnauthenticated, codeFor)
 			return
 		}
 		u, err := h.svc.Authenticate(r.Context(), token)
 		if err != nil {
-			httpx.Error(w, r, h.log, err, statusFor)
+			httpx.Error(w, r, h.log, err, codeFor)
 			return
 		}
 		ctx := context.WithValue(r.Context(), ctxKey{}, u)

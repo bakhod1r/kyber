@@ -56,7 +56,7 @@ describe("Board (KYB-S14 AC3)", () => {
   it("a rejected move shows the error and the card returns", async () => {
     mockApi({
       "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [issue(1, "todo")] } },
-      "POST /api/v1/issues/KYB-1/transitions": { status: 409, body: { error: "transition not allowed by workflow" } },
+      "POST /api/v1/issues/KYB-1/transitions": { status: 409, body: { type: "about:blank", title: "Error", status: 400, code: "TEST", detail: "transition not allowed by workflow" } },
     });
     renderWithProviders(<Board projectKey="KYB" />);
     const card = await screen.findByText("Issue 1");
