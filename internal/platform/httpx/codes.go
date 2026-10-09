@@ -15,6 +15,12 @@ const (
 	CodeProviderDisabled     = "AUTH_PROVIDER_DISABLED"
 	CodeOTPInvalid           = "AUTH_OTP_INVALID"
 	CodeWorkspaceNotFound    = "WORKSPACE_NOT_FOUND"
+	CodeFocusMeeting         = "FOCUS_MEETING_CONFLICT"
+	CodeFocusRunning         = "FOCUS_ALREADY_RUNNING"
+	CodeFocusNotFound        = "FOCUS_NOT_FOUND"
+	CodeFocusState           = "FOCUS_STATE"
+	CodeMeetingNotFound      = "MEETING_NOT_FOUND"
+	CodeMeetingForbidden     = "MEETING_FORBIDDEN"
 	CodeWorkspaceSlugTaken   = "WORKSPACE_SLUG_TAKEN"
 	CodeOTPPending           = "AUTH_OTP_PENDING"
 	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
@@ -56,6 +62,12 @@ var codes = []code{
 	{CodeOTPPending, "6037", 409, "Open the Telegram bot and press Start to get your code.", "Kodni olish uchun Telegram botni ochib, Start tugmasini bosing.", "Откройте Telegram-бота и нажмите Start, чтобы получить код.", errorx.CategoryBusiness},
 	{CodeWorkspaceNotFound, "6060", 404, "Workspace not found.", "Workspace topilmadi.", "Рабочее пространство не найдено.", errorx.CategoryBusiness},
 	{CodeWorkspaceSlugTaken, "6061", 409, "This workspace address is already taken.", "Bu workspace manzili band.", "Этот адрес рабочего пространства уже занят.", errorx.CategoryBusiness},
+	{CodeFocusMeeting, "6070", 409, "You have a meeting at that time.", "Bu vaqtda sizda uchrashuv bor.", "В это время у вас встреча.", errorx.CategoryBusiness},
+	{CodeFocusRunning, "6071", 409, "You already have a focus session.", "Sizda allaqachon fokus seansi bor.", "У вас уже идёт фокус-сессия.", errorx.CategoryBusiness},
+	{CodeFocusNotFound, "6072", 404, "No focus session is running.", "Fokus seansi ishlamayapti.", "Фокус-сессия не запущена.", errorx.CategoryBusiness},
+	{CodeFocusState, "6073", 409, "The focus session cannot do that now.", "Fokus seansi hozir buni qila olmaydi.", "Фокус-сессия сейчас не может этого сделать.", errorx.CategoryBusiness},
+	{CodeMeetingNotFound, "6074", 404, "Meeting not found.", "Uchrashuv topilmadi.", "Встреча не найдена.", errorx.CategoryBusiness},
+	{CodeMeetingForbidden, "6075", 403, "Only the organizer can cancel this meeting.", "Uchrashuvni faqat tashkilotchi bekor qila oladi.", "Отменить встречу может только организатор.", errorx.CategorySecurity},
 	{CodeProjectNotFound, "6002", 404, "Project not found.", "Loyiha topilmadi.", "Проект не найден.", errorx.CategoryBusiness},
 	{CodeProjectKeyTaken, "6003", 409, "This project key is already taken.", "Bu loyiha kaliti band.", "Этот ключ проекта уже занят.", errorx.CategoryBusiness},
 	{CodeForbidden, "6004", 403, "Your project role does not allow this.", "Loyihadagi rolingiz bunga ruxsat bermaydi.", "Ваша роль в проекте не позволяет это сделать.", errorx.CategorySecurity},

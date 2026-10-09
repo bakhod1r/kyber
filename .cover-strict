@@ -7,3 +7,5 @@
 ./internal/platform/tenant
 ./internal/calendar/domain
 ./internal/focus/domain
+./internal/calendar/app
+./internal/focus/app

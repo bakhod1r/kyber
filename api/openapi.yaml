@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.10.0
+  version: 0.11.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -234,6 +234,129 @@ paths:
         "200": { description: Current user, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
         "401": { $ref: "#/components/responses/Error" }
 
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/meetings:
+    get:
+      operationId: listMeetings
+      description: The caller's meetings in this workspace (the time table). Defaults to today and the next 7 days (UTC).
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Meeting" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: scheduleMeeting
+      description: Books a meeting; the organizer always attends. During a meeting its attendees cannot run a Pomodoro.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, starts_at, ends_at]
+              properties:
+                title: { type: string }
+                starts_at: { type: string, format: date-time }
+                ends_at: { type: string, format: date-time }
+                attendee_ids: { type: array, items: { type: string } }
+      responses:
+        "201": { description: Scheduled, content: { application/json: { schema: { $ref: "#/components/schemas/Meeting" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/meetings/{id}:
+    delete:
+      operationId: cancelMeeting
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Cancelled }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/focus:
+    get:
+      operationId: currentFocus
+      description: The caller's running or paused Pomodoro (settled first; null when none).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session]
+                properties: { session: { oneOf: [{ $ref: "#/components/schemas/FocusSession" }, { type: "null" }] } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: startFocus
+      description: >-
+        Starts a Pomodoro (15-60 minutes, default 25) on an issue. Refused with 409 FOCUS_MEETING_CONFLICT when one of
+        the caller's meetings falls inside it; a meeting that begins later ends the session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [issue_key]
+              properties: { issue_key: { type: string }, minutes: { type: integer, minimum: 15, maximum: 60, default: 25 } }
+      responses:
+        "201": { description: Started, content: { application/json: { schema: { $ref: "#/components/schemas/FocusSession" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/focus/pause:
+    post:
+      operationId: pauseFocus
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FocusSession" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/focus/resume:
+    post:
+      operationId: resumeFocus
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FocusSession" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/focus/stop:
+    post:
+      operationId: stopFocus
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FocusSession" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/issues/{issueKey}/focus:
+    parameters: [{ $ref: "#/components/parameters/IssueKey" }]
+    get:
+      operationId: issueFocusLog
+      description: The issue's Pomodoro history (work log) in this workspace and the total focus time.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total_focused_seconds]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/FocusSession" } }
+                  total_focused_seconds: { type: integer }
+        "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/workspaces:
     get:
@@ -788,6 +911,32 @@ components:
             required: [status]
             properties: { status: { type: string, enum: [ok, unavailable] } }
   schemas:
+    Meeting:
+      type: object
+      additionalProperties: false
+      required: [id, title, starts_at, ends_at, organizer_id, attendee_ids]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        organizer_id: { type: string }
+        attendee_ids: { type: array, items: { type: string } }
+    FocusSession:
+      type: object
+      additionalProperties: false
+      required: [id, issue_key, user_id, state, planned_minutes, started_at, ended_at, focused_seconds, remaining_seconds, reason]
+      properties:
+        id: { type: string }
+        issue_key: { type: string }
+        user_id: { type: string }
+        state: { type: string, enum: [running, paused, completed, interrupted] }
+        planned_minutes: { type: integer }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: [string, "null"], format: date-time }
+        focused_seconds: { type: integer }
+        remaining_seconds: { type: integer }
+        reason: { type: string, description: "Why it was interrupted: stopped, or meeting: <title>" }
     Workspace:
       type: object
       additionalProperties: false
