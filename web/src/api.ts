@@ -78,6 +78,27 @@ export const STATUSES: { id: Status; label: string }[] = [
   { id: "done", label: "Done" },
 ];
 
+export type ImportItem = {
+  line: number;
+  external_key: string;
+  issue_key: string | null;
+  title: string;
+  type: IssueType;
+  status: Status;
+  priority: Priority;
+  assignee_id: string | null;
+  points: number | null;
+  created_at: string | null;
+  resolved_at: string | null;
+  warnings: string[];
+};
+export type ImportReport = {
+  dry_run: boolean;
+  items: ImportItem[];
+  errors: { line: number; external_key: string; message: string }[];
+  skipped: string[];
+};
+
 export const ISSUE_TYPES: IssueType[] = ["task", "story", "bug", "epic", "subtask"];
 export const PRIORITIES: Priority[] = ["highest", "high", "medium", "low", "lowest"];
 
@@ -142,6 +163,9 @@ export const api = {
     request<Sprint>("POST", `/api/v1/projects/${seg(key)}/sprints`, { name, goal }),
   startSprint: (id: string, endsAt?: string) =>
     request<Sprint>("POST", `/api/v1/sprints/${seg(id)}/start`, endsAt ? { ends_at: endsAt } : undefined),
+  /** Previews (dryRun) or runs a Jira CSV import; admins only. */
+  importJira: (key: string, csv: string, dryRun: boolean) =>
+    request<ImportReport>("POST", `/api/v1/projects/${seg(key)}/import/jira?dry_run=${dryRun}`, { csv }),
   reportSummary: (key: string) => request<ReportSummary>("GET", `/api/v1/projects/${seg(key)}/reports/summary`),
   reportCreatedVsResolved: (key: string, days: number) =>
     request<{ days: DayStat[] }>("GET", `/api/v1/projects/${seg(key)}/reports/created-vs-resolved?days=${days}`),

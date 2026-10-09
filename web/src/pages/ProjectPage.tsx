@@ -5,9 +5,10 @@ import { type Role, api } from "../api";
 import { Backlog } from "../components/Backlog";
 import { Board } from "../components/Board";
 import { IssuePanel } from "../components/IssuePanel";
+import { JiraImport } from "./ImportPage";
 import { Reports } from "./ReportsPage";
 
-export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "reports" }) {
+export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "reports" | "import" }) {
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
   const project = projects.data?.find((p) => p.key === key);
@@ -31,11 +32,13 @@ export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "
         </NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/backlog`}>Backlog</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/reports`}>Reports</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/import`}>Import</NavLink>
       </nav>
       <div className="project-grid">
         {view === "board" && <Board projectKey={key} onOpen={setOpen} />}
         {view === "backlog" && <Backlog projectKey={key} onOpen={setOpen} />}
         {view === "reports" && <Reports projectKey={key} />}
+        {view === "import" && <JiraImport projectKey={key} />}
         <Members projectKey={key} />
       </div>
       {open && <IssuePanel issueKey={open} projectKey={key} onClose={() => setOpen(null)} />}

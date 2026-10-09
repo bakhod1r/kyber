@@ -34,6 +34,7 @@ export function AppRoutes() {
       <Route path="/projects/:key" element={<RequireUser><ProjectPage /></RequireUser>} />
       <Route path="/projects/:key/backlog" element={<RequireUser><ProjectPage view="backlog" /></RequireUser>} />
       <Route path="/projects/:key/reports" element={<RequireUser><ProjectPage view="reports" /></RequireUser>} />
+      <Route path="/projects/:key/import" element={<RequireUser><ProjectPage view="import" /></RequireUser>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
