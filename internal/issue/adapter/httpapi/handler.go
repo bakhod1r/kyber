@@ -27,6 +27,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}", h.get)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/transitions", h.transition)
 	mux.HandleFunc("PATCH /api/v1/issues/{issueKey}", h.edit)
+	mux.HandleFunc("POST /api/v1/issues/{issueKey}/rank", h.rank)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/comments", h.comments)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/comments", h.addComment)
 }
@@ -40,15 +41,22 @@ type issueDTO struct {
 	Description string  `json:"description"`
 	Priority    string  `json:"priority"`
 	AssigneeID  *string `json:"assignee_id"`
+	SprintID    *string `json:"sprint_id"`
+	Rank        string  `json:"rank"`
 	Version     int     `json:"version"`
 }
 
 func toDTO(is *domain.Issue) issueDTO {
 	d := issueDTO{ID: string(is.ID()), Key: is.Key().String(), Title: is.Title(), Type: string(is.Type()),
-		Status: string(is.Status()), Description: is.Description(), Priority: string(is.Priority()), Version: is.Version()}
+		Status: string(is.Status()), Description: is.Description(), Priority: string(is.Priority()),
+		Rank: string(is.Rank()), Version: is.Version()}
 	if a := is.Assignee(); a != "" {
 		s := string(a)
 		d.AssigneeID = &s
+	}
+	if sp := is.Sprint(); sp != "" {
+		s := string(sp)
+		d.SprintID = &s
 	}
 	return d
 }
@@ -59,7 +67,8 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeInvalidIssueKey, true
 	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidIssueType),
 		errors.Is(err, domain.ErrInvalidPriority), errors.Is(err, domain.ErrDescriptionTooLong),
-		errors.Is(err, domain.ErrInvalidCommentBody), errors.Is(err, app.ErrInvalidAssignee), errors.Is(err, errMissingVersion):
+		errors.Is(err, domain.ErrInvalidCommentBody), errors.Is(err, app.ErrInvalidAssignee), errors.Is(err, errMissingVersion),
+		errors.Is(err, app.ErrInvalidSprint), errors.Is(err, app.ErrInvalidAnchor):
 		return httpx.CodeValidation, true
 	case errors.Is(err, app.ErrProjectNotFound):
 		return httpx.CodeProjectNotFound, true
@@ -113,7 +122,8 @@ func (h *Handler) transition(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	list, err := h.svc.List(r.Context(), auth.Actor(r.Context()), r.PathValue("key"), r.URL.Query().Get("status"))
+	list, err := h.svc.List(r.Context(), auth.Actor(r.Context()), r.PathValue("key"),
+		app.ListQuery{Status: r.URL.Query().Get("status"), Sprint: r.URL.Query().Get("sprint")})
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
@@ -135,6 +145,7 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		Description *string         `json:"description"`
 		Priority    *string         `json:"priority"`
 		AssigneeID  json.RawMessage `json:"assignee_id"`
+		SprintID    json.RawMessage `json:"sprint_id"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
@@ -149,6 +160,15 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		cmd.AssigneeSet = true
 		if string(in.AssigneeID) != "null" {
 			if err := json.Unmarshal(in.AssigneeID, &cmd.Assignee); err != nil {
+				httpx.Error(w, r, h.log, httpx.ErrBadJSON, codeFor)
+				return
+			}
+		}
+	}
+	if in.SprintID != nil {
+		cmd.SprintSet = true
+		if string(in.SprintID) != "null" {
+			if err := json.Unmarshal(in.SprintID, &cmd.Sprint); err != nil {
 				httpx.Error(w, r, h.log, httpx.ErrBadJSON, codeFor)
 				return
 			}
@@ -206,4 +226,18 @@ func (h *Handler) addComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, toCommentDTO(app.CommentView{Comment: c, AuthorName: name}))
+}
+
+func (h *Handler) rank(w http.ResponseWriter, r *http.Request) {
+	var in struct{ After, Before string }
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	is, err := h.svc.Rank(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"), app.RankMove{After: in.After, Before: in.Before})
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toDTO(is))
 }

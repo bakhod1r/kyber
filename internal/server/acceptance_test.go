@@ -580,3 +580,143 @@ func TestProblemDetails(t *testing.T) {
 		}
 	})
 }
+
+func issueKeys(t *testing.T, c *client, path string) string {
+	t.Helper()
+	code, body := c.do("GET", path, nil)
+	expect(t, code, 200, body)
+	var keys []string
+	for _, it := range body["items"].([]any) {
+		keys = append(keys, it.(map[string]any)["key"].(string))
+	}
+	return strings.Join(keys, ",")
+}
+
+func TestS18BacklogRanking(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		alice := anon.signedIn("alice@x.uz")
+		bob := anon.signedIn("bob@x.uz")
+		carol := anon.signedIn("carol@x.uz")
+		alice.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		alice.do("POST", "/api/v1/projects", map[string]string{"key": "OPS", "name": "Ops"})
+		alice.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "bob@x.uz", "role": "viewer"})
+		for range 4 {
+			alice.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "t", "type": "task"})
+		}
+		alice.do("POST", "/api/v1/projects/OPS/issues", map[string]string{"title": "o", "type": "task"})
+
+		if got := issueKeys(t, alice, "/api/v1/projects/KYB/issues"); got != "KYB-1,KYB-2,KYB-3,KYB-4" {
+			t.Fatalf("AC1 new issues at the bottom: %s", got)
+		}
+		code, body := alice.do("POST", "/api/v1/issues/KYB-4/rank", map[string]string{"before": "KYB-1"})
+		expect(t, code, 200, body)
+		if body["rank"] == "" {
+			t.Fatalf("rank missing: %v", body)
+		}
+		alice.do("POST", "/api/v1/issues/KYB-1/rank", map[string]string{"after": "KYB-3"})
+		if got := issueKeys(t, alice, "/api/v1/projects/KYB/issues"); got != "KYB-4,KYB-2,KYB-3,KYB-1" {
+			t.Fatalf("AC2/AC3 order: %s", got)
+		}
+		for _, bad := range []map[string]string{{}, {"after": "OPS-1"}, {"after": "KYB-99"}, {"after": "KYB-2", "before": "KYB-3"}} {
+			code, body := alice.do("POST", "/api/v1/issues/KYB-1/rank", bad)
+			expect(t, code, 422, body)
+		}
+		code, body = bob.do("POST", "/api/v1/issues/KYB-1/rank", map[string]string{"after": "KYB-2"})
+		expect(t, code, 403, body)
+		code, body = carol.do("POST", "/api/v1/issues/KYB-1/rank", map[string]string{"after": "KYB-2"})
+		expect(t, code, 404, body)
+	})
+}
+
+func TestS19Sprints(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		alice := anon.signedIn("alice@x.uz")
+		bob := anon.signedIn("bob@x.uz")
+		carol := anon.signedIn("carol@x.uz")
+		alice.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		alice.do("POST", "/api/v1/projects", map[string]string{"key": "OPS", "name": "Ops"})
+		alice.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "bob@x.uz", "role": "viewer"})
+		for range 3 {
+			alice.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "t", "type": "task"})
+		}
+
+		code, s1 := alice.do("POST", "/api/v1/projects/KYB/sprints", map[string]string{"name": "Sprint 1", "goal": "Ship the board"})
+		expect(t, code, 201, s1)
+		if s1["state"] != "planned" || s1["goal"] != "Ship the board" || s1["started_at"] != nil {
+			t.Fatalf("AC1 created = %v", s1)
+		}
+		_, s2 := alice.do("POST", "/api/v1/projects/KYB/sprints", map[string]string{"name": "Sprint 2"})
+		_, opsSprint := alice.do("POST", "/api/v1/projects/OPS/sprints", map[string]string{"name": "Ops 1"})
+		code, body := alice.do("POST", "/api/v1/projects/KYB/sprints", map[string]string{"name": " "})
+		expect(t, code, 422, body)
+		code, body = bob.do("POST", "/api/v1/projects/KYB/sprints", map[string]string{"name": "x"})
+		expect(t, code, 403, body)
+
+		// AC2: plan issues into the sprint.
+		move := func(key string, sprint any) (int, map[string]any) {
+			_, is := alice.do("GET", "/api/v1/issues/"+key, nil)
+			return alice.do("PATCH", "/api/v1/issues/"+key, map[string]any{"version": is["version"], "sprint_id": sprint})
+		}
+		for _, k := range []string{"KYB-1", "KYB-2", "KYB-3"} {
+			code, body := move(k, s1["id"])
+			expect(t, code, 200, body)
+		}
+		code, body = move("KYB-3", nil)
+		expect(t, code, 200, body)
+		if body["sprint_id"] != nil {
+			t.Fatalf("back to backlog: %v", body)
+		}
+		code, body = move("KYB-3", opsSprint["id"])
+		expect(t, code, 422, body)
+		code, body = move("KYB-3", "not-a-uuid")
+		expect(t, code, 422, body)
+		if got := issueKeys(t, alice, "/api/v1/projects/KYB/issues?sprint="+s1["id"].(string)); got != "KYB-1,KYB-2" {
+			t.Fatalf("sprint filter = %s", got)
+		}
+		if got := issueKeys(t, alice, "/api/v1/projects/KYB/issues?sprint=backlog"); got != "KYB-3" {
+			t.Fatalf("backlog filter = %s", got)
+		}
+
+		// AC3: start; only one active sprint.
+		code, body = alice.do("POST", "/api/v1/sprints/"+s1["id"].(string)+"/start", nil)
+		expect(t, code, 200, body)
+		if body["state"] != "active" || body["started_at"] == nil {
+			t.Fatalf("started = %v", body)
+		}
+		code, body = alice.do("POST", "/api/v1/sprints/"+s2["id"].(string)+"/start", nil)
+		expect(t, code, 409, body)
+		if body["code"] != "SPRINT_ALREADY_ACTIVE" {
+			t.Fatalf("problem = %v", body)
+		}
+		code, body = alice.do("POST", "/api/v1/sprints/"+s2["id"].(string)+"/complete", nil)
+		expect(t, code, 409, body)
+		code, body = carol.do("POST", "/api/v1/sprints/"+s2["id"].(string)+"/start", nil)
+		expect(t, code, 404, body)
+		code, body = alice.do("POST", "/api/v1/sprints/not-a-uuid/start", nil)
+		expect(t, code, 404, body)
+
+		code, body = alice.do("GET", "/api/v1/projects/KYB/sprints", nil)
+		expect(t, code, 200, body)
+		if items := body["items"].([]any); len(items) != 2 || items[0].(map[string]any)["name"] != "Sprint 1" {
+			t.Fatalf("list = %v", items)
+		}
+
+		// AC4: complete returns unfinished issues to the backlog.
+		alice.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "in_progress"})
+		alice.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "done"})
+		code, body = bob.do("POST", "/api/v1/sprints/"+s1["id"].(string)+"/complete", nil)
+		expect(t, code, 403, body)
+		code, body = alice.do("POST", "/api/v1/sprints/"+s1["id"].(string)+"/complete", nil)
+		expect(t, code, 200, body)
+		if body["completed"] != float64(1) || body["returned"] != float64(1) || body["sprint"].(map[string]any)["state"] != "closed" {
+			t.Fatalf("completion = %v", body)
+		}
+		if got := issueKeys(t, alice, "/api/v1/projects/KYB/issues?sprint=backlog"); got != "KYB-2,KYB-3" {
+			t.Fatalf("backlog after completion = %s", got)
+		}
+		code, body = move("KYB-2", s1["id"])
+		expect(t, code, 422, body) // closed sprints take no issues
+		code, body = alice.do("POST", "/api/v1/sprints/"+s2["id"].(string)+"/start", nil)
+		expect(t, code, 200, body) // the next sprint can start now
+	})
+}

@@ -15,7 +15,15 @@ var (
 	ErrInvalidKey      = errors.New("invalid issue key")
 	ErrForbidden       = errors.New("insufficient project role")
 	ErrInvalidAssignee = errors.New("assignee must be a member of the project")
+	ErrInvalidSprint   = errors.New("sprint must be a planned or active sprint of this project")
+	ErrInvalidAnchor   = errors.New("give exactly one of after/before: an issue key of the same project")
 )
+
+// Sprints is the anti-corruption port to the Agile context.
+type Sprints interface {
+	// CanHold returns ErrInvalidSprint unless the sprint belongs to project and is not closed.
+	CanHold(ctx context.Context, project, sprint string) error
+}
 
 // Directory answers membership and naming questions about users (ACL to Project/Identity).
 type Directory interface {
@@ -35,6 +43,7 @@ type Service struct {
 	keys      domain.KeyAllocator
 	access    Access
 	directory Directory
+	sprints   Sprints
 	workflow  *domain.Workflow
 	newID     func() string
 	now       func() time.Time
@@ -47,6 +56,7 @@ type Deps struct {
 	Keys      domain.KeyAllocator
 	Access    Access
 	Directory Directory
+	Sprints   Sprints
 	Workflow  *domain.Workflow
 	NewID     func() string
 	Now       func() time.Time
@@ -54,7 +64,7 @@ type Deps struct {
 
 func NewService(d Deps) *Service {
 	return &Service{issues: d.Issues, comments: d.Comments, keys: d.Keys, access: d.Access,
-		directory: d.Directory, workflow: d.Workflow, newID: d.NewID, now: d.Now}
+		directory: d.Directory, sprints: d.Sprints, workflow: d.Workflow, newID: d.NewID, now: d.Now}
 }
 
 type CreateIssue struct {
@@ -83,6 +93,11 @@ func (s *Service) Create(ctx context.Context, actor string, cmd CreateIssue) (*d
 	if err != nil {
 		return nil, err
 	}
+	last, err := s.issues.LastRank(ctx, cmd.Project)
+	if err != nil {
+		return nil, err
+	}
+	is.Rerank(domain.RankBetween(last, "")) // new issues go to the bottom of the backlog
 	return is, s.save(ctx, is)
 }
 
@@ -114,16 +129,33 @@ func (s *Service) Transition(ctx context.Context, actor, rawKey, to string) (*do
 	return is, s.save(ctx, is)
 }
 
-func (s *Service) List(ctx context.Context, actor, project, status string) ([]*domain.Issue, error) {
+// Backlog selects issues that are in no sprint.
+const Backlog = "backlog"
+
+// ListQuery filters a project listing; empty fields do not filter.
+// Sprint is a sprint ID or Backlog.
+type ListQuery struct {
+	Status string
+	Sprint string
+}
+
+func (s *Service) List(ctx context.Context, actor, project string, q ListQuery) ([]*domain.Issue, error) {
 	if err := s.access.Authorize(ctx, actor, project, false); err != nil {
 		return nil, err
 	}
-	var filter *domain.StatusID
-	if status != "" {
-		st := domain.StatusID(status)
-		filter = &st
+	var f domain.ListFilter
+	if q.Status != "" {
+		st := domain.StatusID(q.Status)
+		f.Status = &st
 	}
-	return s.issues.ListByProject(ctx, project, filter)
+	if q.Sprint != "" {
+		sp := domain.SprintID(q.Sprint)
+		if q.Sprint == Backlog {
+			sp = ""
+		}
+		f.Sprint = &sp
+	}
+	return s.issues.ListByProject(ctx, project, f)
 }
 
 func (s *Service) save(ctx context.Context, is *domain.Issue) error {

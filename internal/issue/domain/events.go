@@ -44,3 +44,12 @@ type CommentAdded struct {
 func (IssueEdited) EventName() string   { return "issue.edited" }
 func (IssueAssigned) EventName() string { return "issue.assigned" }
 func (CommentAdded) EventName() string  { return "comment.added" }
+
+type IssueSprintChanged struct {
+	ID   IssueID  `json:"id"`
+	Key  IssueKey `json:"key"`
+	From SprintID `json:"from"`
+	To   SprintID `json:"to"`
+}
+
+func (IssueSprintChanged) EventName() string { return "issue.sprint_changed" }

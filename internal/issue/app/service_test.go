@@ -58,6 +58,16 @@ func (f fakeAccess) IsMember(_ context.Context, project, user string) (bool, err
 	return ok, nil
 }
 
+// fakeSprints accepts sprint IDs listed per project.
+type fakeSprints map[string]map[string]bool
+
+func (f fakeSprints) CanHold(_ context.Context, project, sprint string) error {
+	if !f[project][sprint] {
+		return app.ErrInvalidSprint
+	}
+	return nil
+}
+
 func (f fakeAccess) DisplayName(_ context.Context, user string) (string, error) {
 	return "Name of " + user, nil
 }
@@ -81,6 +91,7 @@ func setup() (*app.Service, *recorder) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	return app.NewService(app.Deps{
 		Issues: repo, Comments: memory.NewCommentRepository(repo), Keys: keys, Access: access, Directory: access,
+		Sprints:  fakeSprints{"KYB": {"s-1": true, "s-2": true}},
 		Workflow: domain.DefaultWorkflow(), NewID: ids,
 		Now: func() time.Time { now = now.Add(time.Minute); return now },
 	}), rec
@@ -189,11 +200,11 @@ func TestListIssues(t *testing.T) {
 	_, _ = s.Create(ctx, dev, app.CreateIssue{Project: "OPS", Title: "z", Type: "task"})
 	_, _ = s.Transition(ctx, dev, "KYB-2", "in_progress")
 
-	all, _ := s.List(ctx, dev, "KYB", "")
+	all, _ := s.List(ctx, dev, "KYB", app.ListQuery{})
 	if len(all) != 3 || all[0].Key().Number() != 1 || all[2].Key().Number() != 3 {
 		t.Fatalf("List = %v", all)
 	}
-	inProg, _ := s.List(ctx, dev, "KYB", "in_progress")
+	inProg, _ := s.List(ctx, dev, "KYB", app.ListQuery{Status: "in_progress"})
 	if len(inProg) != 1 || inProg[0].Key().String() != "KYB-2" {
 		t.Fatalf("filtered = %v", inProg)
 	}
@@ -207,7 +218,7 @@ func TestAccessControl(t *testing.T) {
 	if _, err := s.Get(ctx, viewer, "KYB-1"); err != nil {
 		t.Fatalf("viewer read: %v", err)
 	}
-	if _, err := s.List(ctx, viewer, "KYB", ""); err != nil {
+	if _, err := s.List(ctx, viewer, "KYB", app.ListQuery{}); err != nil {
 		t.Fatalf("viewer list: %v", err)
 	}
 	if _, err := s.Create(ctx, viewer, app.CreateIssue{Project: "KYB", Title: "x", Type: "task"}); !errors.Is(err, app.ErrForbidden) {
@@ -219,7 +230,7 @@ func TestAccessControl(t *testing.T) {
 	// Outsiders cannot learn whether a project or issue exists.
 	for _, err := range []error{
 		func() error { _, err := s.Get(ctx, alien, "KYB-1"); return err }(),
-		func() error { _, err := s.List(ctx, alien, "KYB", ""); return err }(),
+		func() error { _, err := s.List(ctx, alien, "KYB", app.ListQuery{}); return err }(),
 		func() error { _, err := s.Transition(ctx, alien, "KYB-1", "done"); return err }(),
 		func() error {
 			_, err := s.Create(ctx, alien, app.CreateIssue{Project: "KYB", Title: "x", Type: "task"})

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/bakhod1r/kyber/internal/issue/domain"
+	"github.com/bakhod1r/kyber/internal/platform/db"
 )
 
 type CommentRepository struct{ pool *pgxpool.Pool }
@@ -23,7 +24,7 @@ func (r *CommentRepository) Add(ctx context.Context, c *domain.Comment, events [
 			string(c.ID()), string(c.IssueID()), string(c.Author()), c.Body(), c.CreatedAt()); err != nil {
 			return err
 		}
-		return writeOutbox(ctx, tx, events)
+		return db.WriteOutbox(ctx, tx, events)
 	})
 }
 

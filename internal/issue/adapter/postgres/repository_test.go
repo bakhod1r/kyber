@@ -25,6 +25,9 @@ func TestContract(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if _, err := pool.Exec(ctx, `INSERT INTO sprints (id, project_key, name, state) VALUES ($1, 'KYB', 'Sprint A', 'planned')`, repotest.SprintA); err != nil {
+			t.Fatal(err)
+		}
 		outbox := outboxReader(t, pool)
 		return postgres.NewRepository(pool), outbox
 	})

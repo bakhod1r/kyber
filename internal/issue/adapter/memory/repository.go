@@ -60,18 +60,69 @@ func (r *Repository) ByKey(_ context.Context, key domain.IssueKey) (*domain.Issu
 	return &is, nil
 }
 
-func (r *Repository) ListByProject(_ context.Context, project string, status *domain.StatusID) ([]*domain.Issue, error) {
+func (r *Repository) ListByProject(_ context.Context, project string, f domain.ListFilter) ([]*domain.Issue, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var out []*domain.Issue
 	for _, is := range r.byKey {
-		if is.Key().Project() != project || (status != nil && is.Status() != *status) {
+		if is.Key().Project() != project ||
+			(f.Status != nil && is.Status() != *f.Status) ||
+			(f.Sprint != nil && is.Sprint() != *f.Sprint) {
 			continue
 		}
 		out = append(out, &is)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Key().Number() < out[j].Key().Number() })
+	sortByRank(out)
 	return out, nil
+}
+
+func sortByRank(list []*domain.Issue) {
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].Rank() != list[j].Rank() {
+			return list[i].Rank() < list[j].Rank()
+		}
+		return list[i].Key().Number() < list[j].Key().Number()
+	})
+}
+
+func (r *Repository) ranks(project string) []domain.Rank {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []domain.Rank
+	for _, is := range r.byKey {
+		if is.Key().Project() == project {
+			out = append(out, is.Rank())
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+func (r *Repository) LastRank(_ context.Context, project string) (domain.Rank, error) {
+	rs := r.ranks(project)
+	if len(rs) == 0 {
+		return "", nil
+	}
+	return rs[len(rs)-1], nil
+}
+
+func (r *Repository) NextRank(_ context.Context, project string, after domain.Rank) (domain.Rank, error) {
+	for _, x := range r.ranks(project) {
+		if x > after {
+			return x, nil
+		}
+	}
+	return "", nil
+}
+
+func (r *Repository) PrevRank(_ context.Context, project string, before domain.Rank) (domain.Rank, error) {
+	rs := r.ranks(project)
+	for i := len(rs) - 1; i >= 0; i-- {
+		if rs[i] < before {
+			return rs[i], nil
+		}
+	}
+	return "", nil
 }
 
 func (r *Repository) appendOutbox(events []domain.Event) {

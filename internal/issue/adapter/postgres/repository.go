@@ -3,7 +3,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/bakhod1r/kyber/internal/issue/domain"
+	"github.com/bakhod1r/kyber/internal/platform/db"
 )
 
 type Repository struct{ pool *pgxpool.Pool }
@@ -23,16 +23,18 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 		var err error
 		if is.Version() == 0 {
 			tag, err = tx.Exec(ctx, `INSERT INTO issues (id, project_key, number, title, type, status,
-				description, priority, assignee_id, version)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1) ON CONFLICT DO NOTHING`,
+				description, priority, assignee_id, rank, sprint_id, version)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 1) ON CONFLICT DO NOTHING`,
 				string(is.ID()), is.Key().Project(), is.Key().Number(), is.Title(), string(is.Type()), string(is.Status()),
-				is.Description(), string(is.Priority()), nullable(is.Assignee()))
+				is.Description(), string(is.Priority()), nullable(string(is.Assignee())), string(is.Rank()),
+				nullable(string(is.Sprint())))
 		} else {
 			tag, err = tx.Exec(ctx, `UPDATE issues SET title = $2, type = $3, status = $4, description = $5,
-				priority = $6, assignee_id = $7, version = version + 1, updated_at = now()
-				WHERE id = $1 AND version = $8`,
+				priority = $6, assignee_id = $7, rank = $8, sprint_id = $9, version = version + 1, updated_at = now()
+				WHERE id = $1 AND version = $10`,
 				string(is.ID()), is.Title(), string(is.Type()), string(is.Status()), is.Description(),
-				string(is.Priority()), nullable(is.Assignee()), is.Version())
+				string(is.Priority()), nullable(string(is.Assignee())), string(is.Rank()), nullable(string(is.Sprint())),
+				is.Version())
 		}
 		if err != nil {
 			return err
@@ -40,7 +42,7 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 		if tag.RowsAffected() != 1 {
 			return domain.ErrConcurrentModification
 		}
-		return writeOutbox(ctx, tx, events)
+		return db.WriteOutbox(ctx, tx, events)
 	})
 	if err != nil {
 		return err
@@ -50,7 +52,7 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 }
 
 const selectCols = `SELECT id::text, project_key, number, title, type, status, description, priority,
-	COALESCE(assignee_id::text, ''), version FROM issues`
+	COALESCE(assignee_id::text, ''), rank, COALESCE(sprint_id::text, ''), version FROM issues`
 
 func (r *Repository) ByKey(ctx context.Context, key domain.IssueKey) (*domain.Issue, error) {
 	is, err := scan(r.pool.QueryRow(ctx, selectCols+` WHERE project_key = $1 AND number = $2`, key.Project(), key.Number()))
@@ -60,9 +62,21 @@ func (r *Repository) ByKey(ctx context.Context, key domain.IssueKey) (*domain.Is
 	return is, err
 }
 
-func (r *Repository) ListByProject(ctx context.Context, project string, status *domain.StatusID) ([]*domain.Issue, error) {
-	rows, err := r.pool.Query(ctx, selectCols+` WHERE project_key = $1 AND ($2::text IS NULL OR status = $2)
-		ORDER BY number`, project, (*string)(status))
+func (r *Repository) ListByProject(ctx context.Context, project string, f domain.ListFilter) ([]*domain.Issue, error) {
+	where, args := `WHERE project_key = $1`, []any{project}
+	if f.Status != nil {
+		args = append(args, string(*f.Status))
+		where += fmt.Sprintf(` AND status = $%d`, len(args))
+	}
+	if f.Sprint != nil {
+		if *f.Sprint == "" {
+			where += ` AND sprint_id IS NULL`
+		} else {
+			args = append(args, string(*f.Sprint))
+			where += fmt.Sprintf(` AND sprint_id = $%d`, len(args))
+		}
+	}
+	rows, err := r.pool.Query(ctx, selectCols+" "+where+` ORDER BY rank, number`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -78,12 +92,33 @@ func (r *Repository) ListByProject(ctx context.Context, project string, status *
 	return out, rows.Err()
 }
 
+func (r *Repository) LastRank(ctx context.Context, project string) (domain.Rank, error) {
+	return r.rankQuery(ctx, `SELECT rank FROM issues WHERE project_key = $1 ORDER BY rank DESC LIMIT 1`, project)
+}
+
+func (r *Repository) NextRank(ctx context.Context, project string, after domain.Rank) (domain.Rank, error) {
+	return r.rankQuery(ctx, `SELECT rank FROM issues WHERE project_key = $1 AND rank > $2 ORDER BY rank LIMIT 1`, project, string(after))
+}
+
+func (r *Repository) PrevRank(ctx context.Context, project string, before domain.Rank) (domain.Rank, error) {
+	return r.rankQuery(ctx, `SELECT rank FROM issues WHERE project_key = $1 AND rank < $2 ORDER BY rank DESC LIMIT 1`, project, string(before))
+}
+
+func (r *Repository) rankQuery(ctx context.Context, sql string, args ...any) (domain.Rank, error) {
+	var rank string
+	err := r.pool.QueryRow(ctx, sql, args...).Scan(&rank)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return domain.Rank(rank), err
+}
+
 func scan(row pgx.Row) (*domain.Issue, error) {
 	var s domain.Snapshot
 	var project string
 	var number int
 	if err := row.Scan(&s.ID, &project, &number, &s.Title, &s.Type, &s.Status, &s.Description,
-		&s.Priority, &s.Assignee, &s.Version); err != nil {
+		&s.Priority, &s.Assignee, &s.Rank, &s.Sprint, &s.Version); err != nil {
 		return nil, err
 	}
 	key, err := domain.NewIssueKey(project, number)
@@ -94,25 +129,10 @@ func scan(row pgx.Row) (*domain.Issue, error) {
 	return domain.Rehydrate(s), nil
 }
 
-// nullable maps the domain's "" (unassigned) to SQL NULL.
-func nullable(u domain.UserID) *string {
-	if u == "" {
+// nullable maps the domain's "" (unassigned / backlog) to SQL NULL.
+func nullable(s string) *string {
+	if s == "" {
 		return nil
 	}
-	s := string(u)
 	return &s
-}
-
-// writeOutbox appends events in the caller's transaction (transactional outbox).
-func writeOutbox(ctx context.Context, tx pgx.Tx, events []domain.Event) error {
-	for _, e := range events {
-		payload, err := json.Marshal(e)
-		if err != nil {
-			return fmt.Errorf("marshal %s: %w", e.EventName(), err)
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO outbox (name, payload) VALUES ($1, $2)`, e.EventName(), payload); err != nil {
-			return err
-		}
-	}
-	return nil
 }

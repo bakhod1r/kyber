@@ -15,6 +15,8 @@ type EditIssue struct {
 	Priority    *string
 	AssigneeSet bool
 	Assignee    string
+	SprintSet   bool // move to Sprint ("" = backlog)
+	Sprint      string
 }
 
 func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue) (*domain.Issue, error) {
@@ -34,6 +36,11 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 			return nil, ErrInvalidAssignee
 		}
 	}
+	if cmd.SprintSet && cmd.Sprint != "" {
+		if err := s.sprints.CanHold(ctx, is.Key().Project(), cmd.Sprint); err != nil {
+			return nil, err
+		}
+	}
 	changes := domain.Changes{Title: cmd.Title, Description: cmd.Description}
 	if cmd.Priority != nil {
 		p := domain.Priority(*cmd.Priority)
@@ -44,6 +51,9 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 	}
 	if cmd.AssigneeSet {
 		is.Assign(domain.UserID(cmd.Assignee))
+	}
+	if cmd.SprintSet {
+		is.MoveToSprint(domain.SprintID(cmd.Sprint))
 	}
 	return is, s.save(ctx, is)
 }

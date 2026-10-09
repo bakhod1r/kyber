@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -175,8 +175,12 @@ paths:
       operationId: listIssues
       parameters:
         - { name: status, in: query, schema: { $ref: "#/components/schemas/Status" } }
+        - name: sprint
+          in: query
+          description: A sprint id, or `backlog` for issues in no sprint.
+          schema: { type: string }
       responses:
-        "200": { description: Ordered by number., content: { application/json: { schema: { $ref: "#/components/schemas/IssueList" } } } }
+        "200": { description: Ordered by backlog rank., content: { application/json: { schema: { $ref: "#/components/schemas/IssueList" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
     post:
@@ -222,6 +226,7 @@ paths:
                 description: { type: string, maxLength: 20000 }
                 priority: { $ref: "#/components/schemas/Priority" }
                 assignee_id: { type: [string, "null"], format: uuid }
+                sprint_id: { type: [string, "null"], description: "A planned or active sprint of the project; null = backlog." }
       responses:
         "200": { description: Updated issue, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
         "400": { $ref: "#/components/responses/Error" }
@@ -230,6 +235,93 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/issues/{issueKey}/rank:
+    parameters: [{ $ref: "#/components/parameters/IssueKey" }]
+    post:
+      operationId: rankIssue
+      description: Move the issue directly after or before another issue of the same project (exactly one of the two).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                after: { type: string, example: KYB-3 }
+                before: { type: string, example: KYB-1 }
+      responses:
+        "200": { description: Re-ranked issue, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/sprints:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listSprints
+      description: Active first, then planned (oldest first), then closed (newest first).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: { items: { type: array, items: { $ref: "#/components/schemas/Sprint" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createSprint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+                goal: { type: string, maxLength: 2000 }
+      responses:
+        "201": { description: Planned sprint, content: { application/json: { schema: { $ref: "#/components/schemas/Sprint" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/sprints/{id}/start:
+    parameters: [{ $ref: "#/components/parameters/SprintID" }]
+    post:
+      operationId: startSprint
+      responses:
+        "200": { description: Active sprint, content: { application/json: { schema: { $ref: "#/components/schemas/Sprint" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/sprints/{id}/complete:
+    parameters: [{ $ref: "#/components/parameters/SprintID" }]
+    post:
+      operationId: completeSprint
+      description: Closes the active sprint; issues that are not done return to the backlog.
+      responses:
+        "200":
+          description: Completion summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sprint, completed, returned]
+                additionalProperties: false
+                properties:
+                  sprint: { $ref: "#/components/schemas/Sprint" }
+                  completed: { type: integer, description: Done issues kept with the closed sprint. }
+                  returned: { type: integer, description: Unfinished issues moved back to the backlog. }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/transitions:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
     post:
@@ -287,6 +379,7 @@ components:
   parameters:
     ProjectKey: { name: key, in: path, required: true, schema: { type: string } }
     IssueKey: { name: issueKey, in: path, required: true, schema: { type: string }, example: KYB-12 }
+    SprintID: { name: id, in: path, required: true, schema: { type: string } }
   responses:
     Error:
       description: RFC 9457 problem details; `title` is localized from Accept-Language (en, uz, ru).
@@ -347,7 +440,7 @@ components:
     Priority: { type: string, enum: [lowest, low, medium, high, highest] }
     Issue:
       type: object
-      required: [id, key, title, type, status, description, priority, assignee_id, version]
+      required: [id, key, title, type, status, description, priority, assignee_id, sprint_id, rank, version]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -358,7 +451,21 @@ components:
         description: { type: string }
         priority: { $ref: "#/components/schemas/Priority" }
         assignee_id: { type: [string, "null"], format: uuid }
+        sprint_id: { type: [string, "null"], format: uuid }
+        rank: { type: string, description: Fractional backlog rank; compare byte-wise. }
         version: { type: integer, minimum: 1 }
+    Sprint:
+      type: object
+      required: [id, project_key, name, goal, state, started_at, completed_at]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        project_key: { $ref: "#/components/schemas/ProjectKey" }
+        name: { type: string, minLength: 1 }
+        goal: { type: string }
+        state: { type: string, enum: [planned, active, closed] }
+        started_at: { type: [string, "null"], format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
     IssueList:
       type: object
       required: [items]

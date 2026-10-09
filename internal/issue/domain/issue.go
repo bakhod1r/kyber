@@ -15,6 +15,9 @@ var (
 	ErrDescriptionTooLong     = errors.New("description must be at most 20000 characters")
 )
 
+// SprintID identifies a sprint of the Agile context ("" = backlog).
+type SprintID string
+
 // UserID identifies a user of the Identity context (published language).
 type UserID string
 
@@ -77,8 +80,10 @@ type Issue struct {
 	status      StatusID
 	description string
 	priority    Priority
-	assignee    UserID // "" = unassigned
-	version     int    // 0 = never persisted
+	assignee    UserID   // "" = unassigned
+	rank        Rank     // backlog order
+	sprint      SprintID // "" = backlog
+	version     int      // 0 = never persisted
 	events      []Event
 }
 
@@ -102,6 +107,8 @@ type Snapshot struct {
 	Description string
 	Priority    Priority
 	Assignee    UserID
+	Rank        Rank
+	Sprint      SprintID
 	Version     int
 }
 
@@ -111,7 +118,8 @@ func Rehydrate(s Snapshot) *Issue {
 		s.Priority = PriorityMedium
 	}
 	return &Issue{id: s.ID, key: s.Key, title: s.Title, typ: s.Type, status: s.Status,
-		description: s.Description, priority: s.Priority, assignee: s.Assignee, version: s.Version}
+		description: s.Description, priority: s.Priority, assignee: s.Assignee, rank: s.Rank, sprint: s.Sprint,
+		version: s.Version}
 }
 
 // Version is the optimistic-locking version; 0 means not yet persisted.
@@ -128,6 +136,22 @@ func (i *Issue) Status() StatusID    { return i.status }
 func (i *Issue) Description() string { return i.description }
 func (i *Issue) Priority() Priority  { return i.priority }
 func (i *Issue) Assignee() UserID    { return i.assignee }
+func (i *Issue) Rank() Rank          { return i.rank }
+func (i *Issue) Sprint() SprintID    { return i.sprint }
+
+// Rerank places the issue at r in the project's backlog order.
+func (i *Issue) Rerank(r Rank) { i.rank = r }
+
+// MoveToSprint puts the issue into a sprint, or with "" back into the backlog.
+// Whether the sprint may hold the issue is checked by the application layer.
+func (i *Issue) MoveToSprint(s SprintID) {
+	if s == i.sprint {
+		return
+	}
+	from := i.sprint
+	i.sprint = s
+	i.record(IssueSprintChanged{ID: i.id, Key: i.key, From: from, To: s})
+}
 
 // Changes lists the fields to edit; nil means "leave unchanged".
 type Changes struct {

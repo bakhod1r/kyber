@@ -12,6 +12,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	agilehttp "github.com/bakhod1r/kyber/internal/agile/adapter/httpapi"
+	agilememory "github.com/bakhod1r/kyber/internal/agile/adapter/memory"
+	agilepg "github.com/bakhod1r/kyber/internal/agile/adapter/postgres"
+	agileprojectacl "github.com/bakhod1r/kyber/internal/agile/adapter/projectacl"
+	agileapp "github.com/bakhod1r/kyber/internal/agile/app"
+	agiledomain "github.com/bakhod1r/kyber/internal/agile/domain"
 	"github.com/bakhod1r/kyber/internal/identity/adapter/argon2"
 	"github.com/bakhod1r/kyber/internal/identity/adapter/guardlimit"
 	identityhttp "github.com/bakhod1r/kyber/internal/identity/adapter/httpapi"
@@ -19,6 +25,7 @@ import (
 	identitypg "github.com/bakhod1r/kyber/internal/identity/adapter/postgres"
 	identityapp "github.com/bakhod1r/kyber/internal/identity/app"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
+	"github.com/bakhod1r/kyber/internal/issue/adapter/agileacl"
 	issuehttp "github.com/bakhod1r/kyber/internal/issue/adapter/httpapi"
 	issuememory "github.com/bakhod1r/kyber/internal/issue/adapter/memory"
 	issuepg "github.com/bakhod1r/kyber/internal/issue/adapter/postgres"
@@ -42,6 +49,7 @@ type deps struct {
 	projects     projectdomain.Repository
 	issues       issuedomain.Repository
 	comments     issuedomain.CommentRepository
+	sprints      agiledomain.Repository
 	users        identitydomain.Users
 	sessions     identitydomain.Sessions
 	ready        func(context.Context) error
@@ -61,7 +69,8 @@ func NewInMemory(log *slog.Logger) http.Handler {
 	issueRepo := issuememory.NewRepository()
 	return build(log, deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
-		users: ids, sessions: ids, ready: func(context.Context) error { return nil },
+		sprints: agilememory.NewRepository(),
+		users:   ids, sessions: ids, ready: func(context.Context) error { return nil },
 	})
 }
 
@@ -83,7 +92,8 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	ids := identitypg.NewRepository(pool)
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
-		users: ids, sessions: ids, ready: pool.Ping, cookieSecure: cookieSecure,
+		sprints: agilepg.NewRepository(pool),
+		users:   ids, sessions: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
 		o(&d)
@@ -108,10 +118,17 @@ func build(log *slog.Logger, d deps) http.Handler {
 	users := identitydir.New(d.users)
 	projects := projectapp.NewService(d.projects, users, id.New)
 	acl := projectacl.New(projects, users)
+	// Issue Tracking and Agile depend on each other through ports; the sprint
+	// ACL is bound once both services exist.
+	sprintACL := &lateSprints{}
 	issues := issueapp.NewService(issueapp.Deps{
-		Issues: d.issues, Comments: d.comments, Keys: acl, Access: acl, Directory: acl,
+		Issues: d.issues, Comments: d.comments, Keys: acl, Access: acl, Directory: acl, Sprints: sprintACL,
 		Workflow: issuedomain.DefaultWorkflow(), NewID: id.New, Now: time.Now,
 	})
+	agile := agileapp.NewService(agileapp.Deps{
+		Sprints: d.sprints, Issues: issues, Access: agileprojectacl.New(projects), NewID: id.New, Now: time.Now,
+	})
+	sprintACL.Sprints = agileacl.New(agile)
 	var identityOpts []identityapp.Option
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
@@ -124,6 +141,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	auth.RegisterProtected(api)
 	projecthttp.New(projects, log).Register(api)
 	issuehttp.New(issues, log).Register(api)
+	agilehttp.New(agile, log).Register(api)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -178,3 +196,6 @@ func recoverer(log *slog.Logger, next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// lateSprints breaks the construction cycle between Issue Tracking and Agile.
+type lateSprints struct{ *agileacl.Sprints }

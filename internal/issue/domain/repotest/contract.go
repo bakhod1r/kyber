@@ -4,6 +4,8 @@ package repotest
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +15,17 @@ import (
 // Assignee is a user ID adapters must accept as an assignee (the Postgres
 // test factory inserts this user so the foreign key holds).
 const Assignee = "60000000-0000-4000-8000-000000000001"
+
+// SprintA is a sprint ID adapters must accept (the Postgres factory inserts it).
+const SprintA = "70000000-0000-4000-8000-000000000001"
+
+func keys(list []*domain.Issue) string {
+	out := make([]string, len(list))
+	for i, is := range list {
+		out[i] = is.Key().String()
+	}
+	return strings.Join(out, ",")
+}
 
 // Factory returns an empty repository plus a function reading stored outbox event names.
 type Factory func(t *testing.T) (domain.Repository, func() []string)
@@ -26,6 +39,7 @@ func Run(t *testing.T, newRepo Factory) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		is.Rerank(domain.Rank(fmt.Sprintf("b%02d", n))) // rank order == number order unless a test reranks
 		return is
 	}
 
@@ -99,7 +113,7 @@ func Run(t *testing.T, newRepo Factory) {
 		a := mk(t, 1, "A")
 		_ = repo.Save(ctx, a, nil)
 		b := mk(t, 2, "B")
-		bKeyDup := domain.Rehydrate(domain.Snapshot{ID: b.ID(), Key: a.Key(), Title: "B", Type: domain.TypeTask, Status: domain.StatusTodo})
+		bKeyDup := domain.Rehydrate(domain.Snapshot{ID: b.ID(), Key: a.Key(), Title: "B", Type: domain.TypeTask, Status: domain.StatusTodo, Rank: "a0"})
 		if err := repo.Save(ctx, bKeyDup, nil); !errors.Is(err, domain.ErrConcurrentModification) {
 			t.Fatalf("err = %v", err)
 		}
@@ -129,6 +143,51 @@ func Run(t *testing.T, newRepo Factory) {
 		}
 	})
 
+	t.Run("rank order, neighbours and sprint filter", func(t *testing.T) {
+		repo, _ := newRepo(t)
+		for _, n := range []int{1, 2, 3} {
+			_ = repo.Save(ctx, mk(t, n, "t"), nil)
+		}
+		k1, _ := domain.NewIssueKey("KYB", 1)
+		one, _ := repo.ByKey(ctx, k1)
+		one.Rerank("b99") // move KYB-1 to the bottom
+		one.MoveToSprint(domain.SprintID(SprintA))
+		if err := repo.Save(ctx, one, nil); err != nil {
+			t.Fatal(err)
+		}
+		all, _ := repo.ListByProject(ctx, "KYB", domain.ListFilter{})
+		if got := keys(all); got != "KYB-2,KYB-3,KYB-1" {
+			t.Fatalf("rank order = %s", got)
+		}
+		backlog := domain.SprintID("")
+		inBacklog, _ := repo.ListByProject(ctx, "KYB", domain.ListFilter{Sprint: &backlog})
+		sprint := domain.SprintID(SprintA)
+		inSprint, _ := repo.ListByProject(ctx, "KYB", domain.ListFilter{Sprint: &sprint})
+		if keys(inBacklog) != "KYB-2,KYB-3" || keys(inSprint) != "KYB-1" {
+			t.Fatalf("backlog = %s, sprint = %s", keys(inBacklog), keys(inSprint))
+		}
+
+		last, err := repo.LastRank(ctx, "KYB")
+		if err != nil || last != "b99" {
+			t.Fatalf("LastRank = %q, %v", last, err)
+		}
+		if none, _ := repo.LastRank(ctx, "NONE"); none != "" {
+			t.Fatalf("LastRank(empty project) = %q", none)
+		}
+		if next, _ := repo.NextRank(ctx, "KYB", "b02"); next != "b03" {
+			t.Fatalf("NextRank(b02) = %q", next)
+		}
+		if next, _ := repo.NextRank(ctx, "KYB", "b99"); next != "" {
+			t.Fatalf("NextRank(last) = %q", next)
+		}
+		if prev, _ := repo.PrevRank(ctx, "KYB", "b03"); prev != "b02" {
+			t.Fatalf("PrevRank(b03) = %q", prev)
+		}
+		if prev, _ := repo.PrevRank(ctx, "KYB", "b02"); prev != "" {
+			t.Fatalf("PrevRank(first) = %q", prev)
+		}
+	})
+
 	t.Run("list by project ordered and filtered", func(t *testing.T) {
 		repo, _ := newRepo(t)
 		for _, n := range []int{3, 1, 2} {
@@ -136,18 +195,18 @@ func Run(t *testing.T, newRepo Factory) {
 			_ = repo.Save(ctx, is, nil)
 		}
 		other, _ := domain.NewIssueKey("OPS", 1)
-		_ = repo.Save(ctx, domain.Rehydrate(domain.Snapshot{ID: domain.IssueID(uuidFor(99)), Key: other, Title: "o", Type: domain.TypeTask, Status: domain.StatusTodo}), nil)
+		_ = repo.Save(ctx, domain.Rehydrate(domain.Snapshot{ID: domain.IssueID(uuidFor(99)), Key: other, Title: "o", Type: domain.TypeTask, Status: domain.StatusTodo, Rank: "a0"}), nil)
 		k2, _ := domain.NewIssueKey("KYB", 2)
 		two, _ := repo.ByKey(ctx, k2)
 		_ = two.Transition(domain.StatusInProgress, domain.DefaultWorkflow())
 		_ = repo.Save(ctx, two, nil)
 
-		all, err := repo.ListByProject(ctx, "KYB", nil)
+		all, err := repo.ListByProject(ctx, "KYB", domain.ListFilter{})
 		if err != nil || len(all) != 3 || all[0].Key().Number() != 1 || all[2].Key().Number() != 3 {
 			t.Fatalf("all = %v, %v", all, err)
 		}
 		st := domain.StatusInProgress
-		f, _ := repo.ListByProject(ctx, "KYB", &st)
+		f, _ := repo.ListByProject(ctx, "KYB", domain.ListFilter{Status: &st})
 		if len(f) != 1 || f[0].Key().Number() != 2 {
 			t.Fatalf("filtered = %v", f)
 		}
