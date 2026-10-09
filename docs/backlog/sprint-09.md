@@ -29,3 +29,19 @@ One Kyber installation hosts many organizations; their data never mixes.
 ## Carry-over from Sprint 08
 
 S30 CSV export, S31 @mention autocomplete, S32 MCP server (needs personal API tokens).
+
+## S36 — Public landing page ✅ (shipped)
+Visitors get a landing page at `/`; signed-in users get their projects.
+
+## S37 — Superuser admin panel
+Platform operators (super admins) manage the whole installation:
+- Users: list/search, suspend/reactivate, reset sessions, promote to super admin (guard's protected super-admin role).
+- Workspaces & projects: list, owners, usage (issues, members, storage), suspend a workspace.
+- System: health, version, outbox lag, relay errors, audit log (guard `audit`).
+- Every action is audited; super admins cannot demote the last super admin (guard invariant).
+Decision pending (see chat): Kyber-native React admin backed by guard `access` + `audit`, versus mounting
+guard's server-rendered `adminui` (requires guard sessions, Postgres + Redis).
+
+## S38 — Hosted sign-up ("use Kyber like Jira Cloud")
+Anyone can sign up on the site, create a workspace and invite their team; depends on S33 (workspaces).
+Email verification (emailx), password reset, invitations by email, per-workspace limits configured by super admins.
