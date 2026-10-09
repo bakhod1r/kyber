@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type FocusSession, api } from "../api";
+import { EyeBreak } from "../eye/EyeBreak";
 
 const FOCUS = ["focus"];
 const mmss = (s: number) => `${String(Math.floor(Math.max(0, s) / 60)).padStart(2, "0")}:${String(Math.max(0, s) % 60).padStart(2, "0")}`;
@@ -26,9 +27,29 @@ export function FocusTimer() {
     return () => clearInterval(t);
   }, [running]);
   const act = useMutation({ mutationFn: api.focusAction, onSuccess: done });
-  if (!s) return null;
-  const left = running ? s.remaining_seconds - Math.floor((Date.now() - q.dataUpdatedAt) / 1000) : s.remaining_seconds;
-  if (running && left <= 0) void done(s); // finished: the server settles it on the next read
+  const [eyes, setEyes] = useState(false);
+  const finished = useRef<string | null>(null);
+  const left = s ? (running ? s.remaining_seconds - Math.floor((Date.now() - q.dataUpdatedAt) / 1000) : s.remaining_seconds) : 0;
+  useEffect(() => {
+    if (s && running && left <= 0 && finished.current !== s.id) {
+      finished.current = s.id; // once per session
+      setEyes(true); // Pomodoro done: time to rest the eyes (Sharingan break)
+      void done(s); // the server settles the session on the next read
+    }
+  });
+  const eyeButton = (
+    <button className="ghost eye-button" aria-label="Eye break" title="Eye break" onClick={() => setEyes(true)}>
+      👁
+    </button>
+  );
+  const breakScreen = eyes && <EyeBreak onClose={() => setEyes(false)} />;
+  if (!s)
+    return (
+      <>
+        {eyeButton}
+        {breakScreen}
+      </>
+    );
   return (
     <div className={`focus-timer ${s.state}`}>
       <span role="timer" aria-label={`Focus on ${s.issue_key}`}>
@@ -47,6 +68,8 @@ export function FocusTimer() {
         Stop
       </button>
       {act.isError && <span role="alert" className="error">{act.error.message}</span>}
+      {eyeButton}
+      {breakScreen}
     </div>
   );
 }

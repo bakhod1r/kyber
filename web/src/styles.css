@@ -312,3 +312,15 @@ a.button.ghost { background: transparent; color: var(--accent); border: 1px soli
 .check { display: inline-flex; align-items: center; gap: 0.35rem; }
 /* The top bar (Pomodoro timer, notifications) stays usable above the issue panel overlay. */
 .topbar { position: relative; z-index: 11; }
+
+/* Eye break (S50, from Sharingan) */
+.eye-break { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; align-content: center; gap: 0.75rem;
+  padding: 16px; background: var(--bg); text-align: center; }
+.eye-stage { width: min(70vmin, 420px); height: auto; color: var(--text); }
+.eye-guide { transition: transform 0.6s ease-in-out; }
+.eye-say { font-size: 1.25rem; font-weight: 600; min-height: 1.6em; margin: 0; }
+.eye-exercise { color: var(--muted); margin: 0; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem; }
+.eye-break progress { width: min(420px, 90vw); }
+.eye-done { display: grid; gap: 1rem; justify-items: center; }
+.eye-button { padding: 0.15rem 0.5rem; }
+@media (prefers-reduced-motion: reduce) { .eye-guide { transition: none; } }

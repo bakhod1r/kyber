@@ -89,3 +89,24 @@ describe("Pomodoro buttons", () => {
     expect(screen.getByRole("button", { name: "Focus 25 min" })).toBeDisabled();
   });
 });
+
+describe("Pomodoro → eye break", () => {
+  it("opens the guided eye break when the focus time is up", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockApi({ "GET /api/v1/focus": { status: 200, body: { session: session({ remaining_seconds: 2 }) } } });
+    renderWithProviders(<FocusTimer />);
+    await screen.findByRole("timer");
+    await act(async () => vi.advanceTimersByTime(3000));
+    expect(await screen.findByRole("dialog", { name: "Eye break" })).toBeInTheDocument();
+  });
+
+  it("can be opened any time from the top bar", async () => {
+    mockApi({ "GET /api/v1/focus": { status: 200, body: { session: null } } });
+    const user = userEvent.setup();
+    renderWithProviders(<FocusTimer />);
+    await user.click(await screen.findByRole("button", { name: "Eye break" }));
+    expect(screen.getByRole("dialog", { name: "Eye break" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Skip break" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
