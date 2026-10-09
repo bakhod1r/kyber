@@ -45,7 +45,7 @@ func TestSPAHandler(t *testing.T) {
 	if code, _, _ := get(t, h, "/logo.svg"); code != 200 {
 		t.Fatalf("logo = %d", code)
 	}
-	if csp := hdr.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") || !strings.Contains(csp, "frame-ancestors 'none'") {
+	if csp := hdr.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") || !strings.Contains(csp, "frame-ancestors 'none'") || !strings.Contains(csp, "script-src 'self' https://telegram.org;") || !strings.Contains(csp, "frame-src https://oauth.telegram.org;") {
 		t.Fatalf("CSP = %q", csp)
 	}
 	if hdr.Get("X-Content-Type-Options") != "nosniff" {

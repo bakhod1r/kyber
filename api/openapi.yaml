@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.8.0
+  version: 0.9.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -87,6 +87,83 @@ paths:
           headers:
             Retry-After: { schema: { type: integer }, description: Seconds until the next attempt is allowed. }
           content: { application/problem+json: { schema: { $ref: "#/components/schemas/Error" } } }
+  /api/v1/auth/providers:
+    get:
+      operationId: authProviders
+      security: []
+      description: Which social sign-in methods this installation has configured.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [google, telegram_bot]
+                properties:
+                  google: { type: boolean }
+                  telegram_bot: { type: [string, "null"], description: Bot username for the Telegram Login Widget; null when disabled. }
+  /api/v1/auth/google/start:
+    get:
+      operationId: googleStart
+      security: []
+      description: >-
+        Starts "Sign in with Google" (OpenID Connect code flow with PKCE). Sets a short-lived HttpOnly
+        `kyber_oauth` cookie holding state, nonce and PKCE verifier, then redirects to Google.
+      responses:
+        "302": { description: "Redirect to the Google consent screen" }
+        "404": { description: Google sign-in is not configured }
+  /api/v1/auth/google/callback:
+    get:
+      operationId: googleCallback
+      security: []
+      description: >-
+        Google redirects here. The `state` must match this browser's `kyber_oauth` cookie; the ID token's
+        signature, issuer, audience, expiry and nonce are verified. A verified email links to an existing
+        account; an unverified one never does. On success sets `kyber_session` and redirects to `/`;
+        on failure redirects to `/login?error=google_failed` or `google_email_taken`.
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+      responses:
+        "302": { description: "Redirect to / when signed in, otherwise to /login?error=google_failed or google_email_taken" }
+        "404": { description: Google sign-in is not configured }
+  /api/v1/auth/telegram:
+    post:
+      operationId: telegramLogin
+      security: []
+      description: >-
+        Signs in with the Telegram Login Widget payload (passed through unchanged). The HMAC-SHA256 of the
+        fields is checked with the bot token and `auth_date` must be at most 24 h old. Answers like `login`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, auth_date, hash]
+              properties:
+                id: { type: integer }
+                first_name: { type: string }
+                last_name: { type: string }
+                username: { type: string }
+                photo_url: { type: string }
+                auth_date: { type: integer }
+                hash: { type: string }
+      responses:
+        "200":
+          description: Logged in; also sets the `kyber_session` cookie.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token]
+                properties: { token: { type: string } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/auth/logout:
     post:
       operationId: logout

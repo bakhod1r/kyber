@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { SocialSignIn } from "../components/SocialSignIn";
 
 export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const qc = useQueryClient();
@@ -63,6 +64,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         <button type="submit" disabled={submit.isPending}>
           {signup ? "Create account" : "Log in"}
         </button>
+        <SocialSignIn />
         <p className="muted">
           {signup ? (
             <>Already have an account? <Link to="/login">Log in</Link></>

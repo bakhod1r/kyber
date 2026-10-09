@@ -8,6 +8,7 @@ import (
 
 	"github.com/bakhod1r/kyber/internal/identity/adapter/postgres"
 	"github.com/bakhod1r/kyber/internal/identity/domain"
+	"github.com/bakhod1r/kyber/internal/identity/domain/externaltest"
 	"github.com/bakhod1r/kyber/internal/platform/db/dbtest"
 )
 
@@ -72,4 +73,16 @@ func TestDeleteExpiredSessions(t *testing.T) {
 	if _, err := r.SessionByHash(ctx, []byte("valid-valid-valid-valid-valid-va")); err != nil {
 		t.Fatalf("valid session lost: %v", err)
 	}
+}
+
+func TestExternalIdentitiesContract(t *testing.T) {
+	externaltest.Run(t, func(t *testing.T) (domain.ExternalIdentities, func(domain.UserID)) {
+		r := postgres.NewRepository(dbtest.New(t))
+		return r, func(id domain.UserID) {
+			u, _ := domain.NewUser(id, domain.Email(string(id)[30:]+"@x.uz"), "U", "")
+			if err := r.Create(context.Background(), u); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
 }

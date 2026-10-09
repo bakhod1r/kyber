@@ -2,9 +2,14 @@
 package main
 
 import (
+	"strings"
+
 	"context"
 	"errors"
 	"fmt"
+	"github.com/bakhod1r/kyber/internal/identity/adapter/google"
+	identityhttp "github.com/bakhod1r/kyber/internal/identity/adapter/httpapi"
+	"github.com/bakhod1r/kyber/internal/identity/adapter/telegram"
 	"log/slog"
 	"net/http"
 	"os"
@@ -64,10 +69,16 @@ func main() {
 
 // newHandler selects Postgres when KYBER_DATABASE_URL is set, otherwise in-memory dev mode.
 func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http.Handler, func(), error) {
+	social := server.WithSocial(identityhttp.Social{
+		Google: google.New(google.Config{ClientID: cfg.GoogleClientID, ClientSecret: cfg.GoogleClientSecret,
+			RedirectURL: strings.TrimRight(cfg.PublicURL, "/") + "/api/v1/auth/google/callback"}),
+		Telegram:    telegram.NewVerifier(cfg.TelegramBotToken, time.Now),
+		TelegramBot: cfg.TelegramBotName,
+	})
 	url := cfg.DatabaseURL
 	if url == "" {
 		log.Warn("KYBER_DATABASE_URL not set: running in-memory dev mode, data is lost on restart")
-		return server.NewInMemory(log), func() {}, nil
+		return server.NewInMemory(log, social), func() {}, nil
 	}
 	pool, err := db.Open(ctx, url)
 	if err != nil {
@@ -79,7 +90,7 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 	}
 	log.Info("database ready")
 	server.StartJobs(ctx, log, pool, cfg.SessionPurgeEvery)
-	var opts []server.Option
+	opts := []server.Option{social}
 	cleanup := pool.Close
 	if cfg.RedisURL != "" {
 		ropts, err := redis.ParseURL(cfg.RedisURL)

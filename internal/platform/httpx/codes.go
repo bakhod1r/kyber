@@ -12,6 +12,7 @@ const (
 	CodeTooManyAttempts      = "AUTH_TOO_MANY_ATTEMPTS"
 	CodeEmailTaken           = "EMAIL_TAKEN"
 	CodeCSRF                 = "CSRF_REJECTED"
+	CodeProviderDisabled     = "AUTH_PROVIDER_DISABLED"
 	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
 	CodeProjectKeyTaken      = "PROJECT_KEY_TAKEN"
 	CodeForbidden            = "PROJECT_FORBIDDEN"
@@ -46,6 +47,7 @@ var codes = []code{
 	{CodeTooManyAttempts, "6032", 429, "Too many attempts. Try again later.", "Urinishlar juda ko'p. Keyinroq urinib ko'ring.", "Слишком много попыток. Попробуйте позже.", errorx.CategorySecurity},
 	{CodeEmailTaken, "6033", 409, "This email is already registered.", "Bu email allaqachon ro'yxatdan o'tgan.", "Этот email уже зарегистрирован.", errorx.CategoryBusiness},
 	{CodeCSRF, "6034", 403, "Request rejected by CSRF protection.", "So'rov CSRF himoyasi tomonidan rad etildi.", "Запрос отклонён защитой от CSRF.", errorx.CategorySecurity},
+	{CodeProviderDisabled, "6035", 404, "This sign-in method is not enabled.", "Bu kirish usuli yoqilmagan.", "Этот способ входа не включён.", errorx.CategoryBusiness},
 	{CodeProjectNotFound, "6002", 404, "Project not found.", "Loyiha topilmadi.", "Проект не найден.", errorx.CategoryBusiness},
 	{CodeProjectKeyTaken, "6003", 409, "This project key is already taken.", "Bu loyiha kaliti band.", "Этот ключ проекта уже занят.", errorx.CategoryBusiness},
 	{CodeForbidden, "6004", 403, "Your project role does not allow this.", "Loyihadagi rolingiz bunga ruxsat bermaydi.", "Ваша роль в проекте не позволяет это сделать.", errorx.CategorySecurity},

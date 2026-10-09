@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/bakhod1r/errorx"
 
@@ -25,6 +24,7 @@ type Handler struct {
 	svc          *app.Service
 	log          *slog.Logger
 	cookieSecure bool
+	social       Social
 }
 
 func New(svc *app.Service, log *slog.Logger, cookieSecure bool) *Handler {
@@ -35,6 +35,7 @@ func New(svc *app.Service, log *slog.Logger, cookieSecure bool) *Handler {
 func (h *Handler) RegisterPublic(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/signup", h.signup)
 	mux.HandleFunc("POST /api/v1/auth/login", h.login)
+	h.registerSocial(mux)
 }
 
 // RegisterProtected mounts routes that require RequireAuth.
@@ -61,6 +62,8 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeEmailTaken, true
 	case errors.Is(err, app.ErrInvalidCredentials):
 		return httpx.CodeInvalidCredentials, true
+	case errors.Is(err, errProviderDisabled):
+		return httpx.CodeProviderDisabled, true
 	case errors.Is(err, app.ErrUnauthenticated):
 		return httpx.CodeAuthRequired, true
 	}
@@ -98,10 +101,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: CookieName, Value: token, Path: "/", HttpOnly: true, Secure: h.cookieSecure,
-		SameSite: http.SameSiteLaxMode, Expires: time.Now().Add(app.SessionTTL),
-	})
+	h.setSession(w, token)
 	httpx.JSON(w, http.StatusOK, map[string]string{"token": token})
 }
 

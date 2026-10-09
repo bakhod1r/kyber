@@ -70,6 +70,8 @@ type deps struct {
 	comments     issuedomain.CommentRepository
 	sprints      agiledomain.Repository
 	users        identitydomain.Users
+	external     identitydomain.ExternalIdentities
+	social       identityhttp.Social
 	sessions     identitydomain.Sessions
 	ready        func(context.Context) error
 	cookieSecure bool
@@ -88,6 +90,9 @@ func WithContext(ctx context.Context) Option { return func(d *deps) { d.ctx = ct
 // WithRelayEvery sets how often the outbox relay polls (default 1s).
 func WithRelayEvery(every time.Duration) Option { return func(d *deps) { d.relayEvery = every } }
 
+// WithSocial enables sign-in with Google and/or Telegram.
+func WithSocial(s identityhttp.Social) Option { return func(d *deps) { d.social = s } }
+
 // Option configures optional infrastructure.
 type Option func(*deps)
 
@@ -104,7 +109,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		sprints: sprintRepo, notes: notifymemory.NewRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(),
 		outbox:   outbox.NewMemoryStore(events(issueRepo.Outbox), events(sprintRepo.Outbox)),
-		users:    ids, sessions: ids, ready: func(context.Context) error { return nil },
+		users:    ids, sessions: ids, external: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
 		o(&d)
@@ -144,7 +149,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		sprints: agilepg.NewRepository(pool), notes: notifypg.NewRepository(pool), outbox: outbox.NewPostgresStore(pool),
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool),
-		users: ids, sessions: ids, ready: pool.Ping, cookieSecure: cookieSecure,
+		users: ids, sessions: ids, external: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
 		o(&d)
@@ -205,12 +210,12 @@ func build(log *slog.Logger, d deps) http.Handler {
 		d.relayEvery = time.Second
 	}
 	go relay.Run(d.ctx, d.relayEvery)
-	var identityOpts []identityapp.Option
+	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
 	}
 	identity := identityapp.NewService(d.users, d.sessions, argon2.New(), systemClock{}, id.New, identityOpts...)
-	auth := identityhttp.New(identity, log, d.cookieSecure)
+	auth := identityhttp.New(identity, log, d.cookieSecure).WithSocial(d.social)
 	m := metrics.NewHTTP()
 
 	api := http.NewServeMux()

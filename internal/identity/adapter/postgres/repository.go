@@ -79,3 +79,20 @@ func (r *Repository) DeleteExpiredSessions(ctx context.Context, now time.Time) (
 	tag, err := r.pool.Exec(ctx, `DELETE FROM sessions WHERE expires_at <= $1`, now)
 	return int(tag.RowsAffected()), err
 }
+
+func (r *Repository) LinkedUser(ctx context.Context, p domain.Provider, subject string) (domain.UserID, error) {
+	var id string
+	err := r.pool.QueryRow(ctx, `SELECT user_id::text FROM external_identities WHERE provider = $1 AND subject = $2`,
+		string(p), subject).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", domain.ErrNotLinked
+	}
+	return domain.UserID(id), err
+}
+
+// Link is idempotent; an identity already linked is never moved to another user.
+func (r *Repository) Link(ctx context.Context, id domain.ExternalIdentity) error {
+	_, err := r.pool.Exec(ctx, `INSERT INTO external_identities (provider, subject, user_id) VALUES ($1, $2, $3)
+		ON CONFLICT (provider, subject) DO NOTHING`, string(id.Provider), id.Subject, string(id.UserID))
+	return err
+}

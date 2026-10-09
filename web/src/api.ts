@@ -99,6 +99,10 @@ export type ImportReport = {
   skipped: string[];
 };
 
+export type AuthProviders = { google: boolean; telegram_bot: string | null };
+/** The Telegram Login Widget's user object, forwarded unchanged for server-side verification. */
+export type TelegramUser = { id: number; auth_date: number; hash: string; first_name?: string; last_name?: string; username?: string; photo_url?: string };
+
 export const ISSUE_TYPES: IssueType[] = ["task", "story", "bug", "epic", "subtask"];
 export const PRIORITIES: Priority[] = ["highest", "high", "medium", "low", "lowest"];
 
@@ -145,6 +149,8 @@ export const api = {
   signup: (email: string, name: string, password: string) =>
     request<User>("POST", "/api/v1/auth/signup", { email, name, password }),
   login: (email: string, password: string) => request<{ token: string }>("POST", "/api/v1/auth/login", { email, password }),
+  authProviders: () => request<AuthProviders>("GET", "/api/v1/auth/providers"),
+  telegramLogin: (user: TelegramUser) => request<{ token: string }>("POST", "/api/v1/auth/telegram", user),
   logout: () => request<undefined>("POST", "/api/v1/auth/logout"),
 
   projects: () => request<List<Project>>("GET", "/api/v1/projects").then((r) => r.items),

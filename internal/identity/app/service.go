@@ -32,6 +32,7 @@ type Service struct {
 	newID    func() string
 	dummy    string // hash verified for unknown users to equalise timing
 	limiter  LoginLimiter
+	external domain.ExternalIdentities // nil = Google/Telegram sign-in disabled
 }
 
 // Option customises the service.
@@ -104,16 +105,24 @@ func (s *Service) login(ctx context.Context, rawEmail, password string) (string,
 	if err != nil {
 		return "", err
 	}
+	// Accounts created through Google/Telegram have no password; never verify against "".
+	if u.PasswordHash() == "" {
+		s.hasher.Verify(s.dummy, password)
+		return "", ErrInvalidCredentials
+	}
 	if !s.hasher.Verify(u.PasswordHash(), password) {
 		return "", ErrInvalidCredentials
 	}
+	return s.newSession(ctx, u.ID())
+}
+
+// newSession issues an opaque bearer token; only its SHA-256 hash is stored.
+func (s *Service) newSession(ctx context.Context, user domain.UserID) (string, error) {
 	var raw [32]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
-	}
+	_, _ = rand.Read(raw[:]) // never fails (Go 1.24+: crypto/rand.Read panics instead of erroring)
 	token := base64.RawURLEncoding.EncodeToString(raw[:])
-	err = s.sessions.CreateSession(ctx, domain.Session{
-		TokenHash: hashToken(token), UserID: u.ID(), ExpiresAt: s.clock.Now().Add(SessionTTL),
+	err := s.sessions.CreateSession(ctx, domain.Session{
+		TokenHash: hashToken(token), UserID: user, ExpiresAt: s.clock.Now().Add(SessionTTL),
 	})
 	return token, err
 }

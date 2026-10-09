@@ -15,6 +15,15 @@ type Config struct {
 	RedisURL          string        `env:"KYBER_REDIS_URL"`
 	CookieSecure      bool          `env:"KYBER_COOKIE_SECURE" default:"true"`
 	SessionPurgeEvery time.Duration `env:"KYBER_SESSION_PURGE_EVERY" default:"1h"`
+	// PublicURL is the external base URL (OAuth redirect URIs are built from it).
+	PublicURL string `env:"KYBER_PUBLIC_URL" default:"http://localhost:8080"`
+	// Sign in with Google: create an OAuth client (Web application) in Google Cloud and add
+	// <PublicURL>/api/v1/auth/google/callback as an authorized redirect URI.
+	GoogleClientID     string `env:"KYBER_GOOGLE_CLIENT_ID"`
+	GoogleClientSecret string `env:"KYBER_GOOGLE_CLIENT_SECRET"`
+	// Sign in with Telegram: create a bot with @BotFather and /setdomain to the site's domain.
+	TelegramBotToken string `env:"KYBER_TELEGRAM_BOT_TOKEN"`
+	TelegramBotName  string `env:"KYBER_TELEGRAM_BOT_NAME"`
 }
 
 func Load() (*Config, error) {
@@ -31,8 +40,9 @@ func (c Config) String() string {
 	if c.RedisURL != "" {
 		redisURL = redact(c.RedisURL)
 	}
-	return fmt.Sprintf("addr=%s database=%s redis=%s cookie_secure=%t session_purge_every=%s",
-		c.Addr, redact(c.DatabaseURL), redisURL, c.CookieSecure, c.SessionPurgeEvery)
+	return fmt.Sprintf("addr=%s database=%s redis=%s cookie_secure=%t session_purge_every=%s public_url=%s google=%t telegram=%t",
+		c.Addr, redact(c.DatabaseURL), redisURL, c.CookieSecure, c.SessionPurgeEvery, c.PublicURL,
+		c.GoogleClientID != "" && c.GoogleClientSecret != "", c.TelegramBotToken != "")
 }
 
 func redact(raw string) string {

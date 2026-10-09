@@ -29,29 +29,29 @@ type client struct {
 }
 
 // backends returns the server factories under test: memory always, Postgres when configured.
-func backends(t *testing.T) map[string]func(t *testing.T) http.Handler {
+func backends(t *testing.T, extra ...server.Option) map[string]func(t *testing.T) http.Handler {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	b := map[string]func(t *testing.T) http.Handler{
 		"memory": func(t *testing.T) http.Handler {
-			return server.NewInMemory(log, server.WithContext(t.Context()), server.WithRelayEvery(20*time.Millisecond))
+			return server.NewInMemory(log, append([]server.Option{server.WithContext(t.Context()), server.WithRelayEvery(20 * time.Millisecond)}, extra...)...)
 		},
 	}
 	if os.Getenv("KYBER_TEST_DATABASE_URL") != "" {
 		b["postgres"] = func(t *testing.T) http.Handler {
-			return server.NewPostgres(log, dbtest.New(t), false, server.WithContext(t.Context()), server.WithRelayEvery(20*time.Millisecond))
+			return server.NewPostgres(log, dbtest.New(t), false, append([]server.Option{server.WithContext(t.Context()), server.WithRelayEvery(20 * time.Millisecond)}, extra...)...)
 		}
 		b["postgres+redis"] = func(t *testing.T) http.Handler {
 			rdb := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
-			return server.NewPostgres(log, dbtest.New(t), false, server.WithRedis(rdb),
-				server.WithContext(t.Context()), server.WithRelayEvery(20*time.Millisecond))
+			return server.NewPostgres(log, dbtest.New(t), false, append([]server.Option{server.WithRedis(rdb),
+				server.WithContext(t.Context()), server.WithRelayEvery(20 * time.Millisecond)}, extra...)...)
 		}
 	}
 	return b
 }
 
 // forEachBackend runs fn with an anonymous client per backend.
-func forEachBackend(t *testing.T, fn func(t *testing.T, c *client)) {
-	for name, mk := range backends(t) {
+func forEachBackend(t *testing.T, fn func(t *testing.T, c *client), extra ...server.Option) {
+	for name, mk := range backends(t, extra...) {
 		t.Run(name, func(t *testing.T) {
 			srv := httptest.NewServer(mk(t))
 			t.Cleanup(srv.Close)

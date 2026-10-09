@@ -13,10 +13,12 @@ type Repository struct {
 	mu       sync.Mutex
 	users    map[domain.UserID]domain.User
 	sessions map[string]domain.Session
+	external map[domain.Provider]map[string]domain.UserID
 }
 
 func NewRepository() *Repository {
-	return &Repository{users: map[domain.UserID]domain.User{}, sessions: map[string]domain.Session{}}
+	return &Repository{users: map[domain.UserID]domain.User{}, sessions: map[string]domain.Session{},
+		external: map[domain.Provider]map[string]domain.UserID{}}
 }
 
 func (r *Repository) Create(_ context.Context, u *domain.User) error {
@@ -87,4 +89,25 @@ func (r *Repository) DeleteExpiredSessions(_ context.Context, now time.Time) (in
 		}
 	}
 	return n, nil
+}
+
+func (r *Repository) LinkedUser(_ context.Context, p domain.Provider, subject string) (domain.UserID, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if id, ok := r.external[p][subject]; ok {
+		return id, nil
+	}
+	return "", domain.ErrNotLinked
+}
+
+func (r *Repository) Link(_ context.Context, id domain.ExternalIdentity) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.external[id.Provider] == nil {
+		r.external[id.Provider] = map[string]domain.UserID{}
+	}
+	if _, linked := r.external[id.Provider][id.Subject]; !linked {
+		r.external[id.Provider][id.Subject] = id.UserID
+	}
+	return nil
 }
