@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "extraKnownMarketplaces": {
+    "awesome-agents": {
+      "source": { "source": "github", "repo": "bakhod1r/awesome-agents" }
+    }
+  },
+  "enabledPlugins": {
+    "agent-workflow@awesome-agents": true,
+    "product-team@awesome-agents": true,
+    "architecture-team@awesome-agents": true,
+    "backend-team@awesome-agents": true,
+    "frontend-team@awesome-agents": true,
+    "design-team@awesome-agents": true,
+    "quality-team@awesome-agents": true,
+    "security-team@awesome-agents": true,
+    "platform-team@awesome-agents": true,
+    "release-team@awesome-agents": true
+  },
+  "permissions": {
+    "deny": ["Read(./.env)", "Read(./.env.*)", "Bash(git push --force:*)"]
+  }
+}
