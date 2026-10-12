@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	accessapp "github.com/bakhod1r/kyber/internal/access/app"
+	"github.com/bakhod1r/kyber/internal/issue/adapter/accessacl"
 	"github.com/bakhod1r/kyber/internal/issue/adapter/memory"
 	"github.com/bakhod1r/kyber/internal/issue/app"
 	"github.com/bakhod1r/kyber/internal/issue/domain"
@@ -39,29 +41,13 @@ type recorder struct {
 func (r *recorder) all() []domain.Event { return r.repo.Outbox()[r.skip:] }
 func (r *recorder) reset()              { r.skip = len(r.repo.Outbox()) }
 
-// fakeAccess grants per-project roles: "w" = write, "r" = read-only.
+// fakeAccess grants per-project roles: "r" = viewer, "w" = member, "a" = admin. Decisions are made
+// by the real Access context (default permission scheme), so tests exercise the production rules.
 type fakeAccess map[string]map[string]string
 
-func (f fakeAccess) Authorize(_ context.Context, actor, project string, write bool) error {
-	role, ok := f[project][actor]
-	if !ok {
-		return app.ErrProjectNotFound
-	}
-	if write && role == "r" {
-		return app.ErrForbidden
-	}
-	return nil
-}
-
-// Administer: only role "a" (project admin) configures the project.
-func (f fakeAccess) Administer(ctx context.Context, actor, project string) error {
-	if err := f.Authorize(ctx, actor, project, false); err != nil {
-		return err
-	}
-	if f[project][actor] != "a" {
-		return app.ErrForbidden
-	}
-	return nil
+func (f fakeAccess) RoleOf(_ context.Context, project, user string) (string, bool, error) {
+	role, ok := f[project][user]
+	return map[string]string{"r": "viewer", "w": "member", "a": "admin"}[role], ok, nil
 }
 
 func (f fakeAccess) IsMember(_ context.Context, project, user string) (bool, error) {
@@ -91,6 +77,12 @@ const (
 )
 
 func setup() (*app.Service, *recorder) {
+	s, rec, _ := setupWithAccess()
+	return s, rec
+}
+
+// setupWithAccess also returns the role table, so tests can change someone's role.
+func setupWithAccess() (*app.Service, *recorder, fakeAccess) {
 	repo := memory.NewRepository()
 	rec := &recorder{repo: repo}
 	n := 0
@@ -102,11 +94,11 @@ func setup() (*app.Service, *recorder) {
 	}
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	return app.NewService(app.Deps{
-		Issues: repo, Comments: memory.NewCommentRepository(repo), Keys: keys, Access: access, Directory: access,
+		Issues: repo, Comments: memory.NewCommentRepository(repo), Keys: keys, Access: accessacl.New(accessapp.NewService(access)), Directory: access,
 		Sprints:  fakeSprints{"KYB": {"s-1": true, "s-2": true}},
-		Workflow: domain.DefaultWorkflow(), Workflows: memory.NewWorkflowRepository(), History: memory.NewHistoryRepository(), Links: memory.NewLinkRepository(repo), Admins: access, NewID: ids,
+		Workflow: domain.DefaultWorkflow(), Workflows: memory.NewWorkflowRepository(), History: memory.NewHistoryRepository(), Links: memory.NewLinkRepository(repo), NewID: ids,
 		Now: func() time.Time { now = now.Add(time.Minute); return now },
-	}), rec
+	}), rec, access
 }
 
 func TestCreateIssue(t *testing.T) {

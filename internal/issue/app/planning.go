@@ -19,7 +19,7 @@ func (s *Service) Rank(ctx context.Context, actor, rawKey string, m RankMove) (*
 	if (m.After == "") == (m.Before == "") {
 		return nil, ErrInvalidAnchor
 	}
-	is, err := s.load(ctx, actor, rawKey, true)
+	is, err := s.load(ctx, actor, rawKey, PermEdit)
 	if err != nil {
 		return nil, err
 	}

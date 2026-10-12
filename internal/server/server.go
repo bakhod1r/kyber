@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	accessapp "github.com/bakhod1r/kyber/internal/access/app"
 	agilehttp "github.com/bakhod1r/kyber/internal/agile/adapter/httpapi"
 	agileissueacl "github.com/bakhod1r/kyber/internal/agile/adapter/issueacl"
 	agilememory "github.com/bakhod1r/kyber/internal/agile/adapter/memory"
@@ -60,6 +61,7 @@ import (
 	insightspg "github.com/bakhod1r/kyber/internal/insights/adapter/postgres"
 	insightsapp "github.com/bakhod1r/kyber/internal/insights/app"
 	insightsdomain "github.com/bakhod1r/kyber/internal/insights/domain"
+	issueaccessacl "github.com/bakhod1r/kyber/internal/issue/adapter/accessacl"
 	"github.com/bakhod1r/kyber/internal/issue/adapter/agileacl"
 	issuehttp "github.com/bakhod1r/kyber/internal/issue/adapter/httpapi"
 	issuememory "github.com/bakhod1r/kyber/internal/issue/adapter/memory"
@@ -233,12 +235,14 @@ func build(log *slog.Logger, d deps) http.Handler {
 	tenancy := workspacehttp.New(workspaces, log, d.baseDomain, d.cookieSecure)
 	projects := projectapp.NewService(d.projects, users, id.New).WithWorkspaces(workspaces)
 	acl := projectacl.New(projects, users)
+	// Access context (ADR-0003): every permission decision goes through the project's scheme.
+	access := accessapp.NewService(projects)
 	// Issue Tracking and Agile depend on each other through ports; the sprint
 	// ACL is bound once both services exist.
 	sprintACL := &lateSprints{}
 	issues := issueapp.NewService(issueapp.Deps{
-		Issues: d.issues, Comments: d.comments, Keys: acl, Access: acl, Directory: acl, Sprints: sprintACL,
-		Workflow: issuedomain.DefaultWorkflow(), Workflows: d.workflows, History: d.history, Links: d.links, Admins: acl, NewID: id.New, Now: time.Now,
+		Issues: d.issues, Comments: d.comments, Keys: acl, Access: issueaccessacl.New(access), Directory: acl, Sprints: sprintACL,
+		Workflow: issuedomain.DefaultWorkflow(), Workflows: d.workflows, History: d.history, Links: d.links, NewID: id.New, Now: time.Now,
 	})
 	agileACL := agileprojectacl.New(projects)
 	agile := agileapp.NewService(agileapp.Deps{

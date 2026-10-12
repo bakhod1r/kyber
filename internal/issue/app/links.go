@@ -17,11 +17,11 @@ type LinkView struct {
 
 // Link connects two issues; the actor needs write access to the source issue and read access to the target.
 func (s *Service) Link(ctx context.Context, actor, rawFrom, typ, rawTo string) (domain.Link, error) {
-	from, err := s.load(ctx, actor, rawFrom, true)
+	from, err := s.load(ctx, actor, rawFrom, PermEdit)
 	if err != nil {
 		return domain.Link{}, err
 	}
-	to, err := s.load(ctx, actor, rawTo, false)
+	to, err := s.load(ctx, actor, rawTo, PermBrowse)
 	if err != nil {
 		return domain.Link{}, err
 	}
@@ -38,7 +38,7 @@ func (s *Service) Unlink(ctx context.Context, actor, id string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.access.Authorize(ctx, actor, l.FromKey.Project(), true); err != nil {
+	if err := s.access.Can(ctx, actor, l.FromKey.Project(), PermEdit, nil); err != nil {
 		if errors.Is(err, ErrProjectNotFound) {
 			return domain.ErrLinkNotFound
 		}
@@ -49,7 +49,7 @@ func (s *Service) Unlink(ctx context.Context, actor, id string) error {
 
 // Links lists an issue's links; links to issues the actor may not read are left out.
 func (s *Service) Links(ctx context.Context, actor, rawKey string) ([]LinkView, error) {
-	is, err := s.load(ctx, actor, rawKey, false)
+	is, err := s.load(ctx, actor, rawKey, PermBrowse)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (s *Service) Links(ctx context.Context, actor, rawKey string) ([]LinkView, 
 	}
 	out := []LinkView{}
 	for _, l := range links {
-		other, err := s.load(ctx, actor, l.OtherKey(is.ID()).String(), false)
+		other, err := s.load(ctx, actor, l.OtherKey(is.ID()).String(), PermBrowse)
 		if errors.Is(err, ErrProjectNotFound) || errors.Is(err, domain.ErrIssueNotFound) {
 			continue
 		}

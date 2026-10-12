@@ -61,3 +61,13 @@ attributes.
 - ✅ Jira-like flexibility (schemes, own-permissions, security levels) without a generic policy language.
 - ⚠️ Every list endpoint must filter through the decision; the leak tests are mandatory.
 - ⚠️ Scheme changes affect many projects at once — edits require `ADMINISTER` and are audited.
+
+## Implementation note — phase 1 (shipped, Sprint 10 / S46)
+- `access/app.Service.Can(actor, project, permission, issue)` decides through guard's ABAC engine with the
+  default scheme; the actor's role comes from the Project context (`RoleOf`). 100 % coverage, strict gate.
+- Issue Tracking asks for Jira permissions instead of read/write: Browse, Create, Edit (reporters may edit their
+  own issues), Assign, Transition, Close (moving into a Done-category status), Add Comments, Administer
+  (workflow). Issues are loaded only after the project-level Browse check, so outsiders still get 404.
+- An endpoint × role matrix (admin, member, viewer, outsider) runs on every backend.
+- **Phase 2:** per-project schemes and their editor, issue security levels (list/report/export filtering and
+  leak tests), and moving Agile, Insights, Importer, Calendar and Focus from the coarse project check to `Can`.

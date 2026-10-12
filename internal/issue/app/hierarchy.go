@@ -34,7 +34,7 @@ type Children struct {
 }
 
 func (s *Service) Children(ctx context.Context, actor, rawKey string) (Children, error) {
-	is, err := s.load(ctx, actor, rawKey, false)
+	is, err := s.load(ctx, actor, rawKey, PermBrowse)
 	if err != nil {
 		return Children{}, err
 	}

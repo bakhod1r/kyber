@@ -22,7 +22,7 @@ func (s *Service) workflowFor(ctx context.Context, project string) (*domain.Work
 
 // Workflow returns the project's workflow to any project member.
 func (s *Service) Workflow(ctx context.Context, actor, project string) (*domain.Workflow, error) {
-	if err := s.access.Authorize(ctx, actor, project, false); err != nil {
+	if err := s.access.Can(ctx, actor, project, PermBrowse, nil); err != nil {
 		return nil, err
 	}
 	return s.workflowFor(ctx, project)
@@ -31,7 +31,7 @@ func (s *Service) Workflow(ctx context.Context, actor, project string) (*domain.
 // SetWorkflow replaces the project's workflow (project admins only). Like Jira, a status that
 // issues still sit in cannot be removed until they are moved.
 func (s *Service) SetWorkflow(ctx context.Context, actor, project string, def domain.WorkflowDef) (*domain.Workflow, error) {
-	if err := s.admins.Administer(ctx, actor, project); err != nil {
+	if err := s.access.Can(ctx, actor, project, PermAdminister, nil); err != nil {
 		return nil, err
 	}
 	wf, err := domain.DefineWorkflow(def)

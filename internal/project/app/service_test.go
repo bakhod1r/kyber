@@ -163,3 +163,28 @@ func TestNextIssueNumberIsSequentialUnderConcurrency(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// RoleOf feeds the Access context's permission scheme (ADR-0003).
+func TestRoleOf(t *testing.T) {
+	ctx := context.Background()
+	s := newService(t)
+	_, _ = s.Create(ctx, alice, "KYB", "Kyber")
+	_ = s.SetMember(ctx, alice, "KYB", "carol@x.uz", "viewer")
+	cases := []struct {
+		project string
+		user    domain.UserID
+		role    string
+		ok      bool
+	}{
+		{"KYB", alice, "admin", true},
+		{"KYB", carol, "viewer", true},
+		{"KYB", bob, "", false},
+		{"NOPE", alice, "", false},
+	}
+	for _, c := range cases {
+		role, ok, err := s.RoleOf(ctx, c.project, string(c.user))
+		if err != nil || role != c.role || ok != c.ok {
+			t.Errorf("RoleOf(%s, %s) = %q %v %v", c.project, c.user, role, ok, err)
+		}
+	}
+}

@@ -14,7 +14,8 @@ Source: architecture review (2026-10-09). Priority order; each story DDD + TDD w
   blocks / is blocked by / relates to / duplicates / clones. ✅ **Done:** migrations 0023/0024, children with progress,
   links read from both ends (hidden when the other issue is not readable), both in the issue history and audit log.
 - **S46 Wire access control (ADR-0003)** — permission schemes and issue security on every endpoint and read model;
-  authorize after loading the issue (attribute rules), endpoint × role × attribute matrix tests.
+  authorize after loading the issue (attribute rules), endpoint × role × attribute matrix tests. 🟡 **Phase 1 done**
+  for Issue Tracking (see ADR-0003 note); phase 2: stored schemes, security levels, the other contexts.
 
 ## P1
 - **S47 Sprint scope & sprint report** — issues added/removed after start, completed / not completed / removed

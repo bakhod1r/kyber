@@ -79,7 +79,7 @@ func (s *Service) OnHistoryEvent(ctx context.Context, m outbox.Message) error {
 
 // History returns the issue's full history to anyone who may read the issue.
 func (s *Service) History(ctx context.Context, actor, rawKey string) ([]HistoryLine, error) {
-	is, err := s.load(ctx, actor, rawKey, false)
+	is, err := s.load(ctx, actor, rawKey, PermBrowse)
 	if err != nil {
 		return nil, err
 	}

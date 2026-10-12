@@ -34,15 +34,25 @@ type Directory interface {
 	DisplayName(ctx context.Context, user string) (string, error)
 }
 
-// Admins checks the project administration permission (ACL to the Project context).
-type Admins interface {
-	Administer(ctx context.Context, actor, project string) error
-}
+// Permission is a Jira permission name, decided by the Access context's permission scheme.
+type Permission string
 
-// Access is the anti-corruption port to the Project context's membership rules.
-// Non-members get ErrProjectNotFound, members lacking the permission ErrForbidden.
+const (
+	PermBrowse     Permission = "BROWSE_PROJECTS"
+	PermCreate     Permission = "CREATE_ISSUES"
+	PermEdit       Permission = "EDIT_ISSUES"
+	PermAssign     Permission = "ASSIGN_ISSUES"
+	PermTransition Permission = "TRANSITION_ISSUES"
+	PermClose      Permission = "CLOSE_ISSUES"
+	PermComment    Permission = "ADD_COMMENTS"
+	PermAdminister Permission = "ADMINISTER_PROJECTS"
+)
+
+// Access is the anti-corruption port to the Access context (ADR-0003): may actor exercise perm in
+// project, on the issue when given? Hidden projects/issues give ErrProjectNotFound, missing
+// permissions ErrForbidden.
 type Access interface {
-	Authorize(ctx context.Context, actor, project string, write bool) error
+	Can(ctx context.Context, actor, project string, perm Permission, on *domain.Issue) error
 }
 
 type Service struct {
@@ -56,7 +66,6 @@ type Service struct {
 	workflows domain.WorkflowRepository
 	history   domain.HistoryRepository
 	links     domain.LinkRepository
-	admins    Admins
 	newID     func() string
 	now       func() time.Time
 }
@@ -73,7 +82,6 @@ type Deps struct {
 	Workflows domain.WorkflowRepository
 	History   domain.HistoryRepository
 	Links     domain.LinkRepository
-	Admins    Admins
 	NewID     func() string
 	Now       func() time.Time
 }
@@ -81,7 +89,7 @@ type Deps struct {
 func NewService(d Deps) *Service {
 	return &Service{issues: d.Issues, comments: d.Comments, keys: d.Keys, access: d.Access,
 		directory: d.Directory, sprints: d.Sprints, workflow: d.Workflow,
-		workflows: d.Workflows, history: d.History, links: d.Links, admins: d.Admins, newID: d.NewID, now: d.Now}
+		workflows: d.Workflows, history: d.History, links: d.Links, newID: d.NewID, now: d.Now}
 }
 
 type CreateIssue struct {
@@ -100,7 +108,7 @@ func (s *Service) Create(ctx context.Context, actor string, cmd CreateIssue) (*d
 	if _, err := domain.NormalizeTitle(cmd.Title); err != nil {
 		return nil, err
 	}
-	if err := s.access.Authorize(ctx, actor, cmd.Project, true); err != nil {
+	if err := s.access.Can(ctx, actor, cmd.Project, PermCreate, nil); err != nil {
 		return nil, err
 	}
 	parent, err := s.parentFor(ctx, cmd.Project, cmd.Parent, typ)
@@ -133,30 +141,44 @@ func (s *Service) Create(ctx context.Context, actor string, cmd CreateIssue) (*d
 }
 
 func (s *Service) Get(ctx context.Context, actor, rawKey string) (*domain.Issue, error) {
-	return s.load(ctx, actor, rawKey, false)
+	return s.load(ctx, actor, rawKey, PermBrowse)
 }
 
 // load parses the key and authorizes before touching the issue, so outsiders
 // cannot distinguish missing issues from hidden ones.
-func (s *Service) load(ctx context.Context, actor, rawKey string, write bool) (*domain.Issue, error) {
+// The issue's own attributes (reporter, assignee, status) then decide perm (ABAC).
+func (s *Service) load(ctx context.Context, actor, rawKey string, perm Permission) (*domain.Issue, error) {
 	key, err := domain.ParseIssueKey(rawKey)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidKey, err)
 	}
-	if err := s.access.Authorize(ctx, actor, key.Project(), write); err != nil {
+	if err := s.access.Can(ctx, actor, key.Project(), PermBrowse, nil); err != nil {
 		return nil, err
 	}
-	return s.issues.ByKey(ctx, key)
+	is, err := s.issues.ByKey(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.access.Can(ctx, actor, key.Project(), perm, is); err != nil {
+		return nil, err
+	}
+	return is, nil
 }
 
 func (s *Service) Transition(ctx context.Context, actor, rawKey, to string) (*domain.Issue, error) {
-	is, err := s.load(ctx, actor, rawKey, true)
+	is, err := s.load(ctx, actor, rawKey, PermTransition)
 	if err != nil {
 		return nil, err
 	}
 	wf, err := s.workflowFor(ctx, is.Key().Project())
 	if err != nil {
 		return nil, err
+	}
+	// Moving an issue into a Done-category status resolves it: Jira's Close Issues permission.
+	if wf.IsDone(domain.StatusID(to)) {
+		if err := s.access.Can(ctx, actor, is.Key().Project(), PermClose, is); err != nil {
+			return nil, err
+		}
 	}
 	if err := is.Transition(domain.StatusID(to), wf); err != nil {
 		return nil, err
@@ -175,7 +197,7 @@ type ListQuery struct {
 }
 
 func (s *Service) List(ctx context.Context, actor, project string, q ListQuery) ([]*domain.Issue, error) {
-	if err := s.access.Authorize(ctx, actor, project, false); err != nil {
+	if err := s.access.Can(ctx, actor, project, PermBrowse, nil); err != nil {
 		return nil, err
 	}
 	var f domain.ListFilter

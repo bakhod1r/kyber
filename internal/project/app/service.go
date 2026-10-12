@@ -172,3 +172,16 @@ func (s *Service) NextIssueNumber(ctx context.Context, key string) (int, error) 
 	})
 	return n, err
 }
+
+// RoleOf returns the user's role in the project; ok is false for non-members and unknown projects.
+func (s *Service) RoleOf(ctx context.Context, key, user string) (string, bool, error) {
+	p, err := s.byKey(ctx, key)
+	if errors.Is(err, domain.ErrProjectNotFound) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	r, ok := p.RoleOf(domain.UserID(user))
+	return string(r), ok, nil
+}

@@ -23,9 +23,14 @@ type EditIssue struct {
 }
 
 func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue) (*domain.Issue, error) {
-	is, err := s.load(ctx, actor, rawKey, true)
+	is, err := s.load(ctx, actor, rawKey, PermEdit)
 	if err != nil {
 		return nil, err
+	}
+	if cmd.AssigneeSet {
+		if err := s.access.Can(ctx, actor, is.Key().Project(), PermAssign, is); err != nil {
+			return nil, err
+		}
 	}
 	if is.Version() != cmd.Version {
 		return nil, domain.ErrConcurrentModification
@@ -87,9 +92,9 @@ type CommentView struct {
 	AuthorName string
 }
 
-// AddComment requires write access (viewers read only).
+// AddComment requires the Add Comments permission.
 func (s *Service) AddComment(ctx context.Context, actor, rawKey, body string) (*domain.Comment, error) {
-	is, err := s.load(ctx, actor, rawKey, true)
+	is, err := s.load(ctx, actor, rawKey, PermComment)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +106,7 @@ func (s *Service) AddComment(ctx context.Context, actor, rawKey, body string) (*
 }
 
 func (s *Service) Comments(ctx context.Context, actor, rawKey string) ([]CommentView, error) {
-	is, err := s.load(ctx, actor, rawKey, false)
+	is, err := s.load(ctx, actor, rawKey, PermBrowse)
 	if err != nil {
 		return nil, err
 	}
