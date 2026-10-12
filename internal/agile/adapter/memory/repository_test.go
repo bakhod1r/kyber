@@ -14,3 +14,7 @@ func TestContract(t *testing.T) {
 		return r, r.OutboxNames
 	})
 }
+
+func TestBoardContract(t *testing.T) {
+	repotest.RunBoards(t, func(t *testing.T) domain.BoardRepository { return memory.NewBoardRepository() })
+}

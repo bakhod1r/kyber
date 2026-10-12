@@ -9,3 +9,4 @@
 ./internal/focus/domain
 ./internal/calendar/app
 ./internal/focus/app
+./internal/agile/domain

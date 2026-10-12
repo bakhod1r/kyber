@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.12.0
+  version: 0.13.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -484,6 +484,69 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/boards:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listBoards
+      description: The project's boards by name. A project gets a Kanban board (one column per status) on first use.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: { items: { type: array, items: { $ref: "#/components/schemas/Board" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createBoard
+      description: Create a board (project admins). Without columns, one column per workflow status.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/BoardInput" } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Board" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/boards/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: getBoard
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Board" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      operationId: updateBoard
+      description: Reconfigure a board (project admins); `version` must match (optimistic locking).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/BoardInput" }
+                - { type: object, required: [version], properties: { version: { type: integer } } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Board" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteBoard
+      description: Delete a board (project admins). The last board of a project cannot be deleted (409).
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/issues:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -1049,6 +1112,32 @@ components:
       pattern: "^[a-z0-9_]{1,40}$"
       description: A status id of the project's workflow (default workflow — todo, in_progress, done).
     StatusCategory: { type: string, enum: [todo, in_progress, done] }
+    BoardColumn:
+      type: object
+      description: A column shows the issues in its statuses. `min`/`max` are WIP limits (0 = none).
+      required: [name, statuses]
+      properties:
+        name: { type: string, maxLength: 60 }
+        statuses: { type: array, items: { $ref: "#/components/schemas/Status" } }
+        min: { type: integer, minimum: 0 }
+        max: { type: integer, minimum: 0 }
+    BoardInput:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string, maxLength: 60 }
+        kind: { type: string, enum: [scrum, kanban] }
+        columns: { type: array, items: { $ref: "#/components/schemas/BoardColumn" } }
+    Board:
+      type: object
+      required: [id, project_key, name, kind, columns, version]
+      properties:
+        id: { type: string }
+        project_key: { type: string }
+        name: { type: string }
+        kind: { type: string, enum: [scrum, kanban] }
+        columns: { type: array, items: { $ref: "#/components/schemas/BoardColumn" } }
+        version: { type: integer }
     WorkflowStatus:
       type: object
       required: [id, name, category]

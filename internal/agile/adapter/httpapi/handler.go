@@ -25,6 +25,11 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/projects/{key}/sprints", h.create)
 	mux.HandleFunc("POST /api/v1/sprints/{id}/start", h.start)
 	mux.HandleFunc("POST /api/v1/sprints/{id}/complete", h.complete)
+	mux.HandleFunc("GET /api/v1/projects/{key}/boards", h.boards)
+	mux.HandleFunc("POST /api/v1/projects/{key}/boards", h.createBoard)
+	mux.HandleFunc("GET /api/v1/boards/{id}", h.board)
+	mux.HandleFunc("PUT /api/v1/boards/{id}", h.updateBoard)
+	mux.HandleFunc("DELETE /api/v1/boards/{id}", h.deleteBoard)
 }
 
 type sprintDTO struct {
@@ -57,7 +62,8 @@ func toDTO(s *domain.Sprint) sprintDTO {
 
 func codeFor(err error) (string, bool) {
 	switch {
-	case errors.Is(err, domain.ErrInvalidSprint), errors.Is(err, domain.ErrInvalidSprintDates), errors.Is(err, httpx.ErrBadJSON):
+	case errors.Is(err, domain.ErrInvalidSprint), errors.Is(err, domain.ErrInvalidSprintDates), errors.Is(err, httpx.ErrBadJSON),
+		errors.Is(err, domain.ErrInvalidBoard):
 		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrSprintNotFound):
 		return httpx.CodeSprintNotFound, true
@@ -67,6 +73,12 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeSprintConflict, true
 	case errors.Is(err, domain.ErrSprintState):
 		return httpx.CodeSprintState, true
+	case errors.Is(err, domain.ErrBoardNotFound):
+		return httpx.CodeBoardNotFound, true
+	case errors.Is(err, domain.ErrBoardConflict):
+		return httpx.CodeBoardConflict, true
+	case errors.Is(err, app.ErrLastBoard):
+		return httpx.CodeLastBoard, true
 	case errors.Is(err, app.ErrProjectNotFound):
 		return httpx.CodeProjectNotFound, true
 	case errors.Is(err, app.ErrForbidden):

@@ -31,3 +31,15 @@ func (a *Access) Authorize(ctx context.Context, actor, project string, write boo
 	}
 	return err
 }
+
+// Administer requires the project admin permission.
+func (a *Access) Administer(ctx context.Context, actor, project string) error {
+	err := a.projects.Authorize(ctx, projectdomain.UserID(actor), project, projectdomain.PermAdmin)
+	switch {
+	case errors.Is(err, projectdomain.ErrProjectNotFound):
+		return agileapp.ErrProjectNotFound
+	case errors.Is(err, projectdomain.ErrForbidden):
+		return agileapp.ErrForbidden
+	}
+	return err
+}

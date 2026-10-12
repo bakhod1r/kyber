@@ -26,11 +26,14 @@ type Issues interface {
 }
 
 type Deps struct {
-	Sprints domain.Repository
-	Issues  Issues
-	Access  Access
-	NewID   func() string
-	Now     func() time.Time
+	Sprints   domain.Repository
+	Boards    domain.BoardRepository
+	Issues    Issues
+	Access    Access
+	Admins    Admins
+	Workflows Workflows
+	NewID     func() string
+	Now       func() time.Time
 }
 
 type Service struct{ d Deps }

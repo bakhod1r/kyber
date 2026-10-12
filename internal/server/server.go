@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	agilehttp "github.com/bakhod1r/kyber/internal/agile/adapter/httpapi"
+	agileissueacl "github.com/bakhod1r/kyber/internal/agile/adapter/issueacl"
 	agilememory "github.com/bakhod1r/kyber/internal/agile/adapter/memory"
 	agilepg "github.com/bakhod1r/kyber/internal/agile/adapter/postgres"
 	agileprojectacl "github.com/bakhod1r/kyber/internal/agile/adapter/projectacl"
@@ -91,6 +92,7 @@ type deps struct {
 	comments      issuedomain.CommentRepository
 	workflows     issuedomain.WorkflowRepository
 	sprints       agiledomain.Repository
+	boards        agiledomain.BoardRepository
 	users         identitydomain.Users
 	external      identitydomain.ExternalIdentities
 	social        identityhttp.Social
@@ -145,7 +147,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(),
-		sprints:   sprintRepo, notes: notifymemory.NewRepository(), activity: insightsmemory.NewRepository(),
+		sprints:   sprintRepo, boards: agilememory.NewBoardRepository(), notes: notifymemory.NewRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta)),
@@ -190,7 +192,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool),
-		sprints:   agilepg.NewRepository(pool), notes: notifypg.NewRepository(pool), outbox: outbox.NewPostgresStore(pool),
+		sprints:   agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), notes: notifypg.NewRepository(pool), outbox: outbox.NewPostgresStore(pool),
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
@@ -227,8 +229,10 @@ func build(log *slog.Logger, d deps) http.Handler {
 		Issues: d.issues, Comments: d.comments, Keys: acl, Access: acl, Directory: acl, Sprints: sprintACL,
 		Workflow: issuedomain.DefaultWorkflow(), Workflows: d.workflows, Admins: acl, NewID: id.New, Now: time.Now,
 	})
+	agileACL := agileprojectacl.New(projects)
 	agile := agileapp.NewService(agileapp.Deps{
-		Sprints: d.sprints, Issues: issues, Access: agileprojectacl.New(projects), NewID: id.New, Now: time.Now,
+		Sprints: d.sprints, Boards: d.boards, Issues: issues, Access: agileACL, Admins: agileACL,
+		Workflows: agileissueacl.New(issues), NewID: id.New, Now: time.Now,
 	})
 	sprintACL.Sprints = agileacl.New(agile)
 	notify := notifyapp.NewService(notifyapp.Deps{
