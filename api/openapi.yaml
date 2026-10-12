@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.22.0
+  version: 0.23.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -729,6 +729,7 @@ paths:
                 sprint_id: { type: [string, "null"], description: "A planned or active sprint of the project; null = backlog." }
                 estimate: { type: [number, "null"], minimum: 0, maximum: 999, description: "Story points, one decimal; null clears." }
                 parent_key: { type: [string, "null"], description: "Move under this epic/issue; null removes the parent (not for sub-tasks)." }
+                resolution: { $ref: "#/components/schemas/Resolution" }
                 security_level: { type: string, enum: ["", confidential] }
       responses:
         "200": { description: Updated issue, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
@@ -1239,13 +1240,18 @@ paths:
             schema:
               type: object
               required: [to]
-              properties: { to: { $ref: "#/components/schemas/Status" } }
+              properties:
+                to: { $ref: "#/components/schemas/Status" }
+                resolution:
+                  description: How the issue ends when `to` is a Done status (default done); only valid for Done statuses.
+                  allOf: [{ $ref: "#/components/schemas/Resolution" }]
       responses:
         "200": { description: Moved, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/comments:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
     get:
@@ -1418,6 +1424,9 @@ components:
       pattern: "^[a-z0-9_]{1,40}$"
       description: A status id of the project's workflow (default workflow — todo, in_progress, done).
     StatusCategory: { type: string, enum: [todo, in_progress, done] }
+    Resolution:
+      type: string
+      enum: [done, wont_do, duplicate, cannot_reproduce]
     SprintReportIssue:
       type: object
       required: [key, title, type, points, status_category, added_after_start]
@@ -1545,7 +1554,7 @@ components:
     Priority: { type: string, enum: [lowest, low, medium, high, highest] }
     Issue:
       type: object
-      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, security_level, version]
+      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, security_level, resolution, version]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -1561,6 +1570,10 @@ components:
         sprint_id: { type: [string, "null"], format: uuid }
         rank: { type: string, description: Fractional backlog rank; compare byte-wise. }
         parent_key: { type: [string, "null"], description: "The epic of a story/task/bug, or the issue a sub-task belongs to." }
+        resolution:
+          description: How a resolved issue ended; "" while it is not in a Done status.
+          type: string
+          enum: ["", done, wont_do, duplicate, cannot_reproduce]
         security_level:
           type: string
           enum: ["", confidential]

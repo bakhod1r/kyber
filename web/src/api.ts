@@ -28,7 +28,16 @@ export type Issue = {
   parent_key?: string | null;
   /** "confidential": only admins, the reporter and the assignee see it. */
   security_level?: "" | "confidential";
+  /** How a resolved issue ended; "" while it is not in a Done status. */
+  resolution?: "" | Resolution;
 };
+export type Resolution = "done" | "wont_do" | "duplicate" | "cannot_reproduce";
+export const RESOLUTIONS: { id: Resolution; label: string }[] = [
+  { id: "done", label: "Done" },
+  { id: "wont_do", label: "Won't do" },
+  { id: "duplicate", label: "Duplicate" },
+  { id: "cannot_reproduce", label: "Cannot reproduce" },
+];
 export type SprintState = "planned" | "active" | "closed";
 export type Sprint = {
   id: string;
@@ -88,6 +97,7 @@ export type IssuePatch = {
   sprint_id?: string | null;
   estimate?: number | null;
   security_level?: "" | "confidential";
+  resolution?: Resolution;
 };
 export type Comment = { id: string; author_id: string; author_name: string; body: string; created_at: string };
 export type Role = "admin" | "member" | "viewer";

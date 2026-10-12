@@ -115,9 +115,9 @@ func TestReturnUnfinished(t *testing.T) {
 		is, _ := s.Get(ctx, dev, k)
 		_, _ = s.Edit(ctx, dev, k, app.EditIssue{Version: is.Version(), SprintSet: true, Sprint: "s-1"})
 	}
-	_, _ = s.Transition(ctx, dev, "KYB-1", "in_progress")
-	_, _ = s.Transition(ctx, dev, "KYB-1", "done")
-	_, _ = s.Transition(ctx, dev, "KYB-2", "in_progress")
+	_, _ = s.Transition(ctx, dev, "KYB-1", "in_progress", "")
+	_, _ = s.Transition(ctx, dev, "KYB-1", "done", "")
+	_, _ = s.Transition(ctx, dev, "KYB-2", "in_progress", "")
 
 	completed, returned, err := s.ReturnUnfinished(ctx, dev, "KYB", "s-1", "")
 	if err != nil || completed != 1 || returned != 2 {

@@ -41,7 +41,7 @@ func TestHierarchy(t *testing.T) {
 	if _, err := s.Edit(ctx, dev, "KYB-3", app.EditIssue{Version: task.Version(), Parent: &parent}); err != nil {
 		t.Fatal(err)
 	}
-	_, _ = s.Transition(ctx, dev, "KYB-2", "done")
+	_, _ = s.Transition(ctx, dev, "KYB-2", "done", "")
 	estimate := 5.0
 	st, _ := s.Get(ctx, dev, "KYB-2")
 	_, _ = s.Edit(ctx, dev, "KYB-2", app.EditIssue{Version: st.Version(), EstimateSet: true, Estimate: &estimate})

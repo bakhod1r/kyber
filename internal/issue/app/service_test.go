@@ -175,14 +175,14 @@ func TestTransitionIssue(t *testing.T) {
 	_, _ = s.Create(ctx, dev, app.CreateIssue{Project: "KYB", Title: "Login", Type: "task"})
 	rec.reset()
 
-	if _, err := s.Transition(ctx, dev, "KYB-1", "todo"); !errors.Is(err, domain.ErrTransitionNotAllowed) { // to itself
+	if _, err := s.Transition(ctx, dev, "KYB-1", "todo", ""); !errors.Is(err, domain.ErrTransitionNotAllowed) { // to itself
 		t.Fatalf("err = %v", err)
 	}
 	if is, _ := s.Get(ctx, dev, "KYB-1"); is.Status() != domain.StatusTodo {
 		t.Fatal("rejected transition must not persist")
 	}
 
-	is, err := s.Transition(ctx, dev, "KYB-1", "in_progress")
+	is, err := s.Transition(ctx, dev, "KYB-1", "in_progress", "")
 	if err != nil || is.Status() != domain.StatusInProgress {
 		t.Fatalf("Transition = %+v, %v", is, err)
 	}
@@ -193,7 +193,7 @@ func TestTransitionIssue(t *testing.T) {
 	if len(rec.all()) != 2 || !ok || ev.From != domain.StatusTodo || ev.To != domain.StatusInProgress {
 		t.Fatalf("events = %+v", rec.all())
 	}
-	if _, err := s.Transition(ctx, dev, "KYB-9", "done"); !errors.Is(err, domain.ErrIssueNotFound) {
+	if _, err := s.Transition(ctx, dev, "KYB-9", "done", ""); !errors.Is(err, domain.ErrIssueNotFound) {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -205,7 +205,7 @@ func TestListIssues(t *testing.T) {
 		_, _ = s.Create(ctx, dev, app.CreateIssue{Project: "KYB", Title: title, Type: "task"})
 	}
 	_, _ = s.Create(ctx, dev, app.CreateIssue{Project: "OPS", Title: "z", Type: "task"})
-	_, _ = s.Transition(ctx, dev, "KYB-2", "in_progress")
+	_, _ = s.Transition(ctx, dev, "KYB-2", "in_progress", "")
 
 	all, _ := s.List(ctx, dev, "KYB", app.ListQuery{})
 	if len(all) != 3 || all[0].Key().Number() != 1 || all[2].Key().Number() != 3 {
@@ -231,14 +231,14 @@ func TestAccessControl(t *testing.T) {
 	if _, err := s.Create(ctx, viewer, app.CreateIssue{Project: "KYB", Title: "x", Type: "task"}); !errors.Is(err, app.ErrForbidden) {
 		t.Fatalf("viewer create err = %v", err)
 	}
-	if _, err := s.Transition(ctx, viewer, "KYB-1", "in_progress"); !errors.Is(err, app.ErrForbidden) {
+	if _, err := s.Transition(ctx, viewer, "KYB-1", "in_progress", ""); !errors.Is(err, app.ErrForbidden) {
 		t.Fatalf("viewer transition err = %v", err)
 	}
 	// Outsiders cannot learn whether a project or issue exists.
 	for _, err := range []error{
 		func() error { _, err := s.Get(ctx, alien, "KYB-1"); return err }(),
 		func() error { _, err := s.List(ctx, alien, "KYB", app.ListQuery{}); return err }(),
-		func() error { _, err := s.Transition(ctx, alien, "KYB-1", "done"); return err }(),
+		func() error { _, err := s.Transition(ctx, alien, "KYB-1", "done", ""); return err }(),
 		func() error {
 			_, err := s.Create(ctx, alien, app.CreateIssue{Project: "KYB", Title: "x", Type: "task"})
 			return err

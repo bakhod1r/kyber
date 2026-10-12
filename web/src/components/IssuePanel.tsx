@@ -5,9 +5,9 @@ import { IssueLinks } from "./IssueLinks";
 import { MentionTextarea } from "./MentionTextarea";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useId, useState } from "react";
-import { ApiError, type Issue, PRIORITIES, type Priority, api } from "../api";
+import { ApiError, type Issue, PRIORITIES, type Priority, RESOLUTIONS, type Resolution, api } from "../api";
 
-type Draft = { title: string; description: string; priority: Priority; assignee: string; estimate: string; confidential: boolean };
+type Draft = { title: string; description: string; priority: Priority; assignee: string; estimate: string; confidential: boolean; resolution: Resolution | "" };
 
 const toDraft = (i: Issue): Draft => ({
   title: i.title,
@@ -16,6 +16,7 @@ const toDraft = (i: Issue): Draft => ({
   assignee: i.assignee_id ?? "",
   estimate: i.estimate === null ? "" : String(i.estimate),
   confidential: i.security_level === "confidential",
+  resolution: i.resolution ?? "",
 });
 
 export function IssuePanel({
@@ -58,6 +59,7 @@ export function IssuePanel({
         assignee_id: d.assignee || null,
         estimate: d.estimate.trim() === "" ? null : Number(d.estimate),
         security_level: d.confidential ? "confidential" : "",
+        ...(d.resolution ? { resolution: d.resolution } : {}),
       }),
     onSuccess: (updated) => {
       qc.setQueryData(["issue", issueKey], updated);
@@ -140,6 +142,18 @@ export function IssuePanel({
                 </select>
               </label>
             </div>
+            {draft.resolution && (
+              <label className="narrow">
+                Resolution
+                <select value={draft.resolution} onChange={(e) => setDraft({ ...draft, resolution: e.target.value as Resolution })}>
+                  {RESOLUTIONS.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="narrow">
               Story points
               <input type="number" min={0} max={999} step={0.5} value={draft.estimate} onChange={(e) => setDraft({ ...draft, estimate: e.target.value })} />

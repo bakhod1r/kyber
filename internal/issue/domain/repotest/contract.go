@@ -106,6 +106,17 @@ func Run(t *testing.T, newRepo Factory) {
 		if again, _ := repo.ByKey(ctx, is.Key()); again.SecurityLevel() != "" {
 			t.Fatal("level not cleared")
 		}
+		// The resolution is persisted.
+		res, _ := repo.ByKey(ctx, is.Key())
+		if err := res.TransitionResolved(domain.StatusDone, domain.DefaultWorkflow(), domain.ResolutionDuplicate); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.Save(ctx, res, nil); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := repo.ByKey(ctx, is.Key()); got.Resolution() != domain.ResolutionDuplicate {
+			t.Fatalf("resolution = %q", got.Resolution())
+		}
 	})
 
 	t.Run("not found", func(t *testing.T) {

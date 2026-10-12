@@ -106,6 +106,7 @@ type Issue struct {
 	parent      IssueID
 	parentKey   IssueKey
 	security    string
+	resolution  Resolution
 	baseline    *Snapshot // state when loaded or last saved; nil for a new issue
 	description string
 	priority    Priority
@@ -145,6 +146,7 @@ type Snapshot struct {
 	Parent      IssueID  // epic of a story/task/bug, or the issue a sub-task belongs to
 	ParentKey   IssueKey // the parent's key (for display and history)
 	Security    string   // issue security level ("" = visible to everyone who can browse the project)
+	Resolution  Resolution
 	Version     int
 }
 
@@ -155,7 +157,7 @@ func Rehydrate(s Snapshot) *Issue {
 	}
 	is := &Issue{id: s.ID, key: s.Key, title: s.Title, typ: s.Type, status: s.Status,
 		description: s.Description, priority: s.Priority, assignee: s.Assignee, reporter: s.Reporter, estimate: s.Estimate, rank: s.Rank, sprint: s.Sprint,
-		parent: s.Parent, parentKey: s.ParentKey, security: s.Security, version: s.Version}
+		parent: s.Parent, parentKey: s.ParentKey, security: s.Security, resolution: s.Resolution, version: s.Version}
 	is.markBaseline()
 	return is
 }
@@ -299,6 +301,11 @@ func (i *Issue) Transition(to StatusID, wf *Workflow) error {
 	}
 	from := i.status
 	i.status = to
+	if !wf.IsDone(to) {
+		i.resolution = ""
+	} else if i.resolution == "" {
+		i.resolution = ResolutionDone
+	}
 	i.record(IssueTransitioned{ID: i.id, Key: i.key, From: from, To: to, FromCategory: wf.CategoryOf(from), ToCategory: wf.CategoryOf(to)})
 	return nil
 }

@@ -23,6 +23,7 @@ type EditIssue struct {
 	Estimate    *float64 // story points, one decimal
 	Parent      *string  // issue key of the new parent ("" = none); nil leaves it unchanged
 	Security    *string  // security level ("" = visible to everyone who can browse); nil leaves it unchanged
+	Resolution  *string  // a resolved issue's resolution; nil leaves it unchanged
 }
 
 func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue) (*domain.Issue, error) {
@@ -82,6 +83,11 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 			return nil, fmt.Errorf("%q: %w", *cmd.Security, ErrInvalidSecurityLevel)
 		}
 		is.SetSecurityLevel(*cmd.Security)
+	}
+	if cmd.Resolution != nil && *cmd.Resolution != string(is.Resolution()) {
+		if err := is.SetResolution(domain.Resolution(*cmd.Resolution)); err != nil {
+			return nil, err
+		}
 	}
 	if cmd.Parent != nil {
 		parent, err := s.parentFor(ctx, is.Key().Project(), *cmd.Parent, is.Type())

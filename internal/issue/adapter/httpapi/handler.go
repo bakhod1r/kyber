@@ -54,13 +54,14 @@ type issueDTO struct {
 	Rank        string   `json:"rank"`
 	ParentKey   *string  `json:"parent_key"`
 	Security    string   `json:"security_level"`
+	Resolution  string   `json:"resolution"`
 	Version     int      `json:"version"`
 }
 
 func toDTO(is *domain.Issue) issueDTO {
 	d := issueDTO{ID: string(is.ID()), Key: is.Key().String(), Title: is.Title(), Type: string(is.Type()),
 		Status: string(is.Status()), Description: is.Description(), Priority: string(is.Priority()),
-		Rank: string(is.Rank()), Security: is.SecurityLevel(), Version: is.Version()}
+		Rank: string(is.Rank()), Security: is.SecurityLevel(), Resolution: string(is.Resolution()), Version: is.Version()}
 	if is.Parent() != "" {
 		k := is.ParentKey().String()
 		d.ParentKey = &k
@@ -93,7 +94,7 @@ func codeFor(err error) (string, bool) {
 		errors.Is(err, domain.ErrInvalidCommentBody), errors.Is(err, app.ErrInvalidAssignee), errors.Is(err, errMissingVersion),
 		errors.Is(err, app.ErrInvalidSprint), errors.Is(err, app.ErrInvalidAnchor), errors.Is(err, domain.ErrInvalidEstimate),
 		errors.Is(err, domain.ErrInvalidWorkflow), errors.Is(err, domain.ErrUnknownStatus),
-		errors.Is(err, app.ErrInvalidSecurityLevel):
+		errors.Is(err, app.ErrInvalidSecurityLevel), errors.Is(err, domain.ErrInvalidResolution):
 		return httpx.CodeValidation, true
 	case errors.Is(err, app.ErrProjectNotFound):
 		return httpx.CodeProjectNotFound, true
@@ -146,12 +147,12 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) transition(w http.ResponseWriter, r *http.Request) {
-	var in struct{ To string }
+	var in struct{ To, Resolution string }
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
-	is, err := h.svc.Transition(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"), in.To)
+	is, err := h.svc.Transition(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"), in.To, in.Resolution)
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
@@ -187,6 +188,7 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		Estimate    json.RawMessage `json:"estimate"`
 		ParentKey   json.RawMessage `json:"parent_key"`
 		Security    *string         `json:"security_level"`
+		Resolution  *string         `json:"resolution"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
@@ -196,7 +198,7 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, h.log, errMissingVersion, codeFor)
 		return
 	}
-	cmd := app.EditIssue{Version: *in.Version, Title: in.Title, Description: in.Description, Priority: in.Priority, Security: in.Security}
+	cmd := app.EditIssue{Version: *in.Version, Title: in.Title, Description: in.Description, Priority: in.Priority, Security: in.Security, Resolution: in.Resolution}
 	if in.AssigneeID != nil {
 		cmd.AssigneeSet = true
 		if string(in.AssigneeID) != "null" {

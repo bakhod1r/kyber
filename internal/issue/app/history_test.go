@@ -21,7 +21,7 @@ func TestEveryChangeIsAttributed(t *testing.T) {
 	_, _ = s.Create(ctx, dev, app.CreateIssue{Project: "KYB", Title: "Other", Type: "task"})
 	rec.reset()
 
-	_, _ = s.Transition(ctx, dev, "KYB-1", "in_progress")
+	_, _ = s.Transition(ctx, dev, "KYB-1", "in_progress", "")
 	is, _ = s.Get(ctx, dev, "KYB-1")
 	title := "Login page"
 	_, _ = s.Edit(ctx, dev, "KYB-1", app.EditIssue{Version: is.Version(), Title: &title, SprintSet: true, Sprint: "s-1"})
@@ -56,7 +56,7 @@ func TestHistoryProjectionAndQuery(t *testing.T) {
 	ctx := context.Background()
 	s, rec := setup()
 	is, _ := s.Create(ctx, dev, app.CreateIssue{Project: "KYB", Title: "Login", Type: "task"})
-	_, _ = s.Transition(ctx, dev, "KYB-1", "in_progress")
+	_, _ = s.Transition(ctx, dev, "KYB-1", "in_progress", "")
 	is, _ = s.Get(ctx, dev, "KYB-1")
 	assignee := dev
 	_, _ = s.Edit(ctx, dev, "KYB-1", app.EditIssue{Version: is.Version(), AssigneeSet: true, Assignee: assignee})

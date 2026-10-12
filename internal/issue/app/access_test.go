@@ -31,7 +31,7 @@ func TestOwnIssueRules(t *testing.T) {
 	if _, err := demoted.Edit(ctx, dev, "KYB-1", app.EditIssue{Version: mine.Version(), AssigneeSet: true, Assignee: lead}); !errors.Is(err, app.ErrForbidden) {
 		t.Fatalf("viewer assigning err = %v", err)
 	}
-	if _, err := demoted.Transition(ctx, dev, "KYB-1", "done"); !errors.Is(err, app.ErrForbidden) {
+	if _, err := demoted.Transition(ctx, dev, "KYB-1", "done", ""); !errors.Is(err, app.ErrForbidden) {
 		t.Fatalf("viewer transition err = %v", err)
 	}
 }

@@ -51,11 +51,11 @@ func TestCustomWorkflowDrivesIssues(t *testing.T) {
 	if err != nil || is.Status() != "open" {
 		t.Fatalf("created %v in %v", err, is)
 	}
-	if _, err := s.Transition(ctx, dev, "KYB-1", "closed"); !errors.Is(err, domain.ErrTransitionNotAllowed) {
+	if _, err := s.Transition(ctx, dev, "KYB-1", "closed", ""); !errors.Is(err, domain.ErrTransitionNotAllowed) {
 		t.Fatalf("skip review err = %v", err)
 	}
 	rec.reset()
-	if _, err := s.Transition(ctx, dev, "KYB-1", "review"); err != nil {
+	if _, err := s.Transition(ctx, dev, "KYB-1", "review", ""); err != nil {
 		t.Fatal(err)
 	}
 	if ev := rec.all()[0].(domain.IssueTransitioned); ev.ToCategory != domain.CategoryInProgress {
@@ -99,8 +99,8 @@ func TestReturnUnfinishedUsesDoneCategory(t *testing.T) {
 		is, _ := s.Create(ctx, dev, app.CreateIssue{Project: "KYB", Title: "t", Type: "task"})
 		_, _ = s.Edit(ctx, dev, is.Key().String(), app.EditIssue{Version: is.Version(), SprintSet: true, Sprint: "s-1"})
 	}
-	_, _ = s.Transition(ctx, dev, "KYB-1", "review")
-	_, _ = s.Transition(ctx, dev, "KYB-1", "closed")
+	_, _ = s.Transition(ctx, dev, "KYB-1", "review", "")
+	_, _ = s.Transition(ctx, dev, "KYB-1", "closed", "")
 	completed, returned, err := s.ReturnUnfinished(ctx, dev, "KYB", "s-1", "")
 	if err != nil || completed != 1 || returned != 1 {
 		t.Fatalf("ReturnUnfinished = %d, %d, %v", completed, returned, err)

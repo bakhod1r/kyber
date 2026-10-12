@@ -28,7 +28,7 @@ func (IssueChanged) EventName() string { return "issue.changed" }
 func (i *Issue) Snapshot() Snapshot {
 	return Snapshot{ID: i.id, Key: i.key, Title: i.title, Type: i.typ, Status: i.status, Description: i.description,
 		Priority: i.priority, Assignee: i.assignee, Reporter: i.reporter, Estimate: i.estimate, Rank: i.rank, Sprint: i.sprint,
-		Parent: i.parent, ParentKey: i.parentKey, Security: i.security, Version: i.version}
+		Parent: i.parent, ParentKey: i.parentKey, Security: i.security, Resolution: i.resolution, Version: i.version}
 }
 
 func (i *Issue) markBaseline() {
@@ -67,6 +67,7 @@ func (i *Issue) Changelog(by UserID) (IssueChanged, bool) {
 	add("rank", string(b.Rank), string(a.Rank))
 	add("parent", keyOf(b.ParentKey), keyOf(a.ParentKey))
 	add("security", b.Security, a.Security)
+	add("resolution", string(b.Resolution), string(a.Resolution))
 	if len(items) == 0 {
 		return IssueChanged{}, false
 	}

@@ -169,7 +169,16 @@ func (s *Service) load(ctx context.Context, actor, rawKey string, perm Permissio
 	return is, nil
 }
 
-func (s *Service) Transition(ctx context.Context, actor, rawKey, to string) (*domain.Issue, error) {
+// Transition moves the issue; entering a Done status resolves it as resolution ("" = done).
+func (s *Service) Transition(ctx context.Context, actor, rawKey, to, resolution string) (*domain.Issue, error) {
+	var res domain.Resolution
+	if resolution != "" {
+		r, err := domain.ParseResolution(resolution)
+		if err != nil {
+			return nil, err
+		}
+		res = r
+	}
 	is, err := s.load(ctx, actor, rawKey, PermTransition)
 	if err != nil {
 		return nil, err
@@ -184,7 +193,7 @@ func (s *Service) Transition(ctx context.Context, actor, rawKey, to string) (*do
 			return nil, err
 		}
 	}
-	if err := is.Transition(domain.StatusID(to), wf); err != nil {
+	if err := is.TransitionResolved(domain.StatusID(to), wf, res); err != nil {
 		return nil, err
 	}
 	return is, s.save(ctx, actor, is)

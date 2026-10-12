@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { DEFAULT_WORKFLOW, type HistoryEntry, api } from "../api";
+import { DEFAULT_WORKFLOW, type HistoryEntry, RESOLUTIONS, api } from "../api";
 
 const FIELD: Record<string, string> = {
   title: "Summary", description: "Description", type: "Type", status: "Status", priority: "Priority",
-  assignee: "Assignee", estimate: "Story points", sprint: "Sprint", rank: "Rank",
+  assignee: "Assignee", estimate: "Story points", sprint: "Sprint", rank: "Rank", resolution: "Resolution",
+  security: "Security level", parent: "Parent",
 };
 
 /** IssueHistory is Jira's History tab: every action on the issue, oldest first. */
@@ -14,6 +15,7 @@ export function IssueHistory({ issueKey, projectKey }: { issueKey: string; proje
   const status = (id: string) => (workflow.data ?? DEFAULT_WORKFLOW).statuses.find((s) => s.id === id)?.name ?? id;
   const value = (e: HistoryEntry, raw: string, name: string) => {
     if (raw === "") return "None";
+    if (e.field === "resolution") return RESOLUTIONS.find((r) => r.id === raw)?.label ?? raw;
     return e.field === "status" ? status(raw) : name || raw;
   };
   const line = (e: HistoryEntry) => {

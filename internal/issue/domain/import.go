@@ -59,6 +59,9 @@ func NewImportedIssue(id IssueID, key IssueKey, in Imported, wf *Workflow) (*Iss
 	}
 	is := &Issue{id: id, key: key, title: title, typ: in.Type, status: in.Status, description: in.Description,
 		priority: in.Priority, assignee: in.Assignee, reporter: in.Reporter, estimate: in.Estimate}
+	if wf.IsDone(in.Status) {
+		is.resolution = ResolutionDone
+	}
 	var est *float64
 	if in.Estimate != nil {
 		f := in.Estimate.Float()

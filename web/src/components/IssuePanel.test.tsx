@@ -133,4 +133,29 @@ describe("Story points in the issue panel (KYB-S28 AC3)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(calls.find((c) => c.key === "PATCH /api/v1/issues/KYB-1")?.body).toMatchObject({ version: 3, estimate: 5 }));
   });
+
+  it("S48: a resolved issue's resolution can be changed; an open one shows none", async () => {
+    const calls = mockApi({
+      "GET /api/v1/issues/KYB-1": { status: 200, body: { ...base, status: "done", resolution: "done" } },
+      "GET /api/v1/projects/KYB/members": { status: 200, body: members },
+      "GET /api/v1/issues/KYB-1/comments": { status: 200, body: { items: [] } },
+      "PATCH /api/v1/issues/KYB-1": { status: 200, body: { ...base, status: "done", resolution: "wont_do", version: 4 } },
+    });
+    renderWithProviders(<IssuePanel issueKey="KYB-1" projectKey="KYB" onClose={vi.fn()} />);
+    const select = await screen.findByLabelText("Resolution");
+    await userEvent.selectOptions(select, "wont_do");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "PATCH /api/v1/issues/KYB-1")?.body).toMatchObject({ resolution: "wont_do" }));
+  });
+
+  it("S48: an unresolved issue has no resolution field", async () => {
+    mockApi({
+      "GET /api/v1/issues/KYB-1": { status: 200, body: { ...base, resolution: "" } },
+      "GET /api/v1/projects/KYB/members": { status: 200, body: members },
+      "GET /api/v1/issues/KYB-1/comments": { status: 200, body: { items: [] } },
+    });
+    renderWithProviders(<IssuePanel issueKey="KYB-1" projectKey="KYB" onClose={vi.fn()} />);
+    await screen.findByLabelText("Title");
+    expect(screen.queryByLabelText("Resolution")).not.toBeInTheDocument();
+  });
 });
