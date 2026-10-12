@@ -91,7 +91,7 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   // Complete: the unfinished issue returns to the backlog.
   await page.getByRole("link", { name: "Backlog" }).click();
   await page.getByRole("region", { name: "Sprint 1" }).getByRole("button", { name: "Complete sprint" }).click();
-  await expect(page.getByRole("status")).toContainText("Sprint 1 completed: 1 done, 1 returned to the backlog.");
+  await expect(page.getByRole("status")).toContainText("Sprint 1 completed: 1 done, 1 carried over to the backlog.");
   await expect(page.getByRole("region", { name: "Sprint 1" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Backlog" }).getByText("Write release notes")).toBeVisible();
   await page.getByRole("link", { name: "Board" }).click();

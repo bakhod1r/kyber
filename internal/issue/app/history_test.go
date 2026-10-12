@@ -26,7 +26,7 @@ func TestEveryChangeIsAttributed(t *testing.T) {
 	title := "Login page"
 	_, _ = s.Edit(ctx, dev, "KYB-1", app.EditIssue{Version: is.Version(), Title: &title, SprintSet: true, Sprint: "s-1"})
 	_, _ = s.Rank(ctx, dev, "KYB-1", app.RankMove{After: "KYB-2"})
-	_, _, _ = s.ReturnUnfinished(ctx, lead, "KYB", "s-1")
+	_, _, _ = s.ReturnUnfinished(ctx, lead, "KYB", "s-1", "")
 
 	var got []domain.IssueChanged
 	for _, e := range rec.all() {

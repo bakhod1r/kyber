@@ -119,7 +119,7 @@ func TestReturnUnfinished(t *testing.T) {
 	_, _ = s.Transition(ctx, dev, "KYB-1", "done")
 	_, _ = s.Transition(ctx, dev, "KYB-2", "in_progress")
 
-	completed, returned, err := s.ReturnUnfinished(ctx, dev, "KYB", "s-1")
+	completed, returned, err := s.ReturnUnfinished(ctx, dev, "KYB", "s-1", "")
 	if err != nil || completed != 1 || returned != 2 {
 		t.Fatalf("ReturnUnfinished = %d, %d, %v", completed, returned, err)
 	}

@@ -14,6 +14,7 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [carryTo, setCarryTo] = useState("");
 
   const refresh = () =>
     Promise.all([
@@ -44,13 +45,17 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
     onSettled: refresh,
   });
   const complete = useMutation({
-    mutationFn: (id: string) => api.completeSprint(id),
+    mutationFn: ({ id, moveTo }: { id: string; moveTo: string }) => api.completeSprint(id, moveTo),
     onMutate: () => {
       setError(null);
       setNotice(null);
     },
-    onSuccess: (c) =>
-      setNotice(`${c.sprint.name} completed: ${c.completed} done, ${c.returned} returned to the backlog.`),
+    onSuccess: (c, { moveTo }) =>
+      setNotice(
+        `${c.sprint.name} completed: ${c.completed} done, ${c.returned} carried over to ${
+          sprints.data?.find((s) => s.id === moveTo)?.name ?? "the backlog"
+        }.`,
+      ),
     onError: (err) => setError(err.message),
     onSettled: refresh,
   });
@@ -111,9 +116,24 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
                 />
               )}
               {sec.sprint?.state === "active" && (
-                <button type="button" disabled={complete.isPending} onClick={() => complete.mutate(sec.sprint!.id)}>
-                  Complete sprint
-                </button>
+                <span className="row">
+                  <label>
+                    Unfinished issues to
+                    <select value={carryTo} onChange={(e) => setCarryTo(e.target.value)}>
+                      <option value="">Backlog</option>
+                      {sprints.data
+                        ?.filter((s) => s.state === "planned")
+                        .map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <button type="button" disabled={complete.isPending} onClick={() => complete.mutate({ id: sec.sprint!.id, moveTo: carryTo })}>
+                    Complete sprint
+                  </button>
+                </span>
               )}
             </header>
             <ul className="backlog-rows">

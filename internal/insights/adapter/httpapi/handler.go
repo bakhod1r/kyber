@@ -26,6 +26,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/projects/{key}/reports/created-vs-resolved", h.createdVsResolved)
 	mux.HandleFunc("GET /api/v1/projects/{key}/reports/velocity", h.velocity)
 	mux.HandleFunc("GET /api/v1/sprints/{id}/burndown", h.burndown)
+	mux.HandleFunc("GET /api/v1/sprints/{id}/report", h.sprintReport)
 }
 
 var errBadDays = errors.New("days must be an integer between 1 and 365")
@@ -174,4 +175,38 @@ func (h *Handler) velocity(w http.ResponseWriter, r *http.Request) {
 			CompletedPoints: domain.Tenths(v.CompletedPoints), CompletedIssues: v.CompletedIssues})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"sprints": out})
+}
+
+type sprintIssueDTO struct {
+	Key    string  `json:"key"`
+	Title  string  `json:"title"`
+	Type   string  `json:"type"`
+	Points float64 `json:"points"`
+	Status string  `json:"status_category"`
+	Added  bool    `json:"added_after_start"`
+}
+
+func sprintIssues(l []app.SprintReportIssue) []sprintIssueDTO {
+	out := make([]sprintIssueDTO, 0, len(l))
+	for _, it := range l {
+		out = append(out, sprintIssueDTO{Key: it.Key, Title: it.Title, Type: it.Type, Points: domain.Tenths(it.Points), Status: it.Status, Added: it.Added})
+	}
+	return out
+}
+
+func (h *Handler) sprintReport(w http.ResponseWriter, r *http.Request) {
+	rep, err := h.svc.SprintReport(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	sp, t := rep.Sprint, rep.Report
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"sprint": map[string]any{"id": sp.ID, "name": sp.Name, "state": sp.State,
+			"started_at": timePtr(sp.Start), "ends_at": timePtr(sp.End), "completed_at": timePtr(sp.Completed)},
+		"committed_points": domain.Tenths(t.CommittedPoints), "committed_issues": t.CommittedIssues,
+		"added_points": domain.Tenths(t.AddedPoints), "added_issues": t.AddedIssues,
+		"completed_points": domain.Tenths(t.CompletedPoints),
+		"completed":        sprintIssues(rep.Completed), "not_completed": sprintIssues(rep.NotCompleted), "removed": sprintIssues(rep.Removed),
+	})
 }

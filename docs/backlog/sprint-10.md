@@ -15,11 +15,15 @@ Source: architecture review (2026-10-09). Priority order; each story DDD + TDD w
   links read from both ends (hidden when the other issue is not readable), both in the issue history and audit log.
 - **S46 Wire access control (ADR-0003)** — permission schemes and issue security on every endpoint and read model;
   authorize after loading the issue (attribute rules), endpoint × role × attribute matrix tests. 🟡 **Phase 1 done**
-  for Issue Tracking (see ADR-0003 note); phase 2: stored schemes, security levels, the other contexts.
+  for Issue Tracking (see ADR-0003 note). ✅ **Phase 2 done:** stored per-project schemes with an editor, security
+  levels, every context.
 
 ## P1
 - **S47 Sprint scope & sprint report** — issues added/removed after start, completed / not completed / removed
   lists, carry-over on completion; estimation statistic (points, issue count, original time estimate).
+  ✅ **Done:** `GET /sprints/{id}/report` (committed, added, completed, not completed, removed; only visible
+  issues), completion carries unfinished issues to the backlog or a planned sprint (`move_to`), Reports tab
+  sprint report. Time estimates wait for worklog.
 - **S48 Kanban backlog & releases** — optional backlog column for Kanban boards; fix versions (releases) with
   release notes; resolution field.
 - **S49 Event envelope** — workspace_id, project_key, actor, occurred_at, schema version on every event;

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api";
+import { SprintReport } from "../components/SprintReport";
 import { BarList, GroupedBars, LineChart, StatTile, fmt } from "../components/charts/charts";
 
 const STATUS: Record<string, string> = { todo: "To Do", in_progress: "In Progress", done: "Done" };
@@ -91,6 +92,7 @@ export function Reports({ projectKey }: { projectKey: string }) {
         />
       )}
 
+      <SprintReport projectKey={projectKey} />
       {velocity.data && velocity.data.sprints.length === 0 && (
         <section className="chart empty">
           <h3>Velocity</h3>

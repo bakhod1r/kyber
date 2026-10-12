@@ -69,10 +69,10 @@ func (s *Service) Rank(ctx context.Context, actor, rawKey string, m RankMove) (*
 	return is, s.save(ctx, actor, is)
 }
 
-// ReturnUnfinished moves every issue of the sprint that is not done back to the
-// backlog (Jira semantics: done issues stay with the closed sprint). It is called
+// ReturnUnfinished carries every issue of the sprint that is not done over to `to` — the
+// backlog ("") or the next sprint (Jira semantics: done issues stay with the closed sprint). It is called
 // by the Agile context after it has authorized the actor.
-func (s *Service) ReturnUnfinished(ctx context.Context, actor, project, sprint string) (completed, returned int, err error) {
+func (s *Service) ReturnUnfinished(ctx context.Context, actor, project, sprint, to string) (completed, returned int, err error) {
 	sp := domain.SprintID(sprint)
 	list, err := s.issues.ListByProject(ctx, project, domain.ListFilter{Sprint: &sp})
 	if err != nil {
@@ -87,7 +87,7 @@ func (s *Service) ReturnUnfinished(ctx context.Context, actor, project, sprint s
 			completed++
 			continue
 		}
-		is.MoveToSprint("")
+		is.CarryOver(domain.SprintID(to))
 		if err := s.save(ctx, actor, is); err != nil {
 			return completed, returned, err
 		}

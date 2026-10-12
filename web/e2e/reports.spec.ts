@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // KYB-S27/S28: a sprint with estimates produces correct reports in the UI.
-test("reports show KPIs, distributions, burndown and velocity", async ({ page }) => {
+test("reports show KPIs, distributions, burndown, velocity and the sprint report", async ({ page }) => {
   const id = Date.now().toString(36).slice(-5);
   const key = `R${id.toUpperCase()}`.slice(0, 6);
   const call = async (method: string, path: string, data?: unknown) => {
@@ -50,4 +50,11 @@ test("reports show KPIs, distributions, burndown and velocity", async ({ page })
   }).toPass({ timeout: 15_000 });
   await page.getByRole("figure", { name: "Velocity" }).getByText("Show data table").click();
   await expect(page.getByRole("figure", { name: "Velocity" }).getByRole("table")).toContainText("Sprint 1");
+
+  // S47 sprint report: KYB-1 completed; KYB-2 and KYB-3 carried over to the backlog.
+  const report = page.getByRole("region", { name: "Sprint report" });
+  await expect(report.getByRole("list", { name: "Completed issues" })).toContainText(`${key}-1`);
+  const carried = report.getByRole("list", { name: "Not completed (carried over)" });
+  await expect(carried).toContainText(`${key}-2`);
+  await expect(carried).toContainText(`${key}-3`);
 });

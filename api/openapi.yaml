@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.21.0
+  version: 0.22.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -905,7 +905,16 @@ paths:
     parameters: [{ $ref: "#/components/parameters/SprintID" }]
     post:
       operationId: completeSprint
-      description: Closes the active sprint; issues that are not done return to the backlog.
+      description: |
+        Closes the active sprint. Issues that are not done are carried over to `move_to` (a planned sprint of the
+        same project, 422 otherwise) or, without it, to the backlog; the sprint report lists them as not completed.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { move_to: { type: string, description: "A planned sprint's id; empty = backlog." } }
       responses:
         "200":
           description: Completion summary
@@ -918,11 +927,13 @@ paths:
                 properties:
                   sprint: { $ref: "#/components/schemas/Sprint" }
                   completed: { type: integer, description: Done issues kept with the closed sprint. }
-                  returned: { type: integer, description: Unfinished issues moved back to the backlog. }
+                  returned: { type: integer, description: Unfinished issues carried over to the backlog or the next sprint. }
+        "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/import/jira:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     post:
@@ -1066,6 +1077,41 @@ paths:
                         committed_points: { type: number }
                         completed_points: { type: number }
                         completed_issues: { type: integer }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/sprints/{id}/report:
+    parameters: [{ $ref: "#/components/parameters/SprintID" }]
+    get:
+      operationId: sprintReport
+      description: |
+        Jira's sprint report: committed scope at the start, scope added later, and the issues completed, not
+        completed (carried over at completion) and removed. Only issues the caller may see are counted.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sprint, committed_points, committed_issues, added_points, added_issues, completed_points, completed, not_completed, removed]
+                properties:
+                  sprint:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      name: { type: string }
+                      state: { type: string, enum: [planned, active, closed] }
+                      started_at: { type: [string, "null"], format: date-time }
+                      ends_at: { type: [string, "null"], format: date-time }
+                      completed_at: { type: [string, "null"], format: date-time }
+                  committed_points: { type: number }
+                  committed_issues: { type: integer }
+                  added_points: { type: number }
+                  added_issues: { type: integer }
+                  completed_points: { type: number }
+                  completed: { type: array, items: { $ref: "#/components/schemas/SprintReportIssue" } }
+                  not_completed: { type: array, items: { $ref: "#/components/schemas/SprintReportIssue" } }
+                  removed: { type: array, items: { $ref: "#/components/schemas/SprintReportIssue" } }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/sprints/{id}/burndown:
@@ -1372,6 +1418,16 @@ components:
       pattern: "^[a-z0-9_]{1,40}$"
       description: A status id of the project's workflow (default workflow — todo, in_progress, done).
     StatusCategory: { type: string, enum: [todo, in_progress, done] }
+    SprintReportIssue:
+      type: object
+      required: [key, title, type, points, status_category, added_after_start]
+      properties:
+        key: { type: string }
+        title: { type: string }
+        type: { type: string }
+        points: { type: number }
+        status_category: { type: string }
+        added_after_start: { type: boolean }
     PermissionGrants:
       type: object
       required: [permission, grants]

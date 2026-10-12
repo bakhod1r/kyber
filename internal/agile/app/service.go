@@ -22,7 +22,7 @@ type Access interface {
 
 // Issues is the anti-corruption port to Issue Tracking.
 type Issues interface {
-	ReturnUnfinished(ctx context.Context, actor, project, sprint string) (completed, returned int, err error)
+	ReturnUnfinished(ctx context.Context, actor, project, sprint, to string) (completed, returned int, err error)
 }
 
 type Deps struct {
@@ -104,12 +104,14 @@ func (s *Service) Start(ctx context.Context, actor, id string, endsAt time.Time)
 type Completion struct {
 	Sprint    *domain.Sprint
 	Completed int // done issues kept with the closed sprint
-	Returned  int // unfinished issues moved back to the backlog
+	Returned  int // unfinished issues carried over to the backlog or the next sprint
 }
 
 // Complete returns unfinished issues to the backlog first and only then closes
 // the sprint, so a failure leaves it active and the action can simply be retried.
-func (s *Service) Complete(ctx context.Context, actor, id string) (Completion, error) {
+// Complete closes the active sprint; unfinished issues are carried over to moveTo — a planned
+// sprint of the same project, or the backlog when "".
+func (s *Service) Complete(ctx context.Context, actor, id, moveTo string) (Completion, error) {
 	sp, err := s.load(ctx, actor, id, true)
 	if err != nil {
 		return Completion{}, err
@@ -117,7 +119,13 @@ func (s *Service) Complete(ctx context.Context, actor, id string) (Completion, e
 	if sp.State() != domain.StateActive {
 		return Completion{}, domain.ErrSprintState
 	}
-	done, returned, err := s.d.Issues.ReturnUnfinished(ctx, actor, sp.Project(), string(sp.ID()))
+	if moveTo != "" {
+		next, err := s.d.Sprints.ByID(ctx, domain.SprintID(moveTo))
+		if err != nil || next.Project() != sp.Project() || next.State() != domain.StatePlanned {
+			return Completion{}, ErrInvalidSprint
+		}
+	}
+	done, returned, err := s.d.Issues.ReturnUnfinished(ctx, actor, sp.Project(), string(sp.ID()), moveTo)
 	if err != nil {
 		return Completion{}, err
 	}

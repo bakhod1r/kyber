@@ -67,6 +67,18 @@ export type Burndown = {
 };
 export type Velocity = { sprints: { id: string; name: string; committed_points: number; completed_points: number; completed_issues: number }[] };
 export type Completion = { sprint: Sprint; completed: number; returned: number };
+export type SprintReportIssue = { key: string; title: string; type: string; points: number; status_category: string; added_after_start: boolean };
+export type SprintReport = {
+  sprint: { id: string; name: string; state: SprintState; started_at: string | null; ends_at: string | null; completed_at: string | null };
+  committed_points: number;
+  committed_issues: number;
+  added_points: number;
+  added_issues: number;
+  completed_points: number;
+  completed: SprintReportIssue[];
+  not_completed: SprintReportIssue[];
+  removed: SprintReportIssue[];
+};
 export type IssuePatch = {
   version: number;
   title?: string;
@@ -260,7 +272,9 @@ export const api = {
   notifications: () => request<Inbox>("GET", "/api/v1/notifications"),
   markNotificationRead: (id: string) => request<undefined>("POST", `/api/v1/notifications/${seg(id)}/read`),
   markAllNotificationsRead: () => request<undefined>("POST", "/api/v1/notifications/read-all"),
-  completeSprint: (id: string) => request<Completion>("POST", `/api/v1/sprints/${seg(id)}/complete`),
+  completeSprint: (id: string, moveTo = "") =>
+    request<Completion>("POST", `/api/v1/sprints/${seg(id)}/complete`, moveTo ? { move_to: moveTo } : undefined),
+  sprintReport: (id: string) => request<SprintReport>("GET", `/api/v1/sprints/${seg(id)}/report`),
   createIssue: (key: string, title: string, type: IssueType, parentKey?: string) =>
     request<Issue>("POST", `/api/v1/projects/${seg(key)}/issues`, parentKey ? { title, type, parent_key: parentKey } : { title, type }),
   links: (issueKey: string) => request<List<IssueLink>>("GET", `/api/v1/issues/${seg(issueKey)}/links`).then((r) => r.items),

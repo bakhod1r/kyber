@@ -38,8 +38,8 @@ type fakeIssues struct {
 	err       error
 }
 
-func (f *fakeIssues) ReturnUnfinished(_ context.Context, _, project, sprint string) (int, int, error) {
-	f.calls = append(f.calls, project+"/"+sprint)
+func (f *fakeIssues) ReturnUnfinished(_ context.Context, _, project, sprint, to string) (int, int, error) {
+	f.calls = append(f.calls, project+"/"+sprint+"→"+to)
 	return f.completed, f.returned, f.err
 }
 
@@ -115,18 +115,18 @@ func TestComplete(t *testing.T) {
 	ctx := context.Background()
 	s, repo, issues := setup()
 	a, _ := s.Create(ctx, dev, "KYB", "A", "")
-	if _, err := s.Complete(ctx, dev, string(a.ID())); !errors.Is(err, domain.ErrSprintState) {
+	if _, err := s.Complete(ctx, dev, string(a.ID()), ""); !errors.Is(err, domain.ErrSprintState) {
 		t.Fatalf("complete planned err = %v", err)
 	}
 	if len(issues.calls) != 0 {
 		t.Fatal("issues must not move when completion is rejected")
 	}
 	_, _ = s.Start(ctx, dev, string(a.ID()), time.Time{})
-	res, err := s.Complete(ctx, dev, string(a.ID()))
+	res, err := s.Complete(ctx, dev, string(a.ID()), "")
 	if err != nil || res.Completed != 3 || res.Returned != 2 || res.Sprint.State() != domain.StateClosed {
 		t.Fatalf("Complete = %+v, %v", res, err)
 	}
-	if len(issues.calls) != 1 || issues.calls[0] != "KYB/"+string(a.ID()) {
+	if len(issues.calls) != 1 || issues.calls[0] != "KYB/"+string(a.ID())+"→" {
 		t.Fatalf("ReturnUnfinished calls = %v", issues.calls)
 	}
 	if stored, _ := repo.ByID(ctx, a.ID()); stored.State() != domain.StateClosed {
@@ -140,7 +140,7 @@ func TestComplete(t *testing.T) {
 	b, _ := s.Create(ctx, dev, "KYB", "B", "")
 	_, _ = s.Start(ctx, dev, string(b.ID()), time.Time{})
 	issues.err = errors.New("db down")
-	if _, err := s.Complete(ctx, dev, string(b.ID())); err == nil {
+	if _, err := s.Complete(ctx, dev, string(b.ID()), ""); err == nil {
 		t.Fatal("expected error")
 	}
 	if stored, _ := repo.ByID(ctx, b.ID()); stored.State() != domain.StateActive {
@@ -161,7 +161,7 @@ func TestCanHold(t *testing.T) {
 		}
 	}
 	_, _ = s.Start(ctx, dev, string(a.ID()), time.Time{})
-	_, _ = s.Complete(ctx, dev, string(a.ID()))
+	_, _ = s.Complete(ctx, dev, string(a.ID()), "")
 	if err := s.CanHold(ctx, "KYB", string(a.ID())); !errors.Is(err, app.ErrInvalidSprint) {
 		t.Fatalf("closed sprint err = %v", err)
 	}
@@ -181,5 +181,28 @@ func TestStartEndDate(t *testing.T) {
 	b, _ := s.Create(ctx, dev, "OPS", "B", "")
 	if _, err := s.Start(ctx, dev, string(b.ID()), time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)); !errors.Is(err, domain.ErrInvalidSprintDates) {
 		t.Fatalf("end in the past err = %v", err)
+	}
+}
+
+func TestCompleteCarriesOverToNextSprint(t *testing.T) {
+	ctx := context.Background()
+	s, _, issues := setup()
+	a, _ := s.Create(ctx, dev, "KYB", "A", "")
+	next, _ := s.Create(ctx, dev, "KYB", "B", "")
+	other, _ := s.Create(ctx, dev, "OPS", "O", "")
+	_, _ = s.Start(ctx, dev, string(a.ID()), time.Time{})
+	for _, bad := range []string{"s-404", string(a.ID()), string(other.ID())} {
+		if _, err := s.Complete(ctx, dev, string(a.ID()), bad); !errors.Is(err, app.ErrInvalidSprint) {
+			t.Errorf("move to %s: %v", bad, err)
+		}
+	}
+	if len(issues.calls) != 0 {
+		t.Fatal("issues moved although the target was refused")
+	}
+	if _, err := s.Complete(ctx, dev, string(a.ID()), string(next.ID())); err != nil {
+		t.Fatal(err)
+	}
+	if issues.calls[0] != "KYB/"+string(a.ID())+"→"+string(next.ID()) {
+		t.Fatalf("calls = %v", issues.calls)
 	}
 }

@@ -109,7 +109,21 @@ describe("Backlog (KYB-S20)", () => {
     renderWithProviders(<Backlog projectKey="KYB" />);
     const s1 = await screen.findByRole("region", { name: "Sprint 1" });
     await userEvent.click(within(s1).getByRole("button", { name: "Complete sprint" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Sprint 1 completed: 1 done, 1 returned to the backlog.");
+    expect(await screen.findByRole("status")).toHaveTextContent("Sprint 1 completed: 1 done, 1 carried over to the backlog.");
+  });
+
+  it("S47: carries unfinished issues over to the next sprint", async () => {
+    const calls = mockApi({
+      "GET /api/v1/projects/KYB/sprints": { status: 200, body: { items: [sprint("s-1", "Sprint 1", "active"), sprint("s-2", "Sprint 2", "planned")] } },
+      "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [issue(2, "s-1")] } },
+      "POST /api/v1/sprints/s-1/complete": { status: 200, body: { sprint: sprint("s-1", "Sprint 1", "closed"), completed: 0, returned: 1 } },
+    });
+    renderWithProviders(<Backlog projectKey="KYB" />);
+    const s1 = await screen.findByRole("region", { name: "Sprint 1" });
+    await userEvent.selectOptions(within(s1).getByLabelText("Unfinished issues to"), "s-2");
+    await userEvent.click(within(s1).getByRole("button", { name: "Complete sprint" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("1 carried over to Sprint 2.");
+    expect(calls.find((c) => c.key === "POST /api/v1/sprints/s-1/complete")?.body).toEqual({ move_to: "s-2" });
   });
 });
 

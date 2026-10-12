@@ -8,7 +8,10 @@ import (
 	"log/slog"
 	"math"
 	"regexp"
+	"slices"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/insights/domain"
@@ -22,11 +25,12 @@ var (
 
 // IssueRow is the current state of an issue, for distribution reports.
 type IssueRow struct {
-	Key, Type, Status, Priority string
-	Category                    string // the status's category: todo, in_progress or done
-	StatusOrder                 int    // the status's position in the workflow (board column order)
-	Assignee                    string
-	Points                      *int // tenths
+	ID, Key, Title         string
+	Type, Status, Priority string
+	Category               string // the status's category: todo, in_progress or done
+	StatusOrder            int    // the status's position in the workflow (board column order)
+	Assignee               string
+	Points                 *int // tenths
 }
 
 type SprintInfo struct {
@@ -84,6 +88,7 @@ func (s *Service) OnIssueEvent(ctx context.Context, m outbox.Message) error {
 		Estimate     json.RawMessage
 		Created      time.Time  `json:"created_at"`
 		Resolved     *time.Time `json:"resolved_at"`
+		CarriedOver  bool       `json:"carried_over"`
 	}
 	if err := json.Unmarshal(m.Payload, &e); err != nil || e.ID == "" || e.Key == "" {
 		s.d.Log.ErrorContext(ctx, "insights: skipping malformed event", "id", m.ID, "name", m.Name)
@@ -113,6 +118,9 @@ func (s *Service) OnIssueEvent(ctx context.Context, m outbox.Message) error {
 		entry.Kind, entry.From, entry.To = domain.KindStatus, or(e.FromCategory, str(e.From)), or(e.ToCategory, str(e.To))
 	case "issue.sprint_changed":
 		entry.Kind, entry.From, entry.To = domain.KindSprint, str(e.From), str(e.To)
+		if e.CarriedOver {
+			entry.Kind = domain.KindCarried
+		}
 	case "issue.estimated":
 		entry.Kind, entry.FromPoints, entry.ToPoints = domain.KindEstimate, pts(e.From), pts(e.To)
 	default:
@@ -335,4 +343,71 @@ func (s *Service) Velocity(ctx context.Context, actor, project string) ([]domain
 		return nil, err
 	}
 	return domain.Velocity(entries, windows), nil
+}
+
+// SprintReportIssue is an issue of the sprint report with what the reader may see of it.
+type SprintReportIssue struct {
+	domain.SprintIssue
+	Key, Title, Type string
+}
+
+type SprintReport struct {
+	Sprint                           SprintInfo
+	Report                           domain.SprintReport
+	Completed, NotCompleted, Removed []SprintReportIssue
+}
+
+// SprintReport is Jira's sprint report. Only issues the actor may see are counted or listed.
+func (s *Service) SprintReport(ctx context.Context, actor, sprintID string) (SprintReport, error) {
+	sp, err := s.d.Sprints.Sprint(ctx, sprintID)
+	if err != nil {
+		return SprintReport{}, err
+	}
+	if err := s.d.Access.Authorize(ctx, actor, sp.Project); err != nil {
+		return SprintReport{}, ErrSprintNotFound // do not reveal other projects' sprints
+	}
+	out := SprintReport{Sprint: sp}
+	if sp.Start.IsZero() {
+		return out, nil // planned: nothing to report yet
+	}
+	rows, err := s.d.Issues.Issues(ctx, actor, sp.Project)
+	if err != nil {
+		return SprintReport{}, err
+	}
+	visible := map[string]IssueRow{}
+	for _, r := range rows {
+		visible[r.ID] = r
+	}
+	all, err := s.d.Repo.ForProject(ctx, sp.Project)
+	if err != nil {
+		return SprintReport{}, err
+	}
+	entries := all[:0:0]
+	for _, e := range all {
+		if _, ok := visible[e.Issue]; ok {
+			entries = append(entries, e)
+		}
+	}
+	until := s.d.Now()
+	if !sp.Completed.IsZero() {
+		until = sp.Completed
+	}
+	out.Report = domain.SprintReportOf(entries, sp.ID, sp.Start, until)
+	named := func(l []domain.SprintIssue) []SprintReportIssue {
+		res := make([]SprintReportIssue, 0, len(l))
+		for _, it := range l {
+			r := visible[it.Issue]
+			res = append(res, SprintReportIssue{SprintIssue: it, Key: r.Key, Title: r.Title, Type: r.Type})
+		}
+		slices.SortFunc(res, func(a, b SprintReportIssue) int { return keyNumber(a.Key) - keyNumber(b.Key) })
+		return res
+	}
+	out.Completed, out.NotCompleted, out.Removed = named(out.Report.Completed), named(out.Report.NotCompleted), named(out.Report.Removed)
+	return out, nil
+}
+
+// keyNumber is the issue number of a key ("KYB-12" → 12), for listing in creation order.
+func keyNumber(key string) int {
+	n, _ := strconv.Atoi(key[strings.LastIndexByte(key, '-')+1:])
+	return n
 }

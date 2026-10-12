@@ -53,7 +53,7 @@ func (a Issues) Issues(ctx context.Context, actor, project string) ([]app.IssueR
 	}
 	rows := make([]app.IssueRow, 0, len(list))
 	for _, is := range list {
-		r := app.IssueRow{Key: is.Key().String(), Type: string(is.Type()), Status: string(is.Status()),
+		r := app.IssueRow{ID: string(is.ID()), Title: is.Title(), Key: is.Key().String(), Type: string(is.Type()), Status: string(is.Status()),
 			Category: string(wf.CategoryOf(is.Status())), StatusOrder: order[is.Status()],
 			Priority: string(is.Priority()), Assignee: string(is.Assignee())}
 		if p, ok := is.Estimate(); ok {

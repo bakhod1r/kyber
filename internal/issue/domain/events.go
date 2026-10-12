@@ -56,6 +56,8 @@ type IssueSprintChanged struct {
 	Key  IssueKey `json:"key"`
 	From SprintID `json:"from"`
 	To   SprintID `json:"to"`
+	// CarriedOver: moved because its sprint was completed while it was unfinished.
+	CarriedOver bool `json:"carried_over,omitempty"`
 }
 
 func (IssueSprintChanged) EventName() string { return "issue.sprint_changed" }

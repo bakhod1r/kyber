@@ -62,7 +62,7 @@ func toDTO(s *domain.Sprint) sprintDTO {
 
 func codeFor(err error) (string, bool) {
 	switch {
-	case errors.Is(err, domain.ErrInvalidSprint), errors.Is(err, domain.ErrInvalidSprintDates), errors.Is(err, httpx.ErrBadJSON),
+	case errors.Is(err, domain.ErrInvalidSprint), errors.Is(err, app.ErrInvalidSprint), errors.Is(err, domain.ErrInvalidSprintDates), errors.Is(err, httpx.ErrBadJSON),
 		errors.Is(err, domain.ErrInvalidBoard):
 		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrSprintNotFound):
@@ -134,7 +134,16 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) complete(w http.ResponseWriter, r *http.Request) {
-	c, err := h.svc.Complete(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	var in struct {
+		MoveTo string `json:"move_to"` // a planned sprint; "" = backlog
+	}
+	if r.ContentLength != 0 {
+		if err := httpx.Decode(r, &in); err != nil {
+			httpx.Error(w, r, h.log, err, codeFor)
+			return
+		}
+	}
+	c, err := h.svc.Complete(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.MoveTo)
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return

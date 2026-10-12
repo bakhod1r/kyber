@@ -15,6 +15,7 @@ const (
 	KindStatus   Kind = "status"   // From → To status
 	KindSprint   Kind = "sprint"   // From → To sprint id ("" = backlog)
 	KindEstimate Kind = "estimate" // FromPoints → ToPoints (tenths; nil = unestimated)
+	KindCarried  Kind = "carried"  // like KindSprint, when an unfinished issue leaves a completing sprint
 )
 
 const done = "done"
@@ -80,7 +81,7 @@ func (r replay) apply(e Entry) {
 		}
 	case KindStatus:
 		s.status = e.To
-	case KindSprint:
+	case KindSprint, KindCarried:
 		s.sprint = e.To
 	case KindEstimate:
 		s.points = 0

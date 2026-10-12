@@ -225,6 +225,14 @@ func (i *Issue) MoveToSprint(s SprintID) {
 	i.record(IssueSprintChanged{ID: i.id, Key: i.key, From: from, To: s})
 }
 
+// CarryOver moves an unfinished issue out of its completing sprint, to the backlog ("") or the
+// next sprint; the sprint report lists it as not completed rather than removed.
+func (i *Issue) CarryOver(to SprintID) {
+	from := i.sprint
+	i.sprint = to
+	i.record(IssueSprintChanged{ID: i.id, Key: i.key, From: from, To: to, CarriedOver: true})
+}
+
 // Changes lists the fields to edit; nil means "leave unchanged".
 type Changes struct {
 	Title       *string
