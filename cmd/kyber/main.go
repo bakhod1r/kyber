@@ -10,6 +10,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/identity/adapter/google"
 	identityhttp "github.com/bakhod1r/kyber/internal/identity/adapter/httpapi"
 	"github.com/bakhod1r/kyber/internal/identity/adapter/telegram"
+	"github.com/bakhod1r/kyber/internal/notify/adapter/smtpmail"
 	"log/slog"
 	"net/http"
 	"os"
@@ -75,7 +76,13 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		Telegram:    telegram.NewVerifier(cfg.TelegramBotToken, time.Now),
 		TelegramBot: cfg.TelegramBotName,
 	})
-	common := append([]server.Option{social, server.WithContext(ctx), server.WithBaseDomain(cfg.BaseDomain)}, telegramBot(cfg)...)
+	common := append([]server.Option{social, server.WithContext(ctx), server.WithBaseDomain(cfg.BaseDomain),
+		server.WithPublicURL(cfg.PublicURL)}, telegramBot(cfg)...)
+	mailer, err := mailer(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	common = append(common, mailer...)
 	url := cfg.DatabaseURL
 	if url == "" {
 		log.Warn("KYBER_DATABASE_URL not set: running in-memory dev mode, data is lost on restart")
@@ -119,4 +126,17 @@ func telegramBot(cfg *config.Config) []server.Option {
 		return nil
 	}
 	return []server.Option{server.WithTelegramBot(telegram.NewBot(cfg.TelegramBotToken, ""), 50*time.Second)}
+}
+
+// mailer enables email notifications when an SMTP host is configured.
+func mailer(cfg *config.Config) ([]server.Option, error) {
+	if cfg.SMTPHost == "" {
+		return nil, nil
+	}
+	m, err := smtpmail.New(smtpmail.Config{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword, From: cfg.SMTPFrom, TLS: cfg.SMTPTLS})
+	if err != nil {
+		return nil, err
+	}
+	return []server.Option{server.WithMailer(m)}, nil
 }

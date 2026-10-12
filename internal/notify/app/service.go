@@ -41,6 +41,11 @@ type (
 
 type Deps struct {
 	Repo       domain.Repository
+	Deliveries domain.DeliveryRepository // optional: email/Telegram copies of notifications
+	Prefs      domain.PrefsRepository
+	Contacts   Contacts
+	Channels   []domain.Channel // channels configured on this server (SMTP, Telegram bot)
+	PublicURL  string           // base of the links in messages
 	Issues     Issues
 	Members    Members
 	Workspaces Workspaces
@@ -151,6 +156,9 @@ func (s *Service) deliverTo(ctx context.Context, event int64, issueKey string, i
 			IssueTitle: info.Title, ActorName: actorName, Excerpt: text, SourceEvent: event, CreatedAt: s.d.Now(),
 		}
 		if err := s.d.Repo.Add(ctx, n); err != nil {
+			return err
+		}
+		if err := s.enqueue(ctx, n, info.Project); err != nil {
 			return err
 		}
 	}

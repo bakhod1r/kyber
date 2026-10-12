@@ -73,6 +73,7 @@ import (
 	notifyhttp "github.com/bakhod1r/kyber/internal/notify/adapter/httpapi"
 	notifymemory "github.com/bakhod1r/kyber/internal/notify/adapter/memory"
 	notifypg "github.com/bakhod1r/kyber/internal/notify/adapter/postgres"
+	"github.com/bakhod1r/kyber/internal/notify/adapter/telegramsend"
 	notifyapp "github.com/bakhod1r/kyber/internal/notify/app"
 	notifydomain "github.com/bakhod1r/kyber/internal/notify/domain"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
@@ -109,6 +110,11 @@ type deps struct {
 	social        identityhttp.Social
 	otps          identitydomain.OTPChallenges
 	telegramBot   *telegram.Bot
+	mailer        notifyapp.Sender
+	publicURL     string
+	dispatchEvery time.Duration
+	deliveries    notifydomain.DeliveryRepository
+	prefs         notifydomain.PrefsRepository
 	telegramWait  time.Duration
 	sessions      identitydomain.Sessions
 	ready         func(context.Context) error
@@ -141,6 +147,15 @@ func WithTelegramBot(bot *telegram.Bot, wait time.Duration) Option {
 	return func(d *deps) { d.telegramBot, d.telegramWait = bot, wait }
 }
 
+// WithMailer sends notification emails (see smtpmail); without it, no email is sent.
+func WithMailer(m notifyapp.Sender) Option { return func(d *deps) { d.mailer = m } }
+
+// WithPublicURL is the base of links in emails and Telegram messages.
+func WithPublicURL(u string) Option { return func(d *deps) { d.publicURL = u } }
+
+// WithDispatchEvery sets how often email/Telegram deliveries are sent (default 5 s).
+func WithDispatchEvery(every time.Duration) Option { return func(d *deps) { d.dispatchEvery = every } }
+
 // WithBaseDomain enables workspaces on subdomains of domain (ADR-0004).
 func WithBaseDomain(domain string) Option { return func(d *deps) { d.baseDomain = domain } }
 
@@ -159,7 +174,8 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo),
 		audit:   auditmemory.NewRepository(),
-		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), notes: notifymemory.NewRepository(), activity: insightsmemory.NewRepository(),
+		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), notes: notifymemory.NewRepository(),
+		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta)),
@@ -205,7 +221,8 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool),
 		audit:   auditpg.NewRepository(pool),
-		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), notes: notifypg.NewRepository(pool), outbox: outbox.NewPostgresStore(pool),
+		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), notes: notifypg.NewRepository(pool),
+		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), outbox: outbox.NewPostgresStore(pool),
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
@@ -253,6 +270,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	notify := notifyapp.NewService(notifyapp.Deps{
 		Repo: d.notes, Issues: notifyacl.NewIssues(issues), Members: notifyacl.NewMembers(projects), Workspaces: notifyacl.NewWorkspaces(projects),
 		Users: notifyacl.NewUsers(d.users), NewID: id.New, Now: time.Now, Log: log,
+		Deliveries: d.deliveries, Prefs: d.prefs, Contacts: notifyacl.NewContacts(d.users, d.external),
+		Channels: d.channels(), PublicURL: d.publicURL,
 	})
 	insights := insightsapp.NewService(insightsapp.Deps{
 		Repo: d.activity, Access: insightsacl.NewAccess(projects), Issues: insightsacl.NewIssues(issues),
@@ -281,6 +300,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 		d.relayEvery = time.Second
 	}
 	go relay.Run(d.ctx, d.relayEvery)
+	go dispatch(d.ctx, log, notify, d.senders(), d.dispatchEvery)
 	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
@@ -404,4 +424,55 @@ func (f *fallbackWriter) Write(b []byte) (int, error) {
 		return len(b), nil // drop the router's plain-text body
 	}
 	return f.ResponseWriter.Write(b)
+}
+
+// channels lists the external notification channels this server can use.
+func (d deps) channels() []notifydomain.Channel {
+	var out []notifydomain.Channel
+	if d.mailer != nil {
+		out = append(out, notifydomain.ChannelEmail)
+	}
+	if d.telegramBot != nil {
+		out = append(out, notifydomain.ChannelTelegram)
+	}
+	return out
+}
+
+func (d deps) senders() map[notifydomain.Channel]notifyapp.Sender {
+	out := map[notifydomain.Channel]notifyapp.Sender{}
+	if d.mailer != nil {
+		out[notifydomain.ChannelEmail] = d.mailer
+	}
+	if d.telegramBot != nil {
+		out[notifydomain.ChannelTelegram] = telegramsend.New(d.telegramBot)
+	}
+	return out
+}
+
+// dispatch sends due email/Telegram deliveries until ctx ends.
+func dispatch(ctx context.Context, log *slog.Logger, notify *notifyapp.Service, senders map[notifydomain.Channel]notifyapp.Sender, every time.Duration) {
+	if len(senders) == 0 {
+		return
+	}
+	if every == 0 {
+		every = 5 * time.Second
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			for {
+				n, err := notify.Dispatch(ctx, senders)
+				if err != nil {
+					log.ErrorContext(ctx, "notify: dispatch failed", "err", err)
+				}
+				if err != nil || n == 0 {
+					break
+				}
+			}
+		}
+	}
 }

@@ -164,3 +164,18 @@ func (r *Repository) DeleteExpiredOTPs(_ context.Context, now time.Time) (int, e
 	}
 	return n, nil
 }
+
+func (r *Repository) SubjectOf(_ context.Context, user domain.UserID, p domain.Provider) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	best := ""
+	for sub, id := range r.external[p] {
+		if id == user && (best == "" || sub < best) {
+			best = sub
+		}
+	}
+	if best == "" {
+		return "", domain.ErrNotLinked
+	}
+	return best, nil
+}

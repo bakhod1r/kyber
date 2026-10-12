@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.17.0
+  version: 0.18.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1003,6 +1003,30 @@ paths:
                   ideal: { type: array, items: { $ref: "#/components/schemas/BurndownSample" } }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/me/notification-settings:
+    get:
+      operationId: getNotificationSettings
+      description: |
+        Where the caller's notifications go besides the in-app inbox. A channel is used only when the server
+        has it configured (`*_available`) and, for Telegram, the user connected a chat.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationSettings" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+    put:
+      operationId: setNotificationSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: boolean }
+                telegram: { type: boolean }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationSettings" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
   /api/v1/notifications:
     get:
       operationId: listNotifications
@@ -1248,6 +1272,16 @@ components:
         type: { type: string, enum: [blocks, relates, duplicates, clones] }
         phrase: { type: string, description: "Read from the requested issue's side, e.g. 'is blocked by'" }
         issue: { $ref: "#/components/schemas/Issue" }
+    NotificationSettings:
+      type: object
+      additionalProperties: false
+      required: [email, telegram, email_available, telegram_available, telegram_connected]
+      properties:
+        email: { type: boolean }
+        telegram: { type: boolean }
+        email_available: { type: boolean, description: SMTP is configured on this server }
+        telegram_available: { type: boolean, description: A Telegram bot is configured on this server }
+        telegram_connected: { type: boolean, description: The user connected their Telegram chat }
     HistoryEntry:
       type: object
       additionalProperties: false

@@ -28,4 +28,6 @@ type ExternalIdentities interface {
 	// LinkedUser returns the user linked to (provider, subject) or ErrNotLinked.
 	LinkedUser(ctx context.Context, p Provider, subject string) (UserID, error)
 	Link(ctx context.Context, id ExternalIdentity) error
+	// SubjectOf returns the user's account id at the provider (e.g. their Telegram chat) or ErrNotLinked.
+	SubjectOf(ctx context.Context, user UserID, p Provider) (string, error)
 }

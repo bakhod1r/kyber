@@ -37,6 +37,13 @@ func Run(t *testing.T, newStore func(t *testing.T) (domain.ExternalIdentities, f
 			t.Fatalf("LinkedUser(%s, %s) = %s, %v", c.p, c.sub, got, err)
 		}
 	}
+	// Reverse lookup (used to deliver Telegram notifications to the user's chat).
+	if sub, err := s.SubjectOf(ctx, u1, domain.ProviderTelegram); err != nil || sub != "42" {
+		t.Fatalf("SubjectOf(u1, telegram) = %q, %v", sub, err)
+	}
+	if _, err := s.SubjectOf(ctx, u2, domain.ProviderGoogle); !errors.Is(err, domain.ErrNotLinked) {
+		t.Fatalf("SubjectOf unlinked err = %v", err)
+	}
 	// Re-linking the same identity is idempotent and never moves it to another user.
 	if err := s.Link(ctx, domain.ExternalIdentity{Provider: domain.ProviderGoogle, Subject: "g-1", UserID: u2}); err != nil {
 		t.Fatal(err)

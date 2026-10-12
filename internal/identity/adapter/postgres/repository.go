@@ -154,3 +154,13 @@ func (r *Repository) DeleteExpiredOTPs(ctx context.Context, now time.Time) (int,
 	tag, err := r.pool.Exec(ctx, `DELETE FROM otp_challenges WHERE expires_at <= $1`, now)
 	return int(tag.RowsAffected()), err
 }
+
+func (r *Repository) SubjectOf(ctx context.Context, user domain.UserID, p domain.Provider) (string, error) {
+	var sub string
+	err := r.pool.QueryRow(ctx, `SELECT subject FROM external_identities WHERE user_id = $1 AND provider = $2
+		ORDER BY subject LIMIT 1`, string(user), string(p)).Scan(&sub)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", domain.ErrNotLinked
+	}
+	return sub, err
+}

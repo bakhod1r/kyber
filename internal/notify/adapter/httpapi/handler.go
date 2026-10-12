@@ -24,6 +24,55 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/notifications", h.list)
 	mux.HandleFunc("POST /api/v1/notifications/read-all", h.readAll)
 	mux.HandleFunc("POST /api/v1/notifications/{id}/read", h.read)
+	mux.HandleFunc("GET /api/v1/me/notification-settings", h.settings)
+	mux.HandleFunc("PUT /api/v1/me/notification-settings", h.setSettings)
+}
+
+type settingsDTO struct {
+	Email             bool `json:"email"`
+	Telegram          bool `json:"telegram"`
+	EmailAvailable    bool `json:"email_available"`
+	TelegramAvailable bool `json:"telegram_available"`
+	TelegramConnected bool `json:"telegram_connected"`
+}
+
+func (h *Handler) settings(w http.ResponseWriter, r *http.Request) {
+	s, err := h.svc.Settings(r.Context(), auth.Actor(r.Context()))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, settingsDTO{Email: s.Email, Telegram: s.Telegram, EmailAvailable: s.EmailAvailable,
+		TelegramAvailable: s.TelegramAvailable, TelegramConnected: s.TelegramConnected})
+}
+
+func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Email    *bool `json:"email"`
+		Telegram *bool `json:"telegram"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	actor := auth.Actor(r.Context())
+	cur, err := h.svc.Settings(r.Context(), actor)
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	p := cur.Prefs
+	if in.Email != nil {
+		p.Email = *in.Email
+	}
+	if in.Telegram != nil {
+		p.Telegram = *in.Telegram
+	}
+	if err := h.svc.SetPrefs(r.Context(), actor, p); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	h.settings(w, r)
 }
 
 type notificationDTO struct {

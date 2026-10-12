@@ -26,6 +26,13 @@ type Config struct {
 	// Sign in with Telegram: create a bot with @BotFather and /setdomain to the site's domain.
 	TelegramBotToken string `env:"KYBER_TELEGRAM_BOT_TOKEN"`
 	TelegramBotName  string `env:"KYBER_TELEGRAM_BOT_NAME"`
+	// Email notifications through any SMTP server; unset host = no email.
+	SMTPHost     string `env:"KYBER_SMTP_HOST"`
+	SMTPPort     string `env:"KYBER_SMTP_PORT"`
+	SMTPUsername string `env:"KYBER_SMTP_USERNAME"`
+	SMTPPassword string `env:"KYBER_SMTP_PASSWORD"`
+	SMTPFrom     string `env:"KYBER_SMTP_FROM" default:"Kyber <noreply@localhost>"`
+	SMTPTLS      string `env:"KYBER_SMTP_TLS" default:"starttls"` // starttls (587), tls (465) or none
 }
 
 func Load() (*Config, error) {

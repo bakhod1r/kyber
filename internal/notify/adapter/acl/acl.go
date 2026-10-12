@@ -92,3 +92,33 @@ func (a Workspaces) WorkspaceOf(ctx context.Context, project string) (string, er
 	ws, err := a.projects.WorkspaceOf(ctx, project)
 	return string(ws), err
 }
+
+// Contacts reaches users by email and by their connected Telegram chat (private chat id ==
+// Telegram user id, the subject of their Telegram identity).
+type Contacts struct {
+	users    identitydomain.Users
+	external identitydomain.ExternalIdentities
+}
+
+func NewContacts(u identitydomain.Users, ext identitydomain.ExternalIdentities) Contacts {
+	return Contacts{users: u, external: ext}
+}
+
+func (c Contacts) Email(ctx context.Context, user string) (string, error) {
+	u, err := c.users.ByID(ctx, identitydomain.UserID(user))
+	if errors.Is(err, identitydomain.ErrUserNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return string(u.Email()), nil
+}
+
+func (c Contacts) TelegramChat(ctx context.Context, user string) (string, bool, error) {
+	chat, err := c.external.SubjectOf(ctx, identitydomain.UserID(user), identitydomain.ProviderTelegram)
+	if errors.Is(err, identitydomain.ErrNotLinked) {
+		return "", false, nil
+	}
+	return chat, err == nil, err
+}

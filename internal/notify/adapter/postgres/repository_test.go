@@ -20,3 +20,18 @@ func TestContract(t *testing.T) {
 		return postgres.NewRepository(pool)
 	})
 }
+
+func TestDeliveryContract(t *testing.T) {
+	repotest.RunDeliveries(t, func(t *testing.T) domain.DeliveryRepository { return postgres.NewDeliveryRepository(dbtest.New(t)) })
+}
+
+func TestPrefsContract(t *testing.T) {
+	repotest.RunPrefs(t, func(t *testing.T) domain.PrefsRepository {
+		pool := dbtest.New(t)
+		if _, err := pool.Exec(context.Background(), `INSERT INTO users (id, email, name, password_hash) VALUES
+			($1, 'alice@x.uz', 'Alice', 'h'), ($2, 'bob@x.uz', 'Bob', 'h')`, repotest.Alice, repotest.Bob); err != nil {
+			t.Fatal(err)
+		}
+		return postgres.NewPrefsRepository(pool)
+	})
+}
