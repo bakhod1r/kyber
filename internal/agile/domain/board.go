@@ -60,7 +60,11 @@ type Board struct {
 	kind    BoardKind
 	columns []Column
 	version int
+	follows bool // tracks the workflow until configured by hand
 }
+
+// StatusRef is a workflow status as the board sees it.
+type StatusRef struct{ ID, Name string }
 
 func NewBoard(id BoardID, project, name string, kind BoardKind, columns []Column) (*Board, error) {
 	b := &Board{id: id, project: project}
@@ -108,7 +112,7 @@ func (b *Board) Configure(name string, kind BoardKind, columns []Column) error {
 			statuses[s] = true
 		}
 	}
-	b.name, b.kind, b.columns = name, kind, out
+	b.name, b.kind, b.columns, b.follows = name, kind, out, false
 	return nil
 }
 
@@ -152,3 +156,40 @@ type BoardRepository interface {
 
 // MarkPersisted is called by repositories after a successful save.
 func (b *Board) MarkPersisted() { b.version++ }
+
+// FollowWorkflow marks the board as the project's default board, kept in step with the workflow.
+func (b *Board) FollowWorkflow()       { b.follows = true }
+func (b *Board) FollowsWorkflow() bool { return b.follows }
+
+// SyncWith rebuilds a following board's columns in workflow order: mapped columns keep their
+// name and limits, new statuses get their own column, removed statuses drop out.
+func (b *Board) SyncWith(statuses []StatusRef) {
+	if !b.follows {
+		return
+	}
+	var out []Column
+	used := map[int]bool{}
+	for _, st := range statuses {
+		i := b.ColumnOf(st.ID)
+		switch {
+		case i < 0:
+			out = append(out, Column{Name: st.Name, Statuses: []string{st.ID}})
+		case !used[i]:
+			used[i] = true
+			c := b.columns[i]
+			keep := []string{}
+			for _, id := range c.Statuses {
+				for _, w := range statuses {
+					if w.ID == id {
+						keep = append(keep, id)
+					}
+				}
+			}
+			c.Statuses = keep
+			out = append(out, c)
+		}
+	}
+	if len(out) > 0 {
+		b.columns = out
+	}
+}

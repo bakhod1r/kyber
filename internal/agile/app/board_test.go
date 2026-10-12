@@ -138,3 +138,22 @@ func TestCreateUpdateDeleteBoard(t *testing.T) {
 		t.Fatalf("missing delete err = %v", err)
 	}
 }
+
+// The auto-created board follows the workflow: a status added later becomes a column (S43 + S44).
+func TestDefaultBoardFollowsWorkflow(t *testing.T) {
+	ctx := context.Background()
+	wfs := fakeWorkflows{"KYB": {{ID: "todo", Name: "To Do"}, {ID: "done", Name: "Done"}}}
+	access := fakeAccess{"KYB": {dev: "w", lead: "w"}}
+	s := app.NewService(app.Deps{Sprints: memory.NewRepository(), Boards: memory.NewBoardRepository(), Issues: &fakeIssues{},
+		Access: access, Admins: fakeAdmin{access}, Workflows: wfs, NewID: func() string { return "b-1" }, Now: time.Now})
+	list, _ := s.Boards(ctx, dev, "KYB")
+	if len(list[0].Columns()) != 2 || !list[0].FollowsWorkflow() {
+		t.Fatalf("default = %+v", list[0].Columns())
+	}
+	wfs["KYB"] = []app.WorkflowStatus{{ID: "todo", Name: "To Do"}, {ID: "review", Name: "Code Review"}, {ID: "done", Name: "Done"}}
+	list, _ = s.Boards(ctx, dev, "KYB")
+	b, _ := s.Board(ctx, dev, "b-1")
+	if len(list[0].Columns()) != 3 || list[0].Columns()[1].Name != "Code Review" || len(b.Columns()) != 3 {
+		t.Fatalf("after workflow change = %+v", list[0].Columns())
+	}
+}

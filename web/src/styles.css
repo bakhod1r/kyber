@@ -336,3 +336,9 @@ a.button.ghost { background: transparent; color: var(--accent); border: 1px soli
 @media (max-width: 600px) {
   .workflow-statuses li, .workflow-add { grid-template-columns: 1fr; }
 }
+
+/* S44 boards: WIP limits */
+.board-picker { display: inline-flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+.column.wip-over { background: color-mix(in srgb, #d93025 12%, var(--surface, #fff)); border-color: #d93025; }
+.column.wip-over .count { background: #d93025; color: #fff; }
+.column.wip-under { border-color: #e8a317; }

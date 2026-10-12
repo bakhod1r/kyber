@@ -113,3 +113,54 @@ describe("Board with a project workflow (KYB-S43)", () => {
     expect(screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"))).toEqual(["Open", "Code Review", "Closed"]);
   });
 });
+
+describe("Boards with WIP limits (KYB-S44)", () => {
+  const boards = {
+    items: [
+      { id: "b-1", project_key: "KYB", name: "Delivery", kind: "kanban", version: 1, columns: [
+        { name: "Backlog", statuses: ["todo"], min: 0, max: 0 },
+        { name: "Doing", statuses: ["in_progress", "review"], min: 0, max: 1 },
+        { name: "Shipped", statuses: ["done"], min: 0, max: 0 },
+      ] },
+      { id: "b-2", project_key: "KYB", name: "Triage", kind: "scrum", version: 1, columns: [{ name: "Open", statuses: ["todo"], min: 0, max: 0 }] },
+    ],
+  };
+
+  it("shows the board's columns, maps several statuses to one column and flags WIP over the limit", async () => {
+    mockApi({
+      "GET /api/v1/projects/KYB/boards": { status: 200, body: boards },
+      "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [issue(1, "in_progress"), issue(2, "review"), issue(3, "todo")] } },
+    });
+    renderWithProviders(<Board projectKey="KYB" />);
+    const doing = await screen.findByRole("region", { name: "Doing" });
+    expect(within(doing).getByText("Issue 1")).toBeInTheDocument();
+    expect(within(doing).getByText("Issue 2")).toBeInTheDocument();
+    expect(doing).toHaveClass("wip-over");
+    expect(within(doing).getByText("2 / 1")).toBeInTheDocument();
+    expect(screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"))).toEqual(["Backlog", "Doing", "Shipped"]);
+  });
+
+  it("switches between boards", async () => {
+    mockApi({
+      "GET /api/v1/projects/KYB/boards": { status: 200, body: boards },
+      "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [issue(3, "todo")] } },
+    });
+    renderWithProviders(<Board projectKey="KYB" />);
+    await screen.findByRole("region", { name: "Doing" });
+    await userEvent.selectOptions(screen.getByLabelText("Board"), "b-2");
+    expect(await screen.findByRole("region", { name: "Open" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Doing" })).not.toBeInTheDocument();
+  });
+
+  it("dropping on a column moves the issue to the column's first status", async () => {
+    const calls = mockApi({
+      "GET /api/v1/projects/KYB/boards": { status: 200, body: boards },
+      "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [issue(3, "todo")] } },
+      "POST /api/v1/issues/KYB-3/transitions": { status: 200, body: issue(3, "in_progress") },
+    });
+    renderWithProviders(<Board projectKey="KYB" />);
+    const card = await screen.findByText("Issue 3");
+    drag(card.closest("article")!, screen.getByRole("region", { name: "Doing" }));
+    await waitFor(() => expect(calls.find((c) => c.key.startsWith("POST"))?.body).toEqual({ to: "in_progress" }));
+  });
+});

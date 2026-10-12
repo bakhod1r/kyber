@@ -88,6 +88,9 @@ export const STATUS_CATEGORIES: { id: StatusCategory; label: string }[] = [
   { id: "done", label: "Done" },
 ];
 
+export type BoardColumn = { name: string; statuses: Status[]; min: number; max: number };
+export type BoardView = { id: string; project_key: string; name: string; kind: "scrum" | "kanban"; columns: BoardColumn[]; version: number };
+
 /** Jira's simplified workflow, used until the project's own workflow has loaded. */
 export const DEFAULT_WORKFLOW: Workflow = {
   initial: "todo",
@@ -228,6 +231,7 @@ export const api = {
   completeSprint: (id: string) => request<Completion>("POST", `/api/v1/sprints/${seg(id)}/complete`),
   createIssue: (key: string, title: string, type: IssueType) =>
     request<Issue>("POST", `/api/v1/projects/${seg(key)}/issues`, { title, type }),
+  boards: (key: string) => request<List<BoardView>>("GET", `/api/v1/projects/${seg(key)}/boards`).then((r) => r.items),
   workflow: (key: string) => request<Workflow>("GET", `/api/v1/projects/${seg(key)}/workflow`),
   setWorkflow: (key: string, wf: Workflow) => request<Workflow>("PUT", `/api/v1/projects/${seg(key)}/workflow`, wf),
   transition: (issueKey: string, to: Status) =>

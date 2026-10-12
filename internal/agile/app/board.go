@@ -36,14 +36,34 @@ func (s *Service) Boards(ctx context.Context, actor, project string) ([]*domain.
 		return nil, err
 	}
 	list, err := s.d.Boards.BoardsByProject(ctx, project)
-	if err != nil || len(list) > 0 {
-		return list, err
+	if err != nil {
+		return nil, err
+	}
+	if len(list) > 0 {
+		return list, s.sync(ctx, project, list...)
 	}
 	b, err := s.newBoard(ctx, project, BoardSpec{Name: project + " board", Kind: domain.KindKanban})
 	if err != nil {
 		return nil, err
 	}
+	b.FollowWorkflow()
 	return []*domain.Board{b}, s.d.Boards.SaveBoard(ctx, b)
+}
+
+// sync brings boards that follow the workflow up to date with it (read-side; nothing is stored).
+func (s *Service) sync(ctx context.Context, project string, boards ...*domain.Board) error {
+	statuses, err := s.d.Workflows.Statuses(ctx, project)
+	if err != nil {
+		return err
+	}
+	refs := make([]domain.StatusRef, len(statuses))
+	for i, st := range statuses {
+		refs[i] = domain.StatusRef{ID: st.ID, Name: st.Name}
+	}
+	for _, b := range boards {
+		b.SyncWith(refs)
+	}
+	return nil
 }
 
 func (s *Service) CreateBoard(ctx context.Context, actor, project string, spec BoardSpec) (*domain.Board, error) {
@@ -59,7 +79,11 @@ func (s *Service) CreateBoard(ctx context.Context, actor, project string, spec B
 
 // Board returns a board the actor may see; non-members get ErrBoardNotFound.
 func (s *Service) Board(ctx context.Context, actor, id string) (*domain.Board, error) {
-	return s.loadBoard(ctx, id, func(project string) error { return s.d.Access.Authorize(ctx, actor, project, false) })
+	b, err := s.loadBoard(ctx, id, func(project string) error { return s.d.Access.Authorize(ctx, actor, project, false) })
+	if err != nil {
+		return nil, err
+	}
+	return b, s.sync(ctx, b.Project(), b)
 }
 
 func (s *Service) UpdateBoard(ctx context.Context, actor, id string, version int, spec BoardSpec) (*domain.Board, error) {

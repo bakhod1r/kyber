@@ -95,3 +95,36 @@ func TestRehydrateBoard(t *testing.T) {
 		t.Fatalf("rehydrated = %+v", b)
 	}
 }
+
+// Jira: the board created with a project follows its workflow — new statuses become columns,
+// removed ones disappear — until someone configures the board by hand.
+func TestBoardFollowsWorkflowUntilConfigured(t *testing.T) {
+	b, _ := domain.NewBoard("b-1", "KYB", "KYB board", domain.KindKanban, []domain.Column{
+		{Name: "To Do", Statuses: []string{"todo"}},
+		{Name: "Doing", Statuses: []string{"in_progress"}, Max: 2},
+		{Name: "Gone", Statuses: []string{"old"}},
+		{Name: "Done", Statuses: []string{"done"}},
+	})
+	wf := []domain.StatusRef{{ID: "todo", Name: "To Do"}, {ID: "in_progress", Name: "In Progress"}, {ID: "review", Name: "Code Review"}, {ID: "done", Name: "Done"}}
+	b.SyncWith(wf) // not following: unchanged
+	if len(b.Columns()) != 4 || b.FollowsWorkflow() {
+		t.Fatalf("a hand-made board must not follow: %+v", b.Columns())
+	}
+	b.FollowWorkflow()
+	b.SyncWith(wf)
+	var names []string
+	for _, c := range b.Columns() {
+		names = append(names, c.Name)
+	}
+	if strings.Join(names, ",") != "To Do,Doing,Code Review,Done" || b.Columns()[1].Max != 2 {
+		t.Fatalf("synced columns = %v (limits kept: %+v)", names, b.Columns()[1])
+	}
+	if err := b.Configure("Mine", domain.KindKanban, b.Columns()); err != nil || b.FollowsWorkflow() {
+		t.Fatalf("configuring by hand stops following: %v", err)
+	}
+	r := domain.RehydrateBoard("b-2", "KYB", "B", domain.KindScrum, b.Columns(), 1)
+	r.FollowWorkflow()
+	if !r.FollowsWorkflow() {
+		t.Fatal("follow flag")
+	}
+}

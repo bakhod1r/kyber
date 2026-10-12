@@ -14,6 +14,7 @@ type boardEntry struct {
 	kind              domain.BoardKind
 	columns           []domain.Column
 	version           int
+	follows           bool
 }
 
 // BoardRepository keeps boards in memory.
@@ -35,7 +36,7 @@ func (r *BoardRepository) SaveBoard(ctx context.Context, b *domain.Board) error 
 	}
 	b.MarkPersisted()
 	r.byID[b.ID()] = boardEntry{ws: tenant.Workspace(ctx), project: b.Project(), name: b.Name(), kind: b.Kind(),
-		columns: b.Columns(), version: b.Version()}
+		columns: b.Columns(), version: b.Version(), follows: b.FollowsWorkflow()}
 	return nil
 }
 
@@ -46,7 +47,7 @@ func (r *BoardRepository) BoardByID(ctx context.Context, id domain.BoardID) (*do
 	if !ok || e.ws != tenant.Workspace(ctx) {
 		return nil, domain.ErrBoardNotFound
 	}
-	return domain.RehydrateBoard(id, e.project, e.name, e.kind, e.columns, e.version), nil
+	return e.board(id), nil
 }
 
 func (r *BoardRepository) BoardsByProject(ctx context.Context, project string) ([]*domain.Board, error) {
@@ -55,7 +56,7 @@ func (r *BoardRepository) BoardsByProject(ctx context.Context, project string) (
 	out := []*domain.Board{}
 	for id, e := range r.byID {
 		if e.ws == tenant.Workspace(ctx) && e.project == project {
-			out = append(out, domain.RehydrateBoard(id, e.project, e.name, e.kind, e.columns, e.version))
+			out = append(out, e.board(id))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -75,4 +76,12 @@ func (r *BoardRepository) DeleteBoard(ctx context.Context, id domain.BoardID) er
 	}
 	delete(r.byID, id)
 	return nil
+}
+
+func (e boardEntry) board(id domain.BoardID) *domain.Board {
+	b := domain.RehydrateBoard(id, e.project, e.name, e.kind, e.columns, e.version)
+	if e.follows {
+		b.FollowWorkflow()
+	}
+	return b
 }

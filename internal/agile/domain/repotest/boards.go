@@ -81,6 +81,22 @@ func RunBoards(t *testing.T, newRepo BoardFactory) {
 			t.Fatalf("duplicate insert err = %v", err)
 		}
 	})
+	t.Run("the follow-workflow flag persists", func(t *testing.T) {
+		repo := newRepo(t)
+		b := board(t, BoardA, "KYB", "Default")
+		b.FollowWorkflow()
+		_ = repo.SaveBoard(ctx, b)
+		got, _ := repo.BoardByID(ctx, BoardA)
+		list, _ := repo.BoardsByProject(ctx, "KYB")
+		if !got.FollowsWorkflow() || !list[0].FollowsWorkflow() {
+			t.Fatal("flag lost")
+		}
+		_ = got.Configure("Mine", domain.KindKanban, got.Columns())
+		_ = repo.SaveBoard(ctx, got)
+		if again, _ := repo.BoardByID(ctx, BoardA); again.FollowsWorkflow() {
+			t.Fatal("flag must clear after a manual configuration")
+		}
+	})
 	t.Run("delete", func(t *testing.T) {
 		repo := newRepo(t)
 		_ = repo.SaveBoard(ctx, board(t, BoardA, "KYB", "Board"))

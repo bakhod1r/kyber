@@ -25,13 +25,13 @@ func (r *BoardRepository) SaveBoard(ctx context.Context, b *domain.Board) error 
 	}
 	var tag pgconn.CommandTag
 	if b.Version() == 0 {
-		tag, err = r.pool.Exec(ctx, `INSERT INTO boards (id, workspace_id, project_key, name, kind, columns, version)
-			VALUES ($1, $2, $3, $4, $5, $6, 1) ON CONFLICT (id) DO NOTHING`,
-			string(b.ID()), tenant.Workspace(ctx), b.Project(), b.Name(), string(b.Kind()), cols)
+		tag, err = r.pool.Exec(ctx, `INSERT INTO boards (id, workspace_id, project_key, name, kind, columns, version, follows_workflow)
+			VALUES ($1, $2, $3, $4, $5, $6, 1, $7) ON CONFLICT (id) DO NOTHING`,
+			string(b.ID()), tenant.Workspace(ctx), b.Project(), b.Name(), string(b.Kind()), cols, b.FollowsWorkflow())
 	} else {
-		tag, err = r.pool.Exec(ctx, `UPDATE boards SET name = $2, kind = $3, columns = $4, version = version + 1
+		tag, err = r.pool.Exec(ctx, `UPDATE boards SET name = $2, kind = $3, columns = $4, follows_workflow = $7, version = version + 1
 			WHERE id = $1 AND version = $5 AND workspace_id = $6`,
-			string(b.ID()), b.Name(), string(b.Kind()), cols, b.Version(), tenant.Workspace(ctx))
+			string(b.ID()), b.Name(), string(b.Kind()), cols, b.Version(), tenant.Workspace(ctx), b.FollowsWorkflow())
 	}
 	if err != nil {
 		return err
@@ -43,13 +43,14 @@ func (r *BoardRepository) SaveBoard(ctx context.Context, b *domain.Board) error 
 	return nil
 }
 
-const boardCols = `SELECT id::text, project_key, name, kind, columns, version FROM boards`
+const boardCols = `SELECT id::text, project_key, name, kind, columns, version, follows_workflow FROM boards`
 
 func scanBoard(row pgx.Row) (*domain.Board, error) {
 	var id, project, name, kind string
 	var raw []byte
 	var version int
-	if err := row.Scan(&id, &project, &name, &kind, &raw, &version); err != nil {
+	var follows bool
+	if err := row.Scan(&id, &project, &name, &kind, &raw, &version, &follows); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrBoardNotFound
 		}
@@ -59,7 +60,11 @@ func scanBoard(row pgx.Row) (*domain.Board, error) {
 	if err := json.Unmarshal(raw, &cols); err != nil {
 		return nil, err
 	}
-	return domain.RehydrateBoard(domain.BoardID(id), project, name, domain.BoardKind(kind), cols, version), nil
+	b := domain.RehydrateBoard(domain.BoardID(id), project, name, domain.BoardKind(kind), cols, version)
+	if follows {
+		b.FollowWorkflow()
+	}
+	return b, nil
 }
 
 func (r *BoardRepository) BoardByID(ctx context.Context, id domain.BoardID) (*domain.Board, error) {

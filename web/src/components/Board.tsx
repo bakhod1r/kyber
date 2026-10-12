@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type DragEvent, type FormEvent, useState } from "react";
-import { DEFAULT_WORKFLOW, ISSUE_TYPES, type Issue, type IssueType, type Member, type Status, api } from "../api";
+import { type BoardColumn, DEFAULT_WORKFLOW, ISSUE_TYPES, type Issue, type IssueType, type Member, type Status, api } from "../api";
 
 const DRAG_TYPE = "application/x-kyber-issue";
 
@@ -21,12 +21,16 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
     enabled: !sprints.isPending,
   });
   const members = useQuery({ queryKey: ["members", projectKey], queryFn: () => api.members(projectKey) });
-  // Columns are the project's workflow statuses; the simplified workflow is the fallback.
-  const workflow = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => api.workflow(projectKey) });
-  const columns = (workflow.data ?? DEFAULT_WORKFLOW).statuses;
+  // Columns come from the selected board (S44); without boards, one column per workflow status.
+  const boards = useQuery({ queryKey: ["boards", projectKey], queryFn: () => api.boards(projectKey) });
+  const workflow = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => api.workflow(projectKey), enabled: boards.isError });
+  const [boardId, setBoardId] = useState<string | null>(null);
+  const board = boards.data?.find((b) => b.id === boardId) ?? boards.data?.[0];
+  const columns: BoardColumn[] =
+    board?.columns ?? (workflow.data ?? DEFAULT_WORKFLOW).statuses.map((st) => ({ name: st.name, statuses: [st.id], min: 0, max: 0 }));
   const byId = new Map<string, Member>((members.data ?? []).map((m) => [m.user_id, m]));
   const [error, setError] = useState<string | null>(null);
-  const [over, setOver] = useState<Status | null>(null);
+  const [over, setOver] = useState<string | null>(null);
 
   const move = useMutation({
     mutationFn: ({ key, to }: { key: string; to: Status }) => api.transition(key, to),
@@ -45,15 +49,17 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
     onSettled: () => qc.invalidateQueries({ queryKey }),
   });
 
-  function onDrop(e: DragEvent, to: Status) {
+  // Dropping on a column moves the issue to the column's first status (Jira behaviour).
+  function onDrop(e: DragEvent, col: BoardColumn) {
     e.preventDefault();
     setOver(null);
     const key = e.dataTransfer.getData(DRAG_TYPE);
     const issue = issues.data?.find((i) => i.key === key);
-    if (issue && issue.status !== to) move.mutate({ key, to });
+    const to = col.statuses[0];
+    if (issue && to && !col.statuses.includes(issue.status)) move.mutate({ key, to });
   }
 
-  if (sprints.isPending || issues.isPending || workflow.isPending) return <p className="muted">Loading board…</p>;
+  if (sprints.isPending || issues.isPending || boards.isPending || (boards.isError && workflow.isPending)) return <p className="muted">Loading board…</p>;
   if (issues.isError) return <p role="alert" className="error">{issues.error.message}</p>;
 
   return (
@@ -64,6 +70,18 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
           {active.goal && <span> — {active.goal}</span>}
         </p>
       )}
+      {boards.data && boards.data.length > 1 && (
+        <label className="board-picker">
+          Board{" "}
+          <select aria-label="Board" value={board?.id} onChange={(e) => setBoardId(e.target.value)}>
+            {boards.data.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <QuickAdd projectKey={projectKey} sprintId={active?.id} />
       {error && (
         <p role="alert" className="error">
@@ -72,21 +90,25 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
       )}
       <div className="board">
         {columns.map((col) => {
-          const cards = issues.data.filter((i) => i.status === col.id);
+          const cards = issues.data.filter((i) => col.statuses.includes(i.status));
+          const wip = col.max > 0 && cards.length > col.max ? " wip-over" : col.min > 0 && cards.length < col.min ? " wip-under" : "";
           return (
             <section
-              key={col.id}
+              key={col.name}
               aria-label={col.name}
-              className={`column${over === col.id ? " over" : ""}`}
+              className={`column${over === col.name ? " over" : ""}${wip}`}
               onDragOver={(e) => {
                 e.preventDefault();
-                setOver(col.id);
+                setOver(col.name);
               }}
               onDragLeave={() => setOver(null)}
-              onDrop={(e) => onDrop(e, col.id)}
+              onDrop={(e) => onDrop(e, col)}
             >
               <h2>
-                {col.name} <span className="count">{cards.length}</span>
+                {col.name}{" "}
+                <span className="count" title={col.max > 0 ? "Issues / WIP limit" : undefined}>
+                  {col.max > 0 ? `${cards.length} / ${col.max}` : cards.length}
+                </span>
               </h2>
               {cards.map((i) => (
                 <article
