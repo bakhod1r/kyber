@@ -17,11 +17,16 @@ func TestAuditLog(t *testing.T) {
 		dev.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "done"})
 		dev.do("PUT", "/api/v1/projects/KYB/workflow", map[string]any{"initial": "todo", "statuses": []any{}}) // refused: 403
 		lead.do("GET", "/api/v1/projects/KYB/issues", nil)                                                     // reads are not audited
+		_, sp := lead.do("POST", "/api/v1/projects/KYB/sprints", map[string]string{"name": "S1"})
+		lead.do("POST", "/api/v1/sprints/"+sp["id"].(string)+"/start", map[string]any{})
+		lead.do("GET", "/api/v1/projects/KYB/boards", nil) // creates the default board
+		_, b := lead.do("POST", "/api/v1/projects/KYB/boards", map[string]any{"name": "Extra", "kind": "kanban"})
+		lead.do("DELETE", "/api/v1/boards/"+b["id"].(string), nil) // resolved before the board is gone
 
-		code, b := dev.do("GET", "/api/v1/projects/KYB/audit", nil)
-		expect(t, code, 403, b)
-		code, b = anon.signedIn("alien@x.uz").do("GET", "/api/v1/projects/KYB/audit", nil)
-		expect(t, code, 404, b)
+		code, denied := dev.do("GET", "/api/v1/projects/KYB/audit", nil)
+		expect(t, code, 403, denied)
+		code, denied = anon.signedIn("alien@x.uz").do("GET", "/api/v1/projects/KYB/audit", nil)
+		expect(t, code, 404, denied)
 		code, log := lead.do("GET", "/api/v1/projects/KYB/audit", nil)
 		expect(t, code, 200, log)
 		var lines []string
@@ -33,6 +38,10 @@ func TestAuditLog(t *testing.T) {
 			lines = append(lines, e["actor_name"].(string)+" "+e["action"].(string)+" "+e["target"].(string)+" "+strconv.Itoa(int(e["status"].(float64))))
 		}
 		want := []string{
+			"Tester DELETE /api/v1/boards/{id} /api/v1/boards/" + b["id"].(string) + " 204",
+			"Tester POST /api/v1/projects/{key}/boards /api/v1/projects/KYB/boards 201",
+			"Tester POST /api/v1/sprints/{id}/start /api/v1/sprints/" + sp["id"].(string) + "/start 200",
+			"Tester POST /api/v1/projects/{key}/sprints /api/v1/projects/KYB/sprints 201",
 			"Tester PUT /api/v1/projects/{key}/workflow /api/v1/projects/KYB/workflow 403",
 			"Tester POST /api/v1/issues/{issueKey}/transitions /api/v1/issues/KYB-1/transitions 200",
 			"Tester POST /api/v1/projects/{key}/issues /api/v1/projects/KYB/issues 201",

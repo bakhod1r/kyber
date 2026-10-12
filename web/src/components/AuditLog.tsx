@@ -14,6 +14,10 @@ const LABELS: Record<string, (target: string) => string> = {
   "POST /api/v1/projects/{key}/boards": () => "Created a board",
   "POST /api/v1/projects/{key}/sprints": () => "Created a sprint",
   "POST /api/v1/projects/{key}/import/jira": () => "Imported from Jira",
+  "POST /api/v1/sprints/{id}/start": () => "Started a sprint",
+  "POST /api/v1/sprints/{id}/complete": () => "Completed a sprint",
+  "PUT /api/v1/boards/{id}": () => "Changed a board",
+  "DELETE /api/v1/boards/{id}": () => "Deleted a board",
 };
 
 /** describeAction turns an API operation into plain words; unknown ones show the request. */

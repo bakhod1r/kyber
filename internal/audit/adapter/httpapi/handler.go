@@ -2,10 +2,12 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/audit/app"
@@ -14,12 +16,29 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 )
 
-type Handler struct {
-	svc *app.Service
-	log *slog.Logger
+// Owners finds the project of resources addressed by id alone (/sprints/{id}, /boards/{id}).
+type Owners interface {
+	ProjectOf(ctx context.Context, kind, id string) string // "" when unknown
 }
 
-func New(svc *app.Service, log *slog.Logger) *Handler { return &Handler{svc: svc, log: log} }
+type Handler struct {
+	svc    *app.Service
+	owners Owners
+	log    *slog.Logger
+}
+
+func New(svc *app.Service, owners Owners, log *slog.Logger) *Handler {
+	return &Handler{svc: svc, owners: owners, log: log}
+}
+
+// owned reports the kind and id of /api/v1/{sprints|boards}/{id}/... paths.
+func owned(path string) (kind, id string) {
+	parts := strings.Split(strings.TrimPrefix(path, "/api/v1/"), "/")
+	if len(parts) >= 2 && (parts[0] == "sprints" || parts[0] == "boards") && parts[1] != "" {
+		return parts[0], parts[1]
+	}
+	return "", ""
+}
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/projects/{key}/audit", h.list)
@@ -53,6 +72,11 @@ func (h *Handler) Record(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Resolve before the handler runs: a deleted board has no project afterwards.
+		var owner string
+		if kind, id := owned(r.URL.Path); kind != "" {
+			owner = h.owners.ProjectOf(r.Context(), kind, id)
+		}
 		sw := &statusWriter{ResponseWriter: w}
 		next.ServeHTTP(sw, r)
 		actor := auth.Actor(r.Context())
@@ -60,6 +84,9 @@ func (h *Handler) Record(next http.Handler) http.Handler {
 			return
 		}
 		project := domain.ProjectOf(r.PathValue("key"), r.PathValue("issueKey"))
+		if project == "" {
+			project = owner
+		}
 		if err := h.svc.Record(r.Context(), actor, r.Pattern, r.URL.Path, project, sw.status); err != nil {
 			h.log.ErrorContext(r.Context(), "audit: could not record", "action", r.Pattern, "err", err)
 		}

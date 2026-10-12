@@ -41,6 +41,8 @@ describe("AuditLog", () => {
       ["POST /api/v1/projects/{key}/members", "/api/v1/projects/KYB/members", "Changed project members"],
       ["POST /api/v1/projects/{key}/boards", "/api/v1/projects/KYB/boards", "Created a board"],
       ["POST /api/v1/projects/{key}/import/jira", "/api/v1/projects/KYB/import/jira", "Imported from Jira"],
+      ["POST /api/v1/sprints/{id}/complete", "/api/v1/sprints/s1/complete", "Completed a sprint"],
+      ["DELETE /api/v1/boards/{id}", "/api/v1/boards/b1", "Deleted a board"],
       ["DELETE /api/v1/x/{id}", "/api/v1/x/1", "DELETE /api/v1/x/1"],
     ];
     for (const [action, target, want] of cases) expect(describeAction(action, target)).toBe(want);

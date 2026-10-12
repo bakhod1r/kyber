@@ -305,7 +305,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	tenancy.Register(api)
 	calendarhttp.New(calendar, log, time.Now).Register(api)
 	focushttp.New(focus, log, time.Now).Register(api)
-	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projects), auditacl.NewNames(d.users), time.Now), log)
+	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projects), auditacl.NewNames(d.users), time.Now),
+		auditacl.NewOwners(agile, d.boards), log)
 	audit.Register(api)
 
 	mux := http.NewServeMux()
