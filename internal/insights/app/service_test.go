@@ -25,8 +25,9 @@ func (fakes) Issues(_ context.Context, project string) ([]app.IssueRow, error) {
 	five, three := 50, 30
 	return []app.IssueRow{
 		{Key: "KYB-1", Type: "bug", Status: "todo", Category: "todo", Priority: "high", Assignee: "u-a", Points: &five},
-		{Key: "KYB-2", Type: "task", Status: "closed", Category: "done", Priority: "medium", Assignee: "u-a", Points: &three},
-		{Key: "KYB-3", Type: "task", Status: "review", Category: "in_progress", Priority: "medium"},
+		{Key: "KYB-2", Type: "task", Status: "closed", Category: "done", StatusOrder: 3, Priority: "medium", Assignee: "u-a", Points: &three},
+		{Key: "KYB-3", Type: "task", Status: "review", Category: "in_progress", StatusOrder: 2, Priority: "medium"},
+		{Key: "KYB-4", Type: "task", Status: "progress", Category: "in_progress", StatusOrder: 1, Priority: "medium", Assignee: "u-a"},
 	}, nil
 }
 
@@ -95,14 +96,14 @@ func TestSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum.Total != 3 || sum.Open != 2 || sum.Done != 1 || sum.Unassigned != 1 || sum.TotalPoints != 80 || sum.OpenPoints != 50 {
+	if sum.Total != 4 || sum.Open != 3 || sum.Done != 1 || sum.Unassigned != 1 || sum.TotalPoints != 80 || sum.OpenPoints != 50 {
 		t.Fatalf("totals = %+v", sum)
 	}
-	// Custom statuses are counted by their category; the list keeps category order.
-	if len(sum.ByStatus) != 3 || sum.ByStatus[0].Key != "todo" || sum.ByStatus[1].Key != "review" || sum.ByStatus[2].Key != "closed" || sum.ByStatus[2].Points != 30 {
+	// Custom statuses keep the workflow's column order (not alphabetical).
+	if len(sum.ByStatus) != 4 || sum.ByStatus[0].Key != "todo" || sum.ByStatus[1].Key != "progress" || sum.ByStatus[2].Key != "review" || sum.ByStatus[3].Key != "closed" || sum.ByStatus[3].Points != 30 {
 		t.Fatalf("by status (workflow order) = %+v", sum.ByStatus)
 	}
-	if len(sum.Workload) != 2 || sum.Workload[0].Name != "Ali" || sum.Workload[0].Count != 1 || sum.Workload[0].Points != 50 || sum.Workload[1].Name != "Unassigned" {
+	if len(sum.Workload) != 2 || sum.Workload[0].Name != "Ali" || sum.Workload[0].Count != 2 || sum.Workload[0].Points != 50 || sum.Workload[1].Name != "Unassigned" {
 		t.Fatalf("workload (open issues only) = %+v", sum.Workload)
 	}
 	if _, err := s.Summary(ctx, "stranger", "KYB"); !errors.Is(err, app.ErrProjectNotFound) {

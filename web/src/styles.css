@@ -328,5 +328,11 @@ a.button.ghost { background: transparent; color: var(--accent); border: 1px soli
 /* S43 workflow editor */
 .workflow-editor { display: grid; gap: 0.75rem; max-width: 40rem; }
 .workflow-statuses { display: grid; gap: 0.5rem; padding-left: 1.25rem; margin: 0; }
-.workflow-statuses li { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-.workflow-statuses input { flex: 1 1 12rem; min-width: 0; }
+.workflow-statuses li { display: grid; grid-template-columns: minmax(0, 1fr) 8.5rem auto; gap: 0.5rem; align-items: center; }
+.workflow-statuses .status { justify-self: start; }
+.workflow-add { display: grid; grid-template-columns: minmax(0, 1fr) 10rem auto; gap: 0.5rem; }
+.workflow-editor > label select { width: auto; min-width: 12rem; }
+.workflow-editor > button { justify-self: start; }
+@media (max-width: 600px) {
+  .workflow-statuses li, .workflow-add { grid-template-columns: 1fr; }
+}

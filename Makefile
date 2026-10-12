@@ -1,4 +1,4 @@
-.PHONY: test cover-strict lint run build docker cover web web-test e2e
+.PHONY: test cover-strict lint run build docker cover web web-test e2e screenshots
 
 COVER_MIN ?= 85
 
@@ -31,6 +31,10 @@ build:
 
 run:
 	go run ./cmd/kyber
+
+screenshots: web build ## regenerates the README screenshots in docs/assets from a seeded in-memory server
+	@KYBER_ADDR=:18080 KYBER_COOKIE_SECURE=false ./bin/kyber > screenshots.log 2>&1 & pid=$$!; \
+	sleep 1; KYBER_URL=http://localhost:18080 node web/scripts/screenshots.mjs; rc=$$?; kill $$pid; exit $$rc
 
 e2e: build ## runs Playwright against a fresh in-memory server on :18080
 	@KYBER_ADDR=:18080 KYBER_COOKIE_SECURE=false ./bin/kyber > e2e.log 2>&1 & pid=$$!; \

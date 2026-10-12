@@ -17,6 +17,8 @@ export function Reports({ projectKey }: { projectKey: string }) {
   const sprints = useQuery({ queryKey: ["sprints", projectKey], queryFn: () => api.sprints(projectKey) });
   const focus = sprints.data?.find((s) => s.state === "active") ?? sprints.data?.find((s) => s.state === "closed");
   const burndown = useQuery({ queryKey: ["reports", "burndown", focus?.id], queryFn: () => api.burndown(focus!.id), enabled: !!focus });
+  const workflow = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => api.workflow(projectKey) });
+  const statusName = (k: string) => workflow.data?.statuses.find((st) => st.id === k)?.name ?? title(k);
   const velocity = useQuery({ queryKey: ["reports", projectKey, "velocity"], queryFn: () => api.reportVelocity(projectKey) });
 
   if (summary.isPending) return <p className="muted">Loading reports…</p>;
@@ -46,7 +48,7 @@ export function Reports({ projectKey }: { projectKey: string }) {
       </section>
 
       <div className="charts-grid">
-        <BarList title="Issues by status" items={s.by_status.map((c) => ({ label: title(c.key), value: c.count, extra: c.points }))} extraLabel="Points" />
+        <BarList title="Issues by status" items={s.by_status.map((c) => ({ label: statusName(c.key), value: c.count, extra: c.points }))} extraLabel="Points" />
         <BarList title="Issues by type" items={s.by_type.map((c) => ({ label: title(c.key), value: c.count, extra: c.points }))} extraLabel="Points" />
         <BarList title="Issues by priority" items={s.by_priority.map((c) => ({ label: title(c.key), value: c.count, extra: c.points }))} extraLabel="Points" />
         <BarList title="Workload (open issues)" items={s.workload.map((w) => ({ label: w.name, value: w.count, extra: w.points }))} extraLabel="Points" />

@@ -47,10 +47,14 @@ func (a Issues) Issues(ctx context.Context, project string) ([]app.IssueRow, err
 	if err != nil {
 		return nil, err
 	}
+	order := map[issuedomain.StatusID]int{}
+	for i, st := range wf.Statuses() {
+		order[st.ID] = i
+	}
 	rows := make([]app.IssueRow, 0, len(list))
 	for _, is := range list {
 		r := app.IssueRow{Key: is.Key().String(), Type: string(is.Type()), Status: string(is.Status()),
-			Category: string(wf.CategoryOf(is.Status())),
+			Category: string(wf.CategoryOf(is.Status())), StatusOrder: order[is.Status()],
 			Priority: string(is.Priority()), Assignee: string(is.Assignee())}
 		if p, ok := is.Estimate(); ok {
 			v := int(p)

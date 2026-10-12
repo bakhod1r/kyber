@@ -1,13 +1,28 @@
-<p align="center"><img src="docs/assets/logo-full.png" width="220" alt="Kyber"></p>
+<p align="center"><img src="docs/assets/logo-full.png" width="200" alt="Kyber — lightsaber K-crystal logo"></p>
+<h1 align="center">Kyber</h1>
 <p align="center">Open-source, self-hosted issue &amp; project tracker — the core of Jira, in one Go binary.</p>
 
-> Status: **v0.7 (Sprint 07)** — reports & insights (burndown, velocity, created vs resolved, cycle time, workload), story points, notifications & @mentions, Scrum backlog & sprints, Kanban board, project roles, OpenAPI contract, localized errors (en/uz/ru), PostgreSQL, optional Redis.
+> Status: **v0.10 (Sprint 10)** — configurable workflows per project (statuses with To Do / In Progress / Done
+> categories), Scrum & Kanban boards with status-mapped columns and WIP limits, backlog & sprints, reports (burndown,
+> velocity, created vs resolved, cycle time, workload), notifications & @mentions, Pomodoro focus with a meetings
+> time table, eye-break exercises, Jira CSV import/export, Google & Telegram sign-in, multi-tenant workspaces on
+> subdomains, OpenAPI contract, localized errors (en/uz/ru), PostgreSQL, optional Redis.
 
-<p align="center"><img src="docs/assets/board.png" alt="Kyber Kanban board" width="820"></p>
-<p align="center"><img src="docs/assets/reports.png" alt="Kyber reports: KPIs, distributions, created vs resolved, burndown, velocity" width="820"></p>
-<p align="center"><img src="docs/assets/backlog.png" alt="Kyber backlog with sprints" width="820"></p>
-<p align="center"><img src="docs/assets/issue-panel.png" alt="Kyber issue panel with comments" width="820"></p>
-<p align="center"><img src="docs/assets/notifications.png" alt="Kyber notifications" width="820"></p>
+<p align="center"><img src="docs/assets/landing.png" alt="Kyber landing page" width="820"></p>
+
+| | |
+|---|---|
+| <img src="docs/assets/board.png" alt="Board with columns from the project workflow, including Code Review"> | <img src="docs/assets/workflow.png" alt="Workflow editor: statuses and their categories"> |
+| **Board** — columns follow the project's workflow; drag cards between statuses. | **Workflow** — add, rename and remove statuses; each has a Jira category. |
+| <img src="docs/assets/backlog.png" alt="Backlog with an active and a planned sprint"> | <img src="docs/assets/reports.png" alt="Reports: KPIs, issues by status, type, priority and workload"> |
+| **Backlog & sprints** — rank issues, plan, start and complete sprints. | **Reports** — KPIs, distributions, burndown, velocity, cycle time. |
+| <img src="docs/assets/issue-panel.png" alt="Issue panel with focus timer and comments"> | <img src="docs/assets/meetings.png" alt="Meetings time table"> |
+| **Issue** — details, Pomodoro focus, comments with @mentions. | **Time table** — no Pomodoro can start during a meeting. |
+| <img src="docs/assets/notifications.png" alt="Notifications for mentions and comments"> | |
+| **Notifications** — comments and mentions, per workspace. | |
+
+Screenshots are generated from a seeded demo with `make screenshots`.
+
 > Roadmap: [`docs/PLAN.md`](docs/PLAN.md) · Backlog: [`docs/backlog`](docs/backlog) · QA: [`docs/qa`](docs/qa)
 
 ## Quick start

@@ -82,13 +82,13 @@ export function WorkflowEditor({ projectKey }: { projectKey: string }) {
               onChange={(e) => update({ ...draft, statuses: draft.statuses.map((x) => (x.id === s.id ? { ...x, name: e.target.value } : x)) })}
             />
             <span className={`status status-${s.category}`}>{STATUS_CATEGORIES.find((c) => c.id === s.category)?.label}</span>
-            <button type="button" className="link" aria-label={`Remove ${s.name}`} onClick={() => remove(s.id)} disabled={draft.statuses.length <= 1}>
+            <button type="button" className="ghost" aria-label={`Remove ${s.name}`} onClick={() => remove(s.id)} disabled={draft.statuses.length <= 1}>
               Remove
             </button>
           </li>
         ))}
       </ol>
-      <form className="inline-form" onSubmit={add}>
+      <form className="workflow-add" onSubmit={add}>
         <input aria-label="New status name" placeholder="New status" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
         <select aria-label="New status category" value={category} onChange={(e) => setCategory(e.target.value as StatusCategory)}>
           {STATUS_CATEGORIES.map((c) => (

@@ -24,6 +24,7 @@ var (
 type IssueRow struct {
 	Key, Type, Status, Priority string
 	Category                    string // the status's category: todo, in_progress or done
+	StatusOrder                 int    // the status's position in the workflow (board column order)
 	Assignee                    string
 	Points                      *int // tenths
 }
@@ -178,8 +179,8 @@ var (
 	priorityOrder = []string{"highest", "high", "medium", "low", "lowest"}
 )
 
-// byCategory orders status counts To Do → In Progress → Done, then by status id.
-func byCategory(counts map[string]*Count, category map[string]string) []Count {
+// byWorkflow orders status counts To Do → In Progress → Done, then by workflow position.
+func byWorkflow(counts map[string]*Count, category map[string]string, order map[string]int) []Count {
 	out := make([]Count, 0, len(counts))
 	for _, c := range counts {
 		out = append(out, *c)
@@ -189,7 +190,7 @@ func byCategory(counts map[string]*Count, category map[string]string) []Count {
 		if ci != cj {
 			return ci < cj
 		}
-		return out[i].Key < out[j].Key
+		return order[out[i].Key] < order[out[j].Key]
 	})
 	return out
 }
@@ -215,7 +216,7 @@ func (s *Service) Summary(ctx context.Context, actor, project string) (Summary, 
 	var sum Summary
 	byStatus, byType, byPrio := map[string]*Count{}, map[string]*Count{}, map[string]*Count{}
 	loads := map[string]*Load{}
-	category := map[string]string{}
+	category, order := map[string]string{}, map[string]int{}
 	bump := func(m map[string]*Count, k string, p int) {
 		if m[k] == nil {
 			m[k] = &Count{Key: k}
@@ -231,7 +232,7 @@ func (s *Service) Summary(ctx context.Context, actor, project string) (Summary, 
 		sum.Total++
 		sum.TotalPoints += p
 		bump(byStatus, r.Status, p)
-		category[r.Status] = r.Category
+		category[r.Status], order[r.Status] = r.Category, r.StatusOrder
 		bump(byType, r.Type, p)
 		bump(byPrio, r.Priority, p)
 		if r.Assignee == "" {
@@ -249,7 +250,7 @@ func (s *Service) Summary(ctx context.Context, actor, project string) (Summary, 
 		loads[r.Assignee].Count++
 		loads[r.Assignee].Points += p
 	}
-	sum.ByStatus, sum.ByType, sum.ByPriority = byCategory(byStatus, category), ordered(typeOrder, byType), ordered(priorityOrder, byPrio)
+	sum.ByStatus, sum.ByType, sum.ByPriority = byWorkflow(byStatus, category, order), ordered(typeOrder, byType), ordered(priorityOrder, byPrio)
 	for id, l := range loads {
 		if id == "" {
 			l.Name = "Unassigned"

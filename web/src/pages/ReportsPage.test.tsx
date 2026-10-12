@@ -86,3 +86,21 @@ describe("Reports (KYB-S28)", () => {
     expect(screen.getByText("Complete a sprint to see velocity.")).toBeInTheDocument();
   });
 });
+
+describe("Reports with a custom workflow (KYB-S43)", () => {
+  it("labels statuses with their workflow names", async () => {
+    mockApi({
+      "GET /api/v1/projects/KYB/reports/summary": { status: 200, body: { ...summary, by_status: [{ key: "code_review", count: 1, points: 5 }] } },
+      "GET /api/v1/projects/KYB/workflow": {
+        status: 200,
+        body: { initial: "todo", statuses: [{ id: "todo", name: "To Do", category: "todo" }, { id: "code_review", name: "Code Review", category: "in_progress" }], transitions: [] },
+      },
+      "GET /api/v1/projects/KYB/reports/created-vs-resolved?days=30": { status: 200, body: days(30) },
+      "GET /api/v1/projects/KYB/sprints": { status: 200, body: { items: [] } },
+      "GET /api/v1/projects/KYB/reports/velocity": { status: 200, body: { sprints: [] } },
+    });
+    renderWithProviders(<Reports projectKey="KYB" />);
+    expect((await screen.findAllByText("Code Review")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Code_review")).not.toBeInTheDocument();
+  });
+});
