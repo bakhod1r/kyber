@@ -87,3 +87,29 @@ describe("Board (KYB-S14 AC3)", () => {
     expect(calls.find((c) => c.key.startsWith("POST"))?.body).toEqual({ title: "Write docs", type: "bug" });
   });
 });
+
+describe("Board with a project workflow (KYB-S43)", () => {
+  it("renders one column per workflow status, in workflow order", async () => {
+    mockApi({
+      "GET /api/v1/projects/KYB/workflow": {
+        status: 200,
+        body: {
+          initial: "open",
+          statuses: [
+            { id: "open", name: "Open", category: "todo" },
+            { id: "review", name: "Code Review", category: "in_progress" },
+            { id: "closed", name: "Closed", category: "done" },
+          ],
+          transitions: [],
+        },
+      },
+      "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [issue(1, "review"), issue(2, "closed")] } },
+    });
+    renderWithProviders(<Board projectKey="KYB" />);
+    const review = await screen.findByRole("region", { name: "Code Review" });
+    expect(within(review).getByText("Issue 1")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Closed" })).getByText("Issue 2")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "To Do" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"))).toEqual(["Open", "Code Review", "Closed"]);
+  });
+});

@@ -4,7 +4,9 @@ Source: architecture review (2026-10-09). Priority order; each story DDD + TDD w
 
 ## P0
 - **S43 Configurable workflows per project** — statuses with categories (To Do / In Progress / Done), transitions,
-  workflow editor; replaces the hard-coded `DefaultWorkflow`.
+  workflow editor; replaces the hard-coded `DefaultWorkflow`. ✅ **Done:** migration 0018, `GET/PUT
+  /projects/{key}/workflow`, category-aware reports/sprints/import/export, board columns from the workflow,
+  editor (rename/add/remove, initial status). Editing explicit transitions in the UI follows with S44.
 - **S44 Board aggregate (agile)** — Scrum and Kanban boards: columns mapped to one or more statuses, WIP limits
   (min/max, column turns red), board filter (saved query); several boards per project.
 - **S45 Issue hierarchy and links** — parent link (epic → story/task → sub-task) with epic progress; issue links

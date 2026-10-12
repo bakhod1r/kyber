@@ -3,7 +3,11 @@
 
 export type User = { id: string; email: string; name: string };
 export type Project = { id: string; key: string; name: string };
-export type Status = "todo" | "in_progress" | "done";
+/** A status id of the project's workflow (default: todo, in_progress, done). */
+export type Status = string;
+export type StatusCategory = "todo" | "in_progress" | "done";
+export type WorkflowStatus = { id: Status; name: string; category: StatusCategory };
+export type Workflow = { initial: Status; statuses: WorkflowStatus[]; transitions: { from: Status; to: Status }[] };
 export type IssueType = "epic" | "story" | "task" | "bug" | "subtask";
 export type Priority = "lowest" | "low" | "medium" | "high" | "highest";
 export type Issue = {
@@ -77,6 +81,19 @@ export const STATUSES: { id: Status; label: string }[] = [
   { id: "in_progress", label: "In Progress" },
   { id: "done", label: "Done" },
 ];
+
+export const STATUS_CATEGORIES: { id: StatusCategory; label: string }[] = [
+  { id: "todo", label: "To Do" },
+  { id: "in_progress", label: "In Progress" },
+  { id: "done", label: "Done" },
+];
+
+/** Jira's simplified workflow, used until the project's own workflow has loaded. */
+export const DEFAULT_WORKFLOW: Workflow = {
+  initial: "todo",
+  statuses: STATUSES.map((s) => ({ id: s.id, name: s.label, category: s.id as StatusCategory })),
+  transitions: [],
+};
 
 export type ImportItem = {
   line: number;
@@ -211,6 +228,8 @@ export const api = {
   completeSprint: (id: string) => request<Completion>("POST", `/api/v1/sprints/${seg(id)}/complete`),
   createIssue: (key: string, title: string, type: IssueType) =>
     request<Issue>("POST", `/api/v1/projects/${seg(key)}/issues`, { title, type }),
+  workflow: (key: string) => request<Workflow>("GET", `/api/v1/projects/${seg(key)}/workflow`),
+  setWorkflow: (key: string, wf: Workflow) => request<Workflow>("PUT", `/api/v1/projects/${seg(key)}/workflow`, wf),
   transition: (issueKey: string, to: Status) =>
     request<Issue>("POST", `/api/v1/issues/${seg(issueKey)}/transitions`, { to }),
   issue: (issueKey: string) => request<Issue>("GET", `/api/v1/issues/${seg(issueKey)}`),

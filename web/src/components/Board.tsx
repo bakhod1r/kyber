@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type DragEvent, type FormEvent, useState } from "react";
-import { ISSUE_TYPES, type Issue, type IssueType, type Member, STATUSES, type Status, api } from "../api";
+import { DEFAULT_WORKFLOW, ISSUE_TYPES, type Issue, type IssueType, type Member, type Status, api } from "../api";
 
 const DRAG_TYPE = "application/x-kyber-issue";
 
@@ -21,6 +21,9 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
     enabled: !sprints.isPending,
   });
   const members = useQuery({ queryKey: ["members", projectKey], queryFn: () => api.members(projectKey) });
+  // Columns are the project's workflow statuses; the simplified workflow is the fallback.
+  const workflow = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => api.workflow(projectKey) });
+  const columns = (workflow.data ?? DEFAULT_WORKFLOW).statuses;
   const byId = new Map<string, Member>((members.data ?? []).map((m) => [m.user_id, m]));
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState<Status | null>(null);
@@ -50,7 +53,7 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
     if (issue && issue.status !== to) move.mutate({ key, to });
   }
 
-  if (sprints.isPending || issues.isPending) return <p className="muted">Loading board…</p>;
+  if (sprints.isPending || issues.isPending || workflow.isPending) return <p className="muted">Loading board…</p>;
   if (issues.isError) return <p role="alert" className="error">{issues.error.message}</p>;
 
   return (
@@ -68,12 +71,12 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
         </p>
       )}
       <div className="board">
-        {STATUSES.map((col) => {
+        {columns.map((col) => {
           const cards = issues.data.filter((i) => i.status === col.id);
           return (
             <section
               key={col.id}
-              aria-label={col.label}
+              aria-label={col.name}
               className={`column${over === col.id ? " over" : ""}`}
               onDragOver={(e) => {
                 e.preventDefault();
@@ -83,7 +86,7 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
               onDrop={(e) => onDrop(e, col.id)}
             >
               <h2>
-                {col.label} <span className="count">{cards.length}</span>
+                {col.name} <span className="count">{cards.length}</span>
               </h2>
               {cards.map((i) => (
                 <article
