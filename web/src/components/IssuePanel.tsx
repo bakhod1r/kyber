@@ -1,4 +1,5 @@
 import { IssueFocus } from "./Focus";
+import { IssueChildren } from "./IssueChildren";
 import { IssueHistory } from "./IssueHistory";
 import { MentionTextarea } from "./MentionTextarea";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,7 +16,17 @@ const toDraft = (i: Issue): Draft => ({
   estimate: i.estimate === null ? "" : String(i.estimate),
 });
 
-export function IssuePanel({ issueKey, projectKey, onClose }: { issueKey: string; projectKey: string; onClose: () => void }) {
+export function IssuePanel({
+  issueKey,
+  projectKey,
+  onClose,
+  onOpen,
+}: {
+  issueKey: string;
+  projectKey: string;
+  onClose: () => void;
+  onOpen?: (issueKey: string) => void;
+}) {
   const qc = useQueryClient();
   const titleId = useId();
   const issue = useQuery({ queryKey: ["issue", issueKey], queryFn: () => api.issue(issueKey) });
@@ -80,6 +91,17 @@ export function IssuePanel({ issueKey, projectKey, onClose }: { issueKey: string
         {loaded && (
           <p className="muted people">
             Reporter: {loaded.reporter_id ? (members.data?.find((m) => m.user_id === loaded.reporter_id)?.name ?? "Former member") : "Unknown"}
+            {loaded.parent_key && (
+              <>
+                {" · "}
+                <span className="parent-link">
+                  {loaded.type === "subtask" ? "Sub-task of " : "Epic "}
+                  <button type="button" className="link" onClick={() => onOpen?.(loaded.parent_key!)}>
+                    {loaded.parent_key}
+                  </button>
+                </span>
+              </>
+            )}
           </p>
         )}
         {draft && (
@@ -131,6 +153,7 @@ export function IssuePanel({ issueKey, projectKey, onClose }: { issueKey: string
             </div>
           </form>
         )}
+        {loaded && <IssueChildren issue={loaded} projectKey={projectKey} onOpen={onOpen} />}
         <IssueFocus issueKey={issueKey} />
         <Comments issueKey={issueKey} projectKey={projectKey} />
         <IssueHistory issueKey={issueKey} projectKey={projectKey} />

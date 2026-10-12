@@ -86,6 +86,7 @@ type CreateIssue struct {
 	Project string
 	Title   string
 	Type    string
+	Parent  string // issue key of the epic (for stories, tasks, bugs) or of the issue a sub-task belongs to
 }
 
 func (s *Service) Create(ctx context.Context, actor string, cmd CreateIssue) (*domain.Issue, error) {
@@ -100,6 +101,10 @@ func (s *Service) Create(ctx context.Context, actor string, cmd CreateIssue) (*d
 	if err := s.access.Authorize(ctx, actor, cmd.Project, true); err != nil {
 		return nil, err
 	}
+	parent, err := s.parentFor(ctx, cmd.Project, cmd.Parent, typ)
+	if err != nil {
+		return nil, err
+	}
 	key, err := s.keys.Next(ctx, cmd.Project)
 	if err != nil {
 		return nil, err
@@ -111,6 +116,11 @@ func (s *Service) Create(ctx context.Context, actor string, cmd CreateIssue) (*d
 	is, err := domain.NewIssue(domain.IssueID(s.newID()), key, cmd.Title, typ, domain.UserID(actor), wf)
 	if err != nil {
 		return nil, err
+	}
+	if parent != nil {
+		if err := is.SetParent(parent); err != nil {
+			return nil, err
+		}
 	}
 	last, err := s.issues.LastRank(ctx, cmd.Project)
 	if err != nil {

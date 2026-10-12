@@ -103,6 +103,8 @@ type Issue struct {
 	title       string
 	typ         IssueType
 	status      StatusID
+	parent      IssueID
+	parentKey   IssueKey
 	baseline    *Snapshot // state when loaded or last saved; nil for a new issue
 	description string
 	priority    Priority
@@ -139,6 +141,8 @@ type Snapshot struct {
 	Estimate    *Points
 	Rank        Rank
 	Sprint      SprintID
+	Parent      IssueID  // epic of a story/task/bug, or the issue a sub-task belongs to
+	ParentKey   IssueKey // the parent's key (for display and history)
 	Version     int
 }
 
@@ -149,7 +153,7 @@ func Rehydrate(s Snapshot) *Issue {
 	}
 	is := &Issue{id: s.ID, key: s.Key, title: s.Title, typ: s.Type, status: s.Status,
 		description: s.Description, priority: s.Priority, assignee: s.Assignee, reporter: s.Reporter, estimate: s.Estimate, rank: s.Rank, sprint: s.Sprint,
-		version: s.Version}
+		parent: s.Parent, parentKey: s.ParentKey, version: s.Version}
 	is.markBaseline()
 	return is
 }

@@ -24,6 +24,8 @@ export type Issue = {
   sprint_id: string | null;
   rank: string;
   version: number;
+  /** The epic of a story/task/bug, or the issue a sub-task belongs to. */
+  parent_key?: string | null;
 };
 export type SprintState = "planned" | "active" | "closed";
 export type Sprint = {
@@ -244,8 +246,10 @@ export const api = {
   markNotificationRead: (id: string) => request<undefined>("POST", `/api/v1/notifications/${seg(id)}/read`),
   markAllNotificationsRead: () => request<undefined>("POST", "/api/v1/notifications/read-all"),
   completeSprint: (id: string) => request<Completion>("POST", `/api/v1/sprints/${seg(id)}/complete`),
-  createIssue: (key: string, title: string, type: IssueType) =>
-    request<Issue>("POST", `/api/v1/projects/${seg(key)}/issues`, { title, type }),
+  createIssue: (key: string, title: string, type: IssueType, parentKey?: string) =>
+    request<Issue>("POST", `/api/v1/projects/${seg(key)}/issues`, parentKey ? { title, type, parent_key: parentKey } : { title, type }),
+  children: (issueKey: string) =>
+    request<{ items: Issue[]; total: number; done: number; points: number; done_points: number }>("GET", `/api/v1/issues/${seg(issueKey)}/children`),
   audit: (key: string) => request<List<AuditEntry>>("GET", `/api/v1/projects/${seg(key)}/audit`).then((r) => r.items),
   history: (issueKey: string) => request<List<HistoryEntry>>("GET", `/api/v1/issues/${seg(issueKey)}/history`).then((r) => r.items),
   boards: (key: string) => request<List<BoardView>>("GET", `/api/v1/projects/${seg(key)}/boards`).then((r) => r.items),

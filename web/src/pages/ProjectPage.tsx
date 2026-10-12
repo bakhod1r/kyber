@@ -47,7 +47,7 @@ export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "
         {view === "audit" && <AuditLog projectKey={key} />}
         <Members projectKey={key} />
       </div>
-      {open && <IssuePanel issueKey={open} projectKey={key} onClose={() => setOpen(null)} />}
+      {open && <IssuePanel issueKey={open} projectKey={key} onClose={() => setOpen(null)} onOpen={setOpen} />}
     </div>
   );
 }

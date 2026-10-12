@@ -31,6 +31,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/comments", h.comments)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/comments", h.addComment)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/history", h.history)
+	mux.HandleFunc("GET /api/v1/issues/{issueKey}/children", h.children)
 	mux.HandleFunc("GET /api/v1/projects/{key}/workflow", h.workflow)
 	mux.HandleFunc("PUT /api/v1/projects/{key}/workflow", h.setWorkflow)
 }
@@ -48,6 +49,7 @@ type issueDTO struct {
 	ReporterID  *string  `json:"reporter_id"`
 	Estimate    *float64 `json:"estimate"`
 	Rank        string   `json:"rank"`
+	ParentKey   *string  `json:"parent_key"`
 	Version     int      `json:"version"`
 }
 
@@ -55,6 +57,10 @@ func toDTO(is *domain.Issue) issueDTO {
 	d := issueDTO{ID: string(is.ID()), Key: is.Key().String(), Title: is.Title(), Type: string(is.Type()),
 		Status: string(is.Status()), Description: is.Description(), Priority: string(is.Priority()),
 		Rank: string(is.Rank()), Version: is.Version()}
+	if is.Parent() != "" {
+		k := is.ParentKey().String()
+		d.ParentKey = &k
+	}
 	if a := is.Assignee(); a != "" {
 		s := string(a)
 		d.AssigneeID = &s
@@ -92,6 +98,8 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeForbidden, true
 	case errors.Is(err, domain.ErrTransitionNotAllowed):
 		return httpx.CodeTransitionNotAllowed, true
+	case errors.Is(err, domain.ErrInvalidParent):
+		return httpx.CodeInvalidParent, true
 	case errors.Is(err, app.ErrStatusInUse):
 		return httpx.CodeStatusInUse, true
 	case errors.Is(err, domain.ErrConcurrentModification):
@@ -101,12 +109,15 @@ func codeFor(err error) (string, bool) {
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Title, Type string }
+	var in struct {
+		Title, Type string
+		ParentKey   string `json:"parent_key"`
+	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
-	is, err := h.svc.Create(r.Context(), auth.Actor(r.Context()), app.CreateIssue{Project: r.PathValue("key"), Title: in.Title, Type: in.Type})
+	is, err := h.svc.Create(r.Context(), auth.Actor(r.Context()), app.CreateIssue{Project: r.PathValue("key"), Title: in.Title, Type: in.Type, Parent: in.ParentKey})
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
@@ -163,6 +174,7 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		AssigneeID  json.RawMessage `json:"assignee_id"`
 		SprintID    json.RawMessage `json:"sprint_id"`
 		Estimate    json.RawMessage `json:"estimate"`
+		ParentKey   json.RawMessage `json:"parent_key"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
@@ -201,6 +213,16 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 			}
 			cmd.Estimate = &f
 		}
+	}
+	if in.ParentKey != nil {
+		parent := ""
+		if string(in.ParentKey) != "null" {
+			if err := json.Unmarshal(in.ParentKey, &parent); err != nil {
+				httpx.Error(w, r, h.log, httpx.ErrBadJSON, codeFor)
+				return
+			}
+		}
+		cmd.Parent = &parent
 	}
 	is, err := h.svc.Edit(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"), cmd)
 	if err != nil {
@@ -268,4 +290,18 @@ func (h *Handler) rank(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, toDTO(is))
+}
+
+func (h *Handler) children(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.Children(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	items := make([]issueDTO, 0, len(c.Items))
+	for _, is := range c.Items {
+		items = append(items, toDTO(is))
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": items, "total": len(c.Items), "done": c.Done,
+		"points": float64(c.Points) / 10, "done_points": float64(c.DonePoints) / 10})
 }

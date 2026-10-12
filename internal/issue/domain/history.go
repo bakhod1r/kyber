@@ -27,7 +27,8 @@ func (IssueChanged) EventName() string { return "issue.changed" }
 // Snapshot returns the issue's current state.
 func (i *Issue) Snapshot() Snapshot {
 	return Snapshot{ID: i.id, Key: i.key, Title: i.title, Type: i.typ, Status: i.status, Description: i.description,
-		Priority: i.priority, Assignee: i.assignee, Reporter: i.reporter, Estimate: i.estimate, Rank: i.rank, Sprint: i.sprint, Version: i.version}
+		Priority: i.priority, Assignee: i.assignee, Reporter: i.reporter, Estimate: i.estimate, Rank: i.rank, Sprint: i.sprint,
+		Parent: i.parent, ParentKey: i.parentKey, Version: i.version}
 }
 
 func (i *Issue) markBaseline() {
@@ -64,6 +65,7 @@ func (i *Issue) Changelog(by UserID) (IssueChanged, bool) {
 	add("estimate", points(b.Estimate), points(a.Estimate))
 	add("sprint", string(b.Sprint), string(a.Sprint))
 	add("rank", string(b.Rank), string(a.Rank))
+	add("parent", keyOf(b.ParentKey), keyOf(a.ParentKey))
 	if len(items) == 0 {
 		return IssueChanged{}, false
 	}
@@ -89,4 +91,11 @@ type HistoryRepository interface {
 	Record(ctx context.Context, entries ...HistoryEntry) error
 	// ForIssue returns the issue's history, oldest first (At, Event, Seq).
 	ForIssue(ctx context.Context, issue IssueID) ([]HistoryEntry, error)
+}
+
+func keyOf(k IssueKey) string {
+	if k.Project() == "" {
+		return ""
+	}
+	return k.String()
 }

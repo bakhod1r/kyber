@@ -22,6 +22,7 @@ type Repository interface {
 type ListFilter struct {
 	Status *StatusID
 	Sprint *SprintID
+	Parent *IssueID // children of this issue
 }
 
 // KeyAllocator hands out the next sequential key of a project (ACL to the Project context).

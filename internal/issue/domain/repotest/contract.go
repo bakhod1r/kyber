@@ -61,6 +61,35 @@ func Run(t *testing.T, newRepo Factory) {
 		}
 	})
 
+	t.Run("parent links persist and filter children", func(t *testing.T) {
+		repo, _ := newRepo(t)
+		key1, _ := domain.NewIssueKey("KYB", 1)
+		epic, _ := domain.NewIssue(domain.IssueID(uuidFor(1)), key1, "Epic", domain.TypeEpic, domain.UserID(Assignee), domain.DefaultWorkflow())
+		_ = repo.Save(ctx, epic, nil)
+		a, b := mk(t, 2, "A"), mk(t, 3, "B")
+		_ = repo.Save(ctx, a, nil)
+		_ = repo.Save(ctx, b, nil)
+		if err := a.SetParent(epic); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.Save(ctx, a, nil); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := repo.ByKey(ctx, a.Key())
+		if got.Parent() != epic.ID() || got.ParentKey() != key1 {
+			t.Fatalf("parent = %q %v", got.Parent(), got.ParentKey())
+		}
+		parent := epic.ID()
+		if kids, _ := repo.ListByProject(ctx, "KYB", domain.ListFilter{Parent: &parent}); keys(kids) != "KYB-2" {
+			t.Fatalf("children = %s", keys(kids))
+		}
+		_ = got.SetParent(nil)
+		_ = repo.Save(ctx, got, nil)
+		if again, _ := repo.ByKey(ctx, a.Key()); again.Parent() != "" {
+			t.Fatal("parent not cleared")
+		}
+	})
+
 	t.Run("not found", func(t *testing.T) {
 		repo, _ := newRepo(t)
 		key, _ := domain.NewIssueKey("KYB", 42)

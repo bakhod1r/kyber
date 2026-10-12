@@ -356,3 +356,10 @@ a.button.ghost { background: transparent; color: var(--accent); border: 1px soli
 .table-scroll { overflow-x: auto; }
 .audit table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .audit th, .audit td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+
+/* S45 hierarchy */
+.progress { height: 0.5rem; border-radius: 999px; background: var(--border); overflow: hidden; }
+.progress span { display: block; height: 100%; background: #1f9d55; }
+.child-list { list-style: none; padding: 0; margin: 0.5rem 0; display: grid; gap: 0.25rem; }
+.child-list li { display: flex; justify-content: space-between; gap: 0.5rem; align-items: center; }
+.parent-link { font-size: 0.9rem; }

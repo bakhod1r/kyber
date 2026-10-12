@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.15.0
+  version: 0.16.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -595,6 +595,7 @@ paths:
               properties:
                 title: { type: string }
                 type: { $ref: "#/components/schemas/IssueType" }
+                parent_key: { type: string, description: "Epic for a story/task/bug; required for a sub-task (its story/task/bug)." }
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
         "401": { $ref: "#/components/responses/Error" }
@@ -628,6 +629,7 @@ paths:
                 assignee_id: { type: [string, "null"], format: uuid }
                 sprint_id: { type: [string, "null"], description: "A planned or active sprint of the project; null = backlog." }
                 estimate: { type: [number, "null"], minimum: 0, maximum: 999, description: "Story points, one decimal; null clears." }
+                parent_key: { type: [string, "null"], description: "Move under this epic/issue; null removes the parent (not for sub-tasks)." }
       responses:
         "200": { description: Updated issue, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
         "400": { $ref: "#/components/responses/Error" }
@@ -636,6 +638,28 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/issues/{issueKey}/children:
+    parameters: [{ $ref: "#/components/parameters/IssueKey" }]
+    get:
+      operationId: issueChildren
+      description: An epic's issues or an issue's sub-tasks, with progress (Done-category statuses).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, done, points, done_points]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Issue" } }
+                  total: { type: integer }
+                  done: { type: integer }
+                  points: { type: number }
+                  done_points: { type: number }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/history:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
     get:
@@ -1233,7 +1257,7 @@ components:
     Priority: { type: string, enum: [lowest, low, medium, high, highest] }
     Issue:
       type: object
-      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, version]
+      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, version]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -1248,6 +1272,7 @@ components:
         estimate: { type: [number, "null"], minimum: 0, maximum: 999, description: Story points (one decimal). }
         sprint_id: { type: [string, "null"], format: uuid }
         rank: { type: string, description: Fractional backlog rank; compare byte-wise. }
+        parent_key: { type: [string, "null"], description: "The epic of a story/task/bug, or the issue a sub-task belongs to." }
         version: { type: integer, minimum: 1 }
     Sprint:
       type: object

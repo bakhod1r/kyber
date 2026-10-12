@@ -19,6 +19,7 @@ type EditIssue struct {
 	Sprint      string
 	EstimateSet bool     // set Estimate (nil = clear)
 	Estimate    *float64 // story points, one decimal
+	Parent      *string  // issue key of the new parent ("" = none); nil leaves it unchanged
 }
 
 func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue) (*domain.Issue, error) {
@@ -67,6 +68,15 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 	}
 	if cmd.EstimateSet {
 		is.SetEstimate(estimate)
+	}
+	if cmd.Parent != nil {
+		parent, err := s.parentFor(ctx, is.Key().Project(), *cmd.Parent, is.Type())
+		if err != nil {
+			return nil, err
+		}
+		if err := is.SetParent(parent); err != nil {
+			return nil, err
+		}
 	}
 	return is, s.save(ctx, actor, is)
 }
