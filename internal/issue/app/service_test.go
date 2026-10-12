@@ -104,7 +104,7 @@ func setup() (*app.Service, *recorder) {
 	return app.NewService(app.Deps{
 		Issues: repo, Comments: memory.NewCommentRepository(repo), Keys: keys, Access: access, Directory: access,
 		Sprints:  fakeSprints{"KYB": {"s-1": true, "s-2": true}},
-		Workflow: domain.DefaultWorkflow(), Workflows: memory.NewWorkflowRepository(), Admins: access, NewID: ids,
+		Workflow: domain.DefaultWorkflow(), Workflows: memory.NewWorkflowRepository(), History: memory.NewHistoryRepository(), Admins: access, NewID: ids,
 		Now: func() time.Time { now = now.Add(time.Minute); return now },
 	}), rec
 }
@@ -198,7 +198,7 @@ func TestTransitionIssue(t *testing.T) {
 		t.Fatal("transition must persist")
 	}
 	ev, ok := rec.all()[0].(domain.IssueTransitioned)
-	if len(rec.all()) != 1 || !ok || ev.From != domain.StatusTodo || ev.To != domain.StatusInProgress {
+	if len(rec.all()) != 2 || !ok || ev.From != domain.StatusTodo || ev.To != domain.StatusInProgress {
 		t.Fatalf("events = %+v", rec.all())
 	}
 	if _, err := s.Transition(ctx, dev, "KYB-9", "done"); !errors.Is(err, domain.ErrIssueNotFound) {

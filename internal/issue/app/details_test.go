@@ -31,7 +31,7 @@ func TestEditIssue(t *testing.T) {
 	for _, e := range rec.all() {
 		names = append(names, e.EventName())
 	}
-	if len(names) != 2 || names[0] != "issue.edited" || names[1] != "issue.assigned" {
+	if len(names) != 3 || names[0] != "issue.edited" || names[1] != "issue.assigned" || names[2] != "issue.changed" {
 		t.Fatalf("events = %v", names)
 	}
 

@@ -54,6 +54,7 @@ type Service struct {
 	sprints   Sprints
 	workflow  *domain.Workflow
 	workflows domain.WorkflowRepository
+	history   domain.HistoryRepository
 	admins    Admins
 	newID     func() string
 	now       func() time.Time
@@ -69,6 +70,7 @@ type Deps struct {
 	Sprints   Sprints
 	Workflow  *domain.Workflow // the default for projects without a configured workflow
 	Workflows domain.WorkflowRepository
+	History   domain.HistoryRepository
 	Admins    Admins
 	NewID     func() string
 	Now       func() time.Time
@@ -77,7 +79,7 @@ type Deps struct {
 func NewService(d Deps) *Service {
 	return &Service{issues: d.Issues, comments: d.Comments, keys: d.Keys, access: d.Access,
 		directory: d.Directory, sprints: d.Sprints, workflow: d.Workflow,
-		workflows: d.Workflows, admins: d.Admins, newID: d.NewID, now: d.Now}
+		workflows: d.Workflows, history: d.History, admins: d.Admins, newID: d.NewID, now: d.Now}
 }
 
 type CreateIssue struct {
@@ -115,7 +117,7 @@ func (s *Service) Create(ctx context.Context, actor string, cmd CreateIssue) (*d
 		return nil, err
 	}
 	is.Rerank(domain.RankBetween(last, "")) // new issues go to the bottom of the backlog
-	return is, s.save(ctx, is)
+	return is, s.save(ctx, actor, is)
 }
 
 func (s *Service) Get(ctx context.Context, actor, rawKey string) (*domain.Issue, error) {
@@ -147,7 +149,7 @@ func (s *Service) Transition(ctx context.Context, actor, rawKey, to string) (*do
 	if err := is.Transition(domain.StatusID(to), wf); err != nil {
 		return nil, err
 	}
-	return is, s.save(ctx, is)
+	return is, s.save(ctx, actor, is)
 }
 
 // Backlog selects issues that are in no sprint.
@@ -179,7 +181,12 @@ func (s *Service) List(ctx context.Context, actor, project string, q ListQuery) 
 	return s.issues.ListByProject(ctx, project, f)
 }
 
-func (s *Service) save(ctx context.Context, is *domain.Issue) error {
-	// The repository writes the aggregate and its events atomically (transactional outbox).
-	return s.issues.Save(ctx, is, is.PullEvents())
+// save writes the issue, its events and its changelog (who changed what) atomically
+// through the transactional outbox, so every action is kept in the issue's history.
+func (s *Service) save(ctx context.Context, actor string, is *domain.Issue) error {
+	events := is.PullEvents()
+	if ch, ok := is.Changelog(domain.UserID(actor)); ok {
+		events = append(events, ch)
+	}
+	return s.issues.Save(ctx, is, events)
 }

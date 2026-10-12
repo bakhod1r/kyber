@@ -32,5 +32,5 @@ func (s *Service) Import(ctx context.Context, project string, in domain.Imported
 		return nil, err
 	}
 	is.Rerank(domain.RankBetween(last, ""))
-	return is, s.save(ctx, is)
+	return is, s.save(ctx, "", is) // imported history arrives as issue.imported
 }

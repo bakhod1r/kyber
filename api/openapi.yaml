@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.13.0
+  version: 0.14.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -614,6 +614,26 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/issues/{issueKey}/history:
+    parameters: [{ $ref: "#/components/parameters/IssueKey" }]
+    get:
+      operationId: issueHistory
+      description: |
+        Every action on the issue, oldest first (Jira's History tab): creation, each changed field with its
+        old and new value, comments and imports. Actions before v0.14 were recovered from the event log;
+        their actor may be unknown (null) and old edits carry no values.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: { items: { type: array, items: { $ref: "#/components/schemas/HistoryEntry" } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/rank:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
     post:
@@ -1115,6 +1135,21 @@ components:
       pattern: "^[a-z0-9_]{1,40}$"
       description: A status id of the project's workflow (default workflow — todo, in_progress, done).
     StatusCategory: { type: string, enum: [todo, in_progress, done] }
+    HistoryEntry:
+      type: object
+      additionalProperties: false
+      required: [at, by_id, by_name, field, from, to, from_name, to_name]
+      properties:
+        at: { type: string, format: date-time }
+        by_id: { type: [string, "null"], description: "null = the system or unknown (recovered history)" }
+        by_name: { type: string }
+        field:
+          type: string
+          description: "created, comment, imported, or a field: title, description, type, status, priority, assignee, estimate, sprint, rank"
+        from: { type: string }
+        to: { type: string }
+        from_name: { type: string, description: "Display value (people's names for assignee)" }
+        to_name: { type: string }
     BoardColumn:
       type: object
       description: A column shows the issues in its statuses. `min`/`max` are WIP limits (0 = none).

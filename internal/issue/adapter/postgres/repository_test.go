@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -9,6 +10,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/issue/adapter/postgres"
 	"github.com/bakhod1r/kyber/internal/issue/domain"
 	"github.com/bakhod1r/kyber/internal/issue/domain/repotest"
+	"github.com/bakhod1r/kyber/internal/platform/db"
 	"github.com/bakhod1r/kyber/internal/platform/db/dbtest"
 )
 
@@ -85,4 +87,45 @@ func TestWorkflowContract(t *testing.T) {
 		}
 		return postgres.NewWorkflowRepository(pool)
 	})
+}
+
+func TestHistoryContract(t *testing.T) {
+	repotest.RunHistory(t, func(t *testing.T) domain.HistoryRepository {
+		pool := dbtest.New(t)
+		if _, err := pool.Exec(context.Background(), `INSERT INTO users (id, email, name, password_hash) VALUES ($1, 'a@x.uz', 'A', 'h')`, repotest.Assignee); err != nil {
+			t.Fatal(err)
+		}
+		return postgres.NewHistoryRepository(pool)
+	})
+}
+
+// Migration 0021 rebuilds every past action from the outbox (events are never deleted).
+func TestHistoryBackfillFromOutbox(t *testing.T) {
+	pool := dbtest.New(t)
+	ctx := context.Background()
+	const issue = `"id":"a0000000-0000-4000-8000-00000000000a","key":"KYB-12"`
+	_, err := pool.Exec(ctx, `INSERT INTO outbox (id, name, payload, created_at) VALUES
+		(101, 'issue.created',        '{`+issue+`,"type":"task","title":"Login","reporter":"u-r"}', '2026-05-04T09:00:00Z'),
+		(102, 'issue.transitioned',   '{`+issue+`,"from":"todo","to":"done"}', '2026-05-04T10:00:00Z'),
+		(103, 'issue.assigned',       '{`+issue+`,"from":"","to":"u-a","by":"u-r"}', '2026-05-04T11:00:00Z'),
+		(104, 'issue.edited',         '{`+issue+`,"fields":["title","priority"]}', '2026-05-04T12:00:00Z'),
+		(105, 'issue.estimated',      '{`+issue+`,"from":null,"to":2.5}', '2026-05-04T13:00:00Z'),
+		(106, 'comment.added',        '{"id":"c","issue_id":"a0000000-0000-4000-8000-00000000000a","issue_key":"KYB-12","author":"u-a","body":"hi"}', '2026-05-04T14:00:00Z'),
+		(107, 'sprint.started',       '{"id":"s"}', '2026-05-04T15:00:00Z')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql, _ := db.MigrationSQL("0021_issue_history.sql")
+	if _, err := pool.Exec(ctx, sql[strings.Index(sql, "-- Backfill"):]); err != nil {
+		t.Fatalf("backfill: %v", err)
+	}
+	got, _ := postgres.NewHistoryRepository(pool).ForIssue(ctx, "a0000000-0000-4000-8000-00000000000a")
+	var lines []string
+	for _, e := range got {
+		lines = append(lines, string(e.By)+"|"+e.Field+"|"+e.From+"|"+e.To)
+	}
+	want := "u-r|created||Login,|status|todo|done,u-r|assignee||u-a,|title||,|priority||,|estimate||2.5,u-a|comment||hi"
+	if strings.Join(lines, ",") != want {
+		t.Fatalf("backfilled:\n%s\nwant:\n%s", strings.Join(lines, ","), want)
+	}
 }

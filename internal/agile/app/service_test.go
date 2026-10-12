@@ -38,7 +38,7 @@ type fakeIssues struct {
 	err       error
 }
 
-func (f *fakeIssues) ReturnUnfinished(_ context.Context, project, sprint string) (int, int, error) {
+func (f *fakeIssues) ReturnUnfinished(_ context.Context, _, project, sprint string) (int, int, error) {
 	f.calls = append(f.calls, project+"/"+sprint)
 	return f.completed, f.returned, f.err
 }

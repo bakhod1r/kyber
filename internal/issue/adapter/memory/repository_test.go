@@ -29,3 +29,7 @@ func TestCommentContract(t *testing.T) {
 func TestWorkflowContract(t *testing.T) {
 	repotest.RunWorkflows(t, func(t *testing.T) domain.WorkflowRepository { return memory.NewWorkflowRepository() })
 }
+
+func TestHistoryContract(t *testing.T) {
+	repotest.RunHistory(t, func(t *testing.T) domain.HistoryRepository { return memory.NewHistoryRepository() })
+}

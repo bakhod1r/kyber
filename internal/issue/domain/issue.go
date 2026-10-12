@@ -103,6 +103,7 @@ type Issue struct {
 	title       string
 	typ         IssueType
 	status      StatusID
+	baseline    *Snapshot // state when loaded or last saved; nil for a new issue
 	description string
 	priority    Priority
 	assignee    UserID   // "" = unassigned
@@ -146,16 +147,21 @@ func Rehydrate(s Snapshot) *Issue {
 	if s.Priority == "" {
 		s.Priority = PriorityMedium
 	}
-	return &Issue{id: s.ID, key: s.Key, title: s.Title, typ: s.Type, status: s.Status,
+	is := &Issue{id: s.ID, key: s.Key, title: s.Title, typ: s.Type, status: s.Status,
 		description: s.Description, priority: s.Priority, assignee: s.Assignee, reporter: s.Reporter, estimate: s.Estimate, rank: s.Rank, sprint: s.Sprint,
 		version: s.Version}
+	is.markBaseline()
+	return is
 }
 
 // Version is the optimistic-locking version; 0 means not yet persisted.
 func (i *Issue) Version() int { return i.version }
 
 // MarkPersisted is called by repositories after a successful save.
-func (i *Issue) MarkPersisted() { i.version++ }
+func (i *Issue) MarkPersisted() {
+	i.version++
+	i.markBaseline()
+}
 
 func (i *Issue) ID() IssueID         { return i.id }
 func (i *Issue) Key() IssueKey       { return i.key }

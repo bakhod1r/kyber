@@ -22,7 +22,7 @@ type Access interface {
 
 // Issues is the anti-corruption port to Issue Tracking.
 type Issues interface {
-	ReturnUnfinished(ctx context.Context, project, sprint string) (completed, returned int, err error)
+	ReturnUnfinished(ctx context.Context, actor, project, sprint string) (completed, returned int, err error)
 }
 
 type Deps struct {
@@ -117,7 +117,7 @@ func (s *Service) Complete(ctx context.Context, actor, id string) (Completion, e
 	if sp.State() != domain.StateActive {
 		return Completion{}, domain.ErrSprintState
 	}
-	done, returned, err := s.d.Issues.ReturnUnfinished(ctx, sp.Project(), string(sp.ID()))
+	done, returned, err := s.d.Issues.ReturnUnfinished(ctx, actor, sp.Project(), string(sp.ID()))
 	if err != nil {
 		return Completion{}, err
 	}

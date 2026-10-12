@@ -68,7 +68,7 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 	if cmd.EstimateSet {
 		is.SetEstimate(estimate)
 	}
-	return is, s.save(ctx, is)
+	return is, s.save(ctx, actor, is)
 }
 
 // CommentView is a comment plus its author's display name.

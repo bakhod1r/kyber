@@ -88,6 +88,16 @@ export const STATUS_CATEGORIES: { id: StatusCategory; label: string }[] = [
   { id: "done", label: "Done" },
 ];
 
+export type HistoryEntry = {
+  at: string;
+  by_id: string | null;
+  by_name: string;
+  field: string;
+  from: string;
+  to: string;
+  from_name: string;
+  to_name: string;
+};
 export type BoardColumn = { name: string; statuses: Status[]; min: number; max: number };
 export type BoardView = { id: string; project_key: string; name: string; kind: "scrum" | "kanban"; columns: BoardColumn[]; version: number };
 
@@ -235,6 +245,7 @@ export const api = {
   completeSprint: (id: string) => request<Completion>("POST", `/api/v1/sprints/${seg(id)}/complete`),
   createIssue: (key: string, title: string, type: IssueType) =>
     request<Issue>("POST", `/api/v1/projects/${seg(key)}/issues`, { title, type }),
+  history: (issueKey: string) => request<List<HistoryEntry>>("GET", `/api/v1/issues/${seg(issueKey)}/history`).then((r) => r.items),
   boards: (key: string) => request<List<BoardView>>("GET", `/api/v1/projects/${seg(key)}/boards`).then((r) => r.items),
   workflow: (key: string) => request<Workflow>("GET", `/api/v1/projects/${seg(key)}/workflow`),
   setWorkflow: (key: string, wf: Workflow) => request<Workflow>("PUT", `/api/v1/projects/${seg(key)}/workflow`, wf),

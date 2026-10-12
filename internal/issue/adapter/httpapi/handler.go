@@ -30,6 +30,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/rank", h.rank)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/comments", h.comments)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/comments", h.addComment)
+	mux.HandleFunc("GET /api/v1/issues/{issueKey}/history", h.history)
 	mux.HandleFunc("GET /api/v1/projects/{key}/workflow", h.workflow)
 	mux.HandleFunc("PUT /api/v1/projects/{key}/workflow", h.setWorkflow)
 }
