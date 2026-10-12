@@ -152,3 +152,19 @@ func TestProjectEventsGoToGroups(t *testing.T) {
 		t.Fatalf("both groups, once each: %d", len(deliveries.All()))
 	}
 }
+
+// Regression (S46 matrix): without a bot, the group list still enforces Administer first, so
+// outsiders get 404 and members 403 instead of an empty list.
+func TestGroupChatsAuthorizesEvenWithoutABot(t *testing.T) {
+	ctx := tenant.With(context.Background(), tenant.Default)
+	s := app.NewService(app.Deps{Repo: memory.NewRepository(), Admins: admins{"eve": app.ErrNotFound, "dev": app.ErrForbidden},
+		NewID: func() string { return "x" }, Now: func() time.Time { return clock }})
+	for who, want := range map[string]error{"eve": app.ErrNotFound, "dev": app.ErrForbidden} {
+		if _, err := s.GroupChats(ctx, who, "KYB"); !errors.Is(err, want) {
+			t.Errorf("%s err = %v, want %v", who, err, want)
+		}
+	}
+	if list, err := s.GroupChats(ctx, "alice", "KYB"); err != nil || len(list) != 0 {
+		t.Fatalf("admin without bot = %v, %v", list, err)
+	}
+}

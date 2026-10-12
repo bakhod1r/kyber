@@ -44,11 +44,14 @@ func (s *Service) groupsEnabled() bool {
 // StartGroupLink returns a startgroup deep link for a project admin; opening it lets them pick a
 // Telegram group, adds the bot and sends it the one-time token.
 func (s *Service) StartGroupLink(ctx context.Context, actor, project string) (string, time.Time, error) {
-	if !s.groupsEnabled() {
+	if s.d.Admins == nil {
 		return "", time.Time{}, ErrGroupsDisabled
 	}
 	if err := s.d.Admins.Administer(ctx, actor, project); err != nil {
 		return "", time.Time{}, err
+	}
+	if !s.groupsEnabled() {
+		return "", time.Time{}, ErrGroupsDisabled
 	}
 	raw, tok := domain.NewGroupToken(tenant.Workspace(ctx), project, domain.UserID(actor), s.d.Now())
 	if err := s.d.Groups.CreateGroupToken(ctx, tok); err != nil {
@@ -83,22 +86,30 @@ func (s *Service) OnGroupStart(ctx context.Context, payload, chatID, title strin
 		"status changes and sprints.", tok.Project))
 }
 
+// GroupChats lists the project's groups to its admins. Authorization comes first, even when no
+// bot is configured, so outsiders always get ErrNotFound.
 func (s *Service) GroupChats(ctx context.Context, actor, project string) ([]domain.ProjectChat, error) {
-	if !s.groupsEnabled() {
-		return []domain.ProjectChat{}, nil
+	if s.d.Admins == nil {
+		return nil, ErrGroupsDisabled
 	}
 	if err := s.d.Admins.Administer(ctx, actor, project); err != nil {
 		return nil, err
+	}
+	if !s.groupsEnabled() {
+		return []domain.ProjectChat{}, nil
 	}
 	return s.d.Groups.ChatsOf(ctx, project)
 }
 
 func (s *Service) UnlinkGroup(ctx context.Context, actor, project, chatID string) error {
-	if !s.groupsEnabled() {
+	if s.d.Admins == nil {
 		return ErrGroupsDisabled
 	}
 	if err := s.d.Admins.Administer(ctx, actor, project); err != nil {
 		return err
+	}
+	if !s.groupsEnabled() {
+		return ErrGroupsDisabled
 	}
 	return s.d.Groups.UnlinkChat(ctx, project, chatID)
 }

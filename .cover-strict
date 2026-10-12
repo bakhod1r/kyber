@@ -13,3 +13,4 @@
 ./internal/audit/domain
 ./internal/audit/app
 ./internal/access/app
+./internal/access/adapter/projectcompat

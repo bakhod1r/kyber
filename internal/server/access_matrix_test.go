@@ -61,6 +61,29 @@ func TestS46AccessMatrix(t *testing.T) {
 					{"id": "todo", "name": "To Do", "category": "todo"}, {"id": "in_progress", "name": "In Progress", "category": "in_progress"},
 					{"id": "done", "name": "Done", "category": "done"}}})
 			}, [4]int{200, 403, 403, 404}},
+			// Other contexts decide through the same scheme (S46 phase 2).
+			{"create sprint (Agile)", func(c *client, n int) (int, map[string]any) {
+				return c.do("POST", "/api/v1/projects/KYB/sprints", map[string]string{"name": fmt.Sprintf("S%d", n)})
+			}, [4]int{201, 201, 403, 404}},
+			{"list boards (Agile)", func(c *client, n int) (int, map[string]any) { return c.do("GET", "/api/v1/projects/KYB/boards", nil) }, [4]int{200, 200, 200, 404}},
+			{"create board (Agile)", func(c *client, n int) (int, map[string]any) {
+				return c.do("POST", "/api/v1/projects/KYB/boards", map[string]string{"name": fmt.Sprintf("B%d", n), "kind": "kanban"})
+			}, [4]int{201, 403, 403, 404}},
+			{"reports (Insights)", func(c *client, n int) (int, map[string]any) {
+				return c.do("GET", "/api/v1/projects/KYB/reports/summary", nil)
+			}, [4]int{200, 200, 200, 404}},
+			{"import (Importer)", func(c *client, n int) (int, map[string]any) {
+				return c.do("POST", "/api/v1/projects/KYB/import/jira?dry_run=true", map[string]string{"csv": "Issue key,Summary,Issue Type\nJ-1,x,Task\n"})
+			}, [4]int{200, 403, 403, 404}},
+			{"audit log (Audit)", func(c *client, n int) (int, map[string]any) { return c.do("GET", "/api/v1/projects/KYB/audit", nil) }, [4]int{200, 403, 403, 404}},
+			{"start focus (Focus)", func(c *client, n int) (int, map[string]any) {
+				code, b := c.do("POST", "/api/v1/focus", map[string]any{"issue_key": fmt.Sprintf("KYB-%d", n), "minutes": 15})
+				c.do("POST", "/api/v1/focus/stop", nil)
+				return code, b
+			}, [4]int{201, 201, 403, 404}},
+			{"telegram groups (Notify)", func(c *client, n int) (int, map[string]any) {
+				return c.do("GET", "/api/v1/projects/KYB/telegram-groups", nil)
+			}, [4]int{200, 403, 403, 404}},
 		}
 		admin.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "anchor", "type": "task"}) // KYB-1
 		n := 1

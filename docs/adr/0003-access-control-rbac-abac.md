@@ -71,3 +71,13 @@ attributes.
 - An endpoint × role matrix (admin, member, viewer, outsider) runs on every backend.
 - **Phase 2:** per-project schemes and their editor, issue security levels (list/report/export filtering and
   leak tests), and moving Agile, Insights, Importer, Calendar and Focus from the coarse project check to `Can`.
+
+## Implementation note — phase 2a (shipped)
+- Agile, Insights, Importer, Focus, Notifications and Audit now decide through the same scheme: their ACLs keep
+  calling the Project service, but through `access/adapter/projectcompat.Gate`, which maps read → Browse Projects,
+  admin → Administer Projects and "write" → the permission the context means (Manage Sprints for Agile, Assignable
+  User for Focus and the assignee directory). The coarse role check is no longer used for authorization.
+- The endpoint × role matrix covers 22 endpoints across all contexts; it found the Telegram group list answering
+  outsiders when no bot was configured (fixed: authorization first).
+- **Remaining for phase 2:** per-project schemes and their editor; issue security levels with list/report/export
+  filtering and leak tests.

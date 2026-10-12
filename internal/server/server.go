@@ -15,7 +15,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/bakhod1r/kyber/internal/access/adapter/projectcompat"
 	accessapp "github.com/bakhod1r/kyber/internal/access/app"
+	accessdomain "github.com/bakhod1r/kyber/internal/access/domain"
 	agilehttp "github.com/bakhod1r/kyber/internal/agile/adapter/httpapi"
 	agileissueacl "github.com/bakhod1r/kyber/internal/agile/adapter/issueacl"
 	agilememory "github.com/bakhod1r/kyber/internal/agile/adapter/memory"
@@ -252,9 +254,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 	workspaces := workspaceapp.NewService(d.workspaces, id.New)
 	tenancy := workspacehttp.New(workspaces, log, d.baseDomain, d.cookieSecure)
 	projects := projectapp.NewService(d.projects, users, id.New).WithWorkspaces(workspaces)
-	acl := projectacl.New(projects, users)
 	// Access context (ADR-0003): every permission decision goes through the project's scheme.
 	access := accessapp.NewService(projects)
+	acl := projectacl.New(projectcompat.NewGate(projects, access, accessdomain.AssignableUser), users)
 	// Issue Tracking and Agile depend on each other through ports; the sprint
 	// ACL is bound once both services exist.
 	sprintACL := &lateSprints{}
@@ -262,14 +264,14 @@ func build(log *slog.Logger, d deps) http.Handler {
 		Issues: d.issues, Comments: d.comments, Keys: acl, Access: issueaccessacl.New(access), Directory: acl, Sprints: sprintACL,
 		Workflow: issuedomain.DefaultWorkflow(), Workflows: d.workflows, History: d.history, Links: d.links, NewID: id.New, Now: time.Now,
 	})
-	agileACL := agileprojectacl.New(projects)
+	agileACL := agileprojectacl.New(projectcompat.NewGate(projects, access, accessdomain.ManageSprints))
 	agile := agileapp.NewService(agileapp.Deps{
 		Sprints: d.sprints, Boards: d.boards, Issues: issues, Access: agileACL, Admins: agileACL,
 		Workflows: agileissueacl.New(issues), NewID: id.New, Now: time.Now,
 	})
 	sprintACL.Sprints = agileacl.New(agile)
 	notify := notifyapp.NewService(notifyapp.Deps{
-		Repo: d.notes, Issues: notifyacl.NewIssues(issues), Members: notifyacl.NewMembers(projects), Workspaces: notifyacl.NewWorkspaces(projects),
+		Repo: d.notes, Issues: notifyacl.NewIssues(issues), Members: notifyacl.NewMembers(projectcompat.NewGate(projects, access, accessdomain.BrowseProjects)), Workspaces: notifyacl.NewWorkspaces(projects),
 		Users: notifyacl.NewUsers(d.users), NewID: id.New, Now: time.Now, Log: log,
 		Deliveries: d.deliveries, Prefs: d.prefs, Contacts: notifyacl.NewContacts(d.users, d.external),
 		Channels: d.channels(), PublicURL: d.publicURL,
@@ -277,16 +279,17 @@ func build(log *slog.Logger, d deps) http.Handler {
 		Lookups: notifyacl.NewLookups(issues, agile), Bot: d.botMessenger(),
 	})
 	insights := insightsapp.NewService(insightsapp.Deps{
-		Repo: d.activity, Access: insightsacl.NewAccess(projects), Issues: insightsacl.NewIssues(issues),
+		Repo: d.activity, Access: insightsacl.NewAccess(projectcompat.NewGate(projects, access, accessdomain.BrowseProjects)), Issues: insightsacl.NewIssues(issues),
 		Users: insightsacl.NewUsers(d.users), Sprints: insightsacl.NewSprints(agile), Now: time.Now, Log: log,
 	})
+	importGate := projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)
 	importer := importerapp.NewService(importerapp.Deps{
-		Access: importeracl.NewProject(projects), Members: importeracl.NewProject(projects),
+		Access: importeracl.NewProject(importGate), Members: importeracl.NewProject(importGate),
 		Issues: importeracl.NewIssues(issues, time.Now), Mappings: d.mappings, Source: importeracl.NewSource(issues, d.users),
 	})
 	calendar := calendarapp.NewService(d.meetings, calendaracl.NewMembers(workspaces, d.users), id.New, time.Now)
 	focus := focusapp.NewService(focusapp.Deps{Sessions: d.focusSessions, Calendar: focusacl.NewCalendar(calendar),
-		Issues: focusacl.NewIssues(issues, projects), NewID: id.New, Clock: systemClock{}})
+		Issues: focusacl.NewIssues(issues, projectcompat.NewGate(projects, access, accessdomain.AssignableUser)), NewID: id.New, Clock: systemClock{}})
 	relay := outbox.NewRelay(d.outbox, log)
 	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated", "issue.imported"} {
 		relay.Handle(name, insights.OnIssueEvent)
@@ -342,7 +345,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	tenancy.Register(api)
 	calendarhttp.New(calendar, log, time.Now).Register(api)
 	focushttp.New(focus, log, time.Now).Register(api)
-	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projects), auditacl.NewNames(d.users), time.Now),
+	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
 		auditacl.NewOwners(agile, d.boards, d.links), log)
 	audit.Register(api)
 
