@@ -24,19 +24,19 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 		var err error
 		if is.Version() == 0 {
 			tag, err = tx.Exec(ctx, `INSERT INTO issues (id, project_key, number, title, type, status,
-				description, priority, assignee_id, rank, sprint_id, reporter_id, estimate_tenths, version, workspace_id, parent_id)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, $14, $15) ON CONFLICT DO NOTHING`,
+				description, priority, assignee_id, rank, sprint_id, reporter_id, estimate_tenths, version, workspace_id, parent_id, security_level)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, $14, $15, $16) ON CONFLICT DO NOTHING`,
 				string(is.ID()), is.Key().Project(), is.Key().Number(), is.Title(), string(is.Type()), string(is.Status()),
 				is.Description(), string(is.Priority()), nullable(string(is.Assignee())), string(is.Rank()),
-				nullable(string(is.Sprint())), nullable(string(is.Reporter())), estimateCol(is), tenant.Workspace(ctx), nullable(string(is.Parent())))
+				nullable(string(is.Sprint())), nullable(string(is.Reporter())), estimateCol(is), tenant.Workspace(ctx), nullable(string(is.Parent())), is.SecurityLevel())
 		} else {
 			tag, err = tx.Exec(ctx, `UPDATE issues SET title = $2, type = $3, status = $4, description = $5,
 				priority = $6, assignee_id = $7, rank = $8, sprint_id = $9, estimate_tenths = $11,
-				parent_id = $13, version = version + 1, updated_at = now()
+				parent_id = $13, security_level = $14, version = version + 1, updated_at = now()
 				WHERE id = $1 AND version = $10 AND workspace_id = $12`,
 				string(is.ID()), is.Title(), string(is.Type()), string(is.Status()), is.Description(),
 				string(is.Priority()), nullable(string(is.Assignee())), string(is.Rank()), nullable(string(is.Sprint())),
-				is.Version(), estimateCol(is), tenant.Workspace(ctx), nullable(string(is.Parent())))
+				is.Version(), estimateCol(is), tenant.Workspace(ctx), nullable(string(is.Parent())), is.SecurityLevel())
 		}
 		if err != nil {
 			return err
@@ -55,7 +55,7 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 
 const selectCols = `SELECT id::text, project_key, number, title, type, status, description, priority,
 	COALESCE(assignee_id::text, ''), rank, COALESCE(sprint_id::text, ''), COALESCE(reporter_id::text, ''), estimate_tenths, version,
-	COALESCE(parent_id::text, ''), COALESCE((SELECT p.number FROM issues p WHERE p.id = issues.parent_id), 0) FROM issues`
+	COALESCE(parent_id::text, ''), COALESCE((SELECT p.number FROM issues p WHERE p.id = issues.parent_id), 0), security_level FROM issues`
 
 func (r *Repository) ByKey(ctx context.Context, key domain.IssueKey) (*domain.Issue, error) {
 	is, err := scan(r.pool.QueryRow(ctx, selectCols+` WHERE workspace_id = $3 AND project_key = $1 AND number = $2`, key.Project(), key.Number(), tenant.Workspace(ctx)))
@@ -125,7 +125,7 @@ func scan(row pgx.Row) (*domain.Issue, error) {
 	var project string
 	var number, parentNumber int
 	if err := row.Scan(&s.ID, &project, &number, &s.Title, &s.Type, &s.Status, &s.Description,
-		&s.Priority, &s.Assignee, &s.Rank, &s.Sprint, &s.Reporter, &s.Estimate, &s.Version, &s.Parent, &parentNumber); err != nil {
+		&s.Priority, &s.Assignee, &s.Rank, &s.Sprint, &s.Reporter, &s.Estimate, &s.Version, &s.Parent, &parentNumber, &s.Security); err != nil {
 		return nil, err
 	}
 	if s.Parent != "" {

@@ -21,7 +21,7 @@ func (fakes) Authorize(_ context.Context, actor, project string) error {
 	return nil
 }
 
-func (fakes) Issues(_ context.Context, project string) ([]app.IssueRow, error) {
+func (fakes) Issues(_ context.Context, _, project string) ([]app.IssueRow, error) {
 	five, three := 50, 30
 	return []app.IssueRow{
 		{Key: "KYB-1", Type: "bug", Status: "todo", Category: "todo", Priority: "high", Assignee: "u-a", Points: &five},

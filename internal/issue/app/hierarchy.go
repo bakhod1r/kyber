@@ -43,6 +43,9 @@ func (s *Service) Children(ctx context.Context, actor, rawKey string) (Children,
 	if err != nil {
 		return Children{}, err
 	}
+	if items, err = s.visible(ctx, actor, is.Key().Project(), items); err != nil {
+		return Children{}, err
+	}
 	wf, err := s.workflowFor(ctx, is.Key().Project())
 	if err != nil {
 		return Children{}, err

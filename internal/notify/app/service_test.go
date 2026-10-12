@@ -19,6 +19,7 @@ import (
 type fakes struct {
 	issues  map[string]app.IssueInfo
 	members map[string]bool // "project/user"
+	cleared map[string]bool // users who see confidential issues
 	emails  map[string]string
 	names   map[string]string
 }
@@ -30,8 +31,9 @@ func (f *fakes) Lookup(_ context.Context, key string) (app.IssueInfo, error) {
 	}
 	return i, nil
 }
-func (f *fakes) IsMember(_ context.Context, project, user string) (bool, error) {
-	return f.members[project+"/"+user], nil
+func (f *fakes) CanSee(_ context.Context, user, issueKey string) (bool, error) {
+	i := f.issues[issueKey]
+	return f.members[i.Project+"/"+user] && (!i.Confidential || f.cleared[user]), nil
 }
 func (f *fakes) UserIDByEmail(_ context.Context, email string) (string, bool, error) {
 	id, ok := f.emails[email]
@@ -49,8 +51,10 @@ func (f *fakes) DisplayName(_ context.Context, id string) (string, error) { retu
 
 func setup() (*app.Service, *memory.Repository) {
 	f := &fakes{
-		issues:  map[string]app.IssueInfo{"KYB-1": {Project: "KYB", Title: "Login page", Reporter: "alice", Assignee: "bob"}},
+		issues: map[string]app.IssueInfo{"KYB-1": {Project: "KYB", Title: "Login page", Reporter: "alice", Assignee: "bob"},
+			"KYB-9": {Project: "KYB", Title: "Salaries", Reporter: "alice", Assignee: "bob", Confidential: true}},
 		members: map[string]bool{"KYB/alice": true, "KYB/bob": true, "KYB/carol": true, "KYB/dave": true},
+		cleared: map[string]bool{"alice": true, "bob": true},
 		emails:  map[string]string{"dave@x.uz": "dave", "eve@x.uz": "eve", "carol@x.uz": "carol"},
 		names:   map[string]string{"alice": "Alice", "bob": "Bob", "carol": "Carol"},
 	}
@@ -198,5 +202,21 @@ func TestDeliveryNeedsTheWorkspace(t *testing.T) {
 		NewID: func() string { return "n" }, Now: time.Now})
 	if err := s.OnIssueAssigned(context.Background(), msg(1, "issue.assigned", `{"key":"BROKEN-1","to":"bob","by":"alice"}`)); err == nil {
 		t.Fatal("expected the workspace lookup error")
+	}
+}
+
+// ADR-0003: a member who may not see a confidential issue is never notified about it.
+func TestConfidentialIssueNotifiesOnlyThoseWhoSeeIt(t *testing.T) {
+	ctx := context.Background()
+	s, _ := setup()
+	body := `{"issue_key":"KYB-9","author":"carol","body":"@dave@x.uz look"}`
+	if err := s.OnCommentAdded(ctx, msg(7, "comment.added", body)); err != nil {
+		t.Fatal(err)
+	}
+	if got := inbox(t, s, "alice"); got != "commented:KYB-9:Carol" {
+		t.Fatalf("reporter = %s", got)
+	}
+	if got := inbox(t, s, "dave"); got != "" {
+		t.Fatalf("mentioned member without clearance notified: %s", got)
 	}
 }

@@ -31,7 +31,7 @@ type Access interface {
 
 // Source lists a project's issues for export (ACL to Issue Tracking and Identity).
 type Source interface {
-	ExportRows(ctx context.Context, project string) ([]domain.ExportRow, error)
+	ExportRows(ctx context.Context, actor, project string) ([]domain.ExportRow, error)
 }
 
 // Members lists the project's members for matching assignees and reporters.
@@ -115,7 +115,7 @@ func (s *Service) Import(ctx context.Context, actor, project, csv string, dryRun
 	}
 	// The project's own issues (e.g. re-importing its export) are already here.
 	if s.d.Source != nil {
-		own, err := s.d.Source.ExportRows(ctx, project)
+		own, err := s.d.Source.ExportRows(ctx, actor, project)
 		if err != nil {
 			return Report{}, err
 		}
@@ -151,7 +151,7 @@ func (s *Service) Export(ctx context.Context, actor, project string, w io.Writer
 	if err := s.d.Access.AuthorizeRead(ctx, actor, project); err != nil {
 		return err
 	}
-	rows, err := s.d.Source.ExportRows(ctx, project)
+	rows, err := s.d.Source.ExportRows(ctx, actor, project)
 	if err != nil {
 		return err
 	}

@@ -90,6 +90,24 @@ func Run(t *testing.T, newRepo Factory) {
 		}
 	})
 
+	t.Run("security level persists", func(t *testing.T) {
+		repo, _ := newRepo(t)
+		is := mk(t, 1, "Secret")
+		is.SetSecurityLevel("confidential")
+		if err := repo.Save(ctx, is, nil); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := repo.ByKey(ctx, is.Key())
+		if got.SecurityLevel() != "confidential" {
+			t.Fatalf("level = %q", got.SecurityLevel())
+		}
+		got.SetSecurityLevel("")
+		_ = repo.Save(ctx, got, nil)
+		if again, _ := repo.ByKey(ctx, is.Key()); again.SecurityLevel() != "" {
+			t.Fatal("level not cleared")
+		}
+	})
+
 	t.Run("not found", func(t *testing.T) {
 		repo, _ := newRepo(t)
 		key, _ := domain.NewIssueKey("KYB", 42)

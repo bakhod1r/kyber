@@ -91,7 +91,7 @@ func (a Project) AuthorizeRead(ctx context.Context, actor, project string) error
 }
 
 type Snapshotter interface {
-	Snapshot(ctx context.Context, project string) ([]*issuedomain.Issue, error)
+	VisibleSnapshot(ctx context.Context, actor, project string) ([]*issuedomain.Issue, error)
 	ProjectWorkflow(ctx context.Context, project string) (*issuedomain.Workflow, error)
 }
 
@@ -107,8 +107,9 @@ type Source struct {
 
 func NewSource(i Snapshotter, u Users) Source { return Source{issues: i, users: u} }
 
-func (a Source) ExportRows(ctx context.Context, project string) ([]domain.ExportRow, error) {
-	list, err := a.issues.Snapshot(ctx, project)
+// ExportRows lists only the issues the actor may see (security levels).
+func (a Source) ExportRows(ctx context.Context, actor, project string) ([]domain.ExportRow, error) {
+	list, err := a.issues.VisibleSnapshot(ctx, actor, project)
 	if err != nil {
 		return nil, err
 	}

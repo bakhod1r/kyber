@@ -40,7 +40,7 @@ type (
 		Authorize(ctx context.Context, actor, project string) error // read access
 	}
 	Issues interface {
-		Issues(ctx context.Context, project string) ([]IssueRow, error)
+		Issues(ctx context.Context, actor, project string) ([]IssueRow, error)
 	}
 	Users interface {
 		DisplayName(ctx context.Context, id string) (string, error)
@@ -209,7 +209,7 @@ func (s *Service) Summary(ctx context.Context, actor, project string) (Summary, 
 	if err := s.d.Access.Authorize(ctx, actor, project); err != nil {
 		return Summary{}, err
 	}
-	rows, err := s.d.Issues.Issues(ctx, project)
+	rows, err := s.d.Issues.Issues(ctx, actor, project)
 	if err != nil {
 		return Summary{}, err
 	}

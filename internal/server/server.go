@@ -262,7 +262,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	sprintACL := &lateSprints{}
 	issues := issueapp.NewService(issueapp.Deps{
 		Issues: d.issues, Comments: d.comments, Keys: acl, Access: issueaccessacl.New(access), Directory: acl, Sprints: sprintACL,
-		Workflow: issuedomain.DefaultWorkflow(), Workflows: d.workflows, History: d.history, Links: d.links, NewID: id.New, Now: time.Now,
+		Workflow: issuedomain.DefaultWorkflow(), Workflows: d.workflows, History: d.history, Links: d.links, SecurityLevels: []string{accessapp.LevelConfidential}, NewID: id.New, Now: time.Now,
 	})
 	agileACL := agileprojectacl.New(projectcompat.NewGate(projects, access, accessdomain.ManageSprints))
 	agile := agileapp.NewService(agileapp.Deps{
@@ -271,7 +271,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	sprintACL.Sprints = agileacl.New(agile)
 	notify := notifyapp.NewService(notifyapp.Deps{
-		Repo: d.notes, Issues: notifyacl.NewIssues(issues), Members: notifyacl.NewMembers(projectcompat.NewGate(projects, access, accessdomain.BrowseProjects)), Workspaces: notifyacl.NewWorkspaces(projects),
+		Repo: d.notes, Issues: notifyacl.NewIssues(issues), Members: notifyacl.NewMembers(issues), Workspaces: notifyacl.NewWorkspaces(projects),
 		Users: notifyacl.NewUsers(d.users), NewID: id.New, Now: time.Now, Log: log,
 		Deliveries: d.deliveries, Prefs: d.prefs, Contacts: notifyacl.NewContacts(d.users, d.external),
 		Channels: d.channels(), PublicURL: d.publicURL,

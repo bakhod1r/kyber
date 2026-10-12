@@ -34,11 +34,13 @@ describe("IssuePanel (KYB-S17)", () => {
     await userEvent.type(title, "Login v2");
     await userEvent.selectOptions(within(dialog).getByLabelText("Priority"), "high");
     await userEvent.selectOptions(within(dialog).getByLabelText("Assignee"), "u-bob");
+    await userEvent.click(within(dialog).getByLabelText(/Confidential/));
     await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(calls.some((c) => c.key === "PATCH /api/v1/issues/KYB-1")).toBe(true));
     expect(calls.find((c) => c.key === "PATCH /api/v1/issues/KYB-1")?.body).toEqual({
       version: 3, title: "Login v2", description: "Steps", priority: "high", assignee_id: "u-bob", estimate: null,
+      security_level: "confidential",
     });
     expect(await within(dialog).findByText("Saved")).toBeInTheDocument();
   });

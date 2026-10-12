@@ -172,7 +172,7 @@ func (s *Service) projectEvent(ctx context.Context, name, id, key, title, report
 				continue
 			}
 			info, err := s.d.Issues.Lookup(ctx, key)
-			if errors.Is(err, ErrIssueGone) {
+			if errors.Is(err, ErrIssueGone) || err == nil && info.Confidential {
 				return domain.ProjectEvent{}, "", nil
 			}
 			if err != nil {

@@ -33,20 +33,26 @@ func (a Issues) Lookup(ctx context.Context, key string) (app.IssueInfo, error) {
 		return app.IssueInfo{}, err
 	}
 	return app.IssueInfo{Project: is.Key().Project(), Title: is.Title(),
-		Reporter: string(is.Reporter()), Assignee: string(is.Assignee())}, nil
+		Reporter: string(is.Reporter()), Assignee: string(is.Assignee()), Confidential: is.SecurityLevel() != ""}, nil
 }
 
 type Authorizer interface {
 	Authorize(ctx context.Context, actor projectdomain.UserID, key string, need projectdomain.Permission) error
 }
 
-type Members struct{ projects Authorizer }
+// IssueReader reads an issue as a user would (Issue Tracking's authorized Get).
+type IssueReader interface {
+	Get(ctx context.Context, actor, key string) (*issuedomain.Issue, error)
+}
 
-func NewMembers(p Authorizer) Members { return Members{projects: p} }
+type Members struct{ issues IssueReader }
 
-func (a Members) IsMember(ctx context.Context, project, user string) (bool, error) {
-	err := a.projects.Authorize(ctx, projectdomain.UserID(user), project, projectdomain.PermRead)
-	if errors.Is(err, projectdomain.ErrProjectNotFound) {
+func NewMembers(i IssueReader) Members { return Members{issues: i} }
+
+func (a Members) CanSee(ctx context.Context, user, issueKey string) (bool, error) {
+	_, err := a.issues.Get(ctx, user, issueKey)
+	if errors.Is(err, issueapp.ErrProjectNotFound) || errors.Is(err, issuedomain.ErrIssueNotFound) ||
+		errors.Is(err, issueapp.ErrInvalidKey) {
 		return false, nil
 	}
 	return err == nil, err

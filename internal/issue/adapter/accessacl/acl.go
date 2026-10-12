@@ -23,7 +23,8 @@ func New(a Decider) Access { return Access{access: a} }
 func (a Access) Can(ctx context.Context, actor, project string, perm issueapp.Permission, on *domain.Issue) error {
 	var attrs *accessapp.Issue
 	if on != nil {
-		attrs = &accessapp.Issue{Reporter: string(on.Reporter()), Assignee: string(on.Assignee()), Status: string(on.Status())}
+		attrs = &accessapp.Issue{Reporter: string(on.Reporter()), Assignee: string(on.Assignee()), Status: string(on.Status()),
+			SecurityLevel: on.SecurityLevel()}
 	}
 	err := a.access.Can(ctx, actor, project, accessdomain.Permission(perm), attrs)
 	switch {

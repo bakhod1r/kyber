@@ -30,7 +30,7 @@ func (a Access) Authorize(ctx context.Context, actor, project string) error {
 }
 
 type IssueSnapshotter interface {
-	Snapshot(ctx context.Context, project string) ([]*issuedomain.Issue, error)
+	VisibleSnapshot(ctx context.Context, actor, project string) ([]*issuedomain.Issue, error)
 	ProjectWorkflow(ctx context.Context, project string) (*issuedomain.Workflow, error)
 }
 
@@ -38,8 +38,8 @@ type Issues struct{ src IssueSnapshotter }
 
 func NewIssues(src IssueSnapshotter) Issues { return Issues{src: src} }
 
-func (a Issues) Issues(ctx context.Context, project string) ([]app.IssueRow, error) {
-	list, err := a.src.Snapshot(ctx, project)
+func (a Issues) Issues(ctx context.Context, actor, project string) ([]app.IssueRow, error) {
+	list, err := a.src.VisibleSnapshot(ctx, actor, project)
 	if err != nil {
 		return nil, err
 	}

@@ -11,13 +11,14 @@ import (
 )
 
 var (
-	ErrProjectNotFound = errors.New("project not found")
-	ErrInvalidKey      = errors.New("invalid issue key")
-	ErrForbidden       = errors.New("insufficient project role")
-	ErrInvalidAssignee = errors.New("assignee must be a project member who can work on issues (not a viewer)")
-	ErrInvalidSprint   = errors.New("sprint must be a planned or active sprint of this project")
-	ErrInvalidAnchor   = errors.New("give exactly one of after/before: an issue key of the same project")
-	ErrStatusInUse     = errors.New("status is still used by issues; move them before removing it")
+	ErrProjectNotFound      = errors.New("project not found")
+	ErrInvalidKey           = errors.New("invalid issue key")
+	ErrForbidden            = errors.New("insufficient project role")
+	ErrInvalidAssignee      = errors.New("assignee must be a project member who can work on issues (not a viewer)")
+	ErrInvalidSprint        = errors.New("sprint must be a planned or active sprint of this project")
+	ErrInvalidAnchor        = errors.New("give exactly one of after/before: an issue key of the same project")
+	ErrStatusInUse          = errors.New("status is still used by issues; move them before removing it")
+	ErrInvalidSecurityLevel = errors.New("unknown security level")
 )
 
 // Sprints is the anti-corruption port to the Agile context.
@@ -66,6 +67,7 @@ type Service struct {
 	workflows domain.WorkflowRepository
 	history   domain.HistoryRepository
 	links     domain.LinkRepository
+	levels    []string
 	newID     func() string
 	now       func() time.Time
 }
@@ -82,14 +84,16 @@ type Deps struct {
 	Workflows domain.WorkflowRepository
 	History   domain.HistoryRepository
 	Links     domain.LinkRepository
-	NewID     func() string
-	Now       func() time.Time
+	// SecurityLevels are the issue security levels that can be set (ids, see the Access context).
+	SecurityLevels []string
+	NewID          func() string
+	Now            func() time.Time
 }
 
 func NewService(d Deps) *Service {
 	return &Service{issues: d.Issues, comments: d.Comments, keys: d.Keys, access: d.Access,
 		directory: d.Directory, sprints: d.Sprints, workflow: d.Workflow,
-		workflows: d.Workflows, history: d.History, links: d.Links, newID: d.NewID, now: d.Now}
+		workflows: d.Workflows, history: d.History, links: d.Links, levels: d.SecurityLevels, newID: d.NewID, now: d.Now}
 }
 
 type CreateIssue struct {
@@ -212,7 +216,32 @@ func (s *Service) List(ctx context.Context, actor, project string, q ListQuery) 
 		}
 		f.Sprint = &sp
 	}
-	return s.issues.ListByProject(ctx, project, f)
+	list, err := s.issues.ListByProject(ctx, project, f)
+	if err != nil {
+		return nil, err
+	}
+	return s.visible(ctx, actor, project, list)
+}
+
+// visible drops the issues the actor may not see (issue security levels, ADR-0003): every list
+// is filtered by the same decision as a single read, so a hidden issue never leaks through one.
+func (s *Service) visible(ctx context.Context, actor, project string, list []*domain.Issue) ([]*domain.Issue, error) {
+	out := make([]*domain.Issue, 0, len(list))
+	for _, is := range list {
+		if is.SecurityLevel() == "" {
+			out = append(out, is)
+			continue
+		}
+		err := s.access.Can(ctx, actor, project, PermBrowse, is)
+		if errors.Is(err, ErrProjectNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, is)
+	}
+	return out, nil
 }
 
 // save writes the issue, its events and its changelog (who changed what) atomically

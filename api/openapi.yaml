@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.19.0
+  version: 0.20.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -689,6 +689,7 @@ paths:
                 sprint_id: { type: [string, "null"], description: "A planned or active sprint of the project; null = backlog." }
                 estimate: { type: [number, "null"], minimum: 0, maximum: 999, description: "Story points, one decimal; null clears." }
                 parent_key: { type: [string, "null"], description: "Move under this epic/issue; null removes the parent (not for sub-tasks)." }
+                security_level: { type: string, enum: ["", confidential] }
       responses:
         "200": { description: Updated issue, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
         "400": { $ref: "#/components/responses/Error" }
@@ -1426,7 +1427,7 @@ components:
     Priority: { type: string, enum: [lowest, low, medium, high, highest] }
     Issue:
       type: object
-      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, version]
+      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, security_level, version]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -1442,6 +1443,10 @@ components:
         sprint_id: { type: [string, "null"], format: uuid }
         rank: { type: string, description: Fractional backlog rank; compare byte-wise. }
         parent_key: { type: [string, "null"], description: "The epic of a story/task/bug, or the issue a sub-task belongs to." }
+        security_level:
+          type: string
+          enum: ["", confidential]
+          description: "Issue security (ADR-0003). confidential = only project admins, the reporter and the assignee can see it; it is hidden (404) from everyone else and left out of every list, report, export and notification."
         version: { type: integer, minimum: 1 }
     Sprint:
       type: object

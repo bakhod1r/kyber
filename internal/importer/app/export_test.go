@@ -14,7 +14,7 @@ import (
 
 type fakeSource []domain.ExportRow
 
-func (f fakeSource) ExportRows(_ context.Context, project string) ([]domain.ExportRow, error) {
+func (f fakeSource) ExportRows(_ context.Context, _, project string) ([]domain.ExportRow, error) {
 	return f, nil
 }
 
@@ -47,7 +47,7 @@ func TestImportSkipsIssuesAlreadyInTheProject(t *testing.T) {
 
 type brokenSource struct{}
 
-func (brokenSource) ExportRows(context.Context, string) ([]domain.ExportRow, error) {
+func (brokenSource) ExportRows(context.Context, string, string) ([]domain.ExportRow, error) {
 	return nil, errors.New("db down")
 }
 

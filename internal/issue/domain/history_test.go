@@ -67,3 +67,20 @@ func TestNewIssuesHaveNoChangelog(t *testing.T) {
 		t.Fatal("creation is recorded by issue.created, not a changelog")
 	}
 }
+
+func TestSecurityLevel(t *testing.T) {
+	key, _ := domain.NewIssueKey("KYB", 1)
+	is := domain.Rehydrate(domain.Snapshot{ID: "i", Key: key, Title: "t", Type: domain.TypeTask, Status: "todo", Version: 1})
+	if is.SecurityLevel() != "" {
+		t.Fatal("visible by default")
+	}
+	is.SetSecurityLevel("confidential")
+	ch, ok := is.Changelog("u")
+	if !ok || ch.Items[0] != (domain.FieldChange{Field: "security", From: "", To: "confidential"}) || is.Snapshot().Security != "confidential" {
+		t.Fatalf("changelog = %+v", ch)
+	}
+	again := domain.Rehydrate(is.Snapshot())
+	if again.SecurityLevel() != "confidential" {
+		t.Fatal("rehydrate lost the level")
+	}
+}

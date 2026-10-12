@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"slices"
 
 	"github.com/bakhod1r/kyber/internal/issue/domain"
 )
@@ -20,6 +22,7 @@ type EditIssue struct {
 	EstimateSet bool     // set Estimate (nil = clear)
 	Estimate    *float64 // story points, one decimal
 	Parent      *string  // issue key of the new parent ("" = none); nil leaves it unchanged
+	Security    *string  // security level ("" = visible to everyone who can browse); nil leaves it unchanged
 }
 
 func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue) (*domain.Issue, error) {
@@ -73,6 +76,12 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 	}
 	if cmd.EstimateSet {
 		is.SetEstimate(estimate)
+	}
+	if cmd.Security != nil {
+		if *cmd.Security != "" && !slices.Contains(s.levels, *cmd.Security) {
+			return nil, fmt.Errorf("%q: %w", *cmd.Security, ErrInvalidSecurityLevel)
+		}
+		is.SetSecurityLevel(*cmd.Security)
 	}
 	if cmd.Parent != nil {
 		parent, err := s.parentFor(ctx, is.Key().Project(), *cmd.Parent, is.Type())

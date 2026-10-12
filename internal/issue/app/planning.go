@@ -117,3 +117,13 @@ func (s *Service) ProjectWorkflow(ctx context.Context, project string) (*domain.
 func (s *Service) Snapshot(ctx context.Context, project string) ([]*domain.Issue, error) {
 	return s.issues.ListByProject(ctx, project, domain.ListFilter{})
 }
+
+// VisibleSnapshot is Snapshot narrowed to the issues the actor may see (security levels),
+// for contexts that show issues to a person: reports, exports.
+func (s *Service) VisibleSnapshot(ctx context.Context, actor, project string) ([]*domain.Issue, error) {
+	list, err := s.Snapshot(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	return s.visible(ctx, actor, project, list)
+}

@@ -37,7 +37,7 @@ func (lookups) SprintName(_ context.Context, id string) (string, string, error) 
 
 func groupSetup(adm admins) (*app.Service, *memory.GroupRepository, *memory.DeliveryRepository, *replies) {
 	f := &fakes{
-		issues:  map[string]app.IssueInfo{"KYB-1": {Project: "KYB", Title: "Login page"}},
+		issues:  map[string]app.IssueInfo{"KYB-1": {Project: "KYB", Title: "Login page"}, "KYB-9": {Project: "KYB", Title: "Salaries", Confidential: true}},
 		members: map[string]bool{},
 		names:   map[string]string{"alice": "Alice"},
 	}
@@ -129,6 +129,7 @@ func TestProjectEventsGoToGroups(t *testing.T) {
 		{"issue.changed", `{"id":"i","key":"KYB-1","by":"alice","items":[{"field":"title","from":"b","to":"c"}]}`}, // not a status change
 		{"sprint.started", `{"id":"12","project":"KYB"}`},
 		{"sprint.completed", `{"id":"12","project":"KYB"}`},
+		{"issue.changed", `{"id":"j","key":"KYB-9","by":"alice","items":[{"field":"status","from":"todo","to":"done"}]}`}, // confidential
 		{"issue.created", `garbage`},
 	}
 	for i, e := range events {

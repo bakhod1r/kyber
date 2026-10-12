@@ -33,9 +33,25 @@ type Service struct {
 	scheme *domain.Scheme
 }
 
-// NewService decides with the default scheme (viewer < member < admin, own-issue edits);
-// per-project schemes and security levels come in phase 2.
-func NewService(roles Roles) *Service { return &Service{roles: roles, scheme: domain.DefaultScheme()} }
+// LevelConfidential is the built-in issue security level: only project admins, the reporter and
+// the assignee can see such an issue — it is hidden (404) from everyone else, in every list too.
+const LevelConfidential = "confidential"
+
+// SecurityLevels lists the levels an issue can have ("" = visible to everyone who can browse).
+func SecurityLevels() []domain.SecurityLevel {
+	return []domain.SecurityLevel{{ID: LevelConfidential, Name: "Confidential",
+		Grants: []domain.Grant{domain.Role(domain.RoleAdmin), domain.Reporter(), domain.Assignee()}}}
+}
+
+// NewService decides with the default scheme (viewer < member < admin, own-issue edits) and the
+// built-in security levels; per-project schemes come later.
+func NewService(roles Roles) *Service {
+	scheme := domain.DefaultScheme()
+	for _, l := range SecurityLevels() {
+		_ = scheme.AddLevel(l) // static, distinct ids
+	}
+	return &Service{roles: roles, scheme: scheme}
+}
 
 // Can returns nil when actor holds perm in project (on the issue when given), ErrNotFound when
 // the project or issue must stay hidden, and ErrForbidden otherwise.

@@ -79,5 +79,8 @@ attributes.
   User for Focus and the assignee directory). The coarse role check is no longer used for authorization.
 - The endpoint × role matrix covers 22 endpoints across all contexts; it found the Telegram group list answering
   outsiders when no bot was configured (fixed: authorization first).
-- **Remaining for phase 2:** per-project schemes and their editor; issue security levels with list/report/export
-  filtering and leak tests.
+- **Security levels (phase 2b):** an issue may carry the built-in level `confidential` (admins, reporter,
+  assignee). Reads answer 404 to others; lists, children, reports (`VisibleSnapshot`) and CSV export are filtered
+  per reader; notifications go only to recipients who can still `Get` the issue; Telegram groups never receive
+  updates of a confidential issue. `TestConfidentialIssueLeaks` covers every path on all backends.
+- **Remaining for phase 2:** per-project schemes and their editor.

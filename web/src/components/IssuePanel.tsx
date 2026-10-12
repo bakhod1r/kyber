@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { ApiError, type Issue, PRIORITIES, type Priority, api } from "../api";
 
-type Draft = { title: string; description: string; priority: Priority; assignee: string; estimate: string };
+type Draft = { title: string; description: string; priority: Priority; assignee: string; estimate: string; confidential: boolean };
 
 const toDraft = (i: Issue): Draft => ({
   title: i.title,
@@ -15,6 +15,7 @@ const toDraft = (i: Issue): Draft => ({
   priority: i.priority,
   assignee: i.assignee_id ?? "",
   estimate: i.estimate === null ? "" : String(i.estimate),
+  confidential: i.security_level === "confidential",
 });
 
 export function IssuePanel({
@@ -56,6 +57,7 @@ export function IssuePanel({
         priority: d.priority,
         assignee_id: d.assignee || null,
         estimate: d.estimate.trim() === "" ? null : Number(d.estimate),
+        security_level: d.confidential ? "confidential" : "",
       }),
     onSuccess: (updated) => {
       qc.setQueryData(["issue", issueKey], updated);
@@ -141,6 +143,10 @@ export function IssuePanel({
             <label className="narrow">
               Story points
               <input type="number" min={0} max={999} step={0.5} value={draft.estimate} onChange={(e) => setDraft({ ...draft, estimate: e.target.value })} />
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={draft.confidential} onChange={(e) => setDraft({ ...draft, confidential: e.target.checked })} />
+              Confidential — only admins and the people on this issue see it
             </label>
             <div className="row end">
               {notice && (

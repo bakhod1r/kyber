@@ -28,7 +28,7 @@ func (IssueChanged) EventName() string { return "issue.changed" }
 func (i *Issue) Snapshot() Snapshot {
 	return Snapshot{ID: i.id, Key: i.key, Title: i.title, Type: i.typ, Status: i.status, Description: i.description,
 		Priority: i.priority, Assignee: i.assignee, Reporter: i.reporter, Estimate: i.estimate, Rank: i.rank, Sprint: i.sprint,
-		Parent: i.parent, ParentKey: i.parentKey, Version: i.version}
+		Parent: i.parent, ParentKey: i.parentKey, Security: i.security, Version: i.version}
 }
 
 func (i *Issue) markBaseline() {
@@ -66,6 +66,7 @@ func (i *Issue) Changelog(by UserID) (IssueChanged, bool) {
 	add("sprint", string(b.Sprint), string(a.Sprint))
 	add("rank", string(b.Rank), string(a.Rank))
 	add("parent", keyOf(b.ParentKey), keyOf(a.ParentKey))
+	add("security", b.Security, a.Security)
 	if len(items) == 0 {
 		return IssueChanged{}, false
 	}
@@ -99,3 +100,9 @@ func keyOf(k IssueKey) string {
 	}
 	return k.String()
 }
+
+// SecurityLevel is the issue's security level ("" = visible to everyone who can browse).
+func (i *Issue) SecurityLevel() string { return i.security }
+
+// SetSecurityLevel restricts who can see the issue; the application checks the level exists.
+func (i *Issue) SetSecurityLevel(level string) { i.security = level }

@@ -57,3 +57,24 @@ func TestCan(t *testing.T) {
 		t.Fatalf("store failure must surface as itself: %v", err)
 	}
 }
+
+// The built-in "confidential" security level: admins, the reporter and the assignee only.
+func TestConfidentialLevel(t *testing.T) {
+	ctx := context.Background()
+	s := app.NewService(fakeRoles{"KYB": {"lead": "admin", "dev": "member", "qa": "member", "vic": "viewer"}})
+	secret := &app.Issue{Reporter: "dev", Assignee: "qa", Status: "todo", SecurityLevel: app.LevelConfidential}
+	for who, want := range map[string]error{"lead": nil, "dev": nil, "qa": nil, "vic": app.ErrNotFound, "eve": app.ErrNotFound} {
+		err := s.Can(ctx, who, "KYB", domain.BrowseProjects, secret)
+		if !errors.Is(err, want) || (want == nil) != (err == nil) {
+			t.Errorf("%s browse: %v, want %v", who, err, want)
+		}
+	}
+	// Hidden means hidden for every permission, not only browsing.
+	other := &app.Issue{Reporter: "lead", Status: "todo", SecurityLevel: app.LevelConfidential}
+	if err := s.Can(ctx, "dev", "KYB", domain.EditIssues, other); !errors.Is(err, app.ErrNotFound) {
+		t.Fatalf("edit hidden err = %v", err)
+	}
+	if got := app.SecurityLevels(); len(got) != 1 || got[0].ID != app.LevelConfidential {
+		t.Fatalf("levels = %+v", got)
+	}
+}

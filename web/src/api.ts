@@ -26,6 +26,8 @@ export type Issue = {
   version: number;
   /** The epic of a story/task/bug, or the issue a sub-task belongs to. */
   parent_key?: string | null;
+  /** "confidential": only admins, the reporter and the assignee see it. */
+  security_level?: "" | "confidential";
 };
 export type SprintState = "planned" | "active" | "closed";
 export type Sprint = {
@@ -73,6 +75,7 @@ export type IssuePatch = {
   assignee_id?: string | null;
   sprint_id?: string | null;
   estimate?: number | null;
+  security_level?: "" | "confidential";
 };
 export type Comment = { id: string; author_id: string; author_name: string; body: string; created_at: string };
 export type Role = "admin" | "member" | "viewer";

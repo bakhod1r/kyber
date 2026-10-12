@@ -19,6 +19,7 @@ var ErrIssueGone = errors.New("issue no longer exists")
 type IssueInfo struct {
 	Project, Title     string
 	Reporter, Assignee string
+	Confidential       bool // has a security level: never posted to Telegram groups
 }
 
 // Ports to the other contexts (anti-corruption layers live in the adapters).
@@ -27,7 +28,8 @@ type (
 		Lookup(ctx context.Context, issueKey string) (IssueInfo, error)
 	}
 	Members interface {
-		IsMember(ctx context.Context, project, user string) (bool, error)
+		// CanSee reports whether the user may still browse the issue (membership and security level).
+		CanSee(ctx context.Context, user, issueKey string) (bool, error)
 	}
 	// Workspaces tells which workspace a project belongs to.
 	Workspaces interface {
@@ -131,7 +133,7 @@ func (s *Service) deliver(ctx context.Context, event int64, issueKey, actor, tex
 	return s.deliverTo(ctx, event, issueKey, info, actor, text, recipients)
 }
 
-// deliverTo stores one notification per recipient who is still a project member.
+// deliverTo stores one notification per recipient who may still see the issue.
 func (s *Service) deliverTo(ctx context.Context, event int64, issueKey string, info IssueInfo, actor, text string, recipients map[domain.UserID]domain.Kind) error {
 	if len(recipients) == 0 {
 		return nil
@@ -149,7 +151,7 @@ func (s *Service) deliverTo(ctx context.Context, event int64, issueKey string, i
 		return err
 	}
 	for u, kind := range recipients {
-		ok, err := s.d.Members.IsMember(ctx, info.Project, string(u))
+		ok, err := s.d.Members.CanSee(ctx, string(u), issueKey)
 		if err != nil {
 			return err
 		}
