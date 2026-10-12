@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.14.0
+  version: 0.15.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -547,6 +547,28 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/audit:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: projectAudit
+      description: |
+        The project's audit log (project admins): every write made through the API by a signed-in user —
+        operation, path, result status, who and when — newest first, including refused attempts.
+        Request bodies are never stored.
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 200 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: { items: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/issues:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -1135,6 +1157,17 @@ components:
       pattern: "^[a-z0-9_]{1,40}$"
       description: A status id of the project's workflow (default workflow — todo, in_progress, done).
     StatusCategory: { type: string, enum: [todo, in_progress, done] }
+    AuditEntry:
+      type: object
+      additionalProperties: false
+      required: [at, actor_id, actor_name, action, target, status]
+      properties:
+        at: { type: string, format: date-time }
+        actor_id: { type: string }
+        actor_name: { type: string }
+        action: { type: string, description: "The API operation, e.g. PUT /api/v1/projects/{key}/workflow" }
+        target: { type: string, description: The concrete path }
+        status: { type: integer, description: The HTTP status of the result }
     HistoryEntry:
       type: object
       additionalProperties: false

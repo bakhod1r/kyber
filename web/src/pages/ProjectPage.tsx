@@ -4,12 +4,13 @@ import { NavLink, useParams, useSearchParams } from "react-router-dom";
 import { type Role, api } from "../api";
 import { Backlog } from "../components/Backlog";
 import { Board } from "../components/Board";
+import { AuditLog } from "../components/AuditLog";
 import { IssuePanel } from "../components/IssuePanel";
 import { WorkflowEditor } from "../components/WorkflowEditor";
 import { JiraImport } from "./ImportPage";
 import { Reports } from "./ReportsPage";
 
-export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "reports" | "import" | "workflow" }) {
+export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "reports" | "import" | "workflow" | "audit" }) {
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
   const project = projects.data?.find((p) => p.key === key);
@@ -35,6 +36,7 @@ export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "
         <NavLink to={`/projects/${encodeURIComponent(key)}/reports`}>Reports</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/import`}>Import</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/workflow`}>Workflow</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/audit`}>Audit</NavLink>
       </nav>
       <div className="project-grid">
         {view === "board" && <Board projectKey={key} onOpen={setOpen} />}
@@ -42,6 +44,7 @@ export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "
         {view === "reports" && <Reports projectKey={key} />}
         {view === "import" && <JiraImport projectKey={key} />}
         {view === "workflow" && <WorkflowEditor projectKey={key} />}
+        {view === "audit" && <AuditLog projectKey={key} />}
         <Members projectKey={key} />
       </div>
       {open && <IssuePanel issueKey={open} projectKey={key} onClose={() => setOpen(null)} />}

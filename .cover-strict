@@ -10,3 +10,5 @@
 ./internal/calendar/app
 ./internal/focus/app
 ./internal/agile/domain
+./internal/audit/domain
+./internal/audit/app

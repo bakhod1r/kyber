@@ -351,3 +351,8 @@ a.button.ghost { background: transparent; color: var(--accent); border: 1px soli
 /* Issue history */
 .history-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.35rem; font-size: 0.9rem; }
 .history-list li { border-left: 2px solid var(--border); padding-left: 0.6rem; overflow-wrap: anywhere; }
+
+/* Audit log */
+.table-scroll { overflow-x: auto; }
+.audit table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.audit th, .audit td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); white-space: nowrap; }

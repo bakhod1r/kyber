@@ -22,6 +22,12 @@ import (
 	agileprojectacl "github.com/bakhod1r/kyber/internal/agile/adapter/projectacl"
 	agileapp "github.com/bakhod1r/kyber/internal/agile/app"
 	agiledomain "github.com/bakhod1r/kyber/internal/agile/domain"
+	auditacl "github.com/bakhod1r/kyber/internal/audit/adapter/acl"
+	audithttp "github.com/bakhod1r/kyber/internal/audit/adapter/httpapi"
+	auditmemory "github.com/bakhod1r/kyber/internal/audit/adapter/memory"
+	auditpg "github.com/bakhod1r/kyber/internal/audit/adapter/postgres"
+	auditapp "github.com/bakhod1r/kyber/internal/audit/app"
+	auditdomain "github.com/bakhod1r/kyber/internal/audit/domain"
 	calendaracl "github.com/bakhod1r/kyber/internal/calendar/adapter/acl"
 	calendarhttp "github.com/bakhod1r/kyber/internal/calendar/adapter/httpapi"
 	calendarmemory "github.com/bakhod1r/kyber/internal/calendar/adapter/memory"
@@ -92,6 +98,7 @@ type deps struct {
 	comments      issuedomain.CommentRepository
 	workflows     issuedomain.WorkflowRepository
 	history       issuedomain.HistoryRepository
+	audit         auditdomain.Repository
 	sprints       agiledomain.Repository
 	boards        agiledomain.BoardRepository
 	users         identitydomain.Users
@@ -148,6 +155,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(),
+		audit:   auditmemory.NewRepository(),
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), notes: notifymemory.NewRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
@@ -193,6 +201,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool),
+		audit:   auditpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), notes: notifypg.NewRepository(pool), outbox: outbox.NewPostgresStore(pool),
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
@@ -296,6 +305,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	tenancy.Register(api)
 	calendarhttp.New(calendar, log, time.Now).Register(api)
 	focushttp.New(focus, log, time.Now).Register(api)
+	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projects), auditacl.NewNames(d.users), time.Now), log)
+	audit.Register(api)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -313,7 +324,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
-	mux.Handle("/api/v1/", auth.RequireAuth(tenancy.RequireMember(problemFallback(api))))
+	mux.Handle("/api/v1/", auth.RequireAuth(tenancy.RequireMember(audit.Record(problemFallback(api)))))
 	mux.Handle("/", web.Handler(web.Dist()))
 	return observe(log, m, recoverer(log, tenancy.Resolve(mux)))
 }

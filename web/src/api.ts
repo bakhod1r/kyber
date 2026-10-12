@@ -88,6 +88,7 @@ export const STATUS_CATEGORIES: { id: StatusCategory; label: string }[] = [
   { id: "done", label: "Done" },
 ];
 
+export type AuditEntry = { at: string; actor_id: string; actor_name: string; action: string; target: string; status: number };
 export type HistoryEntry = {
   at: string;
   by_id: string | null;
@@ -245,6 +246,7 @@ export const api = {
   completeSprint: (id: string) => request<Completion>("POST", `/api/v1/sprints/${seg(id)}/complete`),
   createIssue: (key: string, title: string, type: IssueType) =>
     request<Issue>("POST", `/api/v1/projects/${seg(key)}/issues`, { title, type }),
+  audit: (key: string) => request<List<AuditEntry>>("GET", `/api/v1/projects/${seg(key)}/audit`).then((r) => r.items),
   history: (issueKey: string) => request<List<HistoryEntry>>("GET", `/api/v1/issues/${seg(issueKey)}/history`).then((r) => r.items),
   boards: (key: string) => request<List<BoardView>>("GET", `/api/v1/projects/${seg(key)}/boards`).then((r) => r.items),
   workflow: (key: string) => request<Workflow>("GET", `/api/v1/projects/${seg(key)}/workflow`),
