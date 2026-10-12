@@ -47,7 +47,7 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await expect(dialog.getByText("Saved")).toBeVisible();
   await dialog.getByLabel("Add a comment").fill("Looks great!");
   await dialog.getByRole("button", { name: "Comment" }).click();
-  await expect(dialog.getByText("Looks great!")).toBeVisible();
+  await expect(dialog.getByRole("region", { name: "Comments" }).getByText("Looks great!")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByLabel("Priority: highest")).toBeVisible();
@@ -55,7 +55,7 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await page.reload();
   await page.getByRole("button", { name: "Ship the board" }).click();
   await expect(page.getByRole("dialog").getByLabel("Description")).toHaveValue("Drag cards between columns.\nKeyboard support later.");
-  await expect(page.getByRole("dialog").getByText("Looks great!")).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("region", { name: "Comments" }).getByText("Looks great!")).toBeVisible();
   await page.keyboard.press("Escape");
 
   // KYB-S18/19/20: plan a sprint in the backlog, start it, complete it.
