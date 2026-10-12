@@ -92,6 +92,13 @@ export const STATUS_CATEGORIES: { id: StatusCategory; label: string }[] = [
 
 export type LinkType = "blocks" | "relates" | "duplicates" | "clones";
 export type IssueLink = { id: string; type: LinkType; phrase: string; issue: Issue };
+export type NotificationSettings = {
+  email: boolean;
+  telegram: boolean;
+  email_available: boolean;
+  telegram_available: boolean;
+  telegram_connected: boolean;
+};
 export type AuditEntry = { at: string; actor_id: string; actor_name: string; action: string; target: string; status: number };
 export type HistoryEntry = {
   at: string;
@@ -256,6 +263,10 @@ export const api = {
   unlink: (id: string) => request<undefined>("DELETE", `/api/v1/links/${seg(id)}`),
   children: (issueKey: string) =>
     request<{ items: Issue[]; total: number; done: number; points: number; done_points: number }>("GET", `/api/v1/issues/${seg(issueKey)}/children`),
+  notificationSettings: () => request<NotificationSettings>("GET", "/api/v1/me/notification-settings"),
+  setNotificationSettings: (patch: Partial<Pick<NotificationSettings, "email" | "telegram">>) =>
+    request<NotificationSettings>("PUT", "/api/v1/me/notification-settings", patch),
+  connectTelegram: () => request<{ url: string; expires_at: string }>("POST", "/api/v1/me/telegram/connect"),
   audit: (key: string) => request<List<AuditEntry>>("GET", `/api/v1/projects/${seg(key)}/audit`).then((r) => r.items),
   history: (issueKey: string) => request<List<HistoryEntry>>("GET", `/api/v1/issues/${seg(issueKey)}/history`).then((r) => r.items),
   boards: (key: string) => request<List<BoardView>>("GET", `/api/v1/projects/${seg(key)}/boards`).then((r) => r.items),

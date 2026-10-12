@@ -307,6 +307,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 	}
 	if d.telegramBot != nil {
 		identityOpts = append(identityOpts, identityapp.WithTelegramOTP(d.otps, d.telegramBot))
+		if c, ok := d.otps.(identitydomain.ConnectTokens); ok && d.social.TelegramBot != "" {
+			identityOpts = append(identityOpts, identityapp.WithTelegramConnect(c, d.social.TelegramBot))
+		}
 		d.social.TelegramOTP = true
 	}
 	identity := identityapp.NewService(d.users, d.sessions, argon2.New(), systemClock{}, id.New, identityOpts...)

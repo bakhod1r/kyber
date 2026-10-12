@@ -1003,6 +1003,26 @@ paths:
                   ideal: { type: array, items: { $ref: "#/components/schemas/BurndownSample" } }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/me/telegram/connect:
+    post:
+      operationId: connectTelegram
+      description: |
+        A one-time deep link (t.me/<bot>?start=…, valid 10 minutes) that connects the caller's Telegram for
+        notifications once they press Start in the bot. 404 when no Telegram bot is configured.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [url, expires_at]
+                properties:
+                  url: { type: string, format: uri }
+                  expires_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/me/notification-settings:
     get:
       operationId: getNotificationSettings

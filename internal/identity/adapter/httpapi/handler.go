@@ -42,6 +42,17 @@ func (h *Handler) RegisterPublic(mux *http.ServeMux) {
 func (h *Handler) RegisterProtected(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/logout", h.logout)
 	mux.HandleFunc("GET /api/v1/me", h.me)
+	mux.HandleFunc("POST /api/v1/me/telegram/connect", h.telegramConnect)
+}
+
+// telegramConnect returns the deep link that connects the caller's Telegram for notifications.
+func (h *Handler) telegramConnect(w http.ResponseWriter, r *http.Request) {
+	link, expires, err := h.svc.StartTelegramConnect(r.Context(), auth.Actor(r.Context()))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"url": link, "expires_at": expires.UTC()})
 }
 
 type userDTO struct {

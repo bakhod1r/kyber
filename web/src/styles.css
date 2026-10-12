@@ -363,3 +363,11 @@ a.button.ghost { background: transparent; color: var(--accent); border: 1px soli
 .child-list { list-style: none; padding: 0; margin: 0.5rem 0; display: grid; gap: 0.25rem; }
 .child-list li { display: flex; justify-content: space-between; gap: 0.5rem; align-items: center; }
 .parent-link { font-size: 0.9rem; }
+
+/* Notification settings */
+.settings { max-width: 40rem; display: grid; gap: 0.6rem; }
+.settings h2 { margin: 0.8rem 0 0; font-size: 1.05rem; }
+.settings .switch { display: flex; gap: 0.5rem; align-items: center; }
+.settings .ok { color: #1f9d55; }
+a.user { color: inherit; text-decoration: none; }
+a.user:hover { text-decoration: underline; }

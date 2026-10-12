@@ -15,6 +15,7 @@ type Repository struct {
 	sessions map[string]domain.Session
 	external map[domain.Provider]map[string]domain.UserID
 	otps     map[string]domain.OTPChallenge
+	connect  map[string]domain.ConnectToken
 }
 
 func NewRepository() *Repository {
@@ -178,4 +179,25 @@ func (r *Repository) SubjectOf(_ context.Context, user domain.UserID, p domain.P
 		return "", domain.ErrNotLinked
 	}
 	return best, nil
+}
+
+func (r *Repository) CreateConnect(_ context.Context, t domain.ConnectToken) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.connect == nil {
+		r.connect = map[string]domain.ConnectToken{}
+	}
+	r.connect[t.Hash] = t
+	return nil
+}
+
+func (r *Repository) ConsumeConnect(_ context.Context, hash string, now time.Time) (domain.UserID, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t, ok := r.connect[hash]
+	delete(r.connect, hash)
+	if !ok || now.After(t.ExpiresAt) {
+		return "", domain.ErrConnectTokenInvalid
+	}
+	return t.User, nil
 }

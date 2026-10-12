@@ -28,7 +28,9 @@ export function Layout({ user, children }: { user: User; children: ReactNode }) 
         <span className="spacer" />
         <FocusTimer />
         <NotificationBell />
-        <span className="user">{user.name}</span>
+        <Link to="/settings" className="user" title="Notification settings">
+          {user.name}
+        </Link>
         <button className="ghost" onClick={() => logout.mutate()}>
           Log out
         </button>

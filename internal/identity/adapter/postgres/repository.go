@@ -164,3 +164,21 @@ func (r *Repository) SubjectOf(ctx context.Context, user domain.UserID, p domain
 	}
 	return sub, err
 }
+
+func (r *Repository) CreateConnect(ctx context.Context, t domain.ConnectToken) error {
+	// Expired links are dropped as new ones are created; the table stays small.
+	_, err := r.pool.Exec(ctx, `WITH gone AS (DELETE FROM telegram_connect_tokens WHERE expires_at < now())
+		INSERT INTO telegram_connect_tokens (hash, user_id, expires_at) VALUES ($1, $2, $3)`, t.Hash, string(t.User), t.ExpiresAt)
+	return err
+}
+
+// ConsumeConnect deletes the row it returns, so a token works exactly once even under races.
+func (r *Repository) ConsumeConnect(ctx context.Context, hash string, now time.Time) (domain.UserID, error) {
+	var user string
+	err := r.pool.QueryRow(ctx, `DELETE FROM telegram_connect_tokens WHERE hash = $1 AND expires_at >= $2 RETURNING user_id::text`,
+		hash, now).Scan(&user)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", domain.ErrConnectTokenInvalid
+	}
+	return domain.UserID(user), err
+}

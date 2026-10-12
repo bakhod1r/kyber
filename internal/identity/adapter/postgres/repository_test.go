@@ -88,3 +88,13 @@ func TestExternalIdentitiesContract(t *testing.T) {
 }
 
 func TestOTPContract(t *testing.T) { externaltest.RunOTP(t, postgres.NewRepository(dbtest.New(t))) }
+
+func TestConnectContract(t *testing.T) {
+	r := postgres.NewRepository(dbtest.New(t))
+	const user = domain.UserID("40000000-0000-4000-8000-000000000001")
+	u, _ := domain.NewUser(user, "connect@x.uz", "U", "")
+	if err := r.Create(context.Background(), u); err != nil {
+		t.Fatal(err)
+	}
+	externaltest.RunConnect(t, r, user)
+}

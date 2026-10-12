@@ -36,6 +36,8 @@ type Service struct {
 	external domain.ExternalIdentities // nil = Google/Telegram sign-in disabled
 	otps     domain.OTPChallenges      // nil = Telegram code login disabled
 	bot      Messenger
+	connect  domain.ConnectTokens // nil = connecting Telegram for notifications disabled
+	botName  string
 }
 
 // Option customises the service.

@@ -44,7 +44,11 @@ func (s *Service) StartTelegramOTP(ctx context.Context, ip string) (*domain.OTPC
 }
 
 // OnTelegramStart handles "/start <nonce>" from the bot: bind the Telegram user and send the code.
+// A payload starting with "c_" is a connect link instead (see connect.go).
 func (s *Service) OnTelegramStart(ctx context.Context, nonce, telegramID, chatID, name string) error {
+	if domain.IsConnectPayload(nonce) {
+		return s.connectTelegram(ctx, nonce, telegramID, chatID)
+	}
 	if !s.otpEnabled() {
 		return ErrExternalDisabled
 	}

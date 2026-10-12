@@ -7,6 +7,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { LandingPage } from "./pages/LandingPage";
 import { MeetingsPage } from "./pages/MeetingsPage";
 import { ProjectPage } from "./pages/ProjectPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 
 export const ME = ["me"];
@@ -53,6 +54,7 @@ export function AppRoutes() {
       <Route path="/projects/:key/workflow" element={<RequireUser><ProjectPage view="workflow" /></RequireUser>} />
       <Route path="/projects/:key/audit" element={<RequireUser><ProjectPage view="audit" /></RequireUser>} />
       <Route path="/meetings" element={<RequireUser><MeetingsPage /></RequireUser>} />
+      <Route path="/settings" element={<RequireUser><SettingsPage /></RequireUser>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
