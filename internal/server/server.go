@@ -111,6 +111,7 @@ type deps struct {
 	schemes       accessdomain.SchemeRepository
 	sprints       agiledomain.Repository
 	boards        agiledomain.BoardRepository
+	versions      agiledomain.VersionRepository
 	users         identitydomain.Users
 	external      identitydomain.ExternalIdentities
 	social        identityhttp.Social
@@ -181,7 +182,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo),
 		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(),
-		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), notes: notifymemory.NewRepository(),
+		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: agilememory.NewVersionRepository(), notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
@@ -228,7 +229,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool),
 		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool),
-		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), notes: notifypg.NewRepository(pool),
+		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool),
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
@@ -270,7 +271,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	agileACL := agileprojectacl.New(projectcompat.NewGate(projects, access, accessdomain.ManageSprints))
 	agile := agileapp.NewService(agileapp.Deps{
-		Sprints: d.sprints, Boards: d.boards, Issues: issues, Access: agileACL, Admins: agileACL,
+		Sprints: d.sprints, Boards: d.boards, Versions: d.versions, Issues: agileissueacl.NewIssues(issues), Access: agileACL, Admins: agileACL,
 		Workflows: agileissueacl.New(issues), NewID: id.New, Now: time.Now,
 	})
 	sprintACL.Sprints = agileacl.New(agile)

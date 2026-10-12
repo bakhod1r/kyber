@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.23.0
+  version: 0.24.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -678,6 +678,7 @@ paths:
           in: query
           description: A sprint id, or `backlog` for issues in no sprint.
           schema: { type: string }
+        - { name: fix_version, in: query, description: "Issues planned into this version.", schema: { type: string } }
       responses:
         "200": { description: Ordered by backlog rank., content: { application/json: { schema: { $ref: "#/components/schemas/IssueList" } } } }
         "401": { $ref: "#/components/responses/Error" }
@@ -730,6 +731,7 @@ paths:
                 estimate: { type: [number, "null"], minimum: 0, maximum: 999, description: "Story points, one decimal; null clears." }
                 parent_key: { type: [string, "null"], description: "Move under this epic/issue; null removes the parent (not for sub-tasks)." }
                 resolution: { $ref: "#/components/schemas/Resolution" }
+                fix_versions: { type: array, items: { type: string }, description: "Replaces the fix versions (unarchived versions of the project)." }
                 security_level: { type: string, enum: ["", confidential] }
       responses:
         "200": { description: Updated issue, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
@@ -1080,6 +1082,159 @@ paths:
                         completed_issues: { type: integer }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/versions:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listVersions
+      description: The project's versions (releases) with progress over the issues the caller may see; dated ones first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: { items: { type: array, items: { $ref: "#/components/schemas/Version" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createVersion
+      description: Project admins add a version.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/VersionInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Version" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/versions/{id}:
+    parameters: [{ $ref: "#/components/parameters/VersionID" }]
+    patch:
+      operationId: editVersion
+      description: Project admins edit a version loaded at `version` (optimistic locking).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf: [{ $ref: "#/components/schemas/VersionInput" }]
+              required: [version]
+              properties: { version: { type: integer } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/Version" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteVersion
+      description: Project admins delete a version; its issues move to `move_to` or lose the version.
+      parameters:
+        - { name: move_to, in: query, schema: { type: string }, description: "Another unarchived version of the project." }
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/versions/{id}/release:
+    parameters: [{ $ref: "#/components/parameters/VersionID" }]
+    post:
+      operationId: releaseVersion
+      description: Project admins release an unreleased version; unresolved issues move to `move_to` (another unreleased version) or stay.
+      requestBody:
+        required: false
+        content: { application/json: { schema: { type: object, properties: { move_to: { type: string } } } } }
+      responses:
+        "200":
+          description: Released
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, moved]
+                properties: { version: { $ref: "#/components/schemas/Version" }, moved: { type: integer } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/versions/{id}/unrelease:
+    parameters: [{ $ref: "#/components/parameters/VersionID" }]
+    post:
+      operationId: unreleaseVersion
+      description: Project admins. Reopens a released version.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Version" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/versions/{id}/archive:
+    parameters: [{ $ref: "#/components/parameters/VersionID" }]
+    post:
+      operationId: archiveVersion
+      description: Project admins. Hides a version from pickers; it keeps its issues.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Version" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/versions/{id}/restore:
+    parameters: [{ $ref: "#/components/parameters/VersionID" }]
+    post:
+      operationId: restoreVersion
+      description: Project admins. Brings an archived version back.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Version" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/versions/{id}/issues:
+    parameters: [{ $ref: "#/components/parameters/VersionID" }]
+    get:
+      operationId: versionIssues
+      description: The version and the issues planned into it that the caller may see.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, items]
+                properties:
+                  version: { $ref: "#/components/schemas/Version" }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [key, title, type, done, resolution]
+                      properties:
+                        key: { type: string }
+                        title: { type: string }
+                        type: { type: string }
+                        done: { type: boolean }
+                        resolution: { type: string }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/versions/{id}/release-notes:
+    parameters: [{ $ref: "#/components/parameters/VersionID" }]
+    get:
+      operationId: releaseNotes
+      description: Markdown release notes from the version's issues the caller may see, grouped by type.
+      responses:
+        "200": { description: OK, content: { text/markdown: { schema: { type: string } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/sprints/{id}/report:
     parameters: [{ $ref: "#/components/parameters/SprintID" }]
     get:
@@ -1292,6 +1447,7 @@ components:
     ProjectKey: { name: key, in: path, required: true, schema: { type: string } }
     IssueKey: { name: issueKey, in: path, required: true, schema: { type: string }, example: KYB-12 }
     SprintID: { name: id, in: path, required: true, schema: { type: string } }
+    VersionID: { name: id, in: path, required: true, schema: { type: string } }
   responses:
     Error:
       description: RFC 9457 problem details; `title` is localized from Accept-Language (en, uz, ru).
@@ -1427,6 +1583,28 @@ components:
     Resolution:
       type: string
       enum: [done, wont_do, duplicate, cannot_reproduce]
+    Version:
+      type: object
+      required: [id, project_key, name, description, release_date, state, released_at, version]
+      properties:
+        id: { type: string }
+        project_key: { type: string }
+        name: { type: string, maxLength: 60 }
+        description: { type: string, maxLength: 2000 }
+        release_date: { type: [string, "null"], format: date-time }
+        state: { type: string, enum: [unreleased, released, archived] }
+        released_at: { type: [string, "null"], format: date-time }
+        version: { type: integer }
+        issues: { type: integer, description: "Issues planned into it (listing only)." }
+        done: { type: integer, description: "Of those, in a Done status (listing only)." }
+        unresolved: { type: integer, description: "Of those, unresolved (listing only)." }
+    VersionInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 60 }
+        description: { type: string, maxLength: 2000 }
+        release_date: { type: [string, "null"], format: date-time }
     SprintReportIssue:
       type: object
       required: [key, title, type, points, status_category, added_after_start]
@@ -1554,7 +1732,7 @@ components:
     Priority: { type: string, enum: [lowest, low, medium, high, highest] }
     Issue:
       type: object
-      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, security_level, resolution, version]
+      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, security_level, resolution, fix_versions, version]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -1570,6 +1748,7 @@ components:
         sprint_id: { type: [string, "null"], format: uuid }
         rank: { type: string, description: Fractional backlog rank; compare byte-wise. }
         parent_key: { type: [string, "null"], description: "The epic of a story/task/bug, or the issue a sub-task belongs to." }
+        fix_versions: { type: array, items: { type: string }, description: "Ids of the versions (releases) the issue is planned to ship in." }
         resolution:
           description: How a resolved issue ended; "" while it is not in a Done status.
           type: string

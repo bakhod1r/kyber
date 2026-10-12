@@ -53,6 +53,7 @@ export function AppRoutes() {
       <Route path="/projects/:key/import" element={<RequireUser><ProjectPage view="import" /></RequireUser>} />
       <Route path="/projects/:key/workflow" element={<RequireUser><ProjectPage view="workflow" /></RequireUser>} />
       <Route path="/projects/:key/audit" element={<RequireUser><ProjectPage view="audit" /></RequireUser>} />
+      <Route path="/projects/:key/releases" element={<RequireUser><ProjectPage view="releases" /></RequireUser>} />
       <Route path="/projects/:key/permissions" element={<RequireUser><ProjectPage view="permissions" /></RequireUser>} />
       <Route path="/projects/:key/notifications" element={<RequireUser><ProjectPage view="notifications" /></RequireUser>} />
       <Route path="/meetings" element={<RequireUser><MeetingsPage /></RequireUser>} />

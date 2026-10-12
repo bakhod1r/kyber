@@ -19,12 +19,15 @@ var (
 	ErrInvalidAnchor        = errors.New("give exactly one of after/before: an issue key of the same project")
 	ErrStatusInUse          = errors.New("status is still used by issues; move them before removing it")
 	ErrInvalidSecurityLevel = errors.New("unknown security level")
+	ErrInvalidVersion       = errors.New("fix version must be an unarchived version of this project")
 )
 
 // Sprints is the anti-corruption port to the Agile context.
 type Sprints interface {
 	// CanHold returns ErrInvalidSprint unless the sprint belongs to project and is not closed.
 	CanHold(ctx context.Context, project, sprint string) error
+	// CanFix returns ErrInvalidVersion unless the version belongs to project and is not archived.
+	CanFix(ctx context.Context, project, version string) error
 }
 
 // Directory answers membership and naming questions about users (ACL to Project/Identity).
@@ -205,8 +208,9 @@ const Backlog = "backlog"
 // ListQuery filters a project listing; empty fields do not filter.
 // Sprint is a sprint ID or Backlog.
 type ListQuery struct {
-	Status string
-	Sprint string
+	Status     string
+	Sprint     string
+	FixVersion string
 }
 
 func (s *Service) List(ctx context.Context, actor, project string, q ListQuery) ([]*domain.Issue, error) {
@@ -224,6 +228,10 @@ func (s *Service) List(ctx context.Context, actor, project string, q ListQuery) 
 			sp = ""
 		}
 		f.Sprint = &sp
+	}
+	if q.FixVersion != "" {
+		v := domain.VersionID(q.FixVersion)
+		f.FixVersion = &v
 	}
 	list, err := s.issues.ListByProject(ctx, project, f)
 	if err != nil {

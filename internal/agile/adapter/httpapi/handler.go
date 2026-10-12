@@ -30,6 +30,16 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/boards/{id}", h.board)
 	mux.HandleFunc("PUT /api/v1/boards/{id}", h.updateBoard)
 	mux.HandleFunc("DELETE /api/v1/boards/{id}", h.deleteBoard)
+	mux.HandleFunc("GET /api/v1/projects/{key}/versions", h.versions)
+	mux.HandleFunc("POST /api/v1/projects/{key}/versions", h.createVersion)
+	mux.HandleFunc("PATCH /api/v1/versions/{id}", h.editVersion)
+	mux.HandleFunc("DELETE /api/v1/versions/{id}", h.deleteVersion)
+	mux.HandleFunc("POST /api/v1/versions/{id}/release", h.releaseVersion)
+	mux.HandleFunc("POST /api/v1/versions/{id}/unrelease", h.versionStep((*domain.Version).Unrelease))
+	mux.HandleFunc("POST /api/v1/versions/{id}/archive", h.versionStep((*domain.Version).Archive))
+	mux.HandleFunc("POST /api/v1/versions/{id}/restore", h.versionStep((*domain.Version).Restore))
+	mux.HandleFunc("GET /api/v1/versions/{id}/issues", h.versionIssues)
+	mux.HandleFunc("GET /api/v1/versions/{id}/release-notes", h.releaseNotes)
 }
 
 type sprintDTO struct {
@@ -63,8 +73,16 @@ func toDTO(s *domain.Sprint) sprintDTO {
 func codeFor(err error) (string, bool) {
 	switch {
 	case errors.Is(err, domain.ErrInvalidSprint), errors.Is(err, app.ErrInvalidSprint), errors.Is(err, domain.ErrInvalidSprintDates), errors.Is(err, httpx.ErrBadJSON),
-		errors.Is(err, domain.ErrInvalidBoard):
+		errors.Is(err, domain.ErrInvalidBoard), errors.Is(err, domain.ErrInvalidVersion), errors.Is(err, app.ErrInvalidVersion):
 		return httpx.CodeValidation, true
+	case errors.Is(err, domain.ErrVersionNotFound):
+		return httpx.CodeVersionNotFound, true
+	case errors.Is(err, domain.ErrVersionConflict):
+		return httpx.CodeVersionConflict, true
+	case errors.Is(err, domain.ErrVersionState):
+		return httpx.CodeVersionState, true
+	case errors.Is(err, domain.ErrVersionTaken):
+		return httpx.CodeVersionNameTaken, true
 	case errors.Is(err, domain.ErrSprintNotFound):
 		return httpx.CodeSprintNotFound, true
 	case errors.Is(err, domain.ErrAnotherSprintLive):

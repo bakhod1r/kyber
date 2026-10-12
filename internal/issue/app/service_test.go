@@ -58,6 +58,14 @@ func (f fakeAccess) IsMember(_ context.Context, project, user string) (bool, err
 // fakeSprints accepts sprint IDs listed per project.
 type fakeSprints map[string]map[string]bool
 
+// CanFix accepts versions listed as "v:<id>" for the project.
+func (f fakeSprints) CanFix(_ context.Context, project, version string) error {
+	if !f[project]["v:"+version] {
+		return app.ErrInvalidVersion
+	}
+	return nil
+}
+
 func (f fakeSprints) CanHold(_ context.Context, project, sprint string) error {
 	if !f[project][sprint] {
 		return app.ErrInvalidSprint
@@ -95,7 +103,7 @@ func setupWithAccess() (*app.Service, *recorder, fakeAccess) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	return app.NewService(app.Deps{
 		Issues: repo, Comments: memory.NewCommentRepository(repo), Keys: keys, Access: accessacl.New(accessapp.NewService(access)), Directory: access,
-		Sprints:  fakeSprints{"KYB": {"s-1": true, "s-2": true}},
+		Sprints:  fakeSprints{"KYB": {"s-1": true, "s-2": true, "v:v-1": true, "v:v-2": true}},
 		Workflow: domain.DefaultWorkflow(), Workflows: memory.NewWorkflowRepository(), History: memory.NewHistoryRepository(), Links: memory.NewLinkRepository(repo), SecurityLevels: []string{accessapp.LevelConfidential}, NewID: ids,
 		Now: func() time.Time { now = now.Add(time.Minute); return now },
 	}), rec, access

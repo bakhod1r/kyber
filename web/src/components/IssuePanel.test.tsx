@@ -41,6 +41,7 @@ describe("IssuePanel (KYB-S17)", () => {
     expect(calls.find((c) => c.key === "PATCH /api/v1/issues/KYB-1")?.body).toEqual({
       version: 3, title: "Login v2", description: "Steps", priority: "high", assignee_id: "u-bob", estimate: null,
       security_level: "confidential",
+      fix_versions: [],
     });
     expect(await within(dialog).findByText("Saved")).toBeInTheDocument();
   });
@@ -157,5 +158,23 @@ describe("Story points in the issue panel (KYB-S28 AC3)", () => {
     renderWithProviders(<IssuePanel issueKey="KYB-1" projectKey="KYB" onClose={vi.fn()} />);
     await screen.findByLabelText("Title");
     expect(screen.queryByLabelText("Resolution")).not.toBeInTheDocument();
+  });
+
+  it("S48: plans the issue into fix versions; archived ones are offered only when already set", async () => {
+    const v = (id: string, name: string, state: string) => ({ id, project_key: "KYB", name, description: "", release_date: null, state, released_at: null, version: 1 });
+    const calls = mockApi({
+      "GET /api/v1/issues/KYB-1": { status: 200, body: { ...base, fix_versions: ["v-old"] } },
+      "GET /api/v1/projects/KYB/members": { status: 200, body: members },
+      "GET /api/v1/issues/KYB-1/comments": { status: 200, body: { items: [] } },
+      "GET /api/v1/projects/KYB/versions": { status: 200, body: { items: [v("v-1", "1.0", "unreleased"), v("v-old", "0.9", "archived"), v("v-x", "0.1", "archived")] } },
+      "PATCH /api/v1/issues/KYB-1": { status: 200, body: { ...base, version: 4 } },
+    });
+    renderWithProviders(<IssuePanel issueKey="KYB-1" projectKey="KYB" onClose={vi.fn()} />);
+    const group = await screen.findByRole("group", { name: "Fix versions" });
+    expect(within(group).queryByLabelText("0.1")).not.toBeInTheDocument();
+    await userEvent.click(within(group).getByLabelText("1.0"));
+    await userEvent.click(within(group).getByLabelText("0.9"));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "PATCH /api/v1/issues/KYB-1")?.body).toMatchObject({ fix_versions: ["v-1"] }));
   });
 });

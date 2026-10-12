@@ -81,7 +81,8 @@ func (r *Repository) ListByProject(ctx context.Context, project string, f domain
 		if !inWorkspace(ctx, k) || is.Key().Project() != project ||
 			(f.Status != nil && is.Status() != *f.Status) ||
 			(f.Sprint != nil && is.Sprint() != *f.Sprint) ||
-			(f.Parent != nil && is.Parent() != *f.Parent) {
+			(f.Parent != nil && is.Parent() != *f.Parent) ||
+			(f.FixVersion != nil && !is.HasFixVersion(*f.FixVersion)) {
 			continue
 		}
 		out = append(out, &is)

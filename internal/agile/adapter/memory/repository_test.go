@@ -18,3 +18,7 @@ func TestContract(t *testing.T) {
 func TestBoardContract(t *testing.T) {
 	repotest.RunBoards(t, func(t *testing.T) domain.BoardRepository { return memory.NewBoardRepository() })
 }
+
+func TestVersionContract(t *testing.T) {
+	repotest.RunVersions(t, func(t *testing.T) domain.VersionRepository { return memory.NewVersionRepository() })
+}

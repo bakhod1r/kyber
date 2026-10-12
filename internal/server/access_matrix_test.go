@@ -81,6 +81,10 @@ func TestS46AccessMatrix(t *testing.T) {
 				c.do("POST", "/api/v1/focus/stop", nil)
 				return code, b
 			}, [4]int{201, 201, 403, 404}},
+			{"list versions (Agile)", func(c *client, n int) (int, map[string]any) { return c.do("GET", "/api/v1/projects/KYB/versions", nil) }, [4]int{200, 200, 200, 404}},
+			{"create version (Agile)", func(c *client, n int) (int, map[string]any) {
+				return c.do("POST", "/api/v1/projects/KYB/versions", map[string]string{"name": fmt.Sprintf("V%d", n)})
+			}, [4]int{201, 403, 403, 404}},
 			{"permission scheme (Access)", func(c *client, n int) (int, map[string]any) {
 				return c.do("GET", "/api/v1/projects/KYB/permissions", nil)
 			}, [4]int{200, 403, 403, 404}},

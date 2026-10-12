@@ -30,6 +30,7 @@ export type Issue = {
   security_level?: "" | "confidential";
   /** How a resolved issue ended; "" while it is not in a Done status. */
   resolution?: "" | Resolution;
+  fix_versions?: string[];
 };
 export type Resolution = "done" | "wont_do" | "duplicate" | "cannot_reproduce";
 export const RESOLUTIONS: { id: Resolution; label: string }[] = [
@@ -98,10 +99,26 @@ export type IssuePatch = {
   estimate?: number | null;
   security_level?: "" | "confidential";
   resolution?: Resolution;
+  fix_versions?: string[];
 };
 export type Comment = { id: string; author_id: string; author_name: string; body: string; created_at: string };
 export type Role = "admin" | "member" | "viewer";
 export type Member = { user_id: string; email: string; name: string; role: Role };
+export type VersionState = "unreleased" | "released" | "archived";
+export type Version = {
+  id: string;
+  project_key: string;
+  name: string;
+  description: string;
+  release_date: string | null;
+  state: VersionState;
+  released_at: string | null;
+  version: number;
+  issues?: number;
+  done?: number;
+  unresolved?: number;
+};
+export type VersionInput = { name: string; description: string; release_date: string | null };
 export type GrantKind = "role" | "user" | "reporter" | "assignee";
 export type PermissionGrants = { permission: string; grants: { kind: GrantKind; value: string }[] };
 export type PermissionScheme = { custom: boolean; permissions: PermissionGrants[] };
@@ -231,6 +248,18 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
+/** requestText fetches a text body (release notes are Markdown). */
+async function requestText(path: string): Promise<string> {
+  const res = await fetch(path, { credentials: "same-origin" });
+  const text = await res.text();
+  if (!res.ok) {
+    const data: unknown = text ? JSON.parse(text) : undefined;
+    if (isProblem(data)) throw new ApiError(res.status, data.detail || data.title, data.code);
+    throw new ApiError(res.status, `request failed (${res.status})`);
+  }
+  return text;
+}
+
 const seg = encodeURIComponent;
 type List<T> = { items: T[] };
 
@@ -303,6 +332,15 @@ export const api = {
     request<{ url: string; expires_at: string }>("POST", `/api/v1/projects/${seg(key)}/telegram-groups/link`),
   unlinkTelegramGroup: (key: string, chat: string) =>
     request<undefined>("DELETE", `/api/v1/projects/${seg(key)}/telegram-groups/${seg(chat)}`),
+  versions: (key: string) => request<List<Version>>("GET", `/api/v1/projects/${seg(key)}/versions`).then((r) => r.items),
+  createVersion: (key: string, v: VersionInput) => request<Version>("POST", `/api/v1/projects/${seg(key)}/versions`, v),
+  editVersion: (id: string, version: number, v: VersionInput) => request<Version>("PATCH", `/api/v1/versions/${seg(id)}`, { version, ...v }),
+  releaseVersion: (id: string, moveTo = "") =>
+    request<{ version: Version; moved: number }>("POST", `/api/v1/versions/${seg(id)}/release`, moveTo ? { move_to: moveTo } : undefined),
+  versionStep: (id: string, step: "unrelease" | "archive" | "restore") => request<Version>("POST", `/api/v1/versions/${seg(id)}/${step}`),
+  deleteVersion: (id: string, moveTo = "") =>
+    request<undefined>("DELETE", `/api/v1/versions/${seg(id)}${moveTo ? `?move_to=${seg(moveTo)}` : ""}`),
+  releaseNotes: (id: string) => requestText(`/api/v1/versions/${seg(id)}/release-notes`),
   permissions: (key: string) => request<PermissionScheme>("GET", `/api/v1/projects/${seg(key)}/permissions`),
   setPermissions: (key: string, permissions: PermissionGrants[]) =>
     request<PermissionScheme>("PUT", `/api/v1/projects/${seg(key)}/permissions`, { permissions }),

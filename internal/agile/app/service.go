@@ -13,6 +13,7 @@ var (
 	ErrProjectNotFound = errors.New("project not found")
 	ErrForbidden       = errors.New("insufficient project role")
 	ErrInvalidSprint   = errors.New("sprint must be a planned or active sprint of this project")
+	ErrInvalidVersion  = errors.New("version must be an unarchived version of this project")
 )
 
 // Access is the anti-corruption port to the Project context's membership rules.
@@ -23,11 +24,23 @@ type Access interface {
 // Issues is the anti-corruption port to Issue Tracking.
 type Issues interface {
 	ReturnUnfinished(ctx context.Context, actor, project, sprint, to string) (completed, returned int, err error)
+	// VersionIssues lists the issues planned into the version that the actor may see.
+	VersionIssues(ctx context.Context, actor, project, version string) ([]VersionIssue, error)
+	// MoveFixVersion moves issues from one version to another ("" = remove); returns how many moved.
+	MoveFixVersion(ctx context.Context, actor, project, from, to string, unresolvedOnly bool) (int, error)
+}
+
+// VersionIssue is an issue of a version, as the Agile context sees it.
+type VersionIssue struct {
+	Key, Title, Type string
+	Done             bool   // in a Done-category status
+	Resolution       string // "" = unresolved
 }
 
 type Deps struct {
 	Sprints   domain.Repository
 	Boards    domain.BoardRepository
+	Versions  domain.VersionRepository
 	Issues    Issues
 	Access    Access
 	Admins    Admins

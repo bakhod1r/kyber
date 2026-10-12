@@ -19,11 +19,12 @@ type EditIssue struct {
 	Assignee    string
 	SprintSet   bool // move to Sprint ("" = backlog)
 	Sprint      string
-	EstimateSet bool     // set Estimate (nil = clear)
-	Estimate    *float64 // story points, one decimal
-	Parent      *string  // issue key of the new parent ("" = none); nil leaves it unchanged
-	Security    *string  // security level ("" = visible to everyone who can browse); nil leaves it unchanged
-	Resolution  *string  // a resolved issue's resolution; nil leaves it unchanged
+	EstimateSet bool      // set Estimate (nil = clear)
+	Estimate    *float64  // story points, one decimal
+	Parent      *string   // issue key of the new parent ("" = none); nil leaves it unchanged
+	Security    *string   // security level ("" = visible to everyone who can browse); nil leaves it unchanged
+	Resolution  *string   // a resolved issue's resolution; nil leaves it unchanged
+	FixVersions *[]string // replaces the fix versions; nil leaves them unchanged
 }
 
 func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue) (*domain.Issue, error) {
@@ -51,6 +52,15 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 	if cmd.SprintSet && cmd.Sprint != "" {
 		if err := s.sprints.CanHold(ctx, is.Key().Project(), cmd.Sprint); err != nil {
 			return nil, err
+		}
+	}
+	if cmd.FixVersions != nil {
+		for _, v := range *cmd.FixVersions {
+			if !is.HasFixVersion(domain.VersionID(v)) { // archived versions an issue already has may stay
+				if err := s.sprints.CanFix(ctx, is.Key().Project(), v); err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
 	var estimate *domain.Points
@@ -83,6 +93,13 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 			return nil, fmt.Errorf("%q: %w", *cmd.Security, ErrInvalidSecurityLevel)
 		}
 		is.SetSecurityLevel(*cmd.Security)
+	}
+	if cmd.FixVersions != nil {
+		ids := make([]domain.VersionID, len(*cmd.FixVersions))
+		for n, v := range *cmd.FixVersions {
+			ids[n] = domain.VersionID(v)
+		}
+		is.SetFixVersions(ids)
 	}
 	if cmd.Resolution != nil && *cmd.Resolution != string(is.Resolution()) {
 		if err := is.SetResolution(domain.Resolution(*cmd.Resolution)); err != nil {

@@ -127,3 +127,37 @@ func (s *Service) VisibleSnapshot(ctx context.Context, actor, project string) ([
 	}
 	return s.visible(ctx, actor, project, list)
 }
+
+// InVersion lists the project's issues planned into the version that the actor may see, for the
+// Agile context's release views (it has authorized the actor for the project).
+func (s *Service) InVersion(ctx context.Context, actor, project, version string) ([]*domain.Issue, error) {
+	v := domain.VersionID(version)
+	list, err := s.issues.ListByProject(ctx, project, domain.ListFilter{FixVersion: &v})
+	if err != nil {
+		return nil, err
+	}
+	return s.visible(ctx, actor, project, list)
+}
+
+// MoveFixVersion moves the project's issues from one version to another ("" = remove the
+// version); with unresolvedOnly, resolved issues stay. It returns how many issues moved. Called
+// by the Agile context when releasing or deleting a version, after authorizing the actor.
+func (s *Service) MoveFixVersion(ctx context.Context, actor, project, from, to string, unresolvedOnly bool) (int, error) {
+	v := domain.VersionID(from)
+	list, err := s.issues.ListByProject(ctx, project, domain.ListFilter{FixVersion: &v})
+	if err != nil {
+		return 0, err
+	}
+	moved := 0
+	for _, is := range list {
+		if unresolvedOnly && is.Resolution() != "" {
+			continue
+		}
+		is.ReplaceFixVersion(v, domain.VersionID(to))
+		if err := s.save(ctx, actor, is); err != nil {
+			return moved, err
+		}
+		moved++
+	}
+	return moved, nil
+}

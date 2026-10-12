@@ -12,6 +12,7 @@ import (
 
 	"github.com/bakhod1r/kyber/internal/issue/domain"
 	"github.com/bakhod1r/kyber/internal/platform/db"
+	kid "github.com/bakhod1r/kyber/internal/platform/id"
 )
 
 type Repository struct{ pool *pgxpool.Pool }
@@ -44,6 +45,9 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 		if tag.RowsAffected() != 1 {
 			return domain.ErrConcurrentModification
 		}
+		if err := saveFixVersions(ctx, tx, is); err != nil {
+			return err
+		}
 		return db.WriteOutbox(ctx, tx, events)
 	})
 	if err != nil {
@@ -55,7 +59,8 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 
 const selectCols = `SELECT id::text, project_key, number, title, type, status, description, priority,
 	COALESCE(assignee_id::text, ''), rank, COALESCE(sprint_id::text, ''), COALESCE(reporter_id::text, ''), estimate_tenths, version,
-	COALESCE(parent_id::text, ''), COALESCE((SELECT p.number FROM issues p WHERE p.id = issues.parent_id), 0), security_level, resolution FROM issues`
+	COALESCE(parent_id::text, ''), COALESCE((SELECT p.number FROM issues p WHERE p.id = issues.parent_id), 0), security_level, resolution,
+	ARRAY(SELECT f.version_id::text FROM issue_fix_versions f WHERE f.issue_id = issues.id ORDER BY 1) FROM issues`
 
 func (r *Repository) ByKey(ctx context.Context, key domain.IssueKey) (*domain.Issue, error) {
 	is, err := scan(r.pool.QueryRow(ctx, selectCols+` WHERE workspace_id = $3 AND project_key = $1 AND number = $2`, key.Project(), key.Number(), tenant.Workspace(ctx)))
@@ -82,6 +87,13 @@ func (r *Repository) ListByProject(ctx context.Context, project string, f domain
 	if f.Parent != nil {
 		args = append(args, string(*f.Parent))
 		where += fmt.Sprintf(` AND parent_id = $%d`, len(args))
+	}
+	if f.FixVersion != nil {
+		if !kid.Valid(string(*f.FixVersion)) {
+			return nil, nil
+		}
+		args = append(args, string(*f.FixVersion))
+		where += fmt.Sprintf(` AND id IN (SELECT issue_id FROM issue_fix_versions WHERE version_id = $%d)`, len(args))
 	}
 	rows, err := r.pool.Query(ctx, selectCols+" "+where+` ORDER BY rank, number`, args...)
 	if err != nil {
@@ -124,9 +136,13 @@ func scan(row pgx.Row) (*domain.Issue, error) {
 	var s domain.Snapshot
 	var project string
 	var number, parentNumber int
+	var fixVersions []string
 	if err := row.Scan(&s.ID, &project, &number, &s.Title, &s.Type, &s.Status, &s.Description,
-		&s.Priority, &s.Assignee, &s.Rank, &s.Sprint, &s.Reporter, &s.Estimate, &s.Version, &s.Parent, &parentNumber, &s.Security, &s.Resolution); err != nil {
+		&s.Priority, &s.Assignee, &s.Rank, &s.Sprint, &s.Reporter, &s.Estimate, &s.Version, &s.Parent, &parentNumber, &s.Security, &s.Resolution, &fixVersions); err != nil {
 		return nil, err
+	}
+	for _, v := range fixVersions {
+		s.FixVersions = append(s.FixVersions, domain.VersionID(v))
 	}
 	if s.Parent != "" {
 		s.ParentKey, _ = domain.NewIssueKey(project, parentNumber) // parents are in the same project
@@ -154,4 +170,19 @@ func nullable(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// saveFixVersions replaces the issue's fix versions (issue_fix_versions rows) in the transaction.
+func saveFixVersions(ctx context.Context, tx pgx.Tx, is *domain.Issue) error {
+	ids := make([]string, 0, len(is.FixVersions()))
+	for _, v := range is.FixVersions() {
+		ids = append(ids, string(v))
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM issue_fix_versions WHERE issue_id = $1 AND NOT (version_id::text = ANY($2))`,
+		string(is.ID()), ids); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO issue_fix_versions (issue_id, version_id)
+		SELECT $1, v::uuid FROM unnest($2::text[]) v ON CONFLICT DO NOTHING`, string(is.ID()), ids)
+	return err
 }

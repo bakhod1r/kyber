@@ -6,13 +6,14 @@ import { Backlog } from "../components/Backlog";
 import { Board } from "../components/Board";
 import { AuditLog } from "../components/AuditLog";
 import { IssuePanel } from "../components/IssuePanel";
+import { Releases } from "../components/Releases";
 import { PermissionScheme } from "../components/PermissionScheme";
 import { TelegramGroups } from "../components/TelegramGroups";
 import { WorkflowEditor } from "../components/WorkflowEditor";
 import { JiraImport } from "./ImportPage";
 import { Reports } from "./ReportsPage";
 
-export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" }) {
+export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" }) {
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
   const project = projects.data?.find((p) => p.key === key);
@@ -36,6 +37,7 @@ export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "
         </NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/backlog`}>Backlog</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/reports`}>Reports</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/releases`}>Releases</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/import`}>Import</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/workflow`}>Workflow</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/permissions`}>Permissions</NavLink>
@@ -49,6 +51,7 @@ export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "
         {view === "import" && <JiraImport projectKey={key} />}
         {view === "workflow" && <WorkflowEditor projectKey={key} />}
         {view === "audit" && <AuditLog projectKey={key} />}
+        {view === "releases" && <Releases projectKey={key} />}
         {view === "permissions" && <PermissionScheme projectKey={key} />}
         {view === "notifications" && <TelegramGroups projectKey={key} />}
         <Members projectKey={key} />

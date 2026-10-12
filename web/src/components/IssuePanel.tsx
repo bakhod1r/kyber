@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { ApiError, type Issue, PRIORITIES, type Priority, RESOLUTIONS, type Resolution, api } from "../api";
 
-type Draft = { title: string; description: string; priority: Priority; assignee: string; estimate: string; confidential: boolean; resolution: Resolution | "" };
+type Draft = { title: string; description: string; priority: Priority; assignee: string; estimate: string; confidential: boolean; resolution: Resolution | ""; fixVersions: string[] };
 
 const toDraft = (i: Issue): Draft => ({
   title: i.title,
@@ -17,6 +17,7 @@ const toDraft = (i: Issue): Draft => ({
   estimate: i.estimate === null ? "" : String(i.estimate),
   confidential: i.security_level === "confidential",
   resolution: i.resolution ?? "",
+  fixVersions: i.fix_versions ?? [],
 });
 
 export function IssuePanel({
@@ -34,6 +35,7 @@ export function IssuePanel({
   const titleId = useId();
   const issue = useQuery({ queryKey: ["issue", issueKey], queryFn: () => api.issue(issueKey) });
   const members = useQuery({ queryKey: ["members", projectKey], queryFn: () => api.members(projectKey) });
+  const versions = useQuery({ queryKey: ["versions", projectKey], queryFn: () => api.versions(projectKey) });
   const [draft, setDraft] = useState<Draft | null>(null);
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
@@ -60,6 +62,7 @@ export function IssuePanel({
         estimate: d.estimate.trim() === "" ? null : Number(d.estimate),
         security_level: d.confidential ? "confidential" : "",
         ...(d.resolution ? { resolution: d.resolution } : {}),
+        fix_versions: d.fixVersions,
       }),
     onSuccess: (updated) => {
       qc.setQueryData(["issue", issueKey], updated);
@@ -153,6 +156,28 @@ export function IssuePanel({
                   ))}
                 </select>
               </label>
+            )}
+            {(versions.data ?? []).some((v) => v.state !== "archived" || draft.fixVersions.includes(v.id)) && (
+              <fieldset className="fix-versions">
+                <legend>Fix versions</legend>
+                {(versions.data ?? [])
+                  .filter((v) => v.state !== "archived" || draft.fixVersions.includes(v.id))
+                  .map((v) => (
+                    <label key={v.id} className="check">
+                      <input
+                        type="checkbox"
+                        checked={draft.fixVersions.includes(v.id)}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            fixVersions: e.target.checked ? [...draft.fixVersions, v.id] : draft.fixVersions.filter((x) => x !== v.id),
+                          })
+                        }
+                      />
+                      {v.name}
+                    </label>
+                  ))}
+              </fieldset>
             )}
             <label className="narrow">
               Story points

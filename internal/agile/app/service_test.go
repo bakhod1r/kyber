@@ -36,6 +36,34 @@ type fakeIssues struct {
 	completed int
 	returned  int
 	err       error
+	inVersion map[string][]app.VersionIssue // version → issues
+	moveErr   error
+}
+
+func (f *fakeIssues) VersionIssues(_ context.Context, _, _, version string) ([]app.VersionIssue, error) {
+	return f.inVersion[version], f.err
+}
+
+// MoveFixVersion moves the fake's issues between versions like Issue Tracking would.
+func (f *fakeIssues) MoveFixVersion(_ context.Context, _, project, from, to string, unresolvedOnly bool) (int, error) {
+	f.calls = append(f.calls, fmt.Sprintf("move %s/%s→%s unresolved=%v", project, from, to, unresolvedOnly))
+	if f.moveErr != nil {
+		return 0, f.moveErr
+	}
+	var stay []app.VersionIssue
+	moved := 0
+	for _, is := range f.inVersion[from] {
+		if unresolvedOnly && is.Resolution != "" {
+			stay = append(stay, is)
+			continue
+		}
+		if to != "" {
+			f.inVersion[to] = append(f.inVersion[to], is)
+		}
+		moved++
+	}
+	f.inVersion[from] = stay
+	return moved, nil
 }
 
 func (f *fakeIssues) ReturnUnfinished(_ context.Context, _, project, sprint, to string) (int, int, error) {

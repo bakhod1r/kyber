@@ -137,3 +137,6 @@ func runAll() bool {
 	}
 	return true
 }
+
+// Release notes are Markdown; validate them as plain text.
+func init() { openapi3filter.RegisterBodyDecoder("text/markdown", openapi3filter.FileBodyDecoder) }

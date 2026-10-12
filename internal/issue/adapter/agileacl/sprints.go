@@ -11,6 +11,7 @@ import (
 
 type Agile interface {
 	CanHold(ctx context.Context, project, sprint string) error
+	CanFix(ctx context.Context, project, version string) error
 }
 
 type Sprints struct{ agile Agile }
@@ -20,6 +21,14 @@ func New(a Agile) *Sprints { return &Sprints{agile: a} }
 func (s *Sprints) CanHold(ctx context.Context, project, sprint string) error {
 	if err := s.agile.CanHold(ctx, project, sprint); errors.Is(err, agileapp.ErrInvalidSprint) {
 		return issueapp.ErrInvalidSprint
+	} else {
+		return err
+	}
+}
+
+func (s *Sprints) CanFix(ctx context.Context, project, version string) error {
+	if err := s.agile.CanFix(ctx, project, version); errors.Is(err, agileapp.ErrInvalidVersion) {
+		return issueapp.ErrInvalidVersion
 	} else {
 		return err
 	}

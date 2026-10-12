@@ -44,6 +44,10 @@ const (
 	CodeBoardNotFound        = "BOARD_NOT_FOUND"
 	CodeBoardConflict        = "BOARD_CONFLICT"
 	CodeLastBoard            = "BOARD_LAST"
+	CodeVersionNotFound      = "VERSION_NOT_FOUND"
+	CodeVersionConflict      = "VERSION_CONFLICT"
+	CodeVersionState         = "VERSION_STATE"
+	CodeVersionNameTaken     = "VERSION_NAME_TAKEN"
 	CodeNotificationNotFound = "NOTIFICATION_NOT_FOUND"
 	CodeImportTooLarge       = "IMPORT_TOO_LARGE"
 	CodeImportInvalidFile    = "IMPORT_INVALID_FILE"
@@ -98,6 +102,10 @@ var codes = []code{
 	{CodeSprintConflict, "6023", 409, "Someone else changed this sprint. Reload and try again.", "Sprintni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Спринт изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeBoardNotFound, "6024", 404, "Board not found.", "Board topilmadi.", "Доска не найдена.", errorx.CategoryBusiness},
 	{CodeBoardConflict, "6025", 409, "Someone else changed this board. Reload and try again.", "Boardni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Доску изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
+	{CodeVersionNotFound, "6080", 404, "Version not found.", "Versiya topilmadi.", "Версия не найдена.", errorx.CategoryBusiness},
+	{CodeVersionConflict, "6081", 409, "Someone else changed this version. Reload and try again.", "Versiyani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Версию изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
+	{CodeVersionState, "6082", 409, "The version is not in a state that allows this.", "Versiya holati bunga ruxsat bermaydi.", "Текущее состояние версии этого не допускает.", errorx.CategoryBusiness},
+	{CodeVersionNameTaken, "6083", 409, "This project already has a version with that name.", "Loyihada bu nomli versiya allaqachon bor.", "В проекте уже есть версия с таким названием.", errorx.CategoryBusiness},
 	{CodeLastBoard, "6026", 409, "A project must keep at least one board.", "Loyihada kamida bitta board qolishi kerak.", "В проекте должна остаться хотя бы одна доска.", errorx.CategoryBusiness},
 	{CodeNotificationNotFound, "6040", 404, "Notification not found.", "Bildirishnoma topilmadi.", "Уведомление не найдено.", errorx.CategoryBusiness},
 	{CodeImportTooLarge, "6050", 413, "The file is too large to import (10 MB max).", "Fayl import uchun juda katta (ko'pi bilan 10 MB).", "Файл слишком большой для импорта (не более 10 МБ).", errorx.CategoryValidation},

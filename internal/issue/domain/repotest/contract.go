@@ -19,6 +19,12 @@ const Assignee = "60000000-0000-4000-8000-000000000001"
 // SprintA is a sprint ID adapters must accept (the Postgres factory inserts it).
 const SprintA = "70000000-0000-4000-8000-000000000001"
 
+// VersionA and VersionB are KYB versions adapters must accept (the Postgres factory inserts them).
+const (
+	VersionA = "71000000-0000-4000-8000-000000000001"
+	VersionB = "71000000-0000-4000-8000-000000000002"
+)
+
 func keys(list []*domain.Issue) string {
 	out := make([]string, len(list))
 	for i, is := range list {
@@ -116,6 +122,36 @@ func Run(t *testing.T, newRepo Factory) {
 		}
 		if got, _ := repo.ByKey(ctx, is.Key()); got.Resolution() != domain.ResolutionDuplicate {
 			t.Fatalf("resolution = %q", got.Resolution())
+		}
+	})
+
+	t.Run("fix versions persist and filter", func(t *testing.T) {
+		repo, _ := newRepo(t)
+		a, b := mk(t, 1, "In both"), mk(t, 2, "In A")
+		a.SetFixVersions([]domain.VersionID{VersionB, VersionA})
+		b.SetFixVersions([]domain.VersionID{VersionA})
+		for _, is := range []*domain.Issue{a, b, mk(t, 3, "None")} {
+			if err := repo.Save(ctx, is, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, _ := repo.ByKey(ctx, a.Key())
+		if fv := got.FixVersions(); len(fv) != 2 || fv[0] != VersionA || fv[1] != VersionB {
+			t.Fatalf("fix versions = %v", fv)
+		}
+		va, vb, none := domain.VersionID(VersionA), domain.VersionID(VersionB), domain.VersionID("nope")
+		for v, want := range map[*domain.VersionID]string{&va: "KYB-1,KYB-2", &vb: "KYB-1", &none: ""} {
+			list, err := repo.ListByProject(ctx, "KYB", domain.ListFilter{FixVersion: v})
+			if err != nil || keys(list) != want {
+				t.Errorf("filter %s = %s %v", *v, keys(list), err)
+			}
+		}
+		got.ReplaceFixVersion(VersionB, "")
+		if err := repo.Save(ctx, got, nil); err != nil {
+			t.Fatal(err)
+		}
+		if again, _ := repo.ByKey(ctx, a.Key()); len(again.FixVersions()) != 1 || again.FixVersions()[0] != VersionA {
+			t.Fatalf("after removal = %v", again.FixVersions())
 		}
 	})
 
