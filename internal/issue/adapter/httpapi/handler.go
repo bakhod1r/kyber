@@ -32,6 +32,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/comments", h.addComment)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/history", h.history)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/children", h.children)
+	mux.HandleFunc("GET /api/v1/issues/{issueKey}/links", h.links)
+	mux.HandleFunc("POST /api/v1/issues/{issueKey}/links", h.link)
+	mux.HandleFunc("DELETE /api/v1/links/{id}", h.unlink)
 	mux.HandleFunc("GET /api/v1/projects/{key}/workflow", h.workflow)
 	mux.HandleFunc("PUT /api/v1/projects/{key}/workflow", h.setWorkflow)
 }
@@ -98,6 +101,12 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeForbidden, true
 	case errors.Is(err, domain.ErrTransitionNotAllowed):
 		return httpx.CodeTransitionNotAllowed, true
+	case errors.Is(err, domain.ErrInvalidLink):
+		return httpx.CodeInvalidLink, true
+	case errors.Is(err, domain.ErrLinkExists):
+		return httpx.CodeLinkExists, true
+	case errors.Is(err, domain.ErrLinkNotFound):
+		return httpx.CodeLinkNotFound, true
 	case errors.Is(err, domain.ErrInvalidParent):
 		return httpx.CodeInvalidParent, true
 	case errors.Is(err, app.ErrStatusInUse):

@@ -34,6 +34,9 @@ const (
 	CodeConcurrentModified   = "ISSUE_CONFLICT"
 	CodeStatusInUse          = "WORKFLOW_STATUS_IN_USE"
 	CodeInvalidParent        = "ISSUE_INVALID_PARENT"
+	CodeInvalidLink          = "ISSUE_LINK_INVALID"
+	CodeLinkExists           = "ISSUE_LINK_EXISTS"
+	CodeLinkNotFound         = "ISSUE_LINK_NOT_FOUND"
 	CodeSprintNotFound       = "SPRINT_NOT_FOUND"
 	CodeSprintState          = "SPRINT_STATE"
 	CodeSprintAlreadyActive  = "SPRINT_ALREADY_ACTIVE"
@@ -85,6 +88,9 @@ var codes = []code{
 	{CodeTransitionNotAllowed, "6012", 409, "This status change is not allowed.", "Bu holatga o'tkazib bo'lmaydi.", "Такой переход статуса запрещён.", errorx.CategoryBusiness},
 	{CodeConcurrentModified, "6013", 409, "Someone else changed this issue. Reload and try again.", "Vazifani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Задачу изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeInvalidParent, "6015", 422, "That parent is not allowed: epics hold stories, tasks and bugs; those hold sub-tasks.", "Bunday ota vazifa mumkin emas: epic ichida story, task va bug; ularning ichida sub-task bo'ladi.", "Такой родитель недопустим: эпик содержит истории, задачи и баги, а они — подзадачи.", errorx.CategoryValidation},
+	{CodeInvalidLink, "6016", 422, "Choose blocks, relates, duplicates or clones, between two different issues.", "Blocks, relates, duplicates yoki clones turini tanlang; ikki xil vazifa bo'lishi kerak.", "Выберите blocks, relates, duplicates или clones между двумя разными задачами.", errorx.CategoryValidation},
+	{CodeLinkExists, "6017", 409, "These issues are already linked this way.", "Bu vazifalar allaqachon shu tarzda bog'langan.", "Эти задачи уже связаны таким образом.", errorx.CategoryBusiness},
+	{CodeLinkNotFound, "6018", 404, "Link not found.", "Bog'lanish topilmadi.", "Связь не найдена.", errorx.CategoryBusiness},
 	{CodeStatusInUse, "6014", 409, "Issues still use this status. Move them first.", "Bu holatda hali vazifalar bor. Avval ularni boshqa holatga o'tkazing.", "В этом статусе ещё есть задачи. Сначала перенесите их.", errorx.CategoryBusiness},
 	{CodeSprintNotFound, "6020", 404, "Sprint not found.", "Sprint topilmadi.", "Спринт не найден.", errorx.CategoryBusiness},
 	{CodeSprintState, "6021", 409, "The sprint is not in a state that allows this.", "Sprint holati bunga ruxsat bermaydi.", "Текущее состояние спринта этого не допускает.", errorx.CategoryBusiness},

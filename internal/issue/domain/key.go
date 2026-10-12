@@ -50,3 +50,13 @@ func ParseIssueKey(s string) (IssueKey, error) {
 
 // MarshalText renders the key as "KYB-12" (used in event payloads and JSON).
 func (k IssueKey) MarshalText() ([]byte, error) { return []byte(k.String()), nil }
+
+// UnmarshalText parses "KYB-12" (event payloads read back by projections).
+func (k *IssueKey) UnmarshalText(b []byte) error {
+	parsed, err := ParseIssueKey(string(b))
+	if err != nil {
+		return err
+	}
+	*k = parsed
+	return nil
+}

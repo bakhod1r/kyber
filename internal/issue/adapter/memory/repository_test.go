@@ -2,6 +2,7 @@ package memory_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/bakhod1r/kyber/internal/issue/adapter/memory"
@@ -32,4 +33,17 @@ func TestWorkflowContract(t *testing.T) {
 
 func TestHistoryContract(t *testing.T) {
 	repotest.RunHistory(t, func(t *testing.T) domain.HistoryRepository { return memory.NewHistoryRepository() })
+}
+
+func TestLinkContract(t *testing.T) {
+	repotest.RunLinks(t, func(t *testing.T) (domain.LinkRepository, [3]*domain.Issue, func() []string) {
+		r := memory.NewRepository()
+		var is [3]*domain.Issue
+		for n := range 3 {
+			key, _ := domain.NewIssueKey("KYB", n+1)
+			is[n], _ = domain.NewIssue(domain.IssueID(fmt.Sprintf("00000000-0000-4000-8000-00000000000%d", n+1)), key, "t", domain.TypeTask, repotest.Assignee, domain.DefaultWorkflow())
+			_ = r.Save(context.Background(), is[n], nil)
+		}
+		return memory.NewLinkRepository(r), is, r.OutboxNames
+	})
 }

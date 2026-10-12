@@ -29,6 +29,11 @@ func (s *Service) OnHistoryEvent(ctx context.Context, m outbox.Message) error {
 		Body        string               `json:"body"`
 		ExternalKey string               `json:"external_key"`
 		Items       []domain.FieldChange `json:"items"`
+		Type        domain.LinkType      `json:"type"`
+		From        string               `json:"from"`
+		FromKey     domain.IssueKey      `json:"from_key"`
+		To          string               `json:"to"`
+		ToKey       domain.IssueKey      `json:"to_key"`
 	}
 	if json.Unmarshal(m.Payload, &e) != nil {
 		return nil
@@ -45,6 +50,20 @@ func (s *Service) OnHistoryEvent(ctx context.Context, m outbox.Message) error {
 	case "comment.added":
 		base.Issue, base.By, base.Field, base.To = domain.IssueID(e.IssueID), domain.UserID(e.Author), "comment", e.Body
 		entries = append(entries, base)
+	case "issue.linked", "issue.unlinked":
+		// One line on each end, read from that side ("blocks KYB-2" / "is blocked by KYB-1").
+		l := domain.Link{Type: e.Type, From: domain.IssueID(e.From), To: domain.IssueID(e.To), FromKey: e.FromKey, ToKey: e.ToKey}
+		for i, end := range []domain.IssueID{l.From, l.To} {
+			line := base
+			line.Seq, line.Issue, line.By, line.Field = i, end, domain.UserID(e.By), "link"
+			text := l.PhraseFrom(end) + " " + l.OtherKey(end).String()
+			if m.Name == "issue.linked" {
+				line.To = text
+			} else {
+				line.From = text
+			}
+			entries = append(entries, line)
+		}
 	case "issue.changed":
 		for i, it := range e.Items {
 			line := base

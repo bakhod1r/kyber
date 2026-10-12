@@ -90,6 +90,8 @@ export const STATUS_CATEGORIES: { id: StatusCategory; label: string }[] = [
   { id: "done", label: "Done" },
 ];
 
+export type LinkType = "blocks" | "relates" | "duplicates" | "clones";
+export type IssueLink = { id: string; type: LinkType; phrase: string; issue: Issue };
 export type AuditEntry = { at: string; actor_id: string; actor_name: string; action: string; target: string; status: number };
 export type HistoryEntry = {
   at: string;
@@ -248,6 +250,10 @@ export const api = {
   completeSprint: (id: string) => request<Completion>("POST", `/api/v1/sprints/${seg(id)}/complete`),
   createIssue: (key: string, title: string, type: IssueType, parentKey?: string) =>
     request<Issue>("POST", `/api/v1/projects/${seg(key)}/issues`, parentKey ? { title, type, parent_key: parentKey } : { title, type }),
+  links: (issueKey: string) => request<List<IssueLink>>("GET", `/api/v1/issues/${seg(issueKey)}/links`).then((r) => r.items),
+  link: (issueKey: string, type: LinkType, toKey: string) =>
+    request<IssueLink>("POST", `/api/v1/issues/${seg(issueKey)}/links`, { type, to_key: toKey }),
+  unlink: (id: string) => request<undefined>("DELETE", `/api/v1/links/${seg(id)}`),
   children: (issueKey: string) =>
     request<{ items: Issue[]; total: number; done: number; points: number; done_points: number }>("GET", `/api/v1/issues/${seg(issueKey)}/children`),
   audit: (key: string) => request<List<AuditEntry>>("GET", `/api/v1/projects/${seg(key)}/audit`).then((r) => r.items),

@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -128,4 +129,27 @@ func TestHistoryBackfillFromOutbox(t *testing.T) {
 	if strings.Join(lines, ",") != want {
 		t.Fatalf("backfilled:\n%s\nwant:\n%s", strings.Join(lines, ","), want)
 	}
+}
+
+func TestLinkContract(t *testing.T) {
+	repotest.RunLinks(t, func(t *testing.T) (domain.LinkRepository, [3]*domain.Issue, func() []string) {
+		pool := dbtest.New(t)
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, name, password_hash) VALUES ($1, 'a@x.uz', 'A', 'h')`, repotest.Assignee); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO projects (id, key, name, workspace_id) VALUES ('10000000-0000-4000-8000-000000000001','KYB','Kyber','00000000-0000-4000-8000-000000000001')`); err != nil {
+			t.Fatal(err)
+		}
+		issues := postgres.NewRepository(pool)
+		var is [3]*domain.Issue
+		for n := range 3 {
+			key, _ := domain.NewIssueKey("KYB", n+1)
+			is[n], _ = domain.NewIssue(domain.IssueID(fmt.Sprintf("00000000-0000-4000-8000-00000000000%d", n+1)), key, "t", domain.TypeTask, repotest.Assignee, domain.DefaultWorkflow())
+			if err := issues.Save(ctx, is[n], nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return postgres.NewLinkRepository(pool), is, outboxReader(t, pool)
+	})
 }

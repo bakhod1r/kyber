@@ -104,7 +104,7 @@ func setup() (*app.Service, *recorder) {
 	return app.NewService(app.Deps{
 		Issues: repo, Comments: memory.NewCommentRepository(repo), Keys: keys, Access: access, Directory: access,
 		Sprints:  fakeSprints{"KYB": {"s-1": true, "s-2": true}},
-		Workflow: domain.DefaultWorkflow(), Workflows: memory.NewWorkflowRepository(), History: memory.NewHistoryRepository(), Admins: access, NewID: ids,
+		Workflow: domain.DefaultWorkflow(), Workflows: memory.NewWorkflowRepository(), History: memory.NewHistoryRepository(), Links: memory.NewLinkRepository(repo), Admins: access, NewID: ids,
 		Now: func() time.Time { now = now.Add(time.Minute); return now },
 	}), rec
 }

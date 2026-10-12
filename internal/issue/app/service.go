@@ -55,6 +55,7 @@ type Service struct {
 	workflow  *domain.Workflow
 	workflows domain.WorkflowRepository
 	history   domain.HistoryRepository
+	links     domain.LinkRepository
 	admins    Admins
 	newID     func() string
 	now       func() time.Time
@@ -71,6 +72,7 @@ type Deps struct {
 	Workflow  *domain.Workflow // the default for projects without a configured workflow
 	Workflows domain.WorkflowRepository
 	History   domain.HistoryRepository
+	Links     domain.LinkRepository
 	Admins    Admins
 	NewID     func() string
 	Now       func() time.Time
@@ -79,7 +81,7 @@ type Deps struct {
 func NewService(d Deps) *Service {
 	return &Service{issues: d.Issues, comments: d.Comments, keys: d.Keys, access: d.Access,
 		directory: d.Directory, sprints: d.Sprints, workflow: d.Workflow,
-		workflows: d.Workflows, history: d.History, admins: d.Admins, newID: d.NewID, now: d.Now}
+		workflows: d.Workflows, history: d.History, links: d.Links, admins: d.Admins, newID: d.NewID, now: d.Now}
 }
 
 type CreateIssue struct {

@@ -1,6 +1,7 @@
 import { IssueFocus } from "./Focus";
 import { IssueChildren } from "./IssueChildren";
 import { IssueHistory } from "./IssueHistory";
+import { IssueLinks } from "./IssueLinks";
 import { MentionTextarea } from "./MentionTextarea";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useId, useState } from "react";
@@ -154,6 +155,7 @@ export function IssuePanel({
           </form>
         )}
         {loaded && <IssueChildren issue={loaded} projectKey={projectKey} onOpen={onOpen} />}
+        <IssueLinks issueKey={issueKey} onOpen={onOpen} />
         <IssueFocus issueKey={issueKey} />
         <Comments issueKey={issueKey} projectKey={projectKey} />
         <IssueHistory issueKey={issueKey} projectKey={projectKey} />

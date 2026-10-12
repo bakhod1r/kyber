@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.16.0
+  version: 0.17.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -660,6 +660,53 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/issues/{issueKey}/links:
+    parameters: [{ $ref: "#/components/parameters/IssueKey" }]
+    get:
+      operationId: issueLinks
+      description: The issue's links read from its side; links to issues the caller may not read are left out.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: { items: { type: array, items: { $ref: "#/components/schemas/IssueLink" } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: linkIssue
+      description: "Link this issue to another: <this> blocks / relates to / duplicates / clones <to_key>."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, to_key]
+              properties:
+                type: { type: string, enum: [blocks, relates, duplicates, clones] }
+                to_key: { type: string }
+      responses:
+        "201": { description: Linked, content: { application/json: { schema: { $ref: "#/components/schemas/IssueLink" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/links/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    delete:
+      operationId: unlinkIssue
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/history:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
     get:
@@ -1192,6 +1239,15 @@ components:
         action: { type: string, description: "The API operation, e.g. PUT /api/v1/projects/{key}/workflow" }
         target: { type: string, description: The concrete path }
         status: { type: integer, description: The HTTP status of the result }
+    IssueLink:
+      type: object
+      additionalProperties: false
+      required: [id, type, phrase, issue]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [blocks, relates, duplicates, clones] }
+        phrase: { type: string, description: "Read from the requested issue's side, e.g. 'is blocked by'" }
+        issue: { $ref: "#/components/schemas/Issue" }
     HistoryEntry:
       type: object
       additionalProperties: false
@@ -1202,7 +1258,7 @@ components:
         by_name: { type: string }
         field:
           type: string
-          description: "created, comment, imported, or a field: title, description, type, status, priority, assignee, estimate, sprint, rank"
+          description: "created, comment, imported, link, or a field: title, description, type, status, priority, assignee, estimate, sprint, rank, parent"
         from: { type: string }
         to: { type: string }
         from_name: { type: string, description: "Display value (people's names for assignee)" }

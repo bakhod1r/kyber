@@ -16,7 +16,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 )
 
-// Owners finds the project of resources addressed by id alone (/sprints/{id}, /boards/{id}).
+// Owners finds the project of resources addressed by id alone (/sprints/{id}, /boards/{id}, /links/{id}).
 type Owners interface {
 	ProjectOf(ctx context.Context, kind, id string) string // "" when unknown
 }
@@ -31,10 +31,10 @@ func New(svc *app.Service, owners Owners, log *slog.Logger) *Handler {
 	return &Handler{svc: svc, owners: owners, log: log}
 }
 
-// owned reports the kind and id of /api/v1/{sprints|boards}/{id}/... paths.
+// owned reports the kind and id of /api/v1/{sprints|boards|links}/{id}/... paths.
 func owned(path string) (kind, id string) {
 	parts := strings.Split(strings.TrimPrefix(path, "/api/v1/"), "/")
-	if len(parts) >= 2 && (parts[0] == "sprints" || parts[0] == "boards") && parts[1] != "" {
+	if len(parts) >= 2 && (parts[0] == "sprints" || parts[0] == "boards" || parts[0] == "links") && parts[1] != "" {
 		return parts[0], parts[1]
 	}
 	return "", ""

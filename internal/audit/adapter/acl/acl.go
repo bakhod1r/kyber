@@ -8,6 +8,7 @@ import (
 	agiledomain "github.com/bakhod1r/kyber/internal/agile/domain"
 	"github.com/bakhod1r/kyber/internal/audit/app"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
+	issuedomain "github.com/bakhod1r/kyber/internal/issue/domain"
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
 )
 
@@ -55,12 +56,19 @@ type BoardSource interface {
 	BoardByID(ctx context.Context, id agiledomain.BoardID) (*agiledomain.Board, error)
 }
 
+type LinkSource interface {
+	ByID(ctx context.Context, id issuedomain.LinkID) (issuedomain.Link, error)
+}
+
 type Owners struct {
 	sprints SprintSource
 	boards  BoardSource
+	links   LinkSource
 }
 
-func NewOwners(s SprintSource, b BoardSource) Owners { return Owners{sprints: s, boards: b} }
+func NewOwners(s SprintSource, b BoardSource, l LinkSource) Owners {
+	return Owners{sprints: s, boards: b, links: l}
+}
 
 func (o Owners) ProjectOf(ctx context.Context, kind, id string) string {
 	switch kind {
@@ -71,6 +79,10 @@ func (o Owners) ProjectOf(ctx context.Context, kind, id string) string {
 	case "boards":
 		if b, err := o.boards.BoardByID(ctx, agiledomain.BoardID(id)); err == nil {
 			return b.Project()
+		}
+	case "links":
+		if l, err := o.links.ByID(ctx, issuedomain.LinkID(id)); err == nil {
+			return l.FromKey.Project()
 		}
 	}
 	return ""
