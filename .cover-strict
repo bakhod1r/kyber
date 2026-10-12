@@ -14,3 +14,4 @@
 ./internal/audit/app
 ./internal/access/app
 ./internal/access/adapter/projectcompat
+./internal/access/adapter/memory

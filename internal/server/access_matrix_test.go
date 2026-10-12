@@ -81,6 +81,9 @@ func TestS46AccessMatrix(t *testing.T) {
 				c.do("POST", "/api/v1/focus/stop", nil)
 				return code, b
 			}, [4]int{201, 201, 403, 404}},
+			{"permission scheme (Access)", func(c *client, n int) (int, map[string]any) {
+				return c.do("GET", "/api/v1/projects/KYB/permissions", nil)
+			}, [4]int{200, 403, 403, 404}},
 			{"telegram groups (Notify)", func(c *client, n int) (int, map[string]any) {
 				return c.do("GET", "/api/v1/projects/KYB/telegram-groups", nil)
 			}, [4]int{200, 403, 403, 404}},

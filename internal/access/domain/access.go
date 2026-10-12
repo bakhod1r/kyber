@@ -200,3 +200,68 @@ func (s *Scheme) Decide(sub Subject, p Permission, is *IssueAttrs) Decision {
 	d := guard.Decide(request(sub, p, is), policies)
 	return Decision{Allowed: d.Allowed, Reason: reason(d), perm: p}
 }
+
+// ErrInvalidScheme: a scheme edit that names an unknown permission or holder, or would lock the
+// project's admins out (they must keep Browse and Administer).
+var ErrInvalidScheme = errors.New("invalid permission scheme")
+
+// Holder kinds as stored and shown in the scheme editor.
+const (
+	HolderRole     = "role"
+	HolderUser     = "user"
+	HolderReporter = "reporter"
+	HolderAssignee = "assignee"
+)
+
+// Kind and Value describe a grant for storage and the API.
+func (g Grant) Kind() string {
+	return [...]string{holderRole: HolderRole, holderUser: HolderUser, holderReporter: HolderReporter, holderAssignee: HolderAssignee}[g.kind]
+}
+func (g Grant) Value() string { return g.value }
+
+// ParseGrant is the inverse of Kind/Value.
+func ParseGrant(kind, value string) (Grant, error) {
+	switch {
+	case kind == HolderRole && slices.Contains([]RoleID{RoleAdmin, RoleMember, RoleViewer}, RoleID(value)):
+		return Role(RoleID(value)), nil
+	case kind == HolderUser && value != "":
+		return User(UserID(value)), nil
+	case kind == HolderReporter && value == "":
+		return Reporter(), nil
+	case kind == HolderAssignee && value == "":
+		return Assignee(), nil
+	}
+	return Grant{}, fmt.Errorf("%w: holder %s %q", ErrInvalidScheme, kind, value)
+}
+
+// GrantTable is a scheme's grants by permission (storage and API form).
+type GrantTable map[Permission][]Grant
+
+// Table returns every permission's holders, permissions without holders included.
+func (s *Scheme) Table() GrantTable {
+	t := GrantTable{}
+	for _, p := range permissions {
+		t[p] = s.Grants(p)
+	}
+	return t
+}
+
+// SchemeFrom builds a scheme from a grant table, rejecting unknown permissions and any table that
+// takes Browse or Administer away from the admin role (no lock-out).
+func SchemeFrom(t GrantTable) (*Scheme, error) {
+	s := &Scheme{grants: map[Permission][]Grant{}, levels: map[string]SecurityLevel{}}
+	for p, gs := range t {
+		if !slices.Contains(permissions, p) {
+			return nil, fmt.Errorf("%w: unknown permission %q", ErrInvalidScheme, p)
+		}
+		for _, g := range gs {
+			s.Grant(p, g)
+		}
+	}
+	for _, p := range []Permission{BrowseProjects, AdministerProjects} {
+		if !slices.Contains(s.grants[p], Role(RoleAdmin)) {
+			return nil, fmt.Errorf("%w: the admin role must keep %s", ErrInvalidScheme, p)
+		}
+	}
+	return s, nil
+}

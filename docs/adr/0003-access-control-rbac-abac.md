@@ -83,4 +83,7 @@ attributes.
   assignee). Reads answer 404 to others; lists, children, reports (`VisibleSnapshot`) and CSV export are filtered
   per reader; notifications go only to recipients who can still `Get` the issue; Telegram groups never receive
   updates of a confidential issue. `TestConfidentialIssueLeaks` covers every path on all backends.
-- **Remaining for phase 2:** per-project schemes and their editor.
+- **Per-project schemes (phase 2c):** a project may have its own grant table (`project_permission_grants`,
+  migration 0030); without rows it uses the default. `GET/PUT/DELETE /projects/{key}/permissions` (admins) read,
+  replace and reset it; the admin role must keep Browse and Administer, so admins cannot be locked out. Security
+  levels apply under every scheme. The web app's Permissions tab is the editor (roles, reporter, assignee, users).

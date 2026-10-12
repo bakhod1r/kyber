@@ -78,3 +78,91 @@ func TestConfidentialLevel(t *testing.T) {
 		t.Fatalf("levels = %+v", got)
 	}
 }
+
+type schemes struct {
+	fakeTable domain.GrantTable
+	err       error
+	saveErr   error
+}
+
+func (s *schemes) ProjectGrants(context.Context, string) (domain.GrantTable, bool, error) {
+	return s.fakeTable, s.fakeTable != nil, s.err
+}
+func (s *schemes) SaveProjectGrants(_ context.Context, _ string, t domain.GrantTable) error {
+	if s.saveErr != nil {
+		return s.saveErr
+	}
+	s.fakeTable = t
+	return nil
+}
+func (s *schemes) DeleteProjectGrants(context.Context, string) error {
+	s.fakeTable = nil
+	return nil
+}
+
+func TestProjectSchemes(t *testing.T) {
+	ctx := context.Background()
+	store := &schemes{}
+	s := svc().WithSchemes(store)
+
+	table, custom, err := s.ProjectScheme(ctx, "lead", "KYB")
+	if err != nil || custom || len(table[domain.CreateIssues]) != 2 {
+		t.Fatalf("default = %v %v %v", table, custom, err)
+	}
+	for who, want := range map[string]error{"dev": app.ErrForbidden, "eve": app.ErrNotFound} {
+		if _, _, err := s.ProjectScheme(ctx, who, "KYB"); !errors.Is(err, want) {
+			t.Errorf("read as %s: %v", who, err)
+		}
+		if _, err := s.SetProjectScheme(ctx, who, "KYB", table); !errors.Is(err, want) {
+			t.Errorf("set as %s: %v", who, err)
+		}
+		if err := s.ResetProjectScheme(ctx, who, "KYB"); !errors.Is(err, want) {
+			t.Errorf("reset as %s: %v", who, err)
+		}
+	}
+
+	if err := s.Can(ctx, "vic", "KYB", domain.CreateIssues, nil); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("viewer creates under default: %v", err)
+	}
+	table[domain.CreateIssues] = append(table[domain.CreateIssues], domain.Role(domain.RoleViewer))
+	if _, err := s.SetProjectScheme(ctx, "lead", "KYB", table); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Can(ctx, "vic", "KYB", domain.CreateIssues, nil); err != nil {
+		t.Fatalf("viewer creates under the project's scheme: %v", err)
+	}
+	if _, custom, _ := s.ProjectScheme(ctx, "lead", "KYB"); !custom {
+		t.Fatal("scheme not reported as the project's own")
+	}
+	// Security levels still apply under a project's own scheme.
+	if err := s.Can(ctx, "vic", "KYB", domain.BrowseProjects, &app.Issue{SecurityLevel: app.LevelConfidential}); !errors.Is(err, app.ErrNotFound) {
+		t.Fatalf("confidential under custom scheme: %v", err)
+	}
+
+	lockout := domain.DefaultScheme().Table()
+	lockout[domain.AdministerProjects] = nil
+	if _, err := s.SetProjectScheme(ctx, "lead", "KYB", lockout); !errors.Is(err, app.ErrInvalidScheme) {
+		t.Fatalf("lock-out err = %v", err)
+	}
+
+	if err := s.ResetProjectScheme(ctx, "lead", "KYB"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Can(ctx, "vic", "KYB", domain.CreateIssues, nil); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("after reset: %v", err)
+	}
+
+	// Store failures and a corrupt stored scheme surface as errors.
+	store.saveErr = errors.New("disk full")
+	if _, err := s.SetProjectScheme(ctx, "lead", "KYB", table); !errors.Is(err, store.saveErr) {
+		t.Fatalf("save error: %v", err)
+	}
+	store.err = errors.New("db down")
+	if err := s.Can(ctx, "lead", "KYB", domain.BrowseProjects, nil); err == nil {
+		t.Fatal("store error swallowed")
+	}
+	store.err, store.fakeTable = nil, domain.GrantTable{domain.CreateIssues: nil}
+	if err := s.Can(ctx, "lead", "KYB", domain.BrowseProjects, nil); !errors.Is(err, app.ErrInvalidScheme) {
+		t.Fatalf("corrupt scheme: %v", err)
+	}
+}

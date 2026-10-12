@@ -80,6 +80,9 @@ export type IssuePatch = {
 export type Comment = { id: string; author_id: string; author_name: string; body: string; created_at: string };
 export type Role = "admin" | "member" | "viewer";
 export type Member = { user_id: string; email: string; name: string; role: Role };
+export type GrantKind = "role" | "user" | "reporter" | "assignee";
+export type PermissionGrants = { permission: string; grants: { kind: GrantKind; value: string }[] };
+export type PermissionScheme = { custom: boolean; permissions: PermissionGrants[] };
 
 export const STATUSES: { id: Status; label: string }[] = [
   { id: "todo", label: "To Do" },
@@ -276,6 +279,10 @@ export const api = {
     request<{ url: string; expires_at: string }>("POST", `/api/v1/projects/${seg(key)}/telegram-groups/link`),
   unlinkTelegramGroup: (key: string, chat: string) =>
     request<undefined>("DELETE", `/api/v1/projects/${seg(key)}/telegram-groups/${seg(chat)}`),
+  permissions: (key: string) => request<PermissionScheme>("GET", `/api/v1/projects/${seg(key)}/permissions`),
+  setPermissions: (key: string, permissions: PermissionGrants[]) =>
+    request<PermissionScheme>("PUT", `/api/v1/projects/${seg(key)}/permissions`, { permissions }),
+  resetPermissions: (key: string) => request<undefined>("DELETE", `/api/v1/projects/${seg(key)}/permissions`),
   audit: (key: string) => request<List<AuditEntry>>("GET", `/api/v1/projects/${seg(key)}/audit`).then((r) => r.items),
   history: (issueKey: string) => request<List<HistoryEntry>>("GET", `/api/v1/issues/${seg(issueKey)}/history`).then((r) => r.items),
   boards: (key: string) => request<List<BoardView>>("GET", `/api/v1/projects/${seg(key)}/boards`).then((r) => r.items),

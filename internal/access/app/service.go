@@ -29,9 +29,13 @@ type Issue struct {
 }
 
 type Service struct {
-	roles  Roles
-	scheme *domain.Scheme
+	roles   Roles
+	scheme  *domain.Scheme // the default scheme
+	schemes domain.SchemeRepository
 }
+
+// ErrInvalidScheme: see domain.ErrInvalidScheme.
+var ErrInvalidScheme = domain.ErrInvalidScheme
 
 // LevelConfidential is the built-in issue security level: only project admins, the reporter and
 // the assignee can see such an issue — it is hidden (404) from everyone else, in every list too.
@@ -44,13 +48,72 @@ func SecurityLevels() []domain.SecurityLevel {
 }
 
 // NewService decides with the default scheme (viewer < member < admin, own-issue edits) and the
-// built-in security levels; per-project schemes come later.
+// built-in security levels; WithSchemes lets projects have schemes of their own.
 func NewService(roles Roles) *Service {
-	scheme := domain.DefaultScheme()
+	return &Service{roles: roles, scheme: withLevels(domain.DefaultScheme())}
+}
+
+// WithSchemes stores per-project permission schemes in repo.
+func (s *Service) WithSchemes(repo domain.SchemeRepository) *Service {
+	s.schemes = repo
+	return s
+}
+
+func withLevels(scheme *domain.Scheme) *domain.Scheme {
 	for _, l := range SecurityLevels() {
 		_ = scheme.AddLevel(l) // static, distinct ids
 	}
-	return &Service{roles: roles, scheme: scheme}
+	return scheme
+}
+
+// schemeOf returns the project's own scheme, or the default one.
+func (s *Service) schemeOf(ctx context.Context, project string) (*domain.Scheme, error) {
+	if s.schemes == nil {
+		return s.scheme, nil
+	}
+	t, ok, err := s.schemes.ProjectGrants(ctx, project)
+	if err != nil || !ok {
+		return s.scheme, err
+	}
+	scheme, err := domain.SchemeFrom(t)
+	if err != nil {
+		return nil, err
+	}
+	return withLevels(scheme), nil
+}
+
+// ProjectScheme returns the project's grants and whether they are its own (project admins only).
+func (s *Service) ProjectScheme(ctx context.Context, actor, project string) (domain.GrantTable, bool, error) {
+	if err := s.Can(ctx, actor, project, domain.AdministerProjects, nil); err != nil {
+		return nil, false, err
+	}
+	scheme, _ := s.schemeOf(ctx, project) // Can has just loaded it without error
+	return scheme.Table(), scheme != s.scheme, nil
+}
+
+// SetProjectScheme gives the project its own grants (project admins only). The admin role must
+// keep Browse and Administer, so nobody can lock the project's admins out.
+func (s *Service) SetProjectScheme(ctx context.Context, actor, project string, t domain.GrantTable) (domain.GrantTable, error) {
+	if err := s.Can(ctx, actor, project, domain.AdministerProjects, nil); err != nil {
+		return nil, err
+	}
+	scheme, err := domain.SchemeFrom(t)
+	if err != nil {
+		return nil, err
+	}
+	table := scheme.Table()
+	if err := s.schemes.SaveProjectGrants(ctx, project, table); err != nil {
+		return nil, err
+	}
+	return table, nil
+}
+
+// ResetProjectScheme returns the project to the default scheme (project admins only).
+func (s *Service) ResetProjectScheme(ctx context.Context, actor, project string) error {
+	if err := s.Can(ctx, actor, project, domain.AdministerProjects, nil); err != nil {
+		return err
+	}
+	return s.schemes.DeleteProjectGrants(ctx, project)
 }
 
 // Can returns nil when actor holds perm in project (on the issue when given), ErrNotFound when
@@ -71,7 +134,11 @@ func (s *Service) Can(ctx context.Context, actor, project string, perm domain.Pe
 		attrs = &domain.IssueAttrs{Reporter: domain.UserID(on.Reporter), Assignee: domain.UserID(on.Assignee),
 			Status: on.Status, SecurityLevel: on.SecurityLevel}
 	}
-	err := s.scheme.Decide(sub, perm, attrs).Err()
+	scheme, err := s.schemeOf(ctx, project)
+	if err != nil {
+		return err
+	}
+	err = scheme.Decide(sub, perm, attrs).Err()
 	switch {
 	case errors.Is(err, domain.ErrNotFound):
 		return errors.Join(ErrNotFound, err)

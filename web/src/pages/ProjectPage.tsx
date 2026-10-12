@@ -6,12 +6,13 @@ import { Backlog } from "../components/Backlog";
 import { Board } from "../components/Board";
 import { AuditLog } from "../components/AuditLog";
 import { IssuePanel } from "../components/IssuePanel";
+import { PermissionScheme } from "../components/PermissionScheme";
 import { TelegramGroups } from "../components/TelegramGroups";
 import { WorkflowEditor } from "../components/WorkflowEditor";
 import { JiraImport } from "./ImportPage";
 import { Reports } from "./ReportsPage";
 
-export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" }) {
+export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" }) {
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
   const project = projects.data?.find((p) => p.key === key);
@@ -37,6 +38,7 @@ export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "
         <NavLink to={`/projects/${encodeURIComponent(key)}/reports`}>Reports</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/import`}>Import</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/workflow`}>Workflow</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/permissions`}>Permissions</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/notifications`}>Notifications</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/audit`}>Audit</NavLink>
       </nav>
@@ -47,6 +49,7 @@ export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "
         {view === "import" && <JiraImport projectKey={key} />}
         {view === "workflow" && <WorkflowEditor projectKey={key} />}
         {view === "audit" && <AuditLog projectKey={key} />}
+        {view === "permissions" && <PermissionScheme projectKey={key} />}
         {view === "notifications" && <TelegramGroups projectKey={key} />}
         <Members projectKey={key} />
       </div>

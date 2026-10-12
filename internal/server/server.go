@@ -15,6 +15,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	accesshttp "github.com/bakhod1r/kyber/internal/access/adapter/httpapi"
+	accessmemory "github.com/bakhod1r/kyber/internal/access/adapter/memory"
+	accesspg "github.com/bakhod1r/kyber/internal/access/adapter/postgres"
 	"github.com/bakhod1r/kyber/internal/access/adapter/projectcompat"
 	accessapp "github.com/bakhod1r/kyber/internal/access/app"
 	accessdomain "github.com/bakhod1r/kyber/internal/access/domain"
@@ -105,6 +108,7 @@ type deps struct {
 	history       issuedomain.HistoryRepository
 	links         issuedomain.LinkRepository
 	audit         auditdomain.Repository
+	schemes       accessdomain.SchemeRepository
 	sprints       agiledomain.Repository
 	boards        agiledomain.BoardRepository
 	users         identitydomain.Users
@@ -176,7 +180,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo),
-		audit:   auditmemory.NewRepository(),
+		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(),
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
@@ -223,7 +227,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool),
-		audit:   auditpg.NewRepository(pool),
+		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), notes: notifypg.NewRepository(pool),
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool),
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
@@ -255,7 +259,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	tenancy := workspacehttp.New(workspaces, log, d.baseDomain, d.cookieSecure)
 	projects := projectapp.NewService(d.projects, users, id.New).WithWorkspaces(workspaces)
 	// Access context (ADR-0003): every permission decision goes through the project's scheme.
-	access := accessapp.NewService(projects)
+	access := accessapp.NewService(projects).WithSchemes(d.schemes)
 	acl := projectacl.New(projectcompat.NewGate(projects, access, accessdomain.AssignableUser), users)
 	// Issue Tracking and Agile depend on each other through ports; the sprint
 	// ACL is bound once both services exist.
@@ -338,6 +342,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	auth.RegisterProtected(api)
 	projecthttp.New(projects, log).Register(api)
 	issuehttp.New(issues, log).Register(api)
+	accesshttp.New(access, log).Register(api)
 	agilehttp.New(agile, log).Register(api)
 	notifyhttp.New(notify, log).Register(api)
 	insightshttp.New(insights, log).Register(api)
