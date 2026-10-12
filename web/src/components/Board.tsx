@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type DragEvent, type FormEvent, useState } from "react";
 import { type BoardColumn, DEFAULT_WORKFLOW, ISSUE_TYPES, type Issue, type IssueType, type Member, type Status, api } from "../api";
+import { announceIssueDone } from "./Focus";
 
 const DRAG_TYPE = "application/x-kyber-issue";
 
@@ -23,7 +24,7 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
   const members = useQuery({ queryKey: ["members", projectKey], queryFn: () => api.members(projectKey) });
   // Columns come from the selected board (S44); without boards, one column per workflow status.
   const boards = useQuery({ queryKey: ["boards", projectKey], queryFn: () => api.boards(projectKey) });
-  const workflow = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => api.workflow(projectKey), enabled: boards.isError });
+  const workflow = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => api.workflow(projectKey) });
   const [boardId, setBoardId] = useState<string | null>(null);
   const board = boards.data?.find((b) => b.id === boardId) ?? boards.data?.[0];
   const columns: BoardColumn[] =
@@ -42,6 +43,9 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
       qc.setQueryData<Issue[]>(queryKey, (list) => list?.map((i) => (i.key === key ? { ...i, status: to } : i)));
       return { previous };
     },
+    onSuccess: (_issue, { key, to }) => {
+      if ((workflow.data ?? DEFAULT_WORKFLOW).statuses.find((st) => st.id === to)?.category === "done") announceIssueDone(key);
+    },
     onError: (err, _vars, ctx) => {
       qc.setQueryData(queryKey, ctx?.previous);
       setError(err.message);
@@ -59,7 +63,7 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
     if (issue && to && !col.statuses.includes(issue.status)) move.mutate({ key, to });
   }
 
-  if (sprints.isPending || issues.isPending || boards.isPending || (boards.isError && workflow.isPending)) return <p className="muted">Loading board…</p>;
+  if (sprints.isPending || issues.isPending || boards.isPending || workflow.isPending) return <p className="muted">Loading board…</p>;
   if (issues.isError) return <p role="alert" className="error">{issues.error.message}</p>;
 
   return (

@@ -40,12 +40,19 @@ func TestS41S42PomodoroAndMeetings(t *testing.T) {
 		if s["state"] != "running" || s["planned_minutes"] != float64(15) || s["remaining_seconds"].(float64) < 890 {
 			t.Fatalf("session = %v", s)
 		}
+		// Stopwatch precision: the deadline is absolute (ends_at) with the server clock alongside,
+		// so clients count down without rounding or network drift.
+		ends, _ := time.Parse(time.RFC3339Nano, s["ends_at"].(string))
+		srv, _ := time.Parse(time.RFC3339Nano, s["server_time"].(string))
+		if left := ends.Sub(srv); left.Milliseconds() != int64(s["remaining_ms"].(float64)) || left < 14*time.Minute || left > 15*time.Minute {
+			t.Fatalf("ends_at - server_time = %v, remaining_ms = %v", left, s["remaining_ms"])
+		}
 		code, b = dev.do("POST", "/api/v1/focus", map[string]any{"issue_key": "KYB-1", "minutes": 15})
 		expect(t, code, 409, b)
 
 		// AC3 pause / resume / stop and the history on the issue.
 		code, p := dev.do("POST", "/api/v1/focus/pause", nil)
-		if code != 200 || p["state"] != "paused" {
+		if code != 200 || p["state"] != "paused" || p["ends_at"] != nil || p["remaining_ms"].(float64) <= 0 {
 			t.Fatalf("pause = %d %v", code, p)
 		}
 		code, b = dev.do("POST", "/api/v1/focus/pause", nil)

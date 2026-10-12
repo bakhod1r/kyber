@@ -135,6 +135,10 @@ export type FocusSession = {
   ended_at: string | null;
   focused_seconds: number;
   remaining_seconds: number;
+  /** Exact time left (ms); absolute deadline while running; server clock at response time. */
+  remaining_ms?: number;
+  ends_at?: string | null;
+  server_time?: string;
   reason: string;
 };
 export type Meeting = { id: string; title: string; starts_at: string; ends_at: string; organizer_id: string; attendee_ids: string[] };

@@ -1010,7 +1010,7 @@ components:
     FocusSession:
       type: object
       additionalProperties: false
-      required: [id, issue_key, user_id, state, planned_minutes, started_at, ended_at, focused_seconds, remaining_seconds, reason]
+      required: [id, issue_key, user_id, state, planned_minutes, started_at, ended_at, focused_seconds, remaining_seconds, remaining_ms, ends_at, server_time, reason]
       properties:
         id: { type: string }
         issue_key: { type: string }
@@ -1021,6 +1021,9 @@ components:
         ended_at: { type: [string, "null"], format: date-time }
         focused_seconds: { type: integer }
         remaining_seconds: { type: integer }
+        remaining_ms: { type: integer, description: Exact time left in milliseconds. }
+        ends_at: { type: [string, "null"], format: date-time, description: "Absolute deadline while running (null when paused or ended)." }
+        server_time: { type: string, format: date-time, description: Server clock when the response was made; clients use it to correct skew. }
         reason: { type: string, description: "Why it was interrupted: stopped, or meeting: <title>" }
     Workspace:
       type: object

@@ -78,18 +78,27 @@ type sessionDTO struct {
 	EndedAt          *time.Time `json:"ended_at"`
 	FocusedSeconds   int        `json:"focused_seconds"`
 	RemainingSeconds int        `json:"remaining_seconds"`
+	RemainingMS      int64      `json:"remaining_ms"`
+	EndsAt           *time.Time `json:"ends_at"`     // absolute deadline while running
+	ServerTime       time.Time  `json:"server_time"` // lets clients correct for clock skew
 	Reason           string     `json:"reason"`
 }
 
 func (h *Handler) dto(s *domain.Session) sessionDTO {
-	focused := s.Focused(h.now())
+	now := h.now().UTC()
+	focused := s.Focused(now)
 	d := sessionDTO{ID: s.ID, IssueKey: s.Issue, UserID: s.User, State: string(s.State), PlannedMinutes: int(s.Planned.Minutes()),
-		StartedAt: s.StartedAt, FocusedSeconds: int(math.Round(focused.Seconds())), Reason: s.Reason}
+		StartedAt: s.StartedAt, FocusedSeconds: int(math.Round(focused.Seconds())), Reason: s.Reason, ServerTime: now}
 	if !s.EndedAt.IsZero() {
 		e := s.EndedAt
 		d.EndedAt = &e
 	} else {
-		d.RemainingSeconds = int(math.Round((s.Planned - focused).Seconds()))
+		left := (s.Planned - focused).Truncate(time.Millisecond)
+		d.RemainingSeconds, d.RemainingMS = int(math.Round(left.Seconds())), left.Milliseconds()
+		if s.State == domain.Running {
+			end := now.Add(left)
+			d.EndsAt = &end
+		}
 	}
 	return d
 }

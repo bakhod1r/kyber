@@ -164,3 +164,22 @@ describe("Boards with WIP limits (KYB-S44)", () => {
     await waitFor(() => expect(calls.find((c) => c.key.startsWith("POST"))?.body).toEqual({ to: "in_progress" }));
   });
 });
+
+describe("Board → eye health", () => {
+  it("moving an issue into a Done-category status announces the finished task", async () => {
+    const seen: string[] = [];
+    const listener = (e: Event) => seen.push((e as CustomEvent<string>).detail);
+    window.addEventListener("kyber:issue-done", listener);
+    mockApi({
+      "GET /api/v1/projects/KYB/workflow": { status: 200, body: { initial: "todo", statuses: [
+        { id: "todo", name: "To Do", category: "todo" }, { id: "shipped", name: "Shipped", category: "done" }], transitions: [] } },
+      "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [issue(1, "todo")] } },
+      "POST /api/v1/issues/KYB-1/transitions": { status: 200, body: issue(1, "shipped") },
+    });
+    renderWithProviders(<Board projectKey="KYB" />);
+    const card = await screen.findByText("Issue 1");
+    drag(card.closest("article")!, screen.getByRole("region", { name: "Shipped" }));
+    await waitFor(() => expect(seen).toEqual(["KYB-1"]));
+    window.removeEventListener("kyber:issue-done", listener);
+  });
+});
