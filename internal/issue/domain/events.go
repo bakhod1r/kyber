@@ -17,6 +17,9 @@ type IssueTransitioned struct {
 	Key  IssueKey `json:"key"`
 	From StatusID `json:"from"`
 	To   StatusID `json:"to"`
+	// Categories let consumers (reports, sprints) understand custom statuses.
+	FromCategory Category `json:"from_category,omitempty"`
+	ToCategory   Category `json:"to_category,omitempty"`
 }
 
 func (IssueCreated) EventName() string      { return "issue.created" }

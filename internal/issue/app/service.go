@@ -17,6 +17,7 @@ var (
 	ErrInvalidAssignee = errors.New("assignee must be a project member who can work on issues (not a viewer)")
 	ErrInvalidSprint   = errors.New("sprint must be a planned or active sprint of this project")
 	ErrInvalidAnchor   = errors.New("give exactly one of after/before: an issue key of the same project")
+	ErrStatusInUse     = errors.New("status is still used by issues; move them before removing it")
 )
 
 // Sprints is the anti-corruption port to the Agile context.
@@ -33,6 +34,11 @@ type Directory interface {
 	DisplayName(ctx context.Context, user string) (string, error)
 }
 
+// Admins checks the project administration permission (ACL to the Project context).
+type Admins interface {
+	Administer(ctx context.Context, actor, project string) error
+}
+
 // Access is the anti-corruption port to the Project context's membership rules.
 // Non-members get ErrProjectNotFound, members lacking the permission ErrForbidden.
 type Access interface {
@@ -47,6 +53,8 @@ type Service struct {
 	directory Directory
 	sprints   Sprints
 	workflow  *domain.Workflow
+	workflows domain.WorkflowRepository
+	admins    Admins
 	newID     func() string
 	now       func() time.Time
 }
@@ -59,14 +67,17 @@ type Deps struct {
 	Access    Access
 	Directory Directory
 	Sprints   Sprints
-	Workflow  *domain.Workflow
+	Workflow  *domain.Workflow // the default for projects without a configured workflow
+	Workflows domain.WorkflowRepository
+	Admins    Admins
 	NewID     func() string
 	Now       func() time.Time
 }
 
 func NewService(d Deps) *Service {
 	return &Service{issues: d.Issues, comments: d.Comments, keys: d.Keys, access: d.Access,
-		directory: d.Directory, sprints: d.Sprints, workflow: d.Workflow, newID: d.NewID, now: d.Now}
+		directory: d.Directory, sprints: d.Sprints, workflow: d.Workflow,
+		workflows: d.Workflows, admins: d.Admins, newID: d.NewID, now: d.Now}
 }
 
 type CreateIssue struct {
@@ -91,7 +102,11 @@ func (s *Service) Create(ctx context.Context, actor string, cmd CreateIssue) (*d
 	if err != nil {
 		return nil, err
 	}
-	is, err := domain.NewIssue(domain.IssueID(s.newID()), key, cmd.Title, typ, domain.UserID(actor), s.workflow)
+	wf, err := s.workflowFor(ctx, cmd.Project)
+	if err != nil {
+		return nil, err
+	}
+	is, err := domain.NewIssue(domain.IssueID(s.newID()), key, cmd.Title, typ, domain.UserID(actor), wf)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +140,11 @@ func (s *Service) Transition(ctx context.Context, actor, rawKey, to string) (*do
 	if err != nil {
 		return nil, err
 	}
-	if err := is.Transition(domain.StatusID(to), s.workflow); err != nil {
+	wf, err := s.workflowFor(ctx, is.Key().Project())
+	if err != nil {
+		return nil, err
+	}
+	if err := is.Transition(domain.StatusID(to), wf); err != nil {
 		return nil, err
 	}
 	return is, s.save(ctx, is)

@@ -25,3 +25,7 @@ func TestCommentContract(t *testing.T) {
 		return memory.NewCommentRepository(r), is, r.OutboxNames
 	})
 }
+
+func TestWorkflowContract(t *testing.T) {
+	repotest.RunWorkflows(t, func(t *testing.T) domain.WorkflowRepository { return memory.NewWorkflowRepository() })
+}

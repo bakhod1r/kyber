@@ -31,6 +31,7 @@ func (a Access) Authorize(ctx context.Context, actor, project string) error {
 
 type IssueSnapshotter interface {
 	Snapshot(ctx context.Context, project string) ([]*issuedomain.Issue, error)
+	ProjectWorkflow(ctx context.Context, project string) (*issuedomain.Workflow, error)
 }
 
 type Issues struct{ src IssueSnapshotter }
@@ -42,9 +43,14 @@ func (a Issues) Issues(ctx context.Context, project string) ([]app.IssueRow, err
 	if err != nil {
 		return nil, err
 	}
+	wf, err := a.src.ProjectWorkflow(ctx, project)
+	if err != nil {
+		return nil, err
+	}
 	rows := make([]app.IssueRow, 0, len(list))
 	for _, is := range list {
 		r := app.IssueRow{Key: is.Key().String(), Type: string(is.Type()), Status: string(is.Status()),
+			Category: string(wf.CategoryOf(is.Status())),
 			Priority: string(is.Priority()), Assignee: string(is.Assignee())}
 		if p, ok := is.Estimate(); ok {
 			v := int(p)

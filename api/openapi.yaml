@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.11.0
+  version: 0.12.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -458,6 +458,27 @@ paths:
                 role: { $ref: "#/components/schemas/Role" }
       responses:
         "204": { description: Membership saved. }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/workflow:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: getWorkflow
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Workflow" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      operationId: setWorkflow
+      description: Replace the project's workflow (project admins). A status still holding issues cannot be removed (409).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/Workflow" } } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Workflow" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -1023,7 +1044,31 @@ components:
         email: { type: string }
         name: { type: string }
         role: { $ref: "#/components/schemas/Role" }
-    Status: { type: string, enum: [todo, in_progress, done] }
+    Status:
+      type: string
+      pattern: "^[a-z0-9_]{1,40}$"
+      description: A status id of the project's workflow (default workflow — todo, in_progress, done).
+    StatusCategory: { type: string, enum: [todo, in_progress, done] }
+    WorkflowStatus:
+      type: object
+      required: [id, name, category]
+      properties:
+        id: { $ref: "#/components/schemas/Status" }
+        name: { type: string, maxLength: 60 }
+        category: { $ref: "#/components/schemas/StatusCategory" }
+    Workflow:
+      type: object
+      description: Statuses in board-column order. No transitions means every status can reach every other one.
+      required: [initial, statuses, transitions]
+      properties:
+        initial: { $ref: "#/components/schemas/Status" }
+        statuses: { type: array, items: { $ref: "#/components/schemas/WorkflowStatus" } }
+        transitions:
+          type: array
+          items:
+            type: object
+            required: [from, to]
+            properties: { from: { $ref: "#/components/schemas/Status" }, to: { $ref: "#/components/schemas/Status" } }
     IssueType: { type: string, enum: [epic, story, task, bug, subtask] }
     Priority: { type: string, enum: [lowest, low, medium, high, highest] }
     Issue:

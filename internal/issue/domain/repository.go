@@ -28,3 +28,11 @@ type ListFilter struct {
 type KeyAllocator interface {
 	Next(ctx context.Context, project string) (IssueKey, error)
 }
+
+// WorkflowRepository stores each project's configured workflow, scoped to the request's workspace.
+type WorkflowRepository interface {
+	// ByProject returns the stored definition, or ErrWorkflowNotFound when the project uses the default.
+	ByProject(ctx context.Context, project string) (WorkflowDef, error)
+	// Save creates or replaces the project's definition.
+	Save(ctx context.Context, project string, def WorkflowDef) error
+}

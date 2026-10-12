@@ -279,7 +279,7 @@ func (i *Issue) Transition(to StatusID, wf *Workflow) error {
 	}
 	from := i.status
 	i.status = to
-	i.record(IssueTransitioned{ID: i.id, Key: i.key, From: from, To: to})
+	i.record(IssueTransitioned{ID: i.id, Key: i.key, From: from, To: to, FromCategory: wf.CategoryOf(from), ToCategory: wf.CategoryOf(to)})
 	return nil
 }
 

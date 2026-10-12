@@ -44,3 +44,15 @@ func TestExportRoundTrips(t *testing.T) {
 		t.Fatalf("round trip b = %+v", b)
 	}
 }
+
+// S43: a custom status exports with its name and its Jira status category.
+func TestExportCustomStatus(t *testing.T) {
+	var buf bytes.Buffer
+	in := []domain.ExportRow{{Key: "KYB-1", Summary: "s", Type: "task", Status: "review", StatusName: "Code Review", Category: "in_progress", Priority: "medium"}}
+	if err := domain.WriteJiraCSV(&buf, in); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "KYB-1,s,Task,Code Review,In Progress,Medium") {
+		t.Fatalf("csv = %q", buf.String())
+	}
+}

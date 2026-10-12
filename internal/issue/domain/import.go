@@ -30,6 +30,7 @@ type IssueImported struct {
 	Reporter    UserID     `json:"reporter"`
 	Assignee    UserID     `json:"assignee"`
 	Status      StatusID   `json:"status"`
+	Category    Category   `json:"status_category,omitempty"`
 	Estimate    *float64   `json:"estimate"`
 	ExternalKey string     `json:"external_key"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -39,13 +40,19 @@ type IssueImported struct {
 func (IssueImported) EventName() string { return "issue.imported" }
 
 // NewImportedIssue creates an issue directly in its imported state.
-func NewImportedIssue(id IssueID, key IssueKey, in Imported) (*Issue, error) {
+// An Imported status that is not one of the workflow's ids is read as a status category
+// (what Jira exports carry) and placed in the workflow's first status of that category.
+func NewImportedIssue(id IssueID, key IssueKey, in Imported, wf *Workflow) (*Issue, error) {
 	title, err := NormalizeTitle(in.Title)
 	if err != nil {
 		return nil, err
 	}
-	if !DefaultWorkflow().Has(in.Status) {
-		return nil, fmt.Errorf("status %q: %w", in.Status, ErrUnknownStatus)
+	if !wf.Has(in.Status) {
+		st, ok := wf.firstIn(Category(in.Status))
+		if !ok {
+			return nil, fmt.Errorf("status %q: %w", in.Status, ErrUnknownStatus)
+		}
+		in.Status = st
 	}
 	if in.Priority == "" {
 		in.Priority = PriorityMedium
@@ -58,6 +65,6 @@ func NewImportedIssue(id IssueID, key IssueKey, in Imported) (*Issue, error) {
 		est = &f
 	}
 	is.record(IssueImported{ID: id, Key: key, Type: in.Type, Title: title, Reporter: in.Reporter, Assignee: in.Assignee,
-		Status: in.Status, Estimate: est, ExternalKey: in.ExternalKey, CreatedAt: in.CreatedAt.UTC(), ResolvedAt: in.ResolvedAt})
+		Status: in.Status, Category: wf.CategoryOf(in.Status), Estimate: est, ExternalKey: in.ExternalKey, CreatedAt: in.CreatedAt.UTC(), ResolvedAt: in.ResolvedAt})
 	return is, nil
 }

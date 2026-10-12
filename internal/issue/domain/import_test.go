@@ -16,7 +16,7 @@ func TestNewImportedIssue(t *testing.T) {
 	is, err := domain.NewImportedIssue("i-7", key, domain.Imported{
 		Title: " Login fails ", Type: domain.TypeBug, Reporter: "u-lead", Description: "Steps", Priority: domain.PriorityHighest,
 		Assignee: "u-ali", Estimate: &p, Status: domain.StatusDone, CreatedAt: created, ResolvedAt: &resolved, ExternalKey: "PROJ-1",
-	})
+	}, domain.DefaultWorkflow())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,10 +33,10 @@ func TestNewImportedIssue(t *testing.T) {
 		t.Fatalf("events = %+v (one issue.imported, no per-field events that would notify people)", ev)
 	}
 
-	if _, err := domain.NewImportedIssue("i-8", key, domain.Imported{Title: " ", Type: domain.TypeTask, Status: domain.StatusTodo, CreatedAt: created}); !errors.Is(err, domain.ErrEmptyTitle) {
+	if _, err := domain.NewImportedIssue("i-8", key, domain.Imported{Title: " ", Type: domain.TypeTask, Status: domain.StatusTodo, CreatedAt: created}, domain.DefaultWorkflow()); !errors.Is(err, domain.ErrEmptyTitle) {
 		t.Fatalf("blank title err = %v", err)
 	}
-	if _, err := domain.NewImportedIssue("i-8", key, domain.Imported{Title: "x", Type: domain.TypeTask, Status: "ghost", CreatedAt: created}); err == nil {
+	if _, err := domain.NewImportedIssue("i-8", key, domain.Imported{Title: "x", Type: domain.TypeTask, Status: "ghost", CreatedAt: created}, domain.DefaultWorkflow()); err == nil {
 		t.Fatal("unknown status must be rejected")
 	}
 }

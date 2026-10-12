@@ -10,6 +10,7 @@ import (
 // ExportRow is one Kyber issue in Kyber vocabulary; Assignee/Reporter are emails.
 type ExportRow struct {
 	Key, Summary, Type, Status, Priority string
+	StatusName, Category                 string // set for custom workflow statuses
 	Assignee, Reporter, Description      string
 	Points                               *float64
 }
@@ -39,8 +40,11 @@ func WriteJiraCSV(w io.Writer, rows []ExportRow) error {
 		if r.Points != nil {
 			points = strconv.FormatFloat(*r.Points, 'f', -1, 64)
 		}
-		status := jiraStatus[r.Status]
-		if err := cw.Write([]string{r.Key, safeCell(r.Summary), jiraType[r.Type], status, status, jiraPriority[r.Priority],
+		status, category := jiraStatus[r.Status], jiraStatus[r.Status]
+		if r.StatusName != "" {
+			status, category = r.StatusName, jiraStatus[r.Category]
+		}
+		if err := cw.Write([]string{r.Key, safeCell(r.Summary), jiraType[r.Type], safeCell(status), category, jiraPriority[r.Priority],
 			r.Assignee, r.Reporter, safeCell(r.Description), points}); err != nil {
 			return err
 		}

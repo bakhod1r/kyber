@@ -23,6 +23,7 @@ var (
 // IssueRow is the current state of an issue, for distribution reports.
 type IssueRow struct {
 	Key, Type, Status, Priority string
+	Category                    string // the status's category: todo, in_progress or done
 	Assignee                    string
 	Points                      *int // tenths
 }
@@ -73,12 +74,15 @@ var keySuffix = regexp.MustCompile(`-[0-9]+$`)
 // OnIssueEvent records issue.created / transitioned / sprint_changed / estimated.
 func (s *Service) OnIssueEvent(ctx context.Context, m outbox.Message) error {
 	var e struct {
-		ID, Key  string
-		From, To json.RawMessage
-		Status   string
-		Estimate json.RawMessage
-		Created  time.Time  `json:"created_at"`
-		Resolved *time.Time `json:"resolved_at"`
+		ID, Key      string
+		From, To     json.RawMessage
+		FromCategory string `json:"from_category"`
+		ToCategory   string `json:"to_category"`
+		Status       string
+		Category     string `json:"status_category"`
+		Estimate     json.RawMessage
+		Created      time.Time  `json:"created_at"`
+		Resolved     *time.Time `json:"resolved_at"`
 	}
 	if err := json.Unmarshal(m.Payload, &e); err != nil || e.ID == "" || e.Key == "" {
 		s.d.Log.ErrorContext(ctx, "insights: skipping malformed event", "id", m.ID, "name", m.Name)
@@ -100,11 +104,12 @@ func (s *Service) OnIssueEvent(ctx context.Context, m outbox.Message) error {
 	}
 	switch m.Name {
 	case "issue.imported":
-		return s.recordImported(ctx, entry, e.Status, pts(e.Estimate), e.Created, e.Resolved)
+		return s.recordImported(ctx, entry, or(e.Category, e.Status), pts(e.Estimate), e.Created, e.Resolved)
 	case "issue.created":
 		entry.Kind, entry.To = domain.KindCreated, "todo"
 	case "issue.transitioned":
-		entry.Kind, entry.From, entry.To = domain.KindStatus, str(e.From), str(e.To)
+		// Reports reason in categories; events from before S43 only used the default statuses.
+		entry.Kind, entry.From, entry.To = domain.KindStatus, or(e.FromCategory, str(e.From)), or(e.ToCategory, str(e.To))
 	case "issue.sprint_changed":
 		entry.Kind, entry.From, entry.To = domain.KindSprint, str(e.From), str(e.To)
 	case "issue.estimated":
@@ -113,6 +118,13 @@ func (s *Service) OnIssueEvent(ctx context.Context, m outbox.Message) error {
 		return nil
 	}
 	return s.d.Repo.Record(ctx, entry)
+}
+
+func or(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 // recordImported replays an imported issue's history at its original timestamps:
@@ -161,10 +173,26 @@ type Summary struct {
 }
 
 var (
-	statusOrder   = []string{"todo", "in_progress", "done"}
+	categoryOrder = map[string]int{"todo": 0, "in_progress": 1, "done": 2}
 	typeOrder     = []string{"epic", "story", "task", "bug", "subtask"}
 	priorityOrder = []string{"highest", "high", "medium", "low", "lowest"}
 )
+
+// byCategory orders status counts To Do → In Progress → Done, then by status id.
+func byCategory(counts map[string]*Count, category map[string]string) []Count {
+	out := make([]Count, 0, len(counts))
+	for _, c := range counts {
+		out = append(out, *c)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		ci, cj := categoryOrder[category[out[i].Key]], categoryOrder[category[out[j].Key]]
+		if ci != cj {
+			return ci < cj
+		}
+		return out[i].Key < out[j].Key
+	})
+	return out
+}
 
 func ordered(order []string, counts map[string]*Count) []Count {
 	out := []Count{}
@@ -187,6 +215,7 @@ func (s *Service) Summary(ctx context.Context, actor, project string) (Summary, 
 	var sum Summary
 	byStatus, byType, byPrio := map[string]*Count{}, map[string]*Count{}, map[string]*Count{}
 	loads := map[string]*Load{}
+	category := map[string]string{}
 	bump := func(m map[string]*Count, k string, p int) {
 		if m[k] == nil {
 			m[k] = &Count{Key: k}
@@ -202,12 +231,13 @@ func (s *Service) Summary(ctx context.Context, actor, project string) (Summary, 
 		sum.Total++
 		sum.TotalPoints += p
 		bump(byStatus, r.Status, p)
+		category[r.Status] = r.Category
 		bump(byType, r.Type, p)
 		bump(byPrio, r.Priority, p)
 		if r.Assignee == "" {
 			sum.Unassigned++
 		}
-		if r.Status == "done" {
+		if r.Category == "done" {
 			sum.Done++
 			continue
 		}
@@ -219,7 +249,7 @@ func (s *Service) Summary(ctx context.Context, actor, project string) (Summary, 
 		loads[r.Assignee].Count++
 		loads[r.Assignee].Points += p
 	}
-	sum.ByStatus, sum.ByType, sum.ByPriority = ordered(statusOrder, byStatus), ordered(typeOrder, byType), ordered(priorityOrder, byPrio)
+	sum.ByStatus, sum.ByType, sum.ByPriority = byCategory(byStatus, category), ordered(typeOrder, byType), ordered(priorityOrder, byPrio)
 	for id, l := range loads {
 		if id == "" {
 			l.Name = "Unassigned"

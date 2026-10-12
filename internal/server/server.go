@@ -89,6 +89,7 @@ type deps struct {
 	projects      projectdomain.Repository
 	issues        issuedomain.Repository
 	comments      issuedomain.CommentRepository
+	workflows     issuedomain.WorkflowRepository
 	sprints       agiledomain.Repository
 	users         identitydomain.Users
 	external      identitydomain.ExternalIdentities
@@ -143,7 +144,8 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	sprintRepo := agilememory.NewRepository()
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
-		sprints: sprintRepo, notes: notifymemory.NewRepository(), activity: insightsmemory.NewRepository(),
+		workflows: issuememory.NewWorkflowRepository(),
+		sprints:   sprintRepo, notes: notifymemory.NewRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta)),
@@ -187,7 +189,8 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	ids := identitypg.NewRepository(pool)
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
-		sprints: agilepg.NewRepository(pool), notes: notifypg.NewRepository(pool), outbox: outbox.NewPostgresStore(pool),
+		workflows: issuepg.NewWorkflowRepository(pool),
+		sprints:   agilepg.NewRepository(pool), notes: notifypg.NewRepository(pool), outbox: outbox.NewPostgresStore(pool),
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
@@ -222,7 +225,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	sprintACL := &lateSprints{}
 	issues := issueapp.NewService(issueapp.Deps{
 		Issues: d.issues, Comments: d.comments, Keys: acl, Access: acl, Directory: acl, Sprints: sprintACL,
-		Workflow: issuedomain.DefaultWorkflow(), NewID: id.New, Now: time.Now,
+		Workflow: issuedomain.DefaultWorkflow(), Workflows: d.workflows, Admins: acl, NewID: id.New, Now: time.Now,
 	})
 	agile := agileapp.NewService(agileapp.Deps{
 		Sprints: d.sprints, Issues: issues, Access: agileprojectacl.New(projects), NewID: id.New, Now: time.Now,

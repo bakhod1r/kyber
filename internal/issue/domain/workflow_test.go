@@ -109,3 +109,43 @@ func TestDefaultWorkflowCategories(t *testing.T) {
 		t.Fatal("category validity")
 	}
 }
+
+func TestTransitionEventCarriesCategories(t *testing.T) {
+	wf := reviewFlow(t)
+	key, _ := domain.NewIssueKey("KYB", 1)
+	is, err := domain.NewIssue("i-1", key, "t", domain.TypeTask, "u-1", wf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if is.Status() != "backlog" {
+		t.Fatalf("initial = %s", is.Status())
+	}
+	is.PullEvents()
+	if err := is.Transition("dev", wf); err != nil {
+		t.Fatal(err)
+	}
+	ev := is.PullEvents()[0].(domain.IssueTransitioned)
+	if ev.FromCategory != domain.CategoryToDo || ev.ToCategory != domain.CategoryInProgress {
+		t.Fatalf("event = %+v", ev)
+	}
+}
+
+// Imports carry a Jira category; a custom workflow places them in its first status of that category.
+func TestImportedIssueLandsInCategoryStatus(t *testing.T) {
+	wf := reviewFlow(t)
+	key, _ := domain.NewIssueKey("KYB", 1)
+	is, err := domain.NewImportedIssue("i-1", key, domain.Imported{Title: "t", Type: domain.TypeTask, Status: domain.StatusInProgress}, wf)
+	if err != nil || is.Status() != "dev" {
+		t.Fatalf("status = %v, %v", is, err)
+	}
+	ev := is.PullEvents()[0].(domain.IssueImported)
+	if ev.Status != "dev" || ev.Category != domain.CategoryInProgress {
+		t.Fatalf("event = %+v", ev)
+	}
+	if st, _ := domain.NewImportedIssue("i-2", key, domain.Imported{Title: "t", Type: domain.TypeTask, Status: "review"}, wf); st.Status() != "review" {
+		t.Fatalf("own status ids are kept: %s", st.Status())
+	}
+	if _, err := domain.NewImportedIssue("i-3", key, domain.Imported{Title: "t", Type: domain.TypeTask, Status: "ghost"}, wf); !errors.Is(err, domain.ErrUnknownStatus) {
+		t.Fatalf("ghost err = %v", err)
+	}
+}

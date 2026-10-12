@@ -12,6 +12,7 @@ var (
 	ErrUnknownStatus        = errors.New("unknown status")
 	ErrTransitionNotAllowed = errors.New("transition not allowed by workflow")
 	ErrInvalidWorkflow      = errors.New("invalid workflow")
+	ErrWorkflowNotFound     = errors.New("project has no configured workflow")
 )
 
 type StatusID string
@@ -169,6 +170,16 @@ func (w *Workflow) CategoryOf(s StatusID) Category {
 		}
 	}
 	return ""
+}
+
+// firstIn returns the first status (in column order) of the category.
+func (w *Workflow) firstIn(c Category) (StatusID, bool) {
+	for _, st := range w.statuses {
+		if st.Category == c {
+			return st.ID, true
+		}
+	}
+	return "", false
 }
 
 // IsDone reports whether the status resolves an issue.

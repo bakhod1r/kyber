@@ -47,7 +47,18 @@ func (f fakeAccess) Authorize(_ context.Context, actor, project string, write bo
 	if !ok {
 		return app.ErrProjectNotFound
 	}
-	if write && role != "w" {
+	if write && role == "r" {
+		return app.ErrForbidden
+	}
+	return nil
+}
+
+// Administer: only role "a" (project admin) configures the project.
+func (f fakeAccess) Administer(ctx context.Context, actor, project string) error {
+	if err := f.Authorize(ctx, actor, project, false); err != nil {
+		return err
+	}
+	if f[project][actor] != "a" {
 		return app.ErrForbidden
 	}
 	return nil
@@ -76,6 +87,7 @@ const (
 	dev    = "u-dev"
 	viewer = "u-viewer"
 	alien  = "u-alien"
+	lead   = "u-lead"
 )
 
 func setup() (*app.Service, *recorder) {
@@ -85,14 +97,14 @@ func setup() (*app.Service, *recorder) {
 	ids := func() string { n++; return fmt.Sprintf("i-%d", n) }
 	keys := &fakeKeys{seqs: map[string]int{"KYB": 0, "OPS": 0}}
 	access := fakeAccess{
-		"KYB": {dev: "w", viewer: "r"},
+		"KYB": {dev: "w", viewer: "r", lead: "a"},
 		"OPS": {dev: "w"},
 	}
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	return app.NewService(app.Deps{
 		Issues: repo, Comments: memory.NewCommentRepository(repo), Keys: keys, Access: access, Directory: access,
 		Sprints:  fakeSprints{"KYB": {"s-1": true, "s-2": true}},
-		Workflow: domain.DefaultWorkflow(), NewID: ids,
+		Workflow: domain.DefaultWorkflow(), Workflows: memory.NewWorkflowRepository(), Admins: access, NewID: ids,
 		Now: func() time.Time { now = now.Add(time.Minute); return now },
 	}), rec
 }

@@ -30,6 +30,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/rank", h.rank)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/comments", h.comments)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/comments", h.addComment)
+	mux.HandleFunc("GET /api/v1/projects/{key}/workflow", h.workflow)
+	mux.HandleFunc("PUT /api/v1/projects/{key}/workflow", h.setWorkflow)
 }
 
 type issueDTO struct {
@@ -78,7 +80,8 @@ func codeFor(err error) (string, bool) {
 	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidTitle), errors.Is(err, domain.ErrInvalidIssueType),
 		errors.Is(err, domain.ErrInvalidPriority), errors.Is(err, domain.ErrDescriptionTooLong),
 		errors.Is(err, domain.ErrInvalidCommentBody), errors.Is(err, app.ErrInvalidAssignee), errors.Is(err, errMissingVersion),
-		errors.Is(err, app.ErrInvalidSprint), errors.Is(err, app.ErrInvalidAnchor), errors.Is(err, domain.ErrInvalidEstimate):
+		errors.Is(err, app.ErrInvalidSprint), errors.Is(err, app.ErrInvalidAnchor), errors.Is(err, domain.ErrInvalidEstimate),
+		errors.Is(err, domain.ErrInvalidWorkflow), errors.Is(err, domain.ErrUnknownStatus):
 		return httpx.CodeValidation, true
 	case errors.Is(err, app.ErrProjectNotFound):
 		return httpx.CodeProjectNotFound, true
@@ -88,6 +91,8 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeForbidden, true
 	case errors.Is(err, domain.ErrTransitionNotAllowed):
 		return httpx.CodeTransitionNotAllowed, true
+	case errors.Is(err, app.ErrStatusInUse):
+		return httpx.CodeStatusInUse, true
 	case errors.Is(err, domain.ErrConcurrentModification):
 		return httpx.CodeConcurrentModified, true
 	}

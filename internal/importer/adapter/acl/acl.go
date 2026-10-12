@@ -92,6 +92,7 @@ func (a Project) AuthorizeRead(ctx context.Context, actor, project string) error
 
 type Snapshotter interface {
 	Snapshot(ctx context.Context, project string) ([]*issuedomain.Issue, error)
+	ProjectWorkflow(ctx context.Context, project string) (*issuedomain.Workflow, error)
 }
 
 type Users interface {
@@ -127,10 +128,19 @@ func (a Source) ExportRows(ctx context.Context, project string) ([]domain.Export
 		emails[id] = string(u.Email())
 		return string(u.Email()), nil
 	}
+	wf, err := a.issues.ProjectWorkflow(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	names := map[issuedomain.StatusID]string{}
+	for _, st := range wf.Statuses() {
+		names[st.ID] = st.Name
+	}
 	rows := make([]domain.ExportRow, 0, len(list))
 	for _, is := range list {
 		r := domain.ExportRow{Key: is.Key().String(), Summary: is.Title(), Type: string(is.Type()), Status: string(is.Status()),
-			Priority: string(is.Priority()), Description: is.Description()}
+			Priority: string(is.Priority()), Description: is.Description(),
+			StatusName: names[is.Status()], Category: string(wf.CategoryOf(is.Status()))}
 		if r.Assignee, err = email(is.Assignee()); err != nil {
 			return nil, err
 		}

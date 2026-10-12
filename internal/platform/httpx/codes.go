@@ -32,6 +32,7 @@ const (
 	CodeInvalidIssueKey      = "ISSUE_INVALID_KEY"
 	CodeTransitionNotAllowed = "ISSUE_TRANSITION_NOT_ALLOWED"
 	CodeConcurrentModified   = "ISSUE_CONFLICT"
+	CodeStatusInUse          = "WORKFLOW_STATUS_IN_USE"
 	CodeSprintNotFound       = "SPRINT_NOT_FOUND"
 	CodeSprintState          = "SPRINT_STATE"
 	CodeSprintAlreadyActive  = "SPRINT_ALREADY_ACTIVE"
@@ -79,6 +80,7 @@ var codes = []code{
 	{CodeInvalidIssueKey, "6011", 400, "Invalid issue key.", "Vazifa kaliti noto'g'ri.", "Неверный ключ задачи.", errorx.CategoryValidation},
 	{CodeTransitionNotAllowed, "6012", 409, "This status change is not allowed.", "Bu holatga o'tkazib bo'lmaydi.", "Такой переход статуса запрещён.", errorx.CategoryBusiness},
 	{CodeConcurrentModified, "6013", 409, "Someone else changed this issue. Reload and try again.", "Vazifani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Задачу изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
+	{CodeStatusInUse, "6014", 409, "Issues still use this status. Move them first.", "Bu holatda hali vazifalar bor. Avval ularni boshqa holatga o'tkazing.", "В этом статусе ещё есть задачи. Сначала перенесите их.", errorx.CategoryBusiness},
 	{CodeSprintNotFound, "6020", 404, "Sprint not found.", "Sprint topilmadi.", "Спринт не найден.", errorx.CategoryBusiness},
 	{CodeSprintState, "6021", 409, "The sprint is not in a state that allows this.", "Sprint holati bunga ruxsat bermaydi.", "Текущее состояние спринта этого не допускает.", errorx.CategoryBusiness},
 	{CodeSprintAlreadyActive, "6022", 409, "This project already has an active sprint.", "Bu loyihada allaqachon faol sprint bor.", "В этом проекте уже есть активный спринт.", errorx.CategoryBusiness},

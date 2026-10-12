@@ -24,9 +24,9 @@ func (fakes) Authorize(_ context.Context, actor, project string) error {
 func (fakes) Issues(_ context.Context, project string) ([]app.IssueRow, error) {
 	five, three := 50, 30
 	return []app.IssueRow{
-		{Key: "KYB-1", Type: "bug", Status: "todo", Priority: "high", Assignee: "u-a", Points: &five},
-		{Key: "KYB-2", Type: "task", Status: "done", Priority: "medium", Assignee: "u-a", Points: &three},
-		{Key: "KYB-3", Type: "task", Status: "in_progress", Priority: "medium"},
+		{Key: "KYB-1", Type: "bug", Status: "todo", Category: "todo", Priority: "high", Assignee: "u-a", Points: &five},
+		{Key: "KYB-2", Type: "task", Status: "closed", Category: "done", Priority: "medium", Assignee: "u-a", Points: &three},
+		{Key: "KYB-3", Type: "task", Status: "review", Category: "in_progress", Priority: "medium"},
 	}, nil
 }
 
@@ -98,7 +98,8 @@ func TestSummary(t *testing.T) {
 	if sum.Total != 3 || sum.Open != 2 || sum.Done != 1 || sum.Unassigned != 1 || sum.TotalPoints != 80 || sum.OpenPoints != 50 {
 		t.Fatalf("totals = %+v", sum)
 	}
-	if len(sum.ByStatus) != 3 || sum.ByStatus[0].Key != "todo" || sum.ByStatus[2].Key != "done" || sum.ByStatus[2].Points != 30 {
+	// Custom statuses are counted by their category; the list keeps category order.
+	if len(sum.ByStatus) != 3 || sum.ByStatus[0].Key != "todo" || sum.ByStatus[1].Key != "review" || sum.ByStatus[2].Key != "closed" || sum.ByStatus[2].Points != 30 {
 		t.Fatalf("by status (workflow order) = %+v", sum.ByStatus)
 	}
 	if len(sum.Workload) != 2 || sum.Workload[0].Name != "Ali" || sum.Workload[0].Count != 1 || sum.Workload[0].Points != 50 || sum.Workload[1].Name != "Unassigned" {
@@ -154,5 +155,18 @@ func TestIngestImported(t *testing.T) {
 		case e.Kind == domain.KindStatus && (e.From != "todo" || e.To != "done" || !e.At.Equal(resolved)):
 			t.Fatalf("resolution at original time = %+v", e)
 		}
+	}
+}
+
+// S43: custom statuses are logged by category, so burndown/velocity/cycle time understand them.
+func TestIngestCustomStatusesByCategory(t *testing.T) {
+	ctx := context.Background()
+	s, repo := setup()
+	id := `"id":"i-1","key":"KYB-12"`
+	_ = s.OnIssueEvent(ctx, m(1, "issue.transitioned", `{`+id+`,"from":"open","to":"review","from_category":"todo","to_category":"in_progress"}`, t0))
+	_ = s.OnIssueEvent(ctx, m(2, "issue.transitioned", `{`+id+`,"from":"review","to":"closed","from_category":"in_progress","to_category":"done"}`, t0.Add(time.Hour)))
+	got, _ := repo.ForProject(ctx, "KYB")
+	if len(got) != 2 || got[0].From != "todo" || got[0].To != "in_progress" || got[1].To != "done" {
+		t.Fatalf("entries = %+v", got)
 	}
 }

@@ -64,6 +64,11 @@ func (a *Adapter) Authorize(ctx context.Context, actor, project string, write bo
 	return translate(a.projects.Authorize(ctx, projectdomain.UserID(actor), project, need))
 }
 
+// Administer requires the project admin permission.
+func (a *Adapter) Administer(ctx context.Context, actor, project string) error {
+	return translate(a.projects.Authorize(ctx, projectdomain.UserID(actor), project, projectdomain.PermAdmin))
+}
+
 func translate(err error) error {
 	switch {
 	case errors.Is(err, projectdomain.ErrProjectNotFound):

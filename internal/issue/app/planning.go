@@ -78,8 +78,12 @@ func (s *Service) ReturnUnfinished(ctx context.Context, project, sprint string) 
 	if err != nil {
 		return 0, 0, err
 	}
+	wf, err := s.workflowFor(ctx, project)
+	if err != nil {
+		return 0, 0, err
+	}
 	for _, is := range list {
-		if is.Status() == domain.StatusDone {
+		if wf.IsDone(is.Status()) {
 			completed++
 			continue
 		}
@@ -104,6 +108,12 @@ func (s *Service) Peek(ctx context.Context, rawKey string) (*domain.Issue, error
 
 // Snapshot lists every issue of a project without authorization, for read models
 // in other contexts (they authorize the caller themselves).
+// ProjectWorkflow returns the project's workflow without authorization, for other bounded
+// contexts (reports, boards) that have already authorized the actor.
+func (s *Service) ProjectWorkflow(ctx context.Context, project string) (*domain.Workflow, error) {
+	return s.workflowFor(ctx, project)
+}
+
 func (s *Service) Snapshot(ctx context.Context, project string) ([]*domain.Issue, error) {
 	return s.issues.ListByProject(ctx, project, domain.ListFilter{})
 }

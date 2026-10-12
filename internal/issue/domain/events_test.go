@@ -14,7 +14,7 @@ func TestEventJSONContract(t *testing.T) {
 	ev := is.PullEvents()
 	want := []string{
 		`{"id":"i-1","key":"KYB-1","type":"task","title":"Login page","reporter":"u-reporter"}`,
-		`{"id":"i-1","key":"KYB-1","from":"todo","to":"in_progress"}`,
+		`{"id":"i-1","key":"KYB-1","from":"todo","to":"in_progress","from_category":"todo","to_category":"in_progress"}`,
 	}
 	for i, e := range ev {
 		b, err := json.Marshal(e)
@@ -35,6 +35,8 @@ func TestAllEventContracts(t *testing.T) {
 			`{"id":"i-1","key":"KYB-1","type":"bug","title":"t","reporter":"u-1"}`},
 		{domain.IssueTransitioned{ID: "i-1", Key: key, From: "todo", To: "done"}, "issue.transitioned",
 			`{"id":"i-1","key":"KYB-1","from":"todo","to":"done"}`},
+		{domain.IssueTransitioned{ID: "i-1", Key: key, From: "review", To: "closed", FromCategory: domain.CategoryInProgress, ToCategory: domain.CategoryDone}, "issue.transitioned",
+			`{"id":"i-1","key":"KYB-1","from":"review","to":"closed","from_category":"in_progress","to_category":"done"}`},
 		{domain.IssueEdited{ID: "i-1", Key: key, Fields: []string{"title"}}, "issue.edited",
 			`{"id":"i-1","key":"KYB-1","fields":["title"]}`},
 		{domain.IssueAssigned{ID: "i-1", Key: key, From: "", To: "u-1", By: "u-2"}, "issue.assigned",
