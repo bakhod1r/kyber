@@ -44,8 +44,13 @@ type Deps struct {
 	Deliveries domain.DeliveryRepository // optional: email/Telegram copies of notifications
 	Prefs      domain.PrefsRepository
 	Contacts   Contacts
-	Channels   []domain.Channel // channels configured on this server (SMTP, Telegram bot)
-	PublicURL  string           // base of the links in messages
+	Channels   []domain.Channel       // channels configured on this server (SMTP, Telegram bot)
+	PublicURL  string                 // base of the links in messages
+	Groups     domain.GroupRepository // optional: Telegram groups subscribed to projects
+	Admins     Admins
+	Bot        Messenger // replies in Telegram when a group is connected
+	BotName    string
+	Lookups    Lookups
 	Issues     Issues
 	Members    Members
 	Workspaces Workspaces

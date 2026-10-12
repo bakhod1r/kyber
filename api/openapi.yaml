@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.18.0
+  version: 0.19.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -566,6 +566,65 @@ paths:
                 type: object
                 required: [items]
                 properties: { items: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/telegram-groups/link:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    post:
+      operationId: telegramGroupLink
+      description: |
+        Project admins: a one-time t.me/<bot>?startgroup=… link (10 minutes). Choosing a group adds the bot,
+        which then posts the project's new issues, status changes and sprint starts/completions there.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [url, expires_at]
+                properties:
+                  url: { type: string, format: uri }
+                  expires_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/telegram-groups:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: telegramGroups
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [chat_id, title, linked_at]
+                      properties:
+                        chat_id: { type: string }
+                        title: { type: string }
+                        linked_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/telegram-groups/{chat}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectKey" }
+      - { name: chat, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: unlinkTelegramGroup
+      responses:
+        "204": { description: Disconnected }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }

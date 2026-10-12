@@ -19,3 +19,7 @@ func TestDeliveryContract(t *testing.T) {
 func TestPrefsContract(t *testing.T) {
 	repotest.RunPrefs(t, func(t *testing.T) domain.PrefsRepository { return memory.NewPrefsRepository() })
 }
+
+func TestGroupContract(t *testing.T) {
+	repotest.RunGroups(t, func(t *testing.T) domain.GroupRepository { return memory.NewGroupRepository() })
+}

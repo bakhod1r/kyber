@@ -267,6 +267,12 @@ export const api = {
   setNotificationSettings: (patch: Partial<Pick<NotificationSettings, "email" | "telegram">>) =>
     request<NotificationSettings>("PUT", "/api/v1/me/notification-settings", patch),
   connectTelegram: () => request<{ url: string; expires_at: string }>("POST", "/api/v1/me/telegram/connect"),
+  telegramGroups: (key: string) =>
+    request<List<{ chat_id: string; title: string; linked_at: string }>>("GET", `/api/v1/projects/${seg(key)}/telegram-groups`).then((r) => r.items),
+  telegramGroupLink: (key: string) =>
+    request<{ url: string; expires_at: string }>("POST", `/api/v1/projects/${seg(key)}/telegram-groups/link`),
+  unlinkTelegramGroup: (key: string, chat: string) =>
+    request<undefined>("DELETE", `/api/v1/projects/${seg(key)}/telegram-groups/${seg(chat)}`),
   audit: (key: string) => request<List<AuditEntry>>("GET", `/api/v1/projects/${seg(key)}/audit`).then((r) => r.items),
   history: (issueKey: string) => request<List<HistoryEntry>>("GET", `/api/v1/issues/${seg(issueKey)}/history`).then((r) => r.items),
   boards: (key: string) => request<List<BoardView>>("GET", `/api/v1/projects/${seg(key)}/boards`).then((r) => r.items),

@@ -20,7 +20,17 @@ const APIBase = "https://api.telegram.org"
 type Bot struct {
 	token, base string
 	http        *http.Client
+	onGroup     GroupStartHandler
 }
+
+// GroupStartHandler receives "/start g_<payload>" sent in a group or supergroup (startgroup links).
+type GroupStartHandler func(ctx context.Context, payload string, from User, chatID, title string) error
+
+// HandleGroupStart enables group handling; without it, group messages are ignored.
+func (b *Bot) HandleGroupStart(h GroupStartHandler) { b.onGroup = h }
+
+// GroupPrefix marks payloads meant for groups.
+const GroupPrefix = "g_"
 
 func NewBot(token, base string) *Bot {
 	if base == "" {
@@ -77,8 +87,9 @@ type Update struct {
 		Text string `json:"text"`
 		From User   `json:"from"`
 		Chat struct {
-			ID   int64  `json:"id"`
-			Type string `json:"type"`
+			ID    int64  `json:"id"`
+			Type  string `json:"type"`
+			Title string `json:"title"`
 		} `json:"chat"`
 	} `json:"message"`
 }
@@ -115,15 +126,25 @@ func (b *Bot) Poll(ctx context.Context, log *slog.Logger, wait, backoff time.Dur
 		for _, u := range updates {
 			offset = u.UpdateID + 1
 			m := u.Message
-			if m == nil || m.Chat.Type != "private" {
+			if m == nil {
 				continue
 			}
 			cmd, payload, _ := strings.Cut(strings.TrimSpace(m.Text), " ")
+			cmd, _, _ = strings.Cut(cmd, "@") // "/start@KyberBot" in groups
+			payload = strings.TrimSpace(payload)
 			if cmd != "/start" {
 				continue
 			}
+			chat := strconv.FormatInt(m.Chat.ID, 10)
 			uctx, cancel := context.WithTimeout(ctx, UpdateTimeout)
-			if err := onStart(uctx, strings.TrimSpace(payload), m.From, strconv.FormatInt(m.Chat.ID, 10)); err != nil {
+			var err error
+			switch {
+			case m.Chat.Type == "private":
+				err = onStart(uctx, payload, m.From, chat)
+			case (m.Chat.Type == "group" || m.Chat.Type == "supergroup") && b.onGroup != nil && strings.HasPrefix(payload, GroupPrefix):
+				err = b.onGroup(uctx, payload, m.From, chat, m.Chat.Title)
+			}
+			if err != nil {
 				log.InfoContext(ctx, "telegram /start not handled", "err", err)
 			}
 			cancel()

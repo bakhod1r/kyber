@@ -176,3 +176,53 @@ func TestPollTimeBoxesEachUpdate(t *testing.T) {
 		t.Fatal("handler not called")
 	}
 }
+
+// In groups the bot only reacts to "/start[@bot] g_<token>" (Telegram's startgroup links).
+func TestPollGroupStart(t *testing.T) {
+	api := newAPI(t)
+	group := func(id int, typ, text string) map[string]any {
+		m := msg(id, typ, text)
+		m["message"].(map[string]any)["chat"] = map[string]any{"id": -100500, "type": typ, "title": "Kyber devs"}
+		return m
+	}
+	api.updates = []map[string]any{
+		group(1, "group", "/start@KyberBot g_tok1"),
+		group(2, "supergroup", "/start g_tok2"),
+		group(3, "group", "/start c_private_only"), // connect links belong to private chats
+		group(4, "group", "/start@KyberBot"),       // no payload
+		msg(5, "private", "/start g_in_private"),   // private chats go to the private handler
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	var mu sync.Mutex
+	var groups, private []string
+	done := make(chan struct{})
+	bot := telegram.NewBot("TOKEN", api.URL)
+	bot.HandleGroupStart(func(_ context.Context, payload string, from telegram.User, chat, title string) error {
+		mu.Lock()
+		groups = append(groups, payload+"|"+from.DisplayName()+"|"+chat+"|"+title)
+		mu.Unlock()
+		return nil
+	})
+	go func() {
+		bot.Poll(ctx, slog.New(slog.DiscardHandler), 0, time.Millisecond, func(_ context.Context, payload string, _ telegram.User, _ string) error {
+			mu.Lock()
+			private = append(private, payload)
+			mu.Unlock()
+			return nil
+		})
+		close(done)
+	}()
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		mu.Lock()
+		n := len(groups) + len(private)
+		mu.Unlock()
+		if n >= 3 {
+			break
+		}
+	}
+	cancel()
+	<-done
+	if strings.Join(groups, ",") != "g_tok1|Bobur|-100500|Kyber devs,g_tok2|Bobur|-100500|Kyber devs" || strings.Join(private, ",") != "g_in_private" {
+		t.Fatalf("groups = %v, private = %v", groups, private)
+	}
+}

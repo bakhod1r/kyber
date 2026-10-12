@@ -26,6 +26,45 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/notifications/{id}/read", h.read)
 	mux.HandleFunc("GET /api/v1/me/notification-settings", h.settings)
 	mux.HandleFunc("PUT /api/v1/me/notification-settings", h.setSettings)
+	mux.HandleFunc("POST /api/v1/projects/{key}/telegram-groups/link", h.groupLink)
+	mux.HandleFunc("GET /api/v1/projects/{key}/telegram-groups", h.groups)
+	mux.HandleFunc("DELETE /api/v1/projects/{key}/telegram-groups/{chat}", h.unlinkGroup)
+}
+
+func (h *Handler) groupLink(w http.ResponseWriter, r *http.Request) {
+	link, expires, err := h.svc.StartGroupLink(r.Context(), auth.Actor(r.Context()), r.PathValue("key"))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"url": link, "expires_at": expires.UTC()})
+}
+
+type groupDTO struct {
+	ChatID   string    `json:"chat_id"`
+	Title    string    `json:"title"`
+	LinkedAt time.Time `json:"linked_at"`
+}
+
+func (h *Handler) groups(w http.ResponseWriter, r *http.Request) {
+	chats, err := h.svc.GroupChats(r.Context(), auth.Actor(r.Context()), r.PathValue("key"))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	out := make([]groupDTO, 0, len(chats))
+	for _, c := range chats {
+		out = append(out, groupDTO{ChatID: c.ChatID, Title: c.Title, LinkedAt: c.LinkedAt.UTC()})
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+func (h *Handler) unlinkGroup(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.UnlinkGroup(r.Context(), auth.Actor(r.Context()), r.PathValue("key"), r.PathValue("chat")); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type settingsDTO struct {
@@ -87,8 +126,17 @@ type notificationDTO struct {
 }
 
 func codeFor(err error) (string, bool) {
-	if errors.Is(err, domain.ErrNotificationNotFound) {
+	switch {
+	case errors.Is(err, domain.ErrNotificationNotFound):
 		return httpx.CodeNotificationNotFound, true
+	case errors.Is(err, app.ErrNotFound):
+		return httpx.CodeProjectNotFound, true
+	case errors.Is(err, app.ErrForbidden):
+		return httpx.CodeForbidden, true
+	case errors.Is(err, app.ErrGroupsDisabled):
+		return httpx.CodeProviderDisabled, true
+	case errors.Is(err, domain.ErrChatNotLinked):
+		return httpx.CodeNotFound, true
 	}
 	return "", false
 }

@@ -35,3 +35,19 @@ func TestPrefsContract(t *testing.T) {
 		return postgres.NewPrefsRepository(pool)
 	})
 }
+
+func TestGroupContract(t *testing.T) {
+	repotest.RunGroups(t, func(t *testing.T) domain.GroupRepository {
+		pool := dbtest.New(t)
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, name, password_hash) VALUES ($1, 'alice@x.uz', 'Alice', 'h')`, repotest.Alice); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO projects (id, key, name, workspace_id) VALUES
+			('10000000-0000-4000-8000-000000000001','KYB','Kyber','00000000-0000-4000-8000-000000000001'),
+			('10000000-0000-4000-8000-000000000002','OPS','Ops','00000000-0000-4000-8000-000000000001')`); err != nil {
+			t.Fatal(err)
+		}
+		return postgres.NewGroupRepository(pool)
+	})
+}

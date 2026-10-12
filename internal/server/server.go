@@ -115,6 +115,7 @@ type deps struct {
 	dispatchEvery time.Duration
 	deliveries    notifydomain.DeliveryRepository
 	prefs         notifydomain.PrefsRepository
+	groups        notifydomain.GroupRepository
 	telegramWait  time.Duration
 	sessions      identitydomain.Sessions
 	ready         func(context.Context) error
@@ -175,7 +176,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo),
 		audit:   auditmemory.NewRepository(),
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), notes: notifymemory.NewRepository(),
-		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), activity: insightsmemory.NewRepository(),
+		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta)),
@@ -222,7 +223,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool),
 		audit:   auditpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), notes: notifypg.NewRepository(pool),
-		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), outbox: outbox.NewPostgresStore(pool),
+		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool),
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
@@ -272,6 +273,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 		Users: notifyacl.NewUsers(d.users), NewID: id.New, Now: time.Now, Log: log,
 		Deliveries: d.deliveries, Prefs: d.prefs, Contacts: notifyacl.NewContacts(d.users, d.external),
 		Channels: d.channels(), PublicURL: d.publicURL,
+		Groups: d.groups, Admins: notifyacl.NewAdmins(access), BotName: d.social.TelegramBot,
+		Lookups: notifyacl.NewLookups(issues, agile), Bot: d.botMessenger(),
 	})
 	insights := insightsapp.NewService(insightsapp.Deps{
 		Repo: d.activity, Access: insightsacl.NewAccess(projects), Issues: insightsacl.NewIssues(issues),
@@ -290,6 +293,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 	}
 	for _, name := range []string{"issue.created", "issue.changed", "comment.added", "issue.imported", "issue.linked", "issue.unlinked"} {
 		relay.Handle(name, issues.OnHistoryEvent)
+	}
+	for _, name := range []string{"issue.created", "issue.changed", "sprint.started", "sprint.completed"} {
+		relay.Handle(name, notify.OnProjectEvent)
 	}
 	relay.Handle("issue.assigned", notify.OnIssueAssigned)
 	relay.Handle("comment.added", notify.OnCommentAdded)
@@ -314,6 +320,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 	}
 	identity := identityapp.NewService(d.users, d.sessions, argon2.New(), systemClock{}, id.New, identityOpts...)
 	if d.telegramBot != nil {
+		d.telegramBot.HandleGroupStart(func(ctx context.Context, payload string, _ telegram.User, chat, title string) error {
+			return notify.OnGroupStart(ctx, payload, chat, title)
+		})
 		go d.telegramBot.Poll(d.ctx, log, d.telegramWait, 5*time.Second,
 			func(ctx context.Context, nonce string, from telegram.User, chat string) error {
 				return identity.OnTelegramStart(ctx, nonce, strconv.FormatInt(from.ID, 10), chat, from.DisplayName())
@@ -478,4 +487,12 @@ func dispatch(ctx context.Context, log *slog.Logger, notify *notifyapp.Service, 
 			}
 		}
 	}
+}
+
+// botMessenger is the bot as a notify.Messenger (nil when no bot is configured).
+func (d deps) botMessenger() notifyapp.Messenger {
+	if d.telegramBot == nil {
+		return nil
+	}
+	return d.telegramBot
 }

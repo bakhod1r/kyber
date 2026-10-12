@@ -6,6 +6,9 @@ import (
 	"context"
 	"errors"
 
+	accessapp "github.com/bakhod1r/kyber/internal/access/app"
+	accessdomain "github.com/bakhod1r/kyber/internal/access/domain"
+	agiledomain "github.com/bakhod1r/kyber/internal/agile/domain"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
 	issueapp "github.com/bakhod1r/kyber/internal/issue/app"
 	issuedomain "github.com/bakhod1r/kyber/internal/issue/domain"
@@ -121,4 +124,62 @@ func (c Contacts) TelegramChat(ctx context.Context, user string) (string, bool, 
 		return "", false, nil
 	}
 	return chat, err == nil, err
+}
+
+// Decider is the Access context (ADR-0003).
+type Decider interface {
+	Can(ctx context.Context, actor, project string, perm accessdomain.Permission, on *accessapp.Issue) error
+}
+
+// Admins: connecting a project's Telegram groups needs Administer Projects.
+type Admins struct{ access Decider }
+
+func NewAdmins(a Decider) Admins { return Admins{access: a} }
+
+func (a Admins) Administer(ctx context.Context, actor, project string) error {
+	err := a.access.Can(ctx, actor, project, accessdomain.AdministerProjects, nil)
+	switch {
+	case errors.Is(err, accessapp.ErrNotFound):
+		return app.ErrNotFound
+	case errors.Is(err, accessapp.ErrForbidden):
+		return app.ErrForbidden
+	}
+	return err
+}
+
+type WorkflowSource interface {
+	ProjectWorkflow(ctx context.Context, project string) (*issuedomain.Workflow, error)
+}
+
+type SprintSource interface {
+	Peek(ctx context.Context, id string) (*agiledomain.Sprint, error)
+}
+
+// Lookups names statuses (from the project's workflow) and sprints for group messages.
+type Lookups struct {
+	workflows WorkflowSource
+	sprints   SprintSource
+}
+
+func NewLookups(w WorkflowSource, s SprintSource) Lookups { return Lookups{workflows: w, sprints: s} }
+
+func (l Lookups) StatusName(ctx context.Context, project, status string) (string, error) {
+	wf, err := l.workflows.ProjectWorkflow(ctx, project)
+	if err != nil {
+		return "", err
+	}
+	for _, s := range wf.Statuses() {
+		if string(s.ID) == status {
+			return s.Name, nil
+		}
+	}
+	return status, nil // a status removed since: show its id
+}
+
+func (l Lookups) SprintName(ctx context.Context, id string) (string, string, error) {
+	sp, err := l.sprints.Peek(ctx, id)
+	if err != nil {
+		return "", "", err
+	}
+	return sp.Project(), sp.Name(), nil
 }
