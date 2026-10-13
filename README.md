@@ -42,6 +42,7 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 |---|---|---|
 | `KYBER_ADDR` | `:8080` | Listen address |
 | `KYBER_ATTACHMENTS_DIR` | `./data/attachments` | Uploaded files (`<dir>/<workspace>/<id>`, at most 25 MiB each); back it up together with the database |
+| `KYBER_S3_BUCKET` · `KYBER_S3_ENDPOINT` · `KYBER_S3_REGION` · `KYBER_S3_ACCESS_KEY` · `KYBER_S3_SECRET_KEY` · `KYBER_S3_TLS` | — · `s3.amazonaws.com` · — · — · — · `true` | Store attachments in an existing S3/MinIO bucket instead of the directory (endpoint is `host[:port]`) |
 | `KYBER_DATABASE_URL` | — | PostgreSQL URL; unset = in-memory dev mode. Connect as a non-superuser role so row-level security (ADR-0010) applies |
 | `KYBER_REDIS_URL` | — | Optional; shares the login limiter across replicas (guard) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Enables OpenTelemetry tracing (OTLP/HTTP, e.g. `http://otel-collector:4318`); unset = tracing off. The standard `OTEL_*` variables apply (`OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_SDK_DISABLED`). See ADR-0006 |

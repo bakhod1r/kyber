@@ -13,8 +13,10 @@ own origin, so a stored HTML or SVG file must never run as a page there.
   live in PostgreSQL (`attachments`, RLS per ADR-0010); bytes go through the `Blobs` port. The
   issue is referenced by key only.
 - **Storage.** `blobfs` writes `<KYBER_ATTACHMENTS_DIR>/<workspace>/<id>` via a temporary file and
-  rename; ids and workspaces are UUIDs, so paths cannot escape the directory. An in-memory store
-  serves dev mode and tests. S3/MinIO is a later adapter behind the same port.
+  rename; ids and workspaces are UUIDs, so paths cannot escape the directory. `blobs3` stores the
+  same keys in an S3-compatible bucket (AWS S3, MinIO) when `KYBER_S3_BUCKET` is set: uploads stream
+  in 5 MiB parts with an unsigned payload (Kyber hashes the bytes itself), and the bucket must
+  exist at startup. An in-memory store serves dev mode and tests.
 - **Limits.** At most 25 MiB per file, enforced while streaming (the request body is capped and the
   blob store reads at most the limit + 1 byte). Names are reduced to a safe base name; an
   unparsable content type becomes `application/octet-stream`.

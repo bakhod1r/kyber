@@ -222,6 +222,9 @@ func WithMailer(m notifyapp.Sender) Option { return func(d *deps) { d.mailer = m
 // WithAttachmentsDir stores uploaded files under dir (default: in memory).
 func WithAttachmentsDir(dir string) Option { return func(d *deps) { d.blobs = blobfs.New(dir) } }
 
+// WithAttachmentStore stores uploaded files in blobs (e.g. an S3 bucket).
+func WithAttachmentStore(blobs attapp.Blobs) Option { return func(d *deps) { d.blobs = blobs } }
+
 func WithPublicURL(u string) Option { return func(d *deps) { d.publicURL = u } }
 
 // WithDispatchEvery sets how often email/Telegram deliveries are sent (default 5 s).

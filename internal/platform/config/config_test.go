@@ -47,3 +47,20 @@ func TestInvalid(t *testing.T) {
 		t.Fatal("invalid bool must fail")
 	}
 }
+
+func TestAttachmentStore(t *testing.T) {
+	cfg, _ := config.Load()
+	if !strings.Contains(cfg.String(), "attachments=./data/attachments") {
+		t.Fatalf("default store: %s", cfg)
+	}
+	t.Setenv("KYBER_S3_ENDPOINT", "minio:9000")
+	t.Setenv("KYBER_S3_BUCKET", "kyber")
+	t.Setenv("KYBER_S3_SECRET_KEY", "s3cret-key")
+	cfg, err := config.Load()
+	if err != nil || !cfg.S3TLS {
+		t.Fatal(err)
+	}
+	if s := cfg.String(); !strings.Contains(s, "attachments=s3://minio:9000/kyber") || strings.Contains(s, "s3cret") {
+		t.Fatalf("String() = %s", s)
+	}
+}

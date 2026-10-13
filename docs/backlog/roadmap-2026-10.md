@@ -23,7 +23,8 @@ architecture test, Vitest, e2e ×3) → commit + push → short report.
 3. ✅ Board settings UI: columns, status mapping, WIP limits.
 4. ✅ Custom fields: per-project definitions (text, number, date, select), values on issues, API/UI, JQL.
 5. Attachments: storage port; MinIO/S3 and local adapters; size limits, authorization, UI.
-   C5 — done: attachment context, local-disk blob store (KYBER_ATTACHMENTS_DIR), 25 MiB limit, issue permissions, safe downloads, issue panel UI (ADR-0011). Next: S3/MinIO adapter.
+   C5 — done: attachment context, local-disk blob store (KYBER_ATTACHMENTS_DIR), 25 MiB limit, issue permissions, safe downloads, issue panel UI (ADR-0011).
+   S3/MinIO adapter — done: KYBER_S3_* settings, streaming multipart uploads.
 6. S49: event envelope (workspace, project, actor, occurred_at, schema version) and a dead-letter queue. — done (ADR-0007: actor, trace context, schema version; dead letters after 10 failures; `kyber outbox` CLI).
 7. Real time (SSE): outbox relay → per-workspace stream filtered by visibility; UI invalidates queries. — done (ADR-0008; hints only, NOTIFY across replicas).
 8. Admin panel (workspace users, projects, settings), MCP server (tools over the API), PostgreSQL RLS.
