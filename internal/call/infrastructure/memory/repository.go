@@ -97,3 +97,15 @@ func (r *Repository) LiveIn(_ context.Context, conv domain.ConversationID) (*dom
 	}
 	return nil, domain.ErrCallNotFound
 }
+
+func (r *Repository) CountLive(context.Context) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, c := range r.calls {
+		if c.Live() {
+			n++
+		}
+	}
+	return n, nil
+}

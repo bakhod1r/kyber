@@ -417,10 +417,19 @@ func build(log *slog.Logger, d deps) http.Handler {
 	focus := focusapp.NewService(focusapp.Deps{Sessions: d.focusSessions, Calendar: focusacl.NewCalendar(calendar),
 		Issues: focusacl.NewIssues(issues, projectcompat.NewGate(projects, access, accessdomain.AssignableUser)), NewID: id.New, Clock: systemClock{}})
 	rt := realtime.NewHub(1024)
-	chat := chatapp.NewService(chatapp.Deps{Notifier: chatrealtime.New(rt), Conversations: d.conversations, Messages: d.messages,
+	// What contexts publish reaches every replica's streams in PostgreSQL mode (NOTIFY), this node's otherwise.
+	var publish interface {
+		Publish(ws string, users []string, typ string, data any) error
+	} = rt
+	if d.livePool != nil {
+		fanout := realtime.NewPostgres(d.livePool, rt, log)
+		go fanout.Listen(d.liveCtx())
+		publish = fanout
+	}
+	chat := chatapp.NewService(chatapp.Deps{Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages,
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	chat.WithIssues(chatacl.NewIssues(issues))
-	callEvents := callrealtime.New(rt, func(c *calldomain.Call) any { return callhttp.ToDTO(c) })
+	callEvents := callrealtime.New(publish, func(c *calldomain.Call) any { return callhttp.ToDTO(c) })
 	calls := callapp.NewService(callapp.Deps{Calls: d.calls, Conversations: callacl.NewConversations(chat),
 		Notifier: callEvents, Signals: callEvents, NewID: id.New, Now: time.Now})
 	notify.WithConversations(notifyacl.NewConversations(chat))
@@ -526,8 +535,16 @@ func build(log *slog.Logger, d deps) http.Handler {
 	chathttp.New(chat, log).Register(api)
 	rt.Register(api, 25*time.Second)
 	whiteboards := wbapp.NewService(wbapp.Deps{Boards: d.whiteboards, Conversations: wbacl.NewConversations(chat),
-		Notifier: wbrealtime.New(rt, func(e wbdomain.Element) any { return wbhttp.ToDTO(e) }), NewID: id.New, Now: time.Now})
+		Notifier: wbrealtime.New(publish, func(e wbdomain.Element) any { return wbhttp.ToDTO(e) }), NewID: id.New, Now: time.Now})
 	wbhttp.New(whiteboards, log).Register(api)
+	m.Gauge("kyber_stream_connections", "Realtime streams open on this replica.", func() float64 { return float64(rt.Connections()) })
+	m.Gauge("kyber_calls_active", "Live huddles in all workspaces.", func() float64 {
+		n, err := calls.LiveCalls(context.Background())
+		if err != nil {
+			return -1
+		}
+		return float64(n)
+	})
 	callhttp.New(calls, log, func(user string, now time.Time) any { return d.ice.Servers(user, now) }).Register(api)
 	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
 		auditacl.NewOwners(agile, d.boards, d.links), log)

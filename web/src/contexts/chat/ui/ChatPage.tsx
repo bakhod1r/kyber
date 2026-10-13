@@ -45,6 +45,9 @@ export function ChatPage({ extras }: { extras?: ConversationSlot }) {
     }
     const conv = e.message.conversation_id;
     qc.setQueryData<Message[]>(historyKey(conv), (list) => (list ? applyEvent(list, conv, e) : list));
+    // A history fetch still in flight would answer without this message and overwrite it: fetch again (the
+    // server stored the message before announcing it).
+    if (qc.isFetching({ queryKey: historyKey(conv) })) void qc.invalidateQueries({ queryKey: historyKey(conv) });
     if (e.message.thread_id) void qc.invalidateQueries({ queryKey: threadKey(e.message.thread_id) });
     if (e.type === "message.posted") {
       setTyping((t) => ({ ...t, [conv]: (t[conv] ?? []).filter((x) => x.user !== e.message.author_id) }));

@@ -196,6 +196,7 @@ type Repository interface {
 	Save(ctx context.Context, c *Call) error
 	ByID(ctx context.Context, id CallID) (*Call, error)
 	LiveIn(ctx context.Context, conv ConversationID) (*Call, error) // ErrCallNotFound when none
+	CountLive(ctx context.Context) (int, error)                     // live calls in all workspaces (a metric)
 }
 
 // WebRTC signaling between two participants; relayed, never stored.

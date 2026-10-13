@@ -33,6 +33,9 @@ func Run(t *testing.T, r domain.Repository) {
 		len(live.Participants) != 1 || live.Participants[0].Media != (domain.Media{Audio: true}) {
 		t.Fatalf("live = %+v %v", live, err)
 	}
+	if n, err := r.CountLive(ctx); err != nil || n != 1 {
+		t.Fatalf("live calls = %d %v", n, err)
+	}
 	if _, err := r.LiveIn(ctx, Other); !errors.Is(err, domain.ErrCallNotFound) {
 		t.Fatalf("none live = %v", err)
 	}
@@ -68,6 +71,9 @@ func Run(t *testing.T, r domain.Repository) {
 	}
 	if _, err := r.LiveIn(ctx, Conv); !errors.Is(err, domain.ErrCallNotFound) {
 		t.Fatalf("live after end = %v", err)
+	}
+	if n, _ := r.CountLive(ctx); n != 0 {
+		t.Fatalf("live calls after end = %d", n)
 	}
 	if err := r.Create(ctx, domain.Start("74000000-0000-4000-8000-000000000003", WS, Conv, Dev, t0)); err != nil {
 		t.Fatalf("new call after end = %v", err)

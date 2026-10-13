@@ -200,3 +200,6 @@ func (s *Service) Follow(ctx context.Context, actor, id string, v View) error {
 	s.d.Notifier.Follow(ctx, to, c, v)
 	return nil
 }
+
+// LiveCalls counts live calls across workspaces (operations metric).
+func (s *Service) LiveCalls(ctx context.Context) (int, error) { return s.d.Calls.CountLive(ctx) }

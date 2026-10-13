@@ -88,6 +88,9 @@ func TestOnline(t *testing.T) {
 	_, stop2 := h.Subscribe("w1", "alice", 0) // two tabs
 	_, stop3 := h.Subscribe("w2", "bob", 0)
 	defer stop3()
+	if h.Connections() != 3 {
+		t.Fatalf("connections = %d", h.Connections())
+	}
 	if got := h.Online("w1", []string{"alice", "bob"}); !slices.Equal(got, []string{"alice"}) {
 		t.Fatalf("online = %v", got)
 	}

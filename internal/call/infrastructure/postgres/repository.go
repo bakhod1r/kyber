@@ -134,3 +134,9 @@ func (r *Repository) LiveIn(ctx context.Context, conv domain.ConversationID) (*d
 	}
 	return r.one(ctx, `c.conversation_id = $1 AND c.ended_at IS NULL`, string(conv))
 }
+
+func (r *Repository) CountLive(ctx context.Context) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM calls WHERE ended_at IS NULL`).Scan(&n)
+	return n, err
+}

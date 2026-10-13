@@ -115,3 +115,19 @@ func TestChatStream(t *testing.T) {
 		}
 	})
 }
+
+// quietOf fails if an event of the given type arrives (others, e.g. system messages, are fine).
+func quietOf(t *testing.T, ch <-chan sse, event string) {
+	t.Helper()
+	deadline := time.After(150 * time.Millisecond)
+	for {
+		select {
+		case e := <-ch:
+			if e.event == event {
+				t.Fatalf("unexpected %s %+v", event, e)
+			}
+		case <-deadline:
+			return
+		}
+	}
+}

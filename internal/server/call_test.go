@@ -106,7 +106,7 @@ func TestCallSignaling(t *testing.T) {
 		if !strings.Contains(e.data, `"kind":"offer"`) || !strings.Contains(e.data, `"call_id":"`+call["id"].(string)) || !strings.Contains(e.data, `v=0`) {
 			t.Fatalf("signal = %+v", e)
 		}
-		quiet(t, qaStream)
+		quietOf(t, qaStream, "call.signal") // signals reach only their recipient
 		code, b = lead.do("POST", sig, map[string]string{"to": devMe["id"].(string), "kind": "bogus", "data": "x"})
 		expect(t, code, 422, b)
 

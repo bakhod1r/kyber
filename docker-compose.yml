@@ -22,11 +22,34 @@ services:
       KYBER_DATABASE_URL: postgres://kyber:kyber@postgres:5432/kyber?sslmode=disable
       KYBER_REDIS_URL: redis://redis:6379/0 # optional: shares the login limiter across replicas
       KYBER_COOKIE_SECURE: "false" # set to true behind HTTPS
+      # Huddles (video calls) over the internet: STUN finds public addresses, TURN relays media when a
+      # direct connection is impossible. See docs/ops/calls.md. Replace turn.example.com with your host.
+      KYBER_ICE_SERVERS: stun:turn.example.com:3478,turn:turn.example.com:3478?transport=udp,turn:turn.example.com:3478?transport=tcp
+      KYBER_TURN_SECRET: change-me-to-a-long-random-secret
     ports: ["8080:8080"]
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+  # TURN/STUN server for huddles (optional on a LAN). host networking: TURN needs a wide UDP port range.
+  coturn:
+    image: coturn/coturn:4.6
+    network_mode: host
+    command:
+      - --listening-port=3478
+      - --fingerprint
+      - --use-auth-secret
+      - --static-auth-secret=change-me-to-a-long-random-secret # the same as KYBER_TURN_SECRET
+      - --realm=turn.example.com
+      - --min-port=49160
+      - --max-port=49200
+      - --no-cli
+      - --no-tlsv1
+      - --no-tlsv1_1
+      - --denied-peer-ip=10.0.0.0-10.255.255.255 # never relay into private networks
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+      - --denied-peer-ip=192.168.0.0-192.168.255.255
+    profiles: ["calls"] # docker compose --profile calls up
 volumes:
   pgdata:

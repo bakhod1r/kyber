@@ -63,4 +63,7 @@ backends.
   live changes and named cursors, SVG/PNG export; e2e with two browsers drawing together. Sticky note → issue: next.
 - **S60 Shared file in a call** — "present to all": everyone opens the same Markdown doc or whiteboard, edits it
   together and comments on a line/element; the presenter can follow-me (everyone scrolls with them).
-- **S58 Ops** (P1) — coturn example in docker-compose/Helm docs, call metrics (`kyber_calls_active`), SFU ADR.
+- **S58 Ops** (P1) ✅ **Done:** realtime fan-out across replicas (NOTIFY + `realtime_spill` for large events,
+  migration 0051), gauges `kyber_stream_connections` / `kyber_calls_active`, coturn in docker-compose
+  (`--profile calls`) and `docs/ops/calls.md`. SFU ADR: later.
+  Original scope: — coturn example in docker-compose/Helm docs, call metrics (`kyber_calls_active`), SFU ADR.

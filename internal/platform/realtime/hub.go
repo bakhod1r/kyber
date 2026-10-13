@@ -128,3 +128,10 @@ func (h *Hub) Online(ws string, users []string) []string {
 	}
 	return out
 }
+
+// Connections counts the streams open on this replica (a metric).
+func (h *Hub) Connections() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.subs)
+}
