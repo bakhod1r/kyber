@@ -56,6 +56,8 @@ func (a Issues) Issues(ctx context.Context, actor, project string) ([]applicatio
 		r := application.IssueRow{ID: string(is.ID()), Title: is.Title(), Key: is.Key().String(), Type: string(is.Type()), Status: string(is.Status()),
 			Category: string(wf.CategoryOf(is.Status())), StatusOrder: order[is.Status()],
 			Priority: string(is.Priority()), Assignee: string(is.Assignee())}
+		tt := is.TimeTracking()
+		r.OriginalSeconds, r.SpentSeconds, r.RemainingSeconds = int64(tt.Original), int64(tt.Spent), int64(tt.Remaining)
 		if p, ok := is.Estimate(); ok {
 			v := int(p)
 			r.Points = &v

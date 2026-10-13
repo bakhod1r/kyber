@@ -31,6 +31,8 @@ type IssueRow struct {
 	StatusOrder            int    // the status's position in the workflow (board column order)
 	Assignee               string
 	Points                 *int // tenths
+	// Time tracking in seconds (current values).
+	OriginalSeconds, SpentSeconds, RemainingSeconds int64
 }
 
 type SprintInfo struct {
@@ -355,6 +357,8 @@ type SprintReport struct {
 	Sprint                           SprintInfo
 	Report                           domain.SprintReport
 	Completed, NotCompleted, Removed []SprintReportIssue
+	// Time tracking of the issues kept in the sprint (completed and not completed), in seconds.
+	OriginalSeconds, SpentSeconds, RemainingSeconds int64
 }
 
 // SprintReport is Jira's sprint report. Only issues the actor may see are counted or listed.
@@ -403,6 +407,12 @@ func (s *Service) SprintReport(ctx context.Context, actor, sprintID string) (Spr
 		return res
 	}
 	out.Completed, out.NotCompleted, out.Removed = named(out.Report.Completed), named(out.Report.NotCompleted), named(out.Report.Removed)
+	for _, it := range append(append([]domain.SprintIssue{}, out.Report.Completed...), out.Report.NotCompleted...) {
+		r := visible[it.Issue]
+		out.OriginalSeconds += r.OriginalSeconds
+		out.SpentSeconds += r.SpentSeconds
+		out.RemainingSeconds += r.RemainingSeconds
+	}
 	return out, nil
 }
 

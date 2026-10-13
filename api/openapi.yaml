@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.26.0
+  version: 0.27.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -732,6 +732,8 @@ paths:
                 parent_key: { type: [string, "null"], description: "Move under this epic/issue; null removes the parent (not for sub-tasks)." }
                 resolution: { $ref: "#/components/schemas/Resolution" }
                 fix_versions: { type: array, items: { type: string }, description: "Replaces the fix versions (unarchived versions of the project)." }
+                original_estimate: { type: string, description: "Jira-style duration (1w 2d 3h 30m; 1d = 8h, 1w = 5d); empty clears. While nothing is logged the remaining estimate follows it." }
+                remaining_estimate: { type: string, description: "Jira-style duration; empty sets zero." }
                 security_level: { type: string, enum: ["", confidential] }
       responses:
         "200": { description: Updated issue, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
@@ -807,6 +809,50 @@ paths:
       operationId: unlinkIssue
       responses:
         "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/issues/{issueKey}/worklogs:
+    parameters: [{ $ref: "#/components/parameters/IssueKey" }]
+    get:
+      operationId: listWorklogs
+      description: Time logged on the issue, oldest first (anyone who can see it). Filled from events, so a new worklog appears within moments.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Worklog" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: logWork
+      description: Log time spent (people who may edit the issue). The remaining estimate shrinks by it, never below zero.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [spent]
+              properties:
+                spent: { type: string, description: "Jira-style duration, e.g. 1h 30m" }
+                started: { type: string, format: date-time, description: "Default now." }
+                comment: { type: string, maxLength: 2000 }
+      responses:
+        "201": { description: Logged, content: { application/json: { schema: { $ref: "#/components/schemas/Worklog" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/worklogs/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    delete:
+      operationId: deleteWorklog
+      description: Take a worklog back (its author, or a project admin); its time returns to the remaining estimate.
+      responses:
+        "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -1286,7 +1332,8 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [sprint, committed_points, committed_issues, added_points, added_issues, completed_points, completed, not_completed, removed]
+                required: [sprint, committed_points, committed_issues, added_points, added_issues, completed_points, completed, not_completed, removed,
+                  time_original_seconds, time_spent_seconds, time_remaining_seconds]
                 properties:
                   sprint:
                     type: object
@@ -1302,6 +1349,9 @@ paths:
                   added_points: { type: number }
                   added_issues: { type: integer }
                   completed_points: { type: number }
+                  time_original_seconds: { type: integer, description: "Original estimates of the issues kept in the sprint." }
+                  time_spent_seconds: { type: integer, description: "Time logged on them." }
+                  time_remaining_seconds: { type: integer, description: "Their remaining estimates." }
                   completed: { type: array, items: { $ref: "#/components/schemas/SprintReportIssue" } }
                   not_completed: { type: array, items: { $ref: "#/components/schemas/SprintReportIssue" } }
                   removed: { type: array, items: { $ref: "#/components/schemas/SprintReportIssue" } }
@@ -1617,6 +1667,28 @@ components:
       pattern: "^[a-z0-9_]{1,40}$"
       description: A status id of the project's workflow (default workflow — todo, in_progress, done).
     StatusCategory: { type: string, enum: [todo, in_progress, done] }
+    TimeTracking:
+      type: object
+      required: [original_seconds, remaining_seconds, spent_seconds, original, remaining, spent]
+      properties:
+        original_seconds: { type: integer }
+        remaining_seconds: { type: integer }
+        spent_seconds: { type: integer }
+        original: { type: string, description: "e.g. 1d 4h; empty when none" }
+        remaining: { type: string }
+        spent: { type: string }
+    Worklog:
+      type: object
+      required: [id, issue_key, author_id, author_name, started, seconds, spent, comment]
+      properties:
+        id: { type: string }
+        issue_key: { type: string }
+        author_id: { type: string }
+        author_name: { type: string }
+        started: { type: string, format: date-time }
+        seconds: { type: integer }
+        spent: { type: string }
+        comment: { type: string }
     Resolution:
       type: string
       enum: [done, wont_do, duplicate, cannot_reproduce]
@@ -1771,7 +1843,7 @@ components:
     Priority: { type: string, enum: [lowest, low, medium, high, highest] }
     Issue:
       type: object
-      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, security_level, resolution, fix_versions, version]
+      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, security_level, resolution, fix_versions, time_tracking, version]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -1788,6 +1860,7 @@ components:
         rank: { type: string, description: Fractional backlog rank; compare byte-wise. }
         parent_key: { type: [string, "null"], description: "The epic of a story/task/bug, or the issue a sub-task belongs to." }
         fix_versions: { type: array, items: { type: string }, description: "Ids of the versions (releases) the issue is planned to ship in." }
+        time_tracking: { $ref: "#/components/schemas/TimeTracking" }
         resolution:
           description: How a resolved issue ended; "" while it is not in a Done status.
           type: string

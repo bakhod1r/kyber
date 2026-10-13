@@ -109,6 +109,7 @@ type deps struct {
 	history       issuedomain.HistoryRepository
 	links         issuedomain.LinkRepository
 	watchers      issuedomain.WatcherRepository
+	worklogs      issuedomain.WorklogRepository
 	audit         auditdomain.Repository
 	schemes       accessdomain.SchemeRepository
 	sprints       agiledomain.Repository
@@ -183,7 +184,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	versionRepo := agilememory.NewVersionRepository()
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
-		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(),
+		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), worklogs: issuememory.NewWorklogRepository(),
 		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(),
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
@@ -230,7 +231,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	ids := identitypg.NewRepository(pool)
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
-		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool),
+		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), worklogs: issuepg.NewWorklogRepository(pool),
 		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool),
@@ -270,7 +271,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	sprintACL := &lateSprints{}
 	issues := issueapp.NewService(issueapp.Deps{
 		Issues: d.issues, Comments: d.comments, Keys: acl, Access: issueaccessacl.New(access), Directory: acl, Sprints: sprintACL,
-		Workflow: issuedomain.DefaultWorkflow(), Workflows: d.workflows, History: d.history, Links: d.links, Watchers: d.watchers, SecurityLevels: []string{accessapp.LevelConfidential}, NewID: id.New, Now: time.Now,
+		Workflow: issuedomain.DefaultWorkflow(), Workflows: d.workflows, History: d.history, Links: d.links, Watchers: d.watchers, Worklogs: d.worklogs, SecurityLevels: []string{accessapp.LevelConfidential}, NewID: id.New, Now: time.Now,
 	})
 	agileACL := agileprojectacl.New(projectcompat.NewGate(projects, access, accessdomain.ManageSprints))
 	agile := agileapp.NewService(agileapp.Deps{
@@ -313,6 +314,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 	relay.Handle("issue.changed", notify.OnIssueChanged)
 	for _, name := range []string{"issue.created", "issue.assigned", "comment.added"} {
 		relay.Handle(name, issues.OnWatchTrigger)
+	}
+	for _, name := range []string{"issue.work_logged", "issue.worklog_removed"} {
+		relay.Handle(name, issues.OnWorklogEvent)
 	}
 	for _, name := range []string{"version.released", "version.deleted"} {
 		relay.Handle(name, issues.OnVersionEvent)

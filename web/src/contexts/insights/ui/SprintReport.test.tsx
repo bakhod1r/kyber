@@ -10,7 +10,7 @@ const sp = (id: string, name: string, state: string) => ({
 const item = (key: string, points: number, added = false) => ({ key, title: `Title ${key}`, type: "task", points, status_category: "todo", added_after_start: added });
 const report = (name: string, state: string) => ({
   sprint: { id: "x", name, state, started_at: null, ends_at: null, completed_at: null },
-  committed_points: 10, committed_issues: 3, added_points: 8, added_issues: 1, completed_points: 3,
+  committed_points: 10, committed_issues: 3, time_original_seconds: 28800, time_spent_seconds: 5400, time_remaining_seconds: 23400, added_points: 8, added_issues: 1, completed_points: 3,
   completed: [item("KYB-1", 3)], not_completed: [item("KYB-2", 5), item("KYB-4", 8, true)], removed: [],
 });
 
@@ -25,6 +25,8 @@ describe("SprintReport (S47)", () => {
     const notYet = await screen.findByRole("list", { name: "Not completed yet" });
     expect(within(notYet).getByText("Title KYB-4")).toBeInTheDocument();
     expect(within(notYet).getByTitle("Added after the sprint started")).toBeInTheDocument();
+    expect(screen.getByText("1.5h")).toBeInTheDocument(); // time logged
+    expect(screen.getByText("estimate 8h, remaining 6.5h")).toBeInTheDocument();
     expect(screen.getAllByText("None.")).toHaveLength(1); // nothing removed
     expect(screen.queryByRole("option", { name: /Sprint 3/ })).not.toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText("Sprint"), "s-1");

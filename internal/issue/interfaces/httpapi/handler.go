@@ -32,6 +32,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/comments", h.addComment)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/history", h.history)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/watchers", h.watchers)
+	mux.HandleFunc("GET /api/v1/issues/{issueKey}/worklogs", h.worklogs)
+	mux.HandleFunc("POST /api/v1/issues/{issueKey}/worklogs", h.logWork)
+	mux.HandleFunc("DELETE /api/v1/worklogs/{id}", h.deleteWorklog)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/watchers", h.watch)
 	mux.HandleFunc("DELETE /api/v1/issues/{issueKey}/watchers", h.unwatch)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/children", h.children)
@@ -59,13 +62,14 @@ type issueDTO struct {
 	Security    string   `json:"security_level"`
 	Resolution  string   `json:"resolution"`
 	FixVersions []string `json:"fix_versions"`
+	Time        timeDTO  `json:"time_tracking"`
 	Version     int      `json:"version"`
 }
 
 func toDTO(is *domain.Issue) issueDTO {
 	d := issueDTO{ID: string(is.ID()), Key: is.Key().String(), Title: is.Title(), Type: string(is.Type()),
 		Status: string(is.Status()), Description: is.Description(), Priority: string(is.Priority()),
-		Rank: string(is.Rank()), Security: is.SecurityLevel(), Resolution: string(is.Resolution()), FixVersions: fixVersions(is), Version: is.Version()}
+		Rank: string(is.Rank()), Security: is.SecurityLevel(), Resolution: string(is.Resolution()), FixVersions: fixVersions(is), Time: timeOut(is.TimeTracking()), Version: is.Version()}
 	if is.Parent() != "" {
 		k := is.ParentKey().String()
 		d.ParentKey = &k
@@ -98,8 +102,11 @@ func codeFor(err error) (string, bool) {
 		errors.Is(err, domain.ErrInvalidCommentBody), errors.Is(err, application.ErrInvalidAssignee), errors.Is(err, errMissingVersion),
 		errors.Is(err, application.ErrInvalidSprint), errors.Is(err, application.ErrInvalidAnchor), errors.Is(err, domain.ErrInvalidEstimate),
 		errors.Is(err, domain.ErrInvalidWorkflow), errors.Is(err, domain.ErrUnknownStatus),
-		errors.Is(err, application.ErrInvalidSecurityLevel), errors.Is(err, domain.ErrInvalidResolution), errors.Is(err, application.ErrInvalidVersion):
+		errors.Is(err, application.ErrInvalidSecurityLevel), errors.Is(err, domain.ErrInvalidResolution), errors.Is(err, application.ErrInvalidVersion),
+		errors.Is(err, domain.ErrInvalidDuration), errors.Is(err, domain.ErrInvalidWorklog):
 		return httpx.CodeValidation, true
+	case errors.Is(err, domain.ErrWorklogNotFound):
+		return httpx.CodeWorklogNotFound, true
 	case errors.Is(err, application.ErrProjectNotFound):
 		return httpx.CodeProjectNotFound, true
 	case errors.Is(err, domain.ErrIssueNotFound):
@@ -194,6 +201,8 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		Security    *string         `json:"security_level"`
 		Resolution  *string         `json:"resolution"`
 		FixVersions *[]string       `json:"fix_versions"`
+		Original    *string         `json:"original_estimate"`
+		Remaining   *string         `json:"remaining_estimate"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
@@ -203,7 +212,8 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, h.log, errMissingVersion, codeFor)
 		return
 	}
-	cmd := application.EditIssue{Version: *in.Version, Title: in.Title, Description: in.Description, Priority: in.Priority, Security: in.Security, Resolution: in.Resolution, FixVersions: in.FixVersions}
+	cmd := application.EditIssue{Version: *in.Version, Title: in.Title, Description: in.Description, Priority: in.Priority, Security: in.Security, Resolution: in.Resolution, FixVersions: in.FixVersions,
+		OriginalEstimate: in.Original, RemainingEstimate: in.Remaining}
 	if in.AssigneeID != nil {
 		cmd.AssigneeSet = true
 		if string(in.AssigneeID) != "null" {

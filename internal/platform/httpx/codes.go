@@ -48,6 +48,7 @@ const (
 	CodeVersionConflict      = "VERSION_CONFLICT"
 	CodeVersionState         = "VERSION_STATE"
 	CodeVersionNameTaken     = "VERSION_NAME_TAKEN"
+	CodeWorklogNotFound      = "WORKLOG_NOT_FOUND"
 	CodeNotificationNotFound = "NOTIFICATION_NOT_FOUND"
 	CodeImportTooLarge       = "IMPORT_TOO_LARGE"
 	CodeImportInvalidFile    = "IMPORT_INVALID_FILE"
@@ -106,6 +107,7 @@ var codes = []code{
 	{CodeVersionConflict, "6081", 409, "Someone else changed this version. Reload and try again.", "Versiyani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Версию изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeVersionState, "6082", 409, "The version is not in a state that allows this.", "Versiya holati bunga ruxsat bermaydi.", "Текущее состояние версии этого не допускает.", errorx.CategoryBusiness},
 	{CodeVersionNameTaken, "6083", 409, "This project already has a version with that name.", "Loyihada bu nomli versiya allaqachon bor.", "В проекте уже есть версия с таким названием.", errorx.CategoryBusiness},
+	{CodeWorklogNotFound, "6084", 404, "Worklog not found.", "Vaqt yozuvi topilmadi.", "Запись о работе не найдена.", errorx.CategoryBusiness},
 	{CodeLastBoard, "6026", 409, "A project must keep at least one board.", "Loyihada kamida bitta board qolishi kerak.", "В проекте должна остаться хотя бы одна доска.", errorx.CategoryBusiness},
 	{CodeNotificationNotFound, "6040", 404, "Notification not found.", "Bildirishnoma topilmadi.", "Уведомление не найдено.", errorx.CategoryBusiness},
 	{CodeImportTooLarge, "6050", 413, "The file is too large to import (10 MB max).", "Fayl import uchun juda katta (ko'pi bilan 10 MB).", "Файл слишком большой для импорта (не более 10 МБ).", errorx.CategoryValidation},

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { IssueChildren } from "./IssueChildren";
 import { IssueHistory } from "./IssueHistory";
 import { IssueLinks } from "./IssueLinks";
+import { IssueTimeTracking } from "./IssueTimeTracking";
 import { IssueWatchers } from "./IssueWatchers";
 import { MentionTextarea } from "./MentionTextarea";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -208,6 +209,7 @@ export function IssuePanel({
         )}
         {loaded && <IssueChildren issue={loaded} projectKey={projectKey} onOpen={onOpen} />}
         <IssueWatchers issueKey={issueKey} />
+        {loaded && <IssueTimeTracking key={loaded.version} issue={loaded} />}
         <IssueLinks issueKey={issueKey} onOpen={onOpen} />
         {extensions}
         <Comments issueKey={issueKey} projectKey={projectKey} />

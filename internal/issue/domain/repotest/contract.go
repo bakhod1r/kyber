@@ -155,6 +155,25 @@ func Run(t *testing.T, newRepo Factory) {
 		}
 	})
 
+	t.Run("time tracking persists", func(t *testing.T) {
+		repo, _ := newRepo(t)
+		is := mk(t, 1, "Timed")
+		is.EstimateTime(8 * 3600)
+		_, _ = is.LogWork("w", Assignee, time.Now(), 1800, "")
+		if err := repo.Save(ctx, is, nil); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := repo.ByKey(ctx, is.Key())
+		if got.TimeTracking() != (domain.TimeTracking{Original: 8 * 3600, Remaining: 8*3600 - 1800, Spent: 1800}) {
+			t.Fatalf("time = %+v", got.TimeTracking())
+		}
+		got.EstimateRemaining(60)
+		_ = repo.Save(ctx, got, nil)
+		if again, _ := repo.ByKey(ctx, is.Key()); again.TimeTracking().Remaining != 60 {
+			t.Fatalf("updated = %+v", again.TimeTracking())
+		}
+	})
+
 	t.Run("not found", func(t *testing.T) {
 		repo, _ := newRepo(t)
 		key, _ := domain.NewIssueKey("KYB", 42)
