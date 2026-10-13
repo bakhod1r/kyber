@@ -1,0 +1,259 @@
+// Package httpapi exposes team chat (channels, DMs, messages) over REST.
+package httpapi
+
+import (
+	"errors"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"time"
+
+	app "github.com/bakhod1r/kyber/internal/chat/application"
+	"github.com/bakhod1r/kyber/internal/chat/domain"
+	"github.com/bakhod1r/kyber/internal/platform/auth"
+	"github.com/bakhod1r/kyber/internal/platform/httpx"
+)
+
+type Handler struct {
+	svc *app.Service
+	log *slog.Logger
+}
+
+func New(svc *app.Service, log *slog.Logger) *Handler { return &Handler{svc: svc, log: log} }
+
+func (h *Handler) Register(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/v1/conversations", h.list)
+	mux.HandleFunc("POST /api/v1/channels", h.createChannel)
+	mux.HandleFunc("POST /api/v1/dms", h.openDM)
+	mux.HandleFunc("GET /api/v1/conversations/{id}", h.get)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/join", h.join)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/leave", h.leave)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/members", h.invite)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/read", h.read)
+	mux.HandleFunc("GET /api/v1/conversations/{id}/messages", h.history)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/messages", h.post)
+	mux.HandleFunc("PATCH /api/v1/messages/{id}", h.edit)
+	mux.HandleFunc("DELETE /api/v1/messages/{id}", h.delete)
+}
+
+var errBadLimit = errors.New("limit must be a number from 1 to 200")
+
+func codeFor(err error) (string, bool) {
+	switch {
+	case errors.Is(err, domain.ErrConversationNotFound):
+		return httpx.CodeConversationNotFound, true
+	case errors.Is(err, domain.ErrMessageNotFound):
+		return httpx.CodeMessageNotFound, true
+	case errors.Is(err, domain.ErrNameTaken):
+		return httpx.CodeChannelNameTaken, true
+	case errors.Is(err, domain.ErrNotMember), errors.Is(err, domain.ErrNotAuthor), errors.Is(err, domain.ErrNotJoinable),
+		errors.Is(err, domain.ErrDeleted):
+		return httpx.CodeChatForbidden, true
+	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
+		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit):
+		return httpx.CodeValidation, true
+	case errors.Is(err, httpx.ErrBadJSON):
+		return httpx.CodeBadRequest, true
+	}
+	return "", false
+}
+
+type conversationDTO struct {
+	ID        string    `json:"id"`
+	Kind      string    `json:"kind"`
+	Name      string    `json:"name"`
+	Topic     string    `json:"topic"`
+	Private   bool      `json:"private"`
+	MemberIDs []string  `json:"member_ids"`
+	Member    bool      `json:"member"`
+	Unread    int       `json:"unread"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func toConversation(v app.View, actor string) conversationDTO {
+	d := conversationDTO{ID: string(v.ID), Kind: string(v.Kind), Name: v.Name, Topic: v.Topic, Private: v.Private,
+		MemberIDs: make([]string, len(v.Members)), Member: v.IsMember(domain.UserID(actor)), Unread: v.Unread, CreatedAt: v.CreatedAt}
+	for i, m := range v.Members {
+		d.MemberIDs[i] = string(m)
+	}
+	return d
+}
+
+type messageDTO struct {
+	ID             string     `json:"id"`
+	ConversationID string     `json:"conversation_id"`
+	AuthorID       string     `json:"author_id"`
+	Body           string     `json:"body"`
+	CreatedAt      time.Time  `json:"created_at"`
+	EditedAt       *time.Time `json:"edited_at"`
+	Deleted        bool       `json:"deleted"`
+}
+
+func toMessage(m *domain.Message) messageDTO {
+	d := messageDTO{ID: string(m.ID), ConversationID: string(m.Conversation), AuthorID: string(m.Author), Body: m.Body,
+		CreatedAt: m.CreatedAt, Deleted: m.Deleted}
+	if !m.EditedAt.IsZero() {
+		d.EditedAt = &m.EditedAt
+	}
+	return d
+}
+
+func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
+	httpx.Error(w, r, h.log, err, codeFor)
+}
+
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
+	actor := auth.Actor(r.Context())
+	views, err := h.svc.Conversations(r.Context(), actor)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := make([]conversationDTO, len(views))
+	for i, v := range views {
+		out[i] = toConversation(v, actor)
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+func (h *Handler) createChannel(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name    string `json:"name"`
+		Topic   string `json:"topic"`
+		Private bool   `json:"private"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	actor := auth.Actor(r.Context())
+	c, err := h.svc.CreateChannel(r.Context(), actor, app.NewChannel{Name: in.Name, Topic: in.Topic, Private: in.Private})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, toConversation(app.View{Conversation: c}, actor))
+}
+
+func (h *Handler) openDM(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		UserIDs []string `json:"user_ids"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	actor := auth.Actor(r.Context())
+	c, err := h.svc.OpenDM(r.Context(), actor, in.UserIDs)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toConversation(app.View{Conversation: c}, actor))
+}
+
+func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
+	actor := auth.Actor(r.Context())
+	v, err := h.svc.Conversation(r.Context(), actor, r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toConversation(v, actor))
+}
+
+// noContent runs an action on the conversation in the path and answers 204.
+func (h *Handler) noContent(w http.ResponseWriter, r *http.Request, do func() error) {
+	if err := do(); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
+	h.noContent(w, r, func() error { return h.svc.Join(r.Context(), auth.Actor(r.Context()), r.PathValue("id")) })
+}
+
+func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
+	h.noContent(w, r, func() error { return h.svc.Leave(r.Context(), auth.Actor(r.Context()), r.PathValue("id")) })
+}
+
+func (h *Handler) read(w http.ResponseWriter, r *http.Request) {
+	h.noContent(w, r, func() error { return h.svc.MarkRead(r.Context(), auth.Actor(r.Context()), r.PathValue("id")) })
+}
+
+func (h *Handler) invite(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		UserID string `json:"user_id"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.noContent(w, r, func() error { return h.svc.Invite(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.UserID) })
+}
+
+// history: ?before=<message id>&limit= (newest first).
+func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit := 0
+	if v := q.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > app.MaxPage {
+			h.fail(w, r, errBadLimit)
+			return
+		}
+		limit = n
+	}
+	ms, err := h.svc.History(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), q.Get("before"), limit)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := make([]messageDTO, len(ms))
+	for i, m := range ms {
+		out[i] = toMessage(m)
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+func decodeBody(r *http.Request) (string, error) {
+	var in struct {
+		Body string `json:"body"`
+	}
+	err := httpx.Decode(r, &in)
+	return in.Body, err
+}
+
+func (h *Handler) post(w http.ResponseWriter, r *http.Request) {
+	body, err := decodeBody(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	m, err := h.svc.Post(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), body)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, toMessage(m))
+}
+
+func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
+	body, err := decodeBody(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	m, err := h.svc.Edit(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), body)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toMessage(m))
+}
+
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	h.noContent(w, r, func() error { return h.svc.Delete(r.Context(), auth.Actor(r.Context()), r.PathValue("id")) })
+}

@@ -19,15 +19,13 @@ func TestWatchers(t *testing.T) {
 		}
 		lead.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "Login", "type": "task"})
 		const url = "/api/v1/issues/KYB-1/watchers"
-		_, w := lead.do("GET", url, nil)
-		if w["watching"] != true || len(w["items"].([]any)) != 1 {
-			t.Fatalf("reporter watches = %v", w)
-		}
+		// Watching follows the domain event through the outbox.
+		eventuallyJSON(t, lead, url, func(w map[string]any) bool { return w["watching"] == true && len(w["items"].([]any)) == 1 })
 		code, b := qa.do("POST", url, nil)
 		expect(t, code, 204, b)
 		code, b = eve.do("POST", url, nil)
 		expect(t, code, 404, b)
-		_, w = qa.do("GET", url, nil)
+		_, w := qa.do("GET", url, nil)
 		if w["watching"] != true || len(w["items"].([]any)) != 2 {
 			t.Fatalf("after watch = %v", w)
 		}
@@ -44,10 +42,7 @@ func TestWatchers(t *testing.T) {
 			t.Fatalf("qa inbox = %v", inbox)
 		}
 		// The commenter now watches; nobody hears about their own change.
-		_, w = dev.do("GET", url, nil)
-		if w["watching"] != true {
-			t.Fatalf("commenter watches = %v", w)
-		}
+		eventuallyJSON(t, dev, url, func(w map[string]any) bool { return w["watching"] == true })
 		code, b = qa.do("DELETE", url, nil)
 		expect(t, code, 204, b)
 		dev.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "todo"})

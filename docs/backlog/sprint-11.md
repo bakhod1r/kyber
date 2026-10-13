@@ -1,6 +1,6 @@
 # Sprint 11 — Team chat and huddles (video, audio, screen share)
 
-Source: product request (2026-10-13). Design: ADR-0005. Order: **chat first, then video calls**. Every story is
+Source: product request (2026-10-13). Design: ADR-0006. Order: **chat first, then video calls**. Every story is
 planned before it starts (scope + acceptance criteria below), then built DDD + TDD with acceptance tests on all
 backends.
 
@@ -13,7 +13,7 @@ backends.
   - Messages: post (1–4000 chars), edit and delete my own, history newest-first with `before` cursor paging.
   - Unread: mark read; the conversation list shows `unread` per conversation.
   - AC: non-members get 404 for private channels and DMs; outsiders of the workspace see nothing; only the
-    author edits/deletes; deleted messages show as "deleted" in history. ✅ **Done:** migration 0036, API 0.27.0.
+    author edits/deletes; deleted messages show as "deleted" in history. ✅ **Done:** migration 0037, API 0.27.0.
 - **S51 Realtime stream** — `GET /api/v1/stream` (SSE), in-process Hub port, events `message.*`,
   `conversation.*`, typing (`POST /conversations/{id}/typing`, ephemeral), presence (online while a stream is open).
   AC: a member receives a posted message within 1 s; non-members never receive it; reconnect resumes.

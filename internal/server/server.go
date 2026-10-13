@@ -15,93 +15,94 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	accesshttp "github.com/bakhod1r/kyber/internal/access/adapter/httpapi"
-	accessmemory "github.com/bakhod1r/kyber/internal/access/adapter/memory"
-	accesspg "github.com/bakhod1r/kyber/internal/access/adapter/postgres"
-	"github.com/bakhod1r/kyber/internal/access/adapter/projectcompat"
-	accessapp "github.com/bakhod1r/kyber/internal/access/app"
+	accessapp "github.com/bakhod1r/kyber/internal/access/application"
 	accessdomain "github.com/bakhod1r/kyber/internal/access/domain"
-	agilehttp "github.com/bakhod1r/kyber/internal/agile/adapter/httpapi"
-	agileissueacl "github.com/bakhod1r/kyber/internal/agile/adapter/issueacl"
-	agilememory "github.com/bakhod1r/kyber/internal/agile/adapter/memory"
-	agilepg "github.com/bakhod1r/kyber/internal/agile/adapter/postgres"
-	agileprojectacl "github.com/bakhod1r/kyber/internal/agile/adapter/projectacl"
-	agileapp "github.com/bakhod1r/kyber/internal/agile/app"
+	accessmemory "github.com/bakhod1r/kyber/internal/access/infrastructure/memory"
+	accesspg "github.com/bakhod1r/kyber/internal/access/infrastructure/postgres"
+	"github.com/bakhod1r/kyber/internal/access/infrastructure/projectcompat"
+	accesshttp "github.com/bakhod1r/kyber/internal/access/interfaces/httpapi"
+	agileapp "github.com/bakhod1r/kyber/internal/agile/application"
 	agiledomain "github.com/bakhod1r/kyber/internal/agile/domain"
-	auditacl "github.com/bakhod1r/kyber/internal/audit/adapter/acl"
-	audithttp "github.com/bakhod1r/kyber/internal/audit/adapter/httpapi"
-	auditmemory "github.com/bakhod1r/kyber/internal/audit/adapter/memory"
-	auditpg "github.com/bakhod1r/kyber/internal/audit/adapter/postgres"
-	auditapp "github.com/bakhod1r/kyber/internal/audit/app"
+	agileissueacl "github.com/bakhod1r/kyber/internal/agile/infrastructure/issueacl"
+	agilememory "github.com/bakhod1r/kyber/internal/agile/infrastructure/memory"
+	agilepg "github.com/bakhod1r/kyber/internal/agile/infrastructure/postgres"
+	agileprojectacl "github.com/bakhod1r/kyber/internal/agile/infrastructure/projectacl"
+	agilehttp "github.com/bakhod1r/kyber/internal/agile/interfaces/httpapi"
+	auditapp "github.com/bakhod1r/kyber/internal/audit/application"
 	auditdomain "github.com/bakhod1r/kyber/internal/audit/domain"
-	calendaracl "github.com/bakhod1r/kyber/internal/calendar/adapter/acl"
-	calendarhttp "github.com/bakhod1r/kyber/internal/calendar/adapter/httpapi"
-	calendarmemory "github.com/bakhod1r/kyber/internal/calendar/adapter/memory"
-	calendarpg "github.com/bakhod1r/kyber/internal/calendar/adapter/postgres"
-	calendarapp "github.com/bakhod1r/kyber/internal/calendar/app"
+	auditacl "github.com/bakhod1r/kyber/internal/audit/infrastructure/acl"
+	auditmemory "github.com/bakhod1r/kyber/internal/audit/infrastructure/memory"
+	auditpg "github.com/bakhod1r/kyber/internal/audit/infrastructure/postgres"
+	audithttp "github.com/bakhod1r/kyber/internal/audit/interfaces/httpapi"
+	calendarapp "github.com/bakhod1r/kyber/internal/calendar/application"
 	calendardomain "github.com/bakhod1r/kyber/internal/calendar/domain"
-	chatacl "github.com/bakhod1r/kyber/internal/chat/adapter/acl"
-	chathttp "github.com/bakhod1r/kyber/internal/chat/adapter/httpapi"
-	chatmemory "github.com/bakhod1r/kyber/internal/chat/adapter/memory"
-	chatpg "github.com/bakhod1r/kyber/internal/chat/adapter/postgres"
-	chatapp "github.com/bakhod1r/kyber/internal/chat/app"
+	calendaracl "github.com/bakhod1r/kyber/internal/calendar/infrastructure/acl"
+	calendarmemory "github.com/bakhod1r/kyber/internal/calendar/infrastructure/memory"
+	calendarpg "github.com/bakhod1r/kyber/internal/calendar/infrastructure/postgres"
+	calendarhttp "github.com/bakhod1r/kyber/internal/calendar/interfaces/httpapi"
+	chatapp "github.com/bakhod1r/kyber/internal/chat/application"
 	chatdomain "github.com/bakhod1r/kyber/internal/chat/domain"
-	focusacl "github.com/bakhod1r/kyber/internal/focus/adapter/acl"
-	focushttp "github.com/bakhod1r/kyber/internal/focus/adapter/httpapi"
-	focusmemory "github.com/bakhod1r/kyber/internal/focus/adapter/memory"
-	focuspg "github.com/bakhod1r/kyber/internal/focus/adapter/postgres"
-	focusapp "github.com/bakhod1r/kyber/internal/focus/app"
+	chatacl "github.com/bakhod1r/kyber/internal/chat/infrastructure/acl"
+	chatmemory "github.com/bakhod1r/kyber/internal/chat/infrastructure/memory"
+	chatpg "github.com/bakhod1r/kyber/internal/chat/infrastructure/postgres"
+	chathttp "github.com/bakhod1r/kyber/internal/chat/interfaces/httpapi"
+	focusapp "github.com/bakhod1r/kyber/internal/focus/application"
 	focusdomain "github.com/bakhod1r/kyber/internal/focus/domain"
-	"github.com/bakhod1r/kyber/internal/identity/adapter/argon2"
-	"github.com/bakhod1r/kyber/internal/identity/adapter/guardlimit"
-	identityhttp "github.com/bakhod1r/kyber/internal/identity/adapter/httpapi"
-	identitymemory "github.com/bakhod1r/kyber/internal/identity/adapter/memory"
-	identitypg "github.com/bakhod1r/kyber/internal/identity/adapter/postgres"
-	"github.com/bakhod1r/kyber/internal/identity/adapter/telegram"
-	identityapp "github.com/bakhod1r/kyber/internal/identity/app"
+	focusacl "github.com/bakhod1r/kyber/internal/focus/infrastructure/acl"
+	focusmemory "github.com/bakhod1r/kyber/internal/focus/infrastructure/memory"
+	focuspg "github.com/bakhod1r/kyber/internal/focus/infrastructure/postgres"
+	focushttp "github.com/bakhod1r/kyber/internal/focus/interfaces/httpapi"
+	identityapp "github.com/bakhod1r/kyber/internal/identity/application"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
-	importeracl "github.com/bakhod1r/kyber/internal/importer/adapter/acl"
-	importerhttp "github.com/bakhod1r/kyber/internal/importer/adapter/httpapi"
-	importermemory "github.com/bakhod1r/kyber/internal/importer/adapter/memory"
-	importerpg "github.com/bakhod1r/kyber/internal/importer/adapter/postgres"
-	importerapp "github.com/bakhod1r/kyber/internal/importer/app"
+	"github.com/bakhod1r/kyber/internal/identity/infrastructure/argon2"
+	"github.com/bakhod1r/kyber/internal/identity/infrastructure/guardlimit"
+	identityjobs "github.com/bakhod1r/kyber/internal/identity/infrastructure/jobs"
+	identitymemory "github.com/bakhod1r/kyber/internal/identity/infrastructure/memory"
+	identitypg "github.com/bakhod1r/kyber/internal/identity/infrastructure/postgres"
+	"github.com/bakhod1r/kyber/internal/identity/infrastructure/telegram"
+	identityhttp "github.com/bakhod1r/kyber/internal/identity/interfaces/httpapi"
+	importerapp "github.com/bakhod1r/kyber/internal/importer/application"
 	importerdomain "github.com/bakhod1r/kyber/internal/importer/domain"
-	insightsacl "github.com/bakhod1r/kyber/internal/insights/adapter/acl"
-	insightshttp "github.com/bakhod1r/kyber/internal/insights/adapter/httpapi"
-	insightsmemory "github.com/bakhod1r/kyber/internal/insights/adapter/memory"
-	insightspg "github.com/bakhod1r/kyber/internal/insights/adapter/postgres"
-	insightsapp "github.com/bakhod1r/kyber/internal/insights/app"
+	importeracl "github.com/bakhod1r/kyber/internal/importer/infrastructure/acl"
+	importermemory "github.com/bakhod1r/kyber/internal/importer/infrastructure/memory"
+	importerpg "github.com/bakhod1r/kyber/internal/importer/infrastructure/postgres"
+	importerhttp "github.com/bakhod1r/kyber/internal/importer/interfaces/httpapi"
+	insightsapp "github.com/bakhod1r/kyber/internal/insights/application"
 	insightsdomain "github.com/bakhod1r/kyber/internal/insights/domain"
-	issueaccessacl "github.com/bakhod1r/kyber/internal/issue/adapter/accessacl"
-	"github.com/bakhod1r/kyber/internal/issue/adapter/agileacl"
-	issuehttp "github.com/bakhod1r/kyber/internal/issue/adapter/httpapi"
-	issuememory "github.com/bakhod1r/kyber/internal/issue/adapter/memory"
-	issuepg "github.com/bakhod1r/kyber/internal/issue/adapter/postgres"
-	"github.com/bakhod1r/kyber/internal/issue/adapter/projectacl"
-	issueapp "github.com/bakhod1r/kyber/internal/issue/app"
+	insightsacl "github.com/bakhod1r/kyber/internal/insights/infrastructure/acl"
+	insightsmemory "github.com/bakhod1r/kyber/internal/insights/infrastructure/memory"
+	insightspg "github.com/bakhod1r/kyber/internal/insights/infrastructure/postgres"
+	insightshttp "github.com/bakhod1r/kyber/internal/insights/interfaces/httpapi"
+	issueapp "github.com/bakhod1r/kyber/internal/issue/application"
 	issuedomain "github.com/bakhod1r/kyber/internal/issue/domain"
-	notifyacl "github.com/bakhod1r/kyber/internal/notify/adapter/acl"
-	notifyhttp "github.com/bakhod1r/kyber/internal/notify/adapter/httpapi"
-	notifymemory "github.com/bakhod1r/kyber/internal/notify/adapter/memory"
-	notifypg "github.com/bakhod1r/kyber/internal/notify/adapter/postgres"
-	"github.com/bakhod1r/kyber/internal/notify/adapter/telegramsend"
-	notifyapp "github.com/bakhod1r/kyber/internal/notify/app"
+	issueaccessacl "github.com/bakhod1r/kyber/internal/issue/infrastructure/accessacl"
+	"github.com/bakhod1r/kyber/internal/issue/infrastructure/agileacl"
+	issuememory "github.com/bakhod1r/kyber/internal/issue/infrastructure/memory"
+	issuepg "github.com/bakhod1r/kyber/internal/issue/infrastructure/postgres"
+	"github.com/bakhod1r/kyber/internal/issue/infrastructure/projectacl"
+	issuehttp "github.com/bakhod1r/kyber/internal/issue/interfaces/httpapi"
+	notifyapp "github.com/bakhod1r/kyber/internal/notify/application"
 	notifydomain "github.com/bakhod1r/kyber/internal/notify/domain"
+	notifyacl "github.com/bakhod1r/kyber/internal/notify/infrastructure/acl"
+	notifymemory "github.com/bakhod1r/kyber/internal/notify/infrastructure/memory"
+	notifypg "github.com/bakhod1r/kyber/internal/notify/infrastructure/postgres"
+	"github.com/bakhod1r/kyber/internal/notify/infrastructure/telegramsend"
+	notifyhttp "github.com/bakhod1r/kyber/internal/notify/interfaces/httpapi"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 	"github.com/bakhod1r/kyber/internal/platform/id"
 	"github.com/bakhod1r/kyber/internal/platform/metrics"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
-	projecthttp "github.com/bakhod1r/kyber/internal/project/adapter/httpapi"
-	"github.com/bakhod1r/kyber/internal/project/adapter/identitydir"
-	projectmemory "github.com/bakhod1r/kyber/internal/project/adapter/memory"
-	projectpg "github.com/bakhod1r/kyber/internal/project/adapter/postgres"
-	projectapp "github.com/bakhod1r/kyber/internal/project/app"
+	projectapp "github.com/bakhod1r/kyber/internal/project/application"
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
-	workspacehttp "github.com/bakhod1r/kyber/internal/workspace/adapter/httpapi"
-	workspacememory "github.com/bakhod1r/kyber/internal/workspace/adapter/memory"
-	workspacepg "github.com/bakhod1r/kyber/internal/workspace/adapter/postgres"
-	workspaceapp "github.com/bakhod1r/kyber/internal/workspace/app"
+	"github.com/bakhod1r/kyber/internal/project/infrastructure/identitydir"
+	projectmemory "github.com/bakhod1r/kyber/internal/project/infrastructure/memory"
+	projectpg "github.com/bakhod1r/kyber/internal/project/infrastructure/postgres"
+	projecthttp "github.com/bakhod1r/kyber/internal/project/interfaces/httpapi"
+	workspaceapp "github.com/bakhod1r/kyber/internal/workspace/application"
 	workspacedomain "github.com/bakhod1r/kyber/internal/workspace/domain"
+	workspacememory "github.com/bakhod1r/kyber/internal/workspace/infrastructure/memory"
+	workspacepg "github.com/bakhod1r/kyber/internal/workspace/infrastructure/postgres"
+	workspacehttp "github.com/bakhod1r/kyber/internal/workspace/interfaces/httpapi"
 	"github.com/bakhod1r/kyber/web"
 )
 
@@ -188,16 +189,17 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	chatRepo := chatmemory.NewRepository()
 	issueRepo := issuememory.NewRepository()
 	sprintRepo := agilememory.NewRepository()
+	versionRepo := agilememory.NewVersionRepository()
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(),
 		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(),
-		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: agilememory.NewVersionRepository(), notes: notifymemory.NewRepository(),
+		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
 		conversations: chatRepo, messages: chatRepo.Messages(),
-		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta)),
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
@@ -224,7 +226,7 @@ func StartJobs(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, purgeE
 	ids := identitypg.NewRepository(pool)
 	// The purge job also clears expired login-code challenges (no bot needed for that).
 	svc := identityapp.NewService(ids, ids, argon2.New(), systemClock{}, id.New, identityapp.WithTelegramOTP(ids, nil))
-	go svc.RunSessionPurger(ctx, purgeEvery, func(n int, err error) {
+	go identityjobs.RunSessionPurger(ctx, svc, purgeEvery, func(n int, err error) {
 		if err != nil {
 			log.ErrorContext(ctx, "session purge failed", "err", err)
 			return
@@ -322,6 +324,12 @@ func build(log *slog.Logger, d deps) http.Handler {
 	relay.Handle("issue.assigned", notify.OnIssueAssigned)
 	relay.Handle("comment.added", notify.OnCommentAdded)
 	relay.Handle("issue.changed", notify.OnIssueChanged)
+	for _, name := range []string{"issue.created", "issue.assigned", "comment.added"} {
+		relay.Handle(name, issues.OnWatchTrigger)
+	}
+	for _, name := range []string{"version.released", "version.deleted"} {
+		relay.Handle(name, issues.OnVersionEvent)
+	}
 	if d.ctx == nil {
 		d.ctx = context.Background()
 	}

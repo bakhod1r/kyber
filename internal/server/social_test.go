@@ -13,27 +13,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bakhod1r/kyber/internal/identity/adapter/google"
-	identityhttp "github.com/bakhod1r/kyber/internal/identity/adapter/httpapi"
-	"github.com/bakhod1r/kyber/internal/identity/adapter/telegram"
-	"github.com/bakhod1r/kyber/internal/identity/app"
+	"github.com/bakhod1r/kyber/internal/identity/application"
 	"github.com/bakhod1r/kyber/internal/identity/domain"
+	"github.com/bakhod1r/kyber/internal/identity/infrastructure/google"
+	"github.com/bakhod1r/kyber/internal/identity/infrastructure/telegram"
+	identityhttp "github.com/bakhod1r/kyber/internal/identity/interfaces/httpapi"
 	"github.com/bakhod1r/kyber/internal/server"
 )
 
 // fakeGoogle stands in for the OIDC adapter (tested against a fake provider in its own package).
 type fakeGoogle struct {
-	profiles map[string]app.ExternalProfile
+	profiles map[string]application.ExternalProfile
 } // by code
 
 func (fakeGoogle) Enabled() bool { return true }
 func (fakeGoogle) AuthURL(_ context.Context, f google.Flow) (string, error) {
 	return "https://accounts.google.test/auth?state=" + f.State, nil
 }
-func (g fakeGoogle) Exchange(_ context.Context, code string, _ google.Flow) (app.ExternalProfile, error) {
+func (g fakeGoogle) Exchange(_ context.Context, code string, _ google.Flow) (application.ExternalProfile, error) {
 	p, ok := g.profiles[code]
 	if !ok {
-		return app.ExternalProfile{}, google.ErrInvalidLogin
+		return application.ExternalProfile{}, google.ErrInvalidLogin
 	}
 	return p, nil
 }
@@ -85,7 +85,7 @@ func cookie(res *http.Response, name string) *http.Cookie {
 }
 
 func TestS39SocialSignIn(t *testing.T) {
-	g := fakeGoogle{profiles: map[string]app.ExternalProfile{
+	g := fakeGoogle{profiles: map[string]application.ExternalProfile{
 		"new":      {Provider: domain.ProviderGoogle, Subject: "g-1", Email: "ali@gmail.com", EmailVerified: true, Name: "Ali G"},
 		"takeover": {Provider: domain.ProviderGoogle, Subject: "g-2", Email: "dev@x.uz", EmailVerified: false, Name: "Evil"},
 	}}

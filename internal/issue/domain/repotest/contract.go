@@ -99,7 +99,7 @@ func Run(t *testing.T, newRepo Factory) {
 	t.Run("security level persists", func(t *testing.T) {
 		repo, _ := newRepo(t)
 		is := mk(t, 1, "Secret")
-		is.SetSecurityLevel("confidential")
+		is.Classify("confidential")
 		if err := repo.Save(ctx, is, nil); err != nil {
 			t.Fatal(err)
 		}
@@ -107,7 +107,7 @@ func Run(t *testing.T, newRepo Factory) {
 		if got.SecurityLevel() != "confidential" {
 			t.Fatalf("level = %q", got.SecurityLevel())
 		}
-		got.SetSecurityLevel("")
+		got.Classify("")
 		_ = repo.Save(ctx, got, nil)
 		if again, _ := repo.ByKey(ctx, is.Key()); again.SecurityLevel() != "" {
 			t.Fatal("level not cleared")
@@ -128,8 +128,8 @@ func Run(t *testing.T, newRepo Factory) {
 	t.Run("fix versions persist and filter", func(t *testing.T) {
 		repo, _ := newRepo(t)
 		a, b := mk(t, 1, "In both"), mk(t, 2, "In A")
-		a.SetFixVersions([]domain.VersionID{VersionB, VersionA})
-		b.SetFixVersions([]domain.VersionID{VersionA})
+		a.PlanForVersions([]domain.VersionID{VersionB, VersionA})
+		b.PlanForVersions([]domain.VersionID{VersionA})
 		for _, is := range []*domain.Issue{a, b, mk(t, 3, "None")} {
 			if err := repo.Save(ctx, is, nil); err != nil {
 				t.Fatal(err)
@@ -146,7 +146,7 @@ func Run(t *testing.T, newRepo Factory) {
 				t.Errorf("filter %s = %s %v", *v, keys(list), err)
 			}
 		}
-		got.ReplaceFixVersion(VersionB, "")
+		got.MoveToVersion(VersionB, "")
 		if err := repo.Save(ctx, got, nil); err != nil {
 			t.Fatal(err)
 		}

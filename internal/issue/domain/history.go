@@ -107,5 +107,5 @@ func keyOf(k IssueKey) string {
 // SecurityLevel is the issue's security level ("" = visible to everyone who can browse).
 func (i *Issue) SecurityLevel() string { return i.security }
 
-// SetSecurityLevel restricts who can see the issue; the application checks the level exists.
-func (i *Issue) SetSecurityLevel(level string) { i.security = level }
+// Classify restricts who can see the issue; the application checks the level exists.
+func (i *Issue) Classify(level string) { i.security = level }

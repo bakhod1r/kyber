@@ -33,9 +33,9 @@ func ParseResolution(s string) (Resolution, error) {
 // Resolution is "" while the issue is not in a Done status.
 func (i *Issue) Resolution() Resolution { return i.resolution }
 
-// SetResolution changes how a resolved issue ended; an unresolved issue gets one only by a
+// ChangeResolution changes how a resolved issue ended; an unresolved issue gets one only by a
 // transition into a Done status.
-func (i *Issue) SetResolution(res Resolution) error {
+func (i *Issue) ChangeResolution(res Resolution) error {
 	if i.resolution == "" {
 		return ErrInvalidResolution
 	}

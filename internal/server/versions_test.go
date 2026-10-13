@@ -60,10 +60,12 @@ func TestS48Versions(t *testing.T) {
 		if b["moved"] != float64(1) || b["version"].(map[string]any)["state"] != "released" {
 			t.Fatalf("release = %v", b)
 		}
-		_, crash := dev.do("GET", "/api/v1/issues/KYB-2", nil)
-		if fv := crash["fix_versions"].([]any); len(fv) != 1 || fv[0] != id2 {
-			t.Fatalf("KYB-2 fix versions = %v", fv)
-		}
+		// Issue Tracking moves the unresolved bug on the version.released event.
+		fixVersions := func(b map[string]any) []any { return b["fix_versions"].([]any) }
+		eventuallyJSON(t, dev, "/api/v1/issues/KYB-2", func(b map[string]any) bool {
+			fv := fixVersions(b)
+			return len(fv) == 1 && fv[0] == id2
+		})
 		code, b = lead.do("POST", "/api/v1/versions/"+id1+"/release", nil)
 		expect(t, code, 409, b)
 
@@ -103,10 +105,10 @@ func TestS48Versions(t *testing.T) {
 		// Delete 2.0 moving its issue back to 1.0.
 		code, b = lead.do("DELETE", "/api/v1/versions/"+id2+"?move_to="+id1, nil)
 		expect(t, code, 204, b)
-		_, crash = dev.do("GET", "/api/v1/issues/KYB-2", nil)
-		if fv := crash["fix_versions"].([]any); len(fv) != 1 || fv[0] != id1 {
-			t.Fatalf("after delete = %v", fv)
-		}
+		eventuallyJSON(t, dev, "/api/v1/issues/KYB-2", func(b map[string]any) bool {
+			fv := fixVersions(b)
+			return len(fv) == 1 && fv[0] == id1
+		})
 		code, b = lead.do("DELETE", "/api/v1/versions/"+id2, nil)
 		expect(t, code, 404, b)
 	})
