@@ -165,6 +165,57 @@ describe("Boards with WIP limits (KYB-S44)", () => {
   });
 });
 
+describe("Kanban backlog (S48)", () => {
+  const flow = (on: boolean) => ({
+    id: "b-1", project_key: "KYB", name: "Flow", kind: "kanban", version: 1, kanban_backlog: on, columns: [
+      { name: "Backlog", statuses: ["todo"], min: 0, max: 0 },
+      { name: "Doing", statuses: ["in_progress"], min: 0, max: 0 },
+      { name: "Done", statuses: ["done"], min: 0, max: 0 },
+    ],
+  });
+
+  it("lists the first column apart and selects issues for development", async () => {
+    const calls = mockApi({
+      "GET /api/v1/projects/KYB/boards": { status: 200, body: { items: [flow(true)] } },
+      "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [issue(1, "todo"), issue(2, "in_progress")] } },
+      "POST /api/v1/issues/KYB-1/transitions": { status: 200, body: issue(1, "in_progress") },
+    });
+    renderWithProviders(<Board projectKey="KYB" />);
+    const backlog = await screen.findByRole("region", { name: "Kanban backlog" });
+    expect(within(backlog).getByText("Issue 1")).toBeInTheDocument();
+    expect(screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"))).toEqual(["Doing", "Done", "Kanban backlog"]);
+    await userEvent.click(within(backlog).getByRole("button", { name: "Select KYB-1 for development" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "POST /api/v1/issues/KYB-1/transitions")?.body).toEqual({ to: "in_progress" }));
+  });
+
+  it("is switched on from the board and shows a refusal", async () => {
+    let on = false;
+    const calls = mockApi({
+      "GET /api/v1/projects/KYB/boards": () => ({ status: 200, body: { items: [flow(on)] } }),
+      "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [issue(1, "todo")] } },
+      "PUT /api/v1/boards/b-1": () => {
+        on = true;
+        return { status: 200, body: flow(true) };
+      },
+    });
+    renderWithProviders(<Board projectKey="KYB" />);
+    await userEvent.click(await screen.findByLabelText("Kanban backlog"));
+    expect(await screen.findByRole("region", { name: "Kanban backlog" })).toBeInTheDocument();
+    expect(calls.find((c) => c.key === "PUT /api/v1/boards/b-1")?.body).toMatchObject({ kanban_backlog: true, version: 1, name: "Flow" });
+  });
+
+  it("explains when only admins may change the board", async () => {
+    mockApi({
+      "GET /api/v1/projects/KYB/boards": { status: 200, body: { items: [flow(false)] } },
+      "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [] } },
+      "PUT /api/v1/boards/b-1": { status: 403, body: { type: "about:blank", title: "t", status: 403, code: "PROJECT_FORBIDDEN", detail: "admins only" } },
+    });
+    renderWithProviders(<Board projectKey="KYB" />);
+    await userEvent.click(await screen.findByLabelText("Kanban backlog"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("admins only");
+  });
+});
+
 describe("Board → eye health", () => {
   it("moving an issue into a Done-category status announces the finished task", async () => {
     const seen: string[] = [];

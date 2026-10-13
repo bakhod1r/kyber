@@ -157,3 +157,22 @@ func TestDefaultBoardFollowsWorkflow(t *testing.T) {
 		t.Fatalf("after workflow change = %+v", list[0].Columns())
 	}
 }
+
+func TestKanbanBacklogBoards(t *testing.T) {
+	ctx := context.Background()
+	s := boardSetup()
+	b, err := s.CreateBoard(ctx, lead, "KYB", app.BoardSpec{Name: "Flow", Kind: domain.KindKanban, KanbanBacklog: true})
+	if err != nil || !b.KanbanBacklog() || b.BacklogStatuses()[0] != "todo" {
+		t.Fatalf("create = %v %v", b, err)
+	}
+	if _, err := s.CreateBoard(ctx, lead, "KYB", app.BoardSpec{Name: "Sprints", Kind: domain.KindScrum, KanbanBacklog: true}); !errors.Is(err, domain.ErrInvalidBoard) {
+		t.Fatalf("scrum with kanban backlog: %v", err)
+	}
+	u, err := s.UpdateBoard(ctx, lead, string(b.ID()), b.Version(), app.BoardSpec{Name: "Flow", Kind: domain.KindKanban})
+	if err != nil || u.KanbanBacklog() {
+		t.Fatalf("turn off: %v %v", u, err)
+	}
+	if _, err := s.UpdateBoard(ctx, lead, string(b.ID()), u.Version(), app.BoardSpec{Name: "Flow", Kind: domain.KindScrum, KanbanBacklog: true}); !errors.Is(err, domain.ErrInvalidBoard) {
+		t.Fatalf("update to scrum with backlog: %v", err)
+	}
+}

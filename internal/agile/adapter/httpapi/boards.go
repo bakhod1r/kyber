@@ -16,10 +16,11 @@ type boardDTO struct {
 	Kind       string          `json:"kind"`
 	Columns    []domain.Column `json:"columns"`
 	Version    int             `json:"version"`
+	Backlog    bool            `json:"kanban_backlog"`
 }
 
 func toBoardDTO(b *domain.Board) boardDTO {
-	return boardDTO{ID: string(b.ID()), ProjectKey: b.Project(), Name: b.Name(), Kind: string(b.Kind()), Columns: b.Columns(), Version: b.Version()}
+	return boardDTO{ID: string(b.ID()), ProjectKey: b.Project(), Name: b.Name(), Kind: string(b.Kind()), Columns: b.Columns(), Version: b.Version(), Backlog: b.KanbanBacklog()}
 }
 
 type boardIn struct {
@@ -27,10 +28,11 @@ type boardIn struct {
 	Kind    domain.BoardKind `json:"kind"`
 	Columns []domain.Column  `json:"columns"`
 	Version int              `json:"version"`
+	Backlog bool             `json:"kanban_backlog"`
 }
 
 func (in boardIn) spec() app.BoardSpec {
-	return app.BoardSpec{Name: in.Name, Kind: in.Kind, Columns: in.Columns}
+	return app.BoardSpec{Name: in.Name, Kind: in.Kind, Columns: in.Columns, KanbanBacklog: in.Backlog}
 }
 
 func (h *Handler) boards(w http.ResponseWriter, r *http.Request) {

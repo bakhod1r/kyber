@@ -15,6 +15,7 @@ type boardEntry struct {
 	columns           []domain.Column
 	version           int
 	follows           bool
+	backlog           bool
 }
 
 // BoardRepository keeps boards in memory.
@@ -36,7 +37,7 @@ func (r *BoardRepository) SaveBoard(ctx context.Context, b *domain.Board) error 
 	}
 	b.MarkPersisted()
 	r.byID[b.ID()] = boardEntry{ws: tenant.Workspace(ctx), project: b.Project(), name: b.Name(), kind: b.Kind(),
-		columns: b.Columns(), version: b.Version(), follows: b.FollowsWorkflow()}
+		columns: b.Columns(), version: b.Version(), follows: b.FollowsWorkflow(), backlog: b.KanbanBacklog()}
 	return nil
 }
 
@@ -83,5 +84,6 @@ func (e boardEntry) board(id domain.BoardID) *domain.Board {
 	if e.follows {
 		b.FollowWorkflow()
 	}
+	_ = b.SetKanbanBacklog(e.backlog) // stored boards are valid
 	return b
 }

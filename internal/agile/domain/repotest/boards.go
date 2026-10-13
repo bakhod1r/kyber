@@ -97,6 +97,23 @@ func RunBoards(t *testing.T, newRepo BoardFactory) {
 			t.Fatal("flag must clear after a manual configuration")
 		}
 	})
+	t.Run("the kanban backlog flag persists", func(t *testing.T) {
+		repo := newRepo(t)
+		b := board(t, BoardA, "KYB", "Flow")
+		if err := b.SetKanbanBacklog(true); err != nil {
+			t.Fatal(err)
+		}
+		_ = repo.SaveBoard(ctx, b)
+		got, _ := repo.BoardByID(ctx, BoardA)
+		if !got.KanbanBacklog() {
+			t.Fatal("flag lost on insert")
+		}
+		_ = got.SetKanbanBacklog(false)
+		_ = repo.SaveBoard(ctx, got)
+		if again, _ := repo.BoardByID(ctx, BoardA); again.KanbanBacklog() {
+			t.Fatal("flag not cleared on update")
+		}
+	})
 	t.Run("delete", func(t *testing.T) {
 		repo := newRepo(t)
 		_ = repo.SaveBoard(ctx, board(t, BoardA, "KYB", "Board"))

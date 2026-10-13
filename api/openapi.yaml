@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.24.0
+  version: 0.25.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1698,9 +1698,10 @@ components:
         name: { type: string, maxLength: 60 }
         kind: { type: string, enum: [scrum, kanban] }
         columns: { type: array, items: { $ref: "#/components/schemas/BoardColumn" } }
+        kanban_backlog: { type: boolean, description: "Kanban boards with 2+ columns: list the first column's issues in a backlog instead of on the board." }
     Board:
       type: object
-      required: [id, project_key, name, kind, columns, version]
+      required: [id, project_key, name, kind, columns, version, kanban_backlog]
       properties:
         id: { type: string }
         project_key: { type: string }
@@ -1708,6 +1709,7 @@ components:
         kind: { type: string, enum: [scrum, kanban] }
         columns: { type: array, items: { $ref: "#/components/schemas/BoardColumn" } }
         version: { type: integer }
+        kanban_backlog: { type: boolean }
     WorkflowStatus:
       type: object
       required: [id, name, category]

@@ -61,6 +61,7 @@ type Board struct {
 	columns []Column
 	version int
 	follows bool // tracks the workflow until configured by hand
+	backlog bool // Kanban backlog: the first column's issues are listed apart, not on the board
 }
 
 // StatusRef is a workflow status as the board sees it.
@@ -113,6 +114,9 @@ func (b *Board) Configure(name string, kind BoardKind, columns []Column) error {
 		}
 	}
 	b.name, b.kind, b.columns, b.follows = name, kind, out, false
+	if kind != KindKanban || len(out) < 2 {
+		b.backlog = false
+	}
 	return nil
 }
 
@@ -192,4 +196,24 @@ func (b *Board) SyncWith(statuses []StatusRef) {
 	if len(out) > 0 {
 		b.columns = out
 	}
+}
+
+// SetKanbanBacklog turns Jira's Kanban backlog on or off: the first column's issues then wait in a
+// backlog list instead of crowding the board. Only Kanban boards with two or more columns have one.
+func (b *Board) SetKanbanBacklog(on bool) error {
+	if on && (b.kind != KindKanban || len(b.columns) < 2) {
+		return fmt.Errorf("a kanban backlog needs a kanban board with at least two columns: %w", ErrInvalidBoard)
+	}
+	b.backlog = on
+	return nil
+}
+
+func (b *Board) KanbanBacklog() bool { return b.backlog }
+
+// BacklogStatuses are the statuses listed in the Kanban backlog (none when it is off).
+func (b *Board) BacklogStatuses() []string {
+	if !b.backlog {
+		return nil
+	}
+	return append([]string{}, b.columns[0].Statuses...)
 }

@@ -25,13 +25,13 @@ func (r *BoardRepository) SaveBoard(ctx context.Context, b *domain.Board) error 
 	}
 	var tag pgconn.CommandTag
 	if b.Version() == 0 {
-		tag, err = r.pool.Exec(ctx, `INSERT INTO boards (id, workspace_id, project_key, name, kind, columns, version, follows_workflow)
-			VALUES ($1, $2, $3, $4, $5, $6, 1, $7) ON CONFLICT (id) DO NOTHING`,
-			string(b.ID()), tenant.Workspace(ctx), b.Project(), b.Name(), string(b.Kind()), cols, b.FollowsWorkflow())
+		tag, err = r.pool.Exec(ctx, `INSERT INTO boards (id, workspace_id, project_key, name, kind, columns, version, follows_workflow, kanban_backlog)
+			VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8) ON CONFLICT (id) DO NOTHING`,
+			string(b.ID()), tenant.Workspace(ctx), b.Project(), b.Name(), string(b.Kind()), cols, b.FollowsWorkflow(), b.KanbanBacklog())
 	} else {
-		tag, err = r.pool.Exec(ctx, `UPDATE boards SET name = $2, kind = $3, columns = $4, follows_workflow = $7, version = version + 1
+		tag, err = r.pool.Exec(ctx, `UPDATE boards SET name = $2, kind = $3, columns = $4, follows_workflow = $7, kanban_backlog = $8, version = version + 1
 			WHERE id = $1 AND version = $5 AND workspace_id = $6`,
-			string(b.ID()), b.Name(), string(b.Kind()), cols, b.Version(), tenant.Workspace(ctx), b.FollowsWorkflow())
+			string(b.ID()), b.Name(), string(b.Kind()), cols, b.Version(), tenant.Workspace(ctx), b.FollowsWorkflow(), b.KanbanBacklog())
 	}
 	if err != nil {
 		return err
@@ -43,14 +43,14 @@ func (r *BoardRepository) SaveBoard(ctx context.Context, b *domain.Board) error 
 	return nil
 }
 
-const boardCols = `SELECT id::text, project_key, name, kind, columns, version, follows_workflow FROM boards`
+const boardCols = `SELECT id::text, project_key, name, kind, columns, version, follows_workflow, kanban_backlog FROM boards`
 
 func scanBoard(row pgx.Row) (*domain.Board, error) {
 	var id, project, name, kind string
 	var raw []byte
 	var version int
-	var follows bool
-	if err := row.Scan(&id, &project, &name, &kind, &raw, &version, &follows); err != nil {
+	var follows, backlog bool
+	if err := row.Scan(&id, &project, &name, &kind, &raw, &version, &follows, &backlog); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrBoardNotFound
 		}
@@ -64,6 +64,7 @@ func scanBoard(row pgx.Row) (*domain.Board, error) {
 	if follows {
 		b.FollowWorkflow()
 	}
+	_ = b.SetKanbanBacklog(backlog) // stored boards are valid
 	return b, nil
 }
 

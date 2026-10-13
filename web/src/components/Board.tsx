@@ -29,9 +29,20 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
   const board = boards.data?.find((b) => b.id === boardId) ?? boards.data?.[0];
   const columns: BoardColumn[] =
     board?.columns ?? (workflow.data ?? DEFAULT_WORKFLOW).statuses.map((st) => ({ name: st.name, statuses: [st.id], min: 0, max: 0 }));
+  // Kanban backlog (S48): the first column's issues wait in a list below instead of on the board.
+  const kanbanBacklog = !active && !!board?.kanban_backlog && columns.length > 1;
+  const boardColumns = kanbanBacklog ? columns.slice(1) : columns;
+  const waiting = kanbanBacklog ? (issues.data ?? []).filter((i) => columns[0]?.statuses.includes(i.status)) : [];
+  const selectTo = columns[1]?.statuses[0];
   const byId = new Map<string, Member>((members.data ?? []).map((m) => [m.user_id, m]));
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const toggleBacklog = useMutation({
+    mutationFn: (on: boolean) => api.updateBoard(board!, { kanban_backlog: on }),
+    onMutate: () => setError(null),
+    onError: (err) => setError(err.message),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["boards", projectKey] }),
+  });
 
   const move = useMutation({
     mutationFn: ({ key, to }: { key: string; to: Status }) => api.transition(key, to),
@@ -86,6 +97,17 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
           </select>
         </label>
       )}
+      {board?.kind === "kanban" && columns.length > 1 && !active && (
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={!!board.kanban_backlog}
+            disabled={toggleBacklog.isPending}
+            onChange={(e) => toggleBacklog.mutate(e.target.checked)}
+          />
+          Kanban backlog
+        </label>
+      )}
       <QuickAdd projectKey={projectKey} sprintId={active?.id} />
       {error && (
         <p role="alert" className="error">
@@ -93,7 +115,7 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
         </p>
       )}
       <div className="board">
-        {columns.map((col) => {
+        {boardColumns.map((col) => {
           const cards = issues.data.filter((i) => col.statuses.includes(i.status));
           const wip = col.max > 0 && cards.length > col.max ? " wip-over" : col.min > 0 && cards.length < col.min ? " wip-under" : "";
           return (
@@ -145,6 +167,31 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
           );
         })}
       </div>
+      {kanbanBacklog && (
+        <section aria-label="Kanban backlog" className="kanban-backlog panel">
+          <h2>
+            Backlog <span className="count">{waiting.length}</span>
+          </h2>
+          <ul className="child-list">
+            {waiting.map((i) => (
+              <li key={i.id}>
+                <span className="key">{i.key}</span>
+                <button type="button" className="card-open" onClick={() => onOpen?.(i.key)}>
+                  {i.title}
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  aria-label={`Select ${i.key} for development`}
+                  onClick={() => selectTo && move.mutate({ key: i.key, to: selectTo })}
+                >
+                  Select for development
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

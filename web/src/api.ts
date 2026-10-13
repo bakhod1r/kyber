@@ -156,7 +156,7 @@ export type HistoryEntry = {
   to_name: string;
 };
 export type BoardColumn = { name: string; statuses: Status[]; min: number; max: number };
-export type BoardView = { id: string; project_key: string; name: string; kind: "scrum" | "kanban"; columns: BoardColumn[]; version: number };
+export type BoardView = { id: string; project_key: string; name: string; kind: "scrum" | "kanban"; columns: BoardColumn[]; version: number; kanban_backlog?: boolean };
 
 /** Jira's simplified workflow, used until the project's own workflow has loaded. */
 export const DEFAULT_WORKFLOW: Workflow = {
@@ -347,6 +347,10 @@ export const api = {
   resetPermissions: (key: string) => request<undefined>("DELETE", `/api/v1/projects/${seg(key)}/permissions`),
   audit: (key: string) => request<List<AuditEntry>>("GET", `/api/v1/projects/${seg(key)}/audit`).then((r) => r.items),
   history: (issueKey: string) => request<List<HistoryEntry>>("GET", `/api/v1/issues/${seg(issueKey)}/history`).then((r) => r.items),
+  updateBoard: (b: BoardView, patch: Partial<Pick<BoardView, "name" | "kind" | "columns" | "kanban_backlog">>) =>
+    request<BoardView>("PUT", `/api/v1/boards/${seg(b.id)}`, {
+      version: b.version, name: b.name, kind: b.kind, columns: b.columns, kanban_backlog: b.kanban_backlog ?? false, ...patch,
+    }),
   boards: (key: string) => request<List<BoardView>>("GET", `/api/v1/projects/${seg(key)}/boards`).then((r) => r.items),
   workflow: (key: string) => request<Workflow>("GET", `/api/v1/projects/${seg(key)}/workflow`),
   setWorkflow: (key: string, wf: Workflow) => request<Workflow>("PUT", `/api/v1/projects/${seg(key)}/workflow`, wf),

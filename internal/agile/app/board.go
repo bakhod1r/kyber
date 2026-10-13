@@ -25,9 +25,10 @@ type Workflows interface {
 
 // BoardSpec is a board's configuration; no columns means one column per workflow status.
 type BoardSpec struct {
-	Name    string
-	Kind    domain.BoardKind
-	Columns []domain.Column
+	Name          string
+	Kind          domain.BoardKind
+	Columns       []domain.Column
+	KanbanBacklog bool // list the first column's issues in a Kanban backlog
 }
 
 // Boards lists the project's boards; like Jira, a project gets a Kanban board on first use.
@@ -101,6 +102,9 @@ func (s *Service) UpdateBoard(ctx context.Context, actor, id string, version int
 	if err := b.Configure(spec.Name, spec.Kind, cols); err != nil {
 		return nil, err
 	}
+	if err := b.SetKanbanBacklog(spec.KanbanBacklog); err != nil {
+		return nil, err
+	}
 	return b, s.d.Boards.SaveBoard(ctx, b)
 }
 
@@ -138,7 +142,11 @@ func (s *Service) newBoard(ctx context.Context, project string, spec BoardSpec) 
 	if err != nil {
 		return nil, err
 	}
-	return domain.NewBoard(domain.BoardID(s.d.NewID()), project, spec.Name, spec.Kind, cols)
+	b, err := domain.NewBoard(domain.BoardID(s.d.NewID()), project, spec.Name, spec.Kind, cols)
+	if err != nil {
+		return nil, err
+	}
+	return b, b.SetKanbanBacklog(spec.KanbanBacklog)
 }
 
 // columns checks mapped statuses against the project's workflow, or derives one column per status.

@@ -52,9 +52,13 @@ test("reports show KPIs, distributions, burndown, velocity and the sprint report
   await expect(page.getByRole("figure", { name: "Velocity" }).getByRole("table")).toContainText("Sprint 1");
 
   // S47 sprint report: KYB-1 completed; KYB-2 and KYB-3 carried over to the backlog.
-  const report = page.getByRole("region", { name: "Sprint report" });
-  await expect(report.getByRole("list", { name: "Completed issues" })).toContainText(`${key}-1`);
-  const carried = report.getByRole("list", { name: "Not completed (carried over)" });
-  await expect(carried).toContainText(`${key}-2`);
-  await expect(carried).toContainText(`${key}-3`);
+  // The report reads the activity log, which the relay fills asynchronously: reload until it is in.
+  await expect(async () => {
+    await page.reload();
+    const report = page.getByRole("region", { name: "Sprint report" });
+    await expect(report.getByRole("list", { name: "Completed issues" })).toContainText(`${key}-1`, { timeout: 1000 });
+    const carried = report.getByRole("list", { name: "Not completed (carried over)" });
+    await expect(carried).toContainText(`${key}-2`, { timeout: 1000 });
+    await expect(carried).toContainText(`${key}-3`, { timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
 });
