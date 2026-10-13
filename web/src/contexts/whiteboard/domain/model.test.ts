@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyLocal, box, type Element, hit, inverse, reconcile } from "./model";
+import { applyLocal, box, newer, type Element, hit, inverse, linkedIssue, reconcile, stickyToIssue } from "./model";
 
 const rect: Element = { id: "r", kind: "rect", x: 10, y: 10, w: 100, h: 50, points: [], text: "", color: "#000000", version: 1 };
 const line: Element = { ...rect, id: "l", kind: "line", x: 0, y: 0, w: 0, h: 0, points: [{ x: 0, y: 0 }, { x: 100, y: 100 }] };
@@ -15,6 +15,11 @@ describe("whiteboard domain", () => {
     expect(els.r).toBeUndefined();
   });
 
+  it("keeps only changes newer than what we know", () => {
+    const known = { r: rect };
+    expect(newer(known, [rect, { ...rect, version: 2 }, { ...rect, id: "n" }]).map((e) => `${e.id}${e.version}`)).toEqual(["r2", "n1"]);
+  });
+
   it("inverts changes for undo", () => {
     expect(inverse({ op: "add", element: rect }, undefined)).toEqual({ op: "delete", element: rect });
     expect(inverse({ op: "delete", element: rect }, rect)).toEqual({ op: "add", element: { ...rect, version: 0 } });
@@ -27,5 +32,13 @@ describe("whiteboard domain", () => {
     expect(hit(rect, { x: 200, y: 30 })).toBe(false);
     expect(hit(line, { x: 51, y: 49 })).toBe(true);
     expect(hit(line, { x: 80, y: 10 })).toBe(false);
+  });
+});
+
+describe("sticky notes become issues", () => {
+  it("splits title and description and remembers the issue", () => {
+    expect(stickyToIssue("  Cache the board\nUse Redis\nor memory ")).toEqual({ title: "Cache the board", description: "Use Redis\nor memory" });
+    expect(linkedIssue("Cache the board\n→ KYB-12")).toBe("KYB-12");
+    expect(linkedIssue("Cache the board")).toBeUndefined();
   });
 });

@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type PointerEvent, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { issueUseCases } from "../../issue/application";
+import { projectUseCases } from "../../project/application";
 import {
-  box, COLORS, type Element, hit, type Kind, newId, ordered, type Point, STICKY, useWhiteboard, whiteboardUseCases,
+  box, COLORS, type Element, hit, type Kind, linkedIssue, newId, ordered, type Point, STICKY, stickyToIssue, useWhiteboard, whiteboardUseCases,
 } from "../application";
 
 const W = 1600;
@@ -170,6 +173,16 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
     setDraft(null);
   };
 
+  const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
+  const toIssue = useMutation({
+    mutationFn: async ({ note, key }: { note: Element; key: string }) => {
+      const { title, description } = stickyToIssue(note.text);
+      const issue = await issueUseCases.createIssue(key, title, "task");
+      if (description) await issueUseCases.editIssue(issue.key, { version: issue.version, description });
+      return { note, issue };
+    },
+    onSuccess: ({ note, issue }) => wb.change({ op: "update", element: { ...note, text: `${note.text}\n→ ${issue.key}` } }),
+  });
   const remove = () => {
     if (!sel) return;
     wb.change({ op: "delete", element: sel });
@@ -242,6 +255,15 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
           <button className="ghost" onClick={wb.undo} disabled={!wb.canUndo}>Undo</button>
           <button className="ghost" onClick={wb.redo} disabled={!wb.canRedo}>Redo</button>
           {sel && (sel.kind === "text" || sel.kind === "sticky" || sel.kind === "rect" || sel.kind === "ellipse") && <button className="ghost" onClick={editText}>Edit text</button>}
+          {sel?.kind === "sticky" && sel.text.trim() && !linkedIssue(sel.text) && (projects.data?.length ?? 0) > 0 && (
+            <select aria-label="Create issue from sticky note" value="" onChange={(e) => e.target.value && toIssue.mutate({ note: sel, key: e.target.value })}>
+              <option value="">Create issue in…</option>
+              {projects.data?.map((p) => <option key={p.key} value={p.key}>{p.key} — {p.name}</option>)}
+            </select>
+          )}
+          {sel?.kind === "sticky" && linkedIssue(sel.text) && (
+            <Link to={`/projects/${linkedIssue(sel.text)!.split("-")[0]}?issue=${linkedIssue(sel.text)}`}>Open {linkedIssue(sel.text)}</Link>
+          )}
           {sel && <button className="ghost" onClick={remove}>Delete</button>}
           <button className="ghost" onClick={() => void exportAs("svg")}>Export SVG</button>
           <button className="ghost" onClick={() => void exportAs("png")}>Export PNG</button>
@@ -265,6 +287,7 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
         ))}
       </svg>
       {wb.error && <p role="status" className="muted">{wb.error}</p>}
+      {toIssue.error && <p role="alert" className="error">{toIssue.error.message}</p>}
     </section>
   );
 }

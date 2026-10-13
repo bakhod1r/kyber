@@ -19,7 +19,7 @@ test("two people draw on a whiteboard together", async ({ browser }) => {
   await ali.call("POST", `/api/v1/projects/${key}/members`, { email: bobur.email, role: "member" });
   const channel = await ali.call("POST", "/api/v1/channels", { name: `arch-${id}` });
   await bobur.call("POST", `/api/v1/conversations/${channel.id}/join`);
-  await ali.call("POST", `/api/v1/conversations/${channel.id}/whiteboards`, { title: "Architecture" });
+  const board = await ali.call("POST", `/api/v1/conversations/${channel.id}/whiteboards`, { title: "Architecture" });
 
   const open = async (page: Page) => {
     await page.goto(`/chat/${channel.id}`);
@@ -62,4 +62,18 @@ test("two people draw on a whiteboard together", async ({ browser }) => {
   for (let i = 1; i <= 10; i++) await b.mouse.move(boxB.x + 500 + i * 10, boxB.y + 100 + (i % 2) * 20);
   await b.mouse.up();
   await expect(ca.locator("polyline[data-id]")).toHaveCount(1);
+
+  // A sticky note becomes an issue in the project, and the note links to it.
+  await ali.call("POST", `/api/v1/whiteboards/${board.id}/ops`, { ops: [{ op: "add", element: {
+    id: "note", kind: "sticky", x: 1200, y: 600, w: 200, h: 120, text: "Cache the board\nUse Redis", color: "#fde68a", points: [], version: 0 } }] });
+  await expect(ca.getByText("Cache the board")).toBeVisible();
+  await a.getByRole("button", { name: "Select" }).click();
+  const scale = boxA.width / 1600;
+  await a.mouse.click(boxA.x + 1300 * scale, boxA.y + 660 * scale);
+  await a.getByLabel("Create issue from sticky note").selectOption(key);
+  await expect(cb.getByText(`→ ${key}-1`)).toBeVisible();
+  const issue = await ali.call("GET", `/api/v1/issues/${key}-1`);
+  expect(issue.title).toBe("Cache the board");
+  expect(issue.description).toBe("Use Redis");
+  await expect(a.getByRole("link", { name: `Open ${key}-1` })).toBeVisible();
 });

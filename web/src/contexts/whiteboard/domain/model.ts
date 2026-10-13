@@ -36,6 +36,9 @@ export function reconcile(els: Elements, results: Pick<OpResult, "element">[]): 
   return next;
 }
 
+/** The elements of an event that are newer than what we already have (by element version). */
+export const newer = (known: Elements, incoming: Element[]) => incoming.filter((e) => (known[e.id]?.version ?? 0) < e.version);
+
 /** The change that undoes op, given the element before it (if any). */
 export function inverse(op: Op, before: Element | undefined): Op {
   if (op.op === "add") return { op: "delete", element: op.element };
@@ -68,3 +71,14 @@ function distToSegment(p: Point, a: Point, b: Point) {
 
 /** Drawing order: oldest change first (newer shapes on top). */
 export const ordered = (els: Elements) => Object.values(els).sort((a, b) => (a.updated_at ?? "~").localeCompare(b.updated_at ?? "~"));
+
+/** A sticky note as an issue: the first line is the title, the rest the description (S59). */
+export function stickyToIssue(text: string): { title: string; description: string } {
+  const [first = "", ...rest] = text.trim().split("\n");
+  return { title: first.trim().slice(0, 255), description: rest.join("\n").trim() };
+}
+
+/** The issue a sticky note was turned into ("→ KYB-12" on its last line), if any. */
+export function linkedIssue(text: string): string | undefined {
+  return /(?:^|\n)→ ([A-Z][A-Z0-9]{1,9}-[1-9][0-9]*)\s*$/.exec(text)?.[1];
+}

@@ -3,7 +3,7 @@
 // others' changes and cursors from the stream.
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applyLocal, type Element, type Elements, inverse, type Op, reconcile } from "../domain/model";
+import { applyLocal, type Element, type Elements, inverse, newer, type Op, reconcile } from "../domain/model";
 import { onWhiteboardEvents, whiteboardGateway } from "../infrastructure/gateway";
 
 export * from "../domain/model";
@@ -40,8 +40,11 @@ export function useWhiteboard(id: string, me: string) {
     () =>
       onWhiteboardEvents(
         (e) => {
-          if (e.whiteboard_id !== id || e.by === me) return;
-          const results = e.elements.map((element) => ({ element }));
+          if (e.whiteboard_id !== id) return;
+          // Only what is newer than we know: our own changes come back from our requests already, but the
+          // same person's other tabs (or the API) must still show up.
+          const results = newer(confirmed.current, e.elements).map((element) => ({ element }));
+          if (results.length === 0) return;
           confirmed.current = reconcile(confirmed.current, results);
           setEls((cur) => reconcile(cur, results));
         },
