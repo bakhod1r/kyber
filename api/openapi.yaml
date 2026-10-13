@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.27.0
+  version: 0.28.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1318,6 +1318,79 @@ paths:
         "200": { description: OK, content: { text/markdown: { schema: { type: string } } } }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/search:
+    get:
+      operationId: searchIssues
+      description: |
+        JQL search over every project the caller may browse; issues hidden by security levels never match.
+        Fields: project, key, type (issuetype), status, statusCategory, priority, assignee, reporter, sprint, fixVersion,
+        resolution, parent, summary, description, text, "story points". Operators: = != IN, NOT IN, ~ !~, < <= > >=,
+        IS [NOT] EMPTY; AND, OR, NOT, parentheses; functions currentUser(), openSprints(); ORDER BY field [ASC|DESC], ...
+        An invalid query is 422 SEARCH_INVALID_JQL with the position in the detail ("JQL at 9: expected a value").
+      parameters:
+        - { name: jql, in: query, schema: { type: string, maxLength: 1000 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 200 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total, items]
+                properties:
+                  total: { type: integer }
+                  items: { type: array, items: { $ref: "#/components/schemas/SearchHit" } }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/filters:
+    get:
+      operationId: listFilters
+      description: The caller's saved filters and the workspace's shared ones, by name.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Filter" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createFilter
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FilterInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Filter" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/filters/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: updateFilter
+      description: The owner changes a filter loaded at `version`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf: [{ $ref: "#/components/schemas/FilterInput" }]
+              required: [version]
+              properties: { version: { type: integer } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Filter" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteFilter
+      description: The owner deletes a filter.
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/sprints/{id}/report:
     parameters: [{ $ref: "#/components/parameters/SprintID" }]
     get:
@@ -1692,6 +1765,39 @@ components:
     Resolution:
       type: string
       enum: [done, wont_do, duplicate, cannot_reproduce]
+    SearchHit:
+      type: object
+      required: [key, project_key, title, type, status, status_name, status_category, priority, assignee_id, resolution, points]
+      properties:
+        key: { type: string }
+        project_key: { type: string }
+        title: { type: string }
+        type: { type: string }
+        status: { type: string }
+        status_name: { type: string }
+        status_category: { type: string }
+        priority: { type: string }
+        assignee_id: { type: [string, "null"] }
+        resolution: { type: string }
+        points: { type: [number, "null"] }
+    Filter:
+      type: object
+      required: [id, owner_id, name, jql, shared, version, mine]
+      properties:
+        id: { type: string }
+        owner_id: { type: string }
+        name: { type: string }
+        jql: { type: string }
+        shared: { type: boolean }
+        version: { type: integer }
+        mine: { type: boolean }
+    FilterInput:
+      type: object
+      required: [name, jql]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 60 }
+        jql: { type: string, maxLength: 1000 }
+        shared: { type: boolean }
     Version:
       type: object
       required: [id, project_key, name, description, release_date, state, released_at, version]

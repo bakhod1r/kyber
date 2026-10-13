@@ -10,6 +10,7 @@ import { ProjectPage } from "./ProjectPage";
 import { SettingsPage } from "../contexts/notify/ui/SettingsPage";
 import { ProjectsPage } from "../contexts/project/ui/ProjectsPage";
 import { identityUseCases } from "../contexts/identity/application";
+import { SearchPage } from "../contexts/search/ui/SearchPage";
 
 export const ME = ["me"];
 
@@ -58,6 +59,7 @@ export function AppRoutes() {
       <Route path="/projects/:key/permissions" element={<RequireUser><ProjectPage view="permissions" /></RequireUser>} />
       <Route path="/projects/:key/notifications" element={<RequireUser><ProjectPage view="notifications" /></RequireUser>} />
       <Route path="/meetings" element={<RequireUser><MeetingsPage /></RequireUser>} />
+      <Route path="/search" element={<RequireUser><SearchPage /></RequireUser>} />
       <Route path="/settings" element={<RequireUser><SettingsPage /></RequireUser>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

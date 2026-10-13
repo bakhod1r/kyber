@@ -49,6 +49,9 @@ const (
 	CodeVersionState         = "VERSION_STATE"
 	CodeVersionNameTaken     = "VERSION_NAME_TAKEN"
 	CodeWorklogNotFound      = "WORKLOG_NOT_FOUND"
+	CodeInvalidJQL           = "SEARCH_INVALID_JQL"
+	CodeFilterNotFound       = "FILTER_NOT_FOUND"
+	CodeFilterConflict       = "FILTER_CONFLICT"
 	CodeNotificationNotFound = "NOTIFICATION_NOT_FOUND"
 	CodeImportTooLarge       = "IMPORT_TOO_LARGE"
 	CodeImportInvalidFile    = "IMPORT_INVALID_FILE"
@@ -108,6 +111,9 @@ var codes = []code{
 	{CodeVersionState, "6082", 409, "The version is not in a state that allows this.", "Versiya holati bunga ruxsat bermaydi.", "Текущее состояние версии этого не допускает.", errorx.CategoryBusiness},
 	{CodeVersionNameTaken, "6083", 409, "This project already has a version with that name.", "Loyihada bu nomli versiya allaqachon bor.", "В проекте уже есть версия с таким названием.", errorx.CategoryBusiness},
 	{CodeWorklogNotFound, "6084", 404, "Worklog not found.", "Vaqt yozuvi topilmadi.", "Запись о работе не найдена.", errorx.CategoryBusiness},
+	{CodeInvalidJQL, "6090", 422, "The query is not valid JQL.", "So'rov JQL qoidalariga mos emas.", "Запрос не является корректным JQL.", errorx.CategoryValidation},
+	{CodeFilterNotFound, "6091", 404, "Filter not found.", "Filtr topilmadi.", "Фильтр не найден.", errorx.CategoryBusiness},
+	{CodeFilterConflict, "6092", 409, "Someone else changed this filter. Reload and try again.", "Filtrni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Фильтр изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeLastBoard, "6026", 409, "A project must keep at least one board.", "Loyihada kamida bitta board qolishi kerak.", "В проекте должна остаться хотя бы одна доска.", errorx.CategoryBusiness},
 	{CodeNotificationNotFound, "6040", 404, "Notification not found.", "Bildirishnoma topilmadi.", "Уведомление не найдено.", errorx.CategoryBusiness},
 	{CodeImportTooLarge, "6050", 413, "The file is too large to import (10 MB max).", "Fayl import uchun juda katta (ko'pi bilan 10 MB).", "Файл слишком большой для импорта (не более 10 МБ).", errorx.CategoryValidation},

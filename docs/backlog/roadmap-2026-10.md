@@ -19,7 +19,7 @@ architecture test, Vitest, e2e ×3) → commit + push → short report.
 
 ## C. Features
 1. ✅ Worklog: log work, original/remaining estimate, time tracking in the issue, time statistics in the sprint report.
-2. JQL: lexer/parser in the domain, SQL in infrastructure, memory evaluator, search page, saved filters.
+2. ✅ JQL: lexer/parser in the domain, SQL in infrastructure, memory evaluator, search page, saved filters.
 3. Board settings UI: columns, status mapping, WIP limits.
 4. Custom fields: per-project definitions (text, number, date, select), values on issues, API/UI, JQL.
 5. Attachments: storage port; MinIO/S3 and local adapters; size limits, authorization, UI.
