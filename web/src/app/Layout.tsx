@@ -25,6 +25,9 @@ export function Layout({ user, children }: { user: User; children: ReactNode }) 
         <Link to="/search" className="nav-link">
           Search
         </Link>
+        <Link to="/chat" className="nav-link">
+          Chat
+        </Link>
         <Link to="/meetings" className="nav-link">
           Time table
         </Link>

@@ -31,6 +31,8 @@ backends.
   authorized read (hidden issues are not previewed); `issues` on every REST message.
 - **S53 Chat UI** — sidebar (channels, DMs, unread badges), channel view with infinite scroll, composer with
   mentions, thread panel, reactions, typing line; TanStack Query + the stream.
+  ✅ **Done:** `web/src/contexts/chat` (four layers), `/chat` and `/chat/:id`, live updates over `EventSource`,
+  unit tests and an e2e test with two browsers (message, reaction and typing arrive live).
 - **S54 Pins, search, files** (P1) — pin messages, search in messages I can read, file attachments via BlobStore.
 
 ## Video calls (huddles)
