@@ -136,7 +136,9 @@ func (s *Service) otherVersion(ctx context.Context, v *domain.Version, to string
 }
 
 // ReleaseVersion ships the version. Its unresolved issues move to moveTo (another unreleased
-// version), or stay when moveTo is "" — as Jira asks on release.
+// version), or stay when moveTo is "" — as Jira asks on release. The move happens in Issue
+// Tracking, in reaction to the VersionShipped event saved with the version; the count returned
+// is the unresolved issues that will move.
 func (s *Service) ReleaseVersion(ctx context.Context, actor, id, moveTo string) (*domain.Version, int, error) {
 	v, err := s.adminVersion(ctx, actor, id)
 	if err != nil {
@@ -150,11 +152,15 @@ func (s *Service) ReleaseVersion(ctx context.Context, actor, id, moveTo string) 
 	}
 	moved := 0
 	if moveTo != "" {
-		if moved, err = s.d.Issues.MoveFixVersion(ctx, actor, v.Project(), id, moveTo, true); err != nil {
-			return nil, moved, err
+		issues, err := s.d.Issues.VersionIssues(ctx, actor, v.Project(), id)
+		if err != nil {
+			return nil, 0, err
 		}
+		moved = summarize(v, issues).Unresolved
 	}
-	_ = v.Release(s.d.Now()) // checked above
+	if err := v.Release(s.d.Now(), actor, domain.VersionID(moveTo)); err != nil {
+		return nil, 0, err
+	}
 	return v, moved, s.d.Versions.SaveVersion(ctx, v)
 }
 
@@ -171,6 +177,7 @@ func (s *Service) ChangeVersionState(ctx context.Context, actor, id string, step
 }
 
 // DeleteVersion removes the version; its issues move to moveTo, or lose the version when "".
+// Issue Tracking moves them in reaction to the VersionRemoved event saved with the deletion.
 func (s *Service) DeleteVersion(ctx context.Context, actor, id, moveTo string) error {
 	v, err := s.adminVersion(ctx, actor, id)
 	if err != nil {
@@ -179,10 +186,10 @@ func (s *Service) DeleteVersion(ctx context.Context, actor, id, moveTo string) e
 	if err := s.otherVersion(ctx, v, moveTo, false); err != nil {
 		return err
 	}
-	if _, err := s.d.Issues.MoveFixVersion(ctx, actor, v.Project(), id, moveTo, false); err != nil {
+	if err := v.Delete(actor, domain.VersionID(moveTo)); err != nil {
 		return err
 	}
-	return s.d.Versions.DeleteVersion(ctx, v.ID())
+	return s.d.Versions.DeleteVersion(ctx, v)
 }
 
 // CanFix implements Issue Tracking's port: issues may get unarchived versions of their project.

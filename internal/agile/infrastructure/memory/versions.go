@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/bakhod1r/kyber/internal/agile/domain"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
@@ -17,8 +18,36 @@ type versionEntry struct {
 
 // VersionRepository keeps versions in memory.
 type VersionRepository struct {
-	mu   sync.Mutex
-	byID map[domain.VersionID]versionEntry
+	mu     sync.Mutex
+	byID   map[domain.VersionID]versionEntry
+	outbox []domain.Event
+	outAt  []outbox.Meta
+}
+
+// Outbox returns the version events written so far; OutboxMeta their time and workspace.
+func (r *VersionRepository) Outbox() []domain.Event {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]domain.Event(nil), r.outbox...)
+}
+
+func (r *VersionRepository) OutboxMeta() []outbox.Meta {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]outbox.Meta(nil), r.outAt...)
+}
+
+// OutboxNames returns the names of the version events written so far.
+func (r *VersionRepository) OutboxNames() []string {
+	var names []string
+	for _, e := range r.Outbox() {
+		names = append(names, e.EventName())
+	}
+	return names
+}
+
+func (r *VersionRepository) record(ctx context.Context, events []domain.Event) {
+	r.outbox, r.outAt = append(r.outbox, events...), appendNow(ctx, r.outAt, len(events))
 }
 
 func NewVersionRepository() *VersionRepository {
@@ -40,6 +69,7 @@ func (r *VersionRepository) SaveVersion(ctx context.Context, v *domain.Version) 
 	}
 	v.MarkPersisted()
 	r.byID[v.ID()] = versionEntry{ws: ws, s: v.Snapshot()}
+	r.record(ctx, v.PullEvents())
 	return nil
 }
 
@@ -84,13 +114,14 @@ func compareVersions(a, b domain.VersionSnapshot) int {
 	return cmp.Compare(a.Name, b.Name)
 }
 
-func (r *VersionRepository) DeleteVersion(ctx context.Context, id domain.VersionID) error {
+func (r *VersionRepository) DeleteVersion(ctx context.Context, v *domain.Version) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	e, ok := r.byID[id]
+	e, ok := r.byID[v.ID()]
 	if !ok || e.ws != tenant.Workspace(ctx) {
 		return domain.ErrVersionNotFound
 	}
-	delete(r.byID, id)
+	delete(r.byID, v.ID())
+	r.record(ctx, v.PullEvents())
 	return nil
 }

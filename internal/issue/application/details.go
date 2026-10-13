@@ -92,17 +92,17 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 		if *cmd.Security != "" && !slices.Contains(s.levels, *cmd.Security) {
 			return nil, fmt.Errorf("%q: %w", *cmd.Security, ErrInvalidSecurityLevel)
 		}
-		is.SetSecurityLevel(*cmd.Security)
+		is.Classify(*cmd.Security)
 	}
 	if cmd.FixVersions != nil {
 		ids := make([]domain.VersionID, len(*cmd.FixVersions))
 		for n, v := range *cmd.FixVersions {
 			ids[n] = domain.VersionID(v)
 		}
-		is.SetFixVersions(ids)
+		is.PlanForVersions(ids)
 	}
 	if cmd.Resolution != nil && *cmd.Resolution != string(is.Resolution()) {
-		if err := is.SetResolution(domain.Resolution(*cmd.Resolution)); err != nil {
+		if err := is.ChangeResolution(domain.Resolution(*cmd.Resolution)); err != nil {
 			return nil, err
 		}
 	}
@@ -115,13 +115,7 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 			return nil, err
 		}
 	}
-	if err := s.save(ctx, actor, is); err != nil {
-		return nil, err
-	}
-	if cmd.AssigneeSet && cmd.Assignee != "" {
-		return is, s.autoWatch(ctx, is.ID(), domain.UserID(cmd.Assignee)) // the assignee watches, as in Jira
-	}
-	return is, nil
+	return is, s.save(ctx, actor, is)
 }
 
 // CommentView is a comment plus its author's display name.
@@ -140,10 +134,7 @@ func (s *Service) AddComment(ctx context.Context, actor, rawKey, body string) (*
 	if err != nil {
 		return nil, err
 	}
-	if err := s.comments.Add(ctx, c, c.PullEvents()); err != nil {
-		return nil, err
-	}
-	return c, s.autoWatch(ctx, is.ID(), domain.UserID(actor)) // commenters watch, as in Jira
+	return c, s.comments.Add(ctx, c, c.PullEvents())
 }
 
 func (s *Service) Comments(ctx context.Context, actor, rawKey string) ([]CommentView, error) {

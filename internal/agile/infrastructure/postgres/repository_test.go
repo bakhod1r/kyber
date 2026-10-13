@@ -51,7 +51,7 @@ func TestBoardContract(t *testing.T) {
 }
 
 func TestVersionContract(t *testing.T) {
-	repotest.RunVersions(t, func(t *testing.T) domain.VersionRepository {
+	repotest.RunVersions(t, func(t *testing.T) (domain.VersionRepository, func() []string) {
 		pool := dbtest.New(t)
 		ctx := context.Background()
 		if _, err := pool.Exec(ctx, `INSERT INTO workspaces (id, slug, name) VALUES ($1, 'other', 'Other')`, repotest.OtherWorkspace); err != nil {
@@ -63,6 +63,17 @@ func TestVersionContract(t *testing.T) {
 			('10000000-0000-4000-8000-000000000003','KYB','Kyber',$1)`, repotest.OtherWorkspace); err != nil {
 			t.Fatal(err)
 		}
-		return postgres.NewVersionRepository(pool)
+		outbox := func() []string {
+			rows, _ := pool.Query(ctx, `SELECT name FROM outbox ORDER BY id`)
+			defer rows.Close()
+			var names []string
+			for rows.Next() {
+				var n string
+				_ = rows.Scan(&n)
+				names = append(names, n)
+			}
+			return names
+		}
+		return postgres.NewVersionRepository(pool), outbox
 	})
 }

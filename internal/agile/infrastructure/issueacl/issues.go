@@ -12,7 +12,6 @@ type IssueSource interface {
 	Source
 	ReturnUnfinished(ctx context.Context, actor, project, sprint, to string) (completed, returned int, err error)
 	InVersion(ctx context.Context, actor, project, version string) ([]*issuedomain.Issue, error)
-	MoveFixVersion(ctx context.Context, actor, project, from, to string, unresolvedOnly bool) (int, error)
 }
 
 // Issues adapts Issue Tracking to the Agile context's Issues port.
@@ -39,8 +38,4 @@ func (a Issues) VersionIssues(ctx context.Context, actor, project, version strin
 			Done: wf.IsDone(is.Status()), Resolution: string(is.Resolution())})
 	}
 	return out, nil
-}
-
-func (a Issues) MoveFixVersion(ctx context.Context, actor, project, from, to string, unresolvedOnly bool) (int, error) {
-	return a.src.MoveFixVersion(ctx, actor, project, from, to, unresolvedOnly)
 }

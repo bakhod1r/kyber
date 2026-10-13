@@ -44,7 +44,28 @@ type Version struct {
 	state       VersionState
 	releasedAt  time.Time
 	version     int
+	events      []Event
 }
+
+// VersionShipped: the version was released; Issue Tracking moves its unresolved issues to
+// MoveUnresolvedTo (when set). By is who released it.
+type VersionShipped struct {
+	ID               VersionID `json:"id"`
+	Project          string    `json:"project"`
+	MoveUnresolvedTo VersionID `json:"move_unresolved_to"`
+	By               string    `json:"by"`
+}
+
+// VersionRemoved: the version is gone; Issue Tracking moves its issues to MoveTo, or drops it.
+type VersionRemoved struct {
+	ID      VersionID `json:"id"`
+	Project string    `json:"project"`
+	MoveTo  VersionID `json:"move_to"`
+	By      string    `json:"by"`
+}
+
+func (VersionShipped) EventName() string { return "version.released" }
+func (VersionRemoved) EventName() string { return "version.deleted" }
 
 // VersionSnapshot is the persisted state of a version.
 type VersionSnapshot struct {
@@ -103,13 +124,34 @@ func (v *Version) Edit(name, description string, releaseDate *time.Time) error {
 	return nil
 }
 
-// Release marks an unreleased version as shipped at `at`.
-func (v *Version) Release(at time.Time) error {
+// Release marks an unreleased version as shipped at `at`, by `by`; its unresolved issues are to
+// move on to moveUnresolvedTo ("" = they stay).
+func (v *Version) Release(at time.Time, by string, moveUnresolvedTo VersionID) error {
 	if v.state != VersionUnreleased {
 		return ErrVersionState
 	}
+	if moveUnresolvedTo == v.id {
+		return fmt.Errorf("%w: unresolved issues cannot move to the version being released", ErrInvalidVersion)
+	}
 	v.state, v.releasedAt, v.releaseDate = VersionReleased, at, at
+	v.events = append(v.events, VersionShipped{ID: v.id, Project: v.project, MoveUnresolvedTo: moveUnresolvedTo, By: by})
 	return nil
+}
+
+// Delete records the version's removal; its issues are to move to moveTo ("" = drop it).
+func (v *Version) Delete(by string, moveTo VersionID) error {
+	if moveTo == v.id {
+		return fmt.Errorf("%w: issues cannot move to the version being deleted", ErrInvalidVersion)
+	}
+	v.events = append(v.events, VersionRemoved{ID: v.id, Project: v.project, MoveTo: moveTo, By: by})
+	return nil
+}
+
+// PullEvents returns and clears the recorded domain events.
+func (v *Version) PullEvents() []Event {
+	ev := v.events
+	v.events = nil
+	return ev
 }
 
 // Unrelease reopens a released version.
@@ -142,12 +184,14 @@ func (v *Version) Restore() error {
 	return nil
 }
 
-// VersionRepository stores versions in the workspace of ctx.
+// VersionRepository stores versions in the workspace of ctx. Saving and deleting write the
+// version's pulled domain events to the outbox in the same transaction.
 type VersionRepository interface {
 	// SaveVersion inserts (version 0) or updates with optimistic locking; ErrVersionTaken on a duplicate name.
 	SaveVersion(ctx context.Context, v *Version) error
 	VersionByID(ctx context.Context, id VersionID) (*Version, error)
 	// VersionsOf lists the project's versions: unreleased first by release date, then by name.
 	VersionsOf(ctx context.Context, project string) ([]*Version, error)
-	DeleteVersion(ctx context.Context, id VersionID) error
+	// DeleteVersion removes the version (call Delete on it first, for its VersionRemoved event).
+	DeleteVersion(ctx context.Context, v *Version) error
 }

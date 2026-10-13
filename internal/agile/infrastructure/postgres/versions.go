@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/bakhod1r/kyber/internal/agile/domain"
+	"github.com/bakhod1r/kyber/internal/platform/db"
 	kid "github.com/bakhod1r/kyber/internal/platform/id"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
@@ -22,26 +23,32 @@ func NewVersionRepository(pool *pgxpool.Pool) *VersionRepository {
 
 func (r *VersionRepository) SaveVersion(ctx context.Context, v *domain.Version) error {
 	s := v.Snapshot()
-	var tag pgconn.CommandTag
-	var err error
-	if s.Version == 0 {
-		tag, err = r.pool.Exec(ctx, `INSERT INTO versions (id, workspace_id, project_key, name, description, release_date, state, released_at, version)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1) ON CONFLICT (id) DO NOTHING`,
-			string(s.ID), tenant.Workspace(ctx), s.Project, s.Name, s.Description, nullTime(s.ReleaseDate), string(s.State), nullTime(s.ReleasedAt))
-	} else {
-		tag, err = r.pool.Exec(ctx, `UPDATE versions SET name = $2, description = $3, release_date = $4, state = $5, released_at = $6,
-			version = version + 1 WHERE id = $1 AND version = $7 AND workspace_id = $8`,
-			string(s.ID), s.Name, s.Description, nullTime(s.ReleaseDate), string(s.State), nullTime(s.ReleasedAt), s.Version, tenant.Workspace(ctx))
-	}
+	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		var tag pgconn.CommandTag
+		var err error
+		if s.Version == 0 {
+			tag, err = tx.Exec(ctx, `INSERT INTO versions (id, workspace_id, project_key, name, description, release_date, state, released_at, version)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1) ON CONFLICT (id) DO NOTHING`,
+				string(s.ID), tenant.Workspace(ctx), s.Project, s.Name, s.Description, nullTime(s.ReleaseDate), string(s.State), nullTime(s.ReleasedAt))
+		} else {
+			tag, err = tx.Exec(ctx, `UPDATE versions SET name = $2, description = $3, release_date = $4, state = $5, released_at = $6,
+				version = version + 1 WHERE id = $1 AND version = $7 AND workspace_id = $8`,
+				string(s.ID), s.Name, s.Description, nullTime(s.ReleaseDate), string(s.State), nullTime(s.ReleasedAt), s.Version, tenant.Workspace(ctx))
+		}
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() != 1 {
+			return domain.ErrVersionConflict
+		}
+		return db.WriteOutbox(ctx, tx, v.PullEvents())
+	})
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return domain.ErrVersionTaken
 	}
 	if err != nil {
 		return err
-	}
-	if tag.RowsAffected() != 1 {
-		return domain.ErrVersionConflict
 	}
 	v.MarkPersisted()
 	return nil
@@ -88,16 +95,19 @@ func (r *VersionRepository) VersionsOf(ctx context.Context, project string) ([]*
 	return pgx.CollectRows(rows, scanVersion)
 }
 
-func (r *VersionRepository) DeleteVersion(ctx context.Context, id domain.VersionID) error {
-	if !kid.Valid(string(id)) {
+// DeleteVersion removes the version and writes its VersionRemoved event in one transaction.
+func (r *VersionRepository) DeleteVersion(ctx context.Context, v *domain.Version) error {
+	if !kid.Valid(string(v.ID())) {
 		return domain.ErrVersionNotFound
 	}
-	tag, err := r.pool.Exec(ctx, `DELETE FROM versions WHERE id = $1 AND workspace_id = $2`, string(id), tenant.Workspace(ctx))
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return domain.ErrVersionNotFound
-	}
-	return nil
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `DELETE FROM versions WHERE id = $1 AND workspace_id = $2`, string(v.ID()), tenant.Workspace(ctx))
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return domain.ErrVersionNotFound
+		}
+		return db.WriteOutbox(ctx, tx, v.PullEvents())
+	})
 }

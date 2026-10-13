@@ -13,13 +13,35 @@ import (
 	"github.com/bakhod1r/kyber/internal/agile/infrastructure/memory"
 )
 
+var versionStore *memory.VersionRepository
+
+// versionEvents lists the outbox events of a version as "name:target".
+func versionEvents(t *testing.T, _ *application.Service, id string) string {
+	t.Helper()
+	var out []string
+	for _, e := range versionStore.Outbox() {
+		switch ev := e.(type) {
+		case domain.VersionShipped:
+			if string(ev.ID) == id {
+				out = append(out, ev.EventName()+":"+string(ev.MoveUnresolvedTo))
+			}
+		case domain.VersionRemoved:
+			if string(ev.ID) == id {
+				out = append(out, ev.EventName()+":"+string(ev.MoveTo))
+			}
+		}
+	}
+	return strings.Join(out, ",")
+}
+
 func versionSetup() (*application.Service, *fakeIssues) {
 	n := 0
 	access := fakeAccess{"KYB": {dev: "w", viewer: "r", lead: "w"}, "OPS": {lead: "w"}}
 	issues := &fakeIssues{inVersion: map[string][]application.VersionIssue{}}
+	versionStore = memory.NewVersionRepository()
 	now := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
 	return application.NewService(application.Deps{
-		Sprints: memory.NewRepository(), Versions: memory.NewVersionRepository(), Issues: issues,
+		Sprints: memory.NewRepository(), Versions: versionStore, Issues: issues,
 		Access: access, Admins: fakeAdmin{access},
 		NewID: func() string { n++; return fmt.Sprintf("v-%d", n) },
 		Now:   func() time.Time { return now },
@@ -88,14 +110,18 @@ func TestVersionsLifecycle(t *testing.T) {
 			t.Errorf("release moving to %s: %v", bad, err)
 		}
 	}
-	issues.moveErr = errors.New("db down")
+	issues.err = errors.New("db down")
 	if _, _, err := s.ReleaseVersion(ctx, lead, id1, id2); err == nil {
-		t.Fatal("move error swallowed")
+		t.Fatal("issue error swallowed")
 	}
-	issues.moveErr = nil
+	issues.err = nil
+	// The issues move later, in Issue Tracking, on the version.released event saved with the version.
 	v, moved, err := s.ReleaseVersion(ctx, lead, id1, id2)
-	if err != nil || moved != 1 || v.State() != domain.VersionReleased || len(issues.inVersion[id2]) != 1 {
-		t.Fatalf("release = %v moved %d %v", v, moved, err)
+	if err != nil || moved != 1 || v.State() != domain.VersionReleased || len(issues.calls) != 0 {
+		t.Fatalf("release = %v moved %d %v calls %v", v, moved, err, issues.calls)
+	}
+	if ev := versionEvents(t, s, id1); ev != "version.released:"+id2 {
+		t.Fatalf("events = %s", ev)
 	}
 	if _, _, err := s.ReleaseVersion(ctx, lead, id1, ""); !errors.Is(err, domain.ErrVersionState) {
 		t.Fatalf("release twice: %v", err)
@@ -138,19 +164,18 @@ func TestVersionsLifecycle(t *testing.T) {
 	if err := s.DeleteVersion(ctx, dev, id2, ""); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("member delete: %v", err)
 	}
-	issues.moveErr = errors.New("db down")
-	if err := s.DeleteVersion(ctx, lead, id2, ""); err == nil {
-		t.Fatal("move error swallowed")
+	if err := s.DeleteVersion(ctx, lead, id2, id1); !errors.Is(err, application.ErrInvalidVersion) {
+		t.Fatalf("moving into an archived version: %v", err)
 	}
-	issues.moveErr = nil
-	if err := s.DeleteVersion(ctx, lead, id2, ""); err != nil {
+	_, _ = s.ChangeVersionState(ctx, lead, id1, (*domain.Version).Restore)
+	if err := s.DeleteVersion(ctx, lead, id2, id1); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteVersion(ctx, lead, id2, ""); !errors.Is(err, domain.ErrVersionNotFound) {
 		t.Fatalf("delete twice: %v", err)
 	}
-	if !strings.Contains(strings.Join(issues.calls, "|"), "move KYB/"+id2+"→ unresolved=false") {
-		t.Fatalf("calls = %v", issues.calls)
+	if ev := versionEvents(t, s, id2); ev != "version.deleted:"+id1 {
+		t.Fatalf("events = %s", ev)
 	}
 
 	// Listing fails when Issue Tracking does.

@@ -13,16 +13,16 @@ func TestFixVersions(t *testing.T) {
 	if !is.HasFixVersion("v-2") || is.HasFixVersion("v-1") {
 		t.Fatal("rehydrated fix versions")
 	}
-	is.SetFixVersions([]domain.VersionID{"v-3", "v-1", "v-3"})
+	is.PlanForVersions([]domain.VersionID{"v-3", "v-1", "v-3"})
 	if got := is.FixVersions(); !slices.Equal(got, []domain.VersionID{"v-1", "v-3"}) {
 		t.Fatalf("set = %v", got)
 	}
-	is.ReplaceFixVersion("v-1", "v-2")
-	is.ReplaceFixVersion("v-3", "")
+	is.MoveToVersion("v-1", "v-2")
+	is.MoveToVersion("v-3", "")
 	if got := is.Snapshot().FixVersions; !slices.Equal(got, []domain.VersionID{"v-2"}) {
 		t.Fatalf("replaced = %v", got)
 	}
-	is.SetFixVersions([]domain.VersionID{"v-1", "v-2"})
+	is.PlanForVersions([]domain.VersionID{"v-1", "v-2"})
 	ch, ok := is.Changelog("u-1")
 	if !ok || len(ch.Items) != 1 || ch.Items[0].Field != "fix_versions" || ch.Items[0].From != "v-2" || ch.Items[0].To != "v-1,v-2" {
 		t.Fatalf("changelog = %+v", ch.Items)

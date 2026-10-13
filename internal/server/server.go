@@ -180,15 +180,16 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	ids := identitymemory.NewRepository()
 	issueRepo := issuememory.NewRepository()
 	sprintRepo := agilememory.NewRepository()
+	versionRepo := agilememory.NewVersionRepository()
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(),
 		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(),
-		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: agilememory.NewVersionRepository(), notes: notifymemory.NewRepository(),
+		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
-		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta)),
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
@@ -310,6 +311,12 @@ func build(log *slog.Logger, d deps) http.Handler {
 	relay.Handle("issue.assigned", notify.OnIssueAssigned)
 	relay.Handle("comment.added", notify.OnCommentAdded)
 	relay.Handle("issue.changed", notify.OnIssueChanged)
+	for _, name := range []string{"issue.created", "issue.assigned", "comment.added"} {
+		relay.Handle(name, issues.OnWatchTrigger)
+	}
+	for _, name := range []string{"version.released", "version.deleted"} {
+		relay.Handle(name, issues.OnVersionEvent)
+	}
 	if d.ctx == nil {
 		d.ctx = context.Background()
 	}

@@ -10,7 +10,7 @@ Code generation (`sqlc`) would add a build step and generated structs that sit b
 which the repositories would immediately map away again.
 
 ## Decision
-- Repositories are written by hand with `pgx/v5` in `<context>/adapter/postgres`.
+- Repositories are written by hand with `pgx/v5` in `<context>/infrastructure/postgres` (ADR-0005).
 - SQL lives next to the adapter that uses it; schema changes only via embedded, forward-only migrations.
 - Correctness is enforced by tests, not codegen: every adapter must pass the context's shared
   **repository contract suite** (memory and Postgres run the same tests) plus Postgres integration tests in CI.

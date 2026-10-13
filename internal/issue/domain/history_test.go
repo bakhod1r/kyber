@@ -74,7 +74,7 @@ func TestSecurityLevel(t *testing.T) {
 	if is.SecurityLevel() != "" {
 		t.Fatal("visible by default")
 	}
-	is.SetSecurityLevel("confidential")
+	is.Classify("confidential")
 	ch, ok := is.Changelog("u")
 	if !ok || ch.Items[0] != (domain.FieldChange{Field: "security", From: "", To: "confidential"}) || is.Snapshot().Security != "confidential" {
 		t.Fatalf("changelog = %+v", ch)

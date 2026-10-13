@@ -2,10 +2,12 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/bakhod1r/kyber/internal/issue/domain"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 )
 
 // RankMove places an issue directly after or before another issue of the same project.
@@ -140,8 +142,8 @@ func (s *Service) InVersion(ctx context.Context, actor, project, version string)
 }
 
 // MoveFixVersion moves the project's issues from one version to another ("" = remove the
-// version); with unresolvedOnly, resolved issues stay. It returns how many issues moved. Called
-// by the Agile context when releasing or deleting a version, after authorizing the actor.
+// version); with unresolvedOnly, resolved issues stay. It returns how many issues moved.
+// Idempotent: issues already moved are no longer in `from`.
 func (s *Service) MoveFixVersion(ctx context.Context, actor, project, from, to string, unresolvedOnly bool) (int, error) {
 	v := domain.VersionID(from)
 	list, err := s.issues.ListByProject(ctx, project, domain.ListFilter{FixVersion: &v})
@@ -153,11 +155,35 @@ func (s *Service) MoveFixVersion(ctx context.Context, actor, project, from, to s
 		if unresolvedOnly && is.Resolution() != "" {
 			continue
 		}
-		is.ReplaceFixVersion(v, domain.VersionID(to))
+		is.MoveToVersion(v, domain.VersionID(to))
 		if err := s.save(ctx, actor, is); err != nil {
 			return moved, err
 		}
 		moved++
 	}
 	return moved, nil
+}
+
+// OnVersionEvent reacts to the Agile context's version.released and version.deleted events by
+// moving the version's issues (eventual consistency between the two aggregates).
+func (s *Service) OnVersionEvent(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		ID               string `json:"id"`
+		Project          string `json:"project"`
+		MoveUnresolvedTo string `json:"move_unresolved_to"`
+		MoveTo           string `json:"move_to"`
+		By               string `json:"by"`
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil || e.ID == "" || e.Project == "" {
+		return nil // a malformed event must not block the relay
+	}
+	switch {
+	case m.Name == "version.released" && e.MoveUnresolvedTo != "":
+		_, err := s.MoveFixVersion(ctx, e.By, e.Project, e.ID, e.MoveUnresolvedTo, true)
+		return err
+	case m.Name == "version.deleted":
+		_, err := s.MoveFixVersion(ctx, e.By, e.Project, e.ID, e.MoveTo, false)
+		return err
+	}
+	return nil
 }

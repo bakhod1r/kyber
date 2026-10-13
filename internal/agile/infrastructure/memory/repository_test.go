@@ -20,5 +20,8 @@ func TestBoardContract(t *testing.T) {
 }
 
 func TestVersionContract(t *testing.T) {
-	repotest.RunVersions(t, func(t *testing.T) domain.VersionRepository { return memory.NewVersionRepository() })
+	repotest.RunVersions(t, func(t *testing.T) (domain.VersionRepository, func() []string) {
+		r := memory.NewVersionRepository()
+		return r, r.OutboxNames
+	})
 }

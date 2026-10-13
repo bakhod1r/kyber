@@ -2,6 +2,9 @@ package application
 
 import (
 	"context"
+	"encoding/json"
+
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 
 	"github.com/bakhod1r/kyber/internal/issue/domain"
 )
@@ -72,4 +75,29 @@ func (s *Service) WatchersOf(ctx context.Context, rawKey string) ([]string, erro
 		out[i] = string(id)
 	}
 	return out, err
+}
+
+// OnWatchTrigger makes people watch an issue when they get involved, as in Jira: the reporter on
+// issue.created, the new assignee on issue.assigned, the author on comment.added. It reacts to the
+// domain events through the outbox, so it never runs half of an unrelated transaction.
+func (s *Service) OnWatchTrigger(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		ID       domain.IssueID `json:"id"`
+		IssueID  domain.IssueID `json:"issue_id"`
+		Reporter domain.UserID  `json:"reporter"`
+		To       domain.UserID  `json:"to"`
+		Author   domain.UserID  `json:"author"`
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		return nil // a malformed event must not block the relay
+	}
+	switch m.Name {
+	case "issue.created":
+		return s.autoWatch(ctx, e.ID, e.Reporter)
+	case "issue.assigned":
+		return s.autoWatch(ctx, e.ID, e.To)
+	case "comment.added":
+		return s.autoWatch(ctx, e.IssueID, e.Author)
+	}
+	return nil
 }

@@ -2,8 +2,11 @@ package application_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
+
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 
 	"github.com/bakhod1r/kyber/internal/issue/application"
 )
@@ -18,9 +21,23 @@ func names(ws []application.Watcher) string {
 
 func TestWatchers(t *testing.T) {
 	ctx := context.Background()
-	s, _ := setup()
+	s, rec := setup()
+	// relay feeds the recorded domain events to the watch trigger, as the outbox relay does.
+	relay := func() {
+		for _, e := range rec.all() {
+			payload, _ := json.Marshal(e)
+			if err := s.OnWatchTrigger(ctx, outbox.Message{Name: e.EventName(), Payload: payload}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		rec.reset()
+	}
 	is, _ := s.Create(ctx, dev, application.CreateIssue{Project: "KYB", Title: "Login", Type: "task"})
 	key := is.Key().String()
+	if ws, _, _ := s.Watchers(ctx, dev, key); len(ws) != 0 {
+		t.Fatal("watching is a reaction to the event, not part of the command")
+	}
+	relay()
 
 	ws, watching, err := s.Watchers(ctx, dev, key)
 	if err != nil || !watching || names(ws) != dev+"," || ws[0].Name != "Name of "+dev {
@@ -29,6 +46,13 @@ func TestWatchers(t *testing.T) {
 	// The assignee and commenters start watching.
 	_, _ = s.Edit(ctx, dev, key, application.EditIssue{Version: is.Version(), AssigneeSet: true, Assignee: lead})
 	if _, err := s.AddComment(ctx, lead, key, "on it"); err != nil {
+		t.Fatal(err)
+	}
+	relay()
+	if err := s.OnWatchTrigger(ctx, outbox.Message{Name: "comment.added", Payload: []byte("garbage")}); err != nil {
+		t.Fatal("malformed events are skipped")
+	}
+	if err := s.OnWatchTrigger(ctx, outbox.Message{Name: "issue.linked", Payload: []byte(`{}`)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Watch(ctx, viewer, key); err != nil {

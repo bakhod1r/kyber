@@ -146,10 +146,7 @@ func (s *Service) Create(ctx context.Context, actor string, cmd CreateIssue) (*d
 		return nil, err
 	}
 	is.Rerank(domain.RankBetween(last, "")) // new issues go to the bottom of the backlog
-	if err := s.save(ctx, actor, is); err != nil {
-		return nil, err
-	}
-	return is, s.autoWatch(ctx, is.ID(), domain.UserID(actor)) // the reporter watches, as in Jira
+	return is, s.save(ctx, actor, is)
 }
 
 func (s *Service) Get(ctx context.Context, actor, rawKey string) (*domain.Issue, error) {

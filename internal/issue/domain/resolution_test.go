@@ -38,14 +38,14 @@ func TestResolution(t *testing.T) {
 	if _, err := domain.ParseResolution("fixed"); !errors.Is(err, domain.ErrInvalidResolution) {
 		t.Fatalf("unknown resolution: %v", err)
 	}
-	if err := is.SetResolution(domain.ResolutionDuplicate); err != nil || is.Resolution() != domain.ResolutionDuplicate {
+	if err := is.ChangeResolution(domain.ResolutionDuplicate); err != nil || is.Resolution() != domain.ResolutionDuplicate {
 		t.Fatalf("change resolution: %v", err)
 	}
-	if err := is.SetResolution("fixed"); !errors.Is(err, domain.ErrInvalidResolution) {
+	if err := is.ChangeResolution("fixed"); !errors.Is(err, domain.ErrInvalidResolution) {
 		t.Fatalf("unknown: %v", err)
 	}
 	_ = is.Transition(domain.StatusTodo, wf)
-	if err := is.SetResolution(domain.ResolutionDone); !errors.Is(err, domain.ErrInvalidResolution) {
+	if err := is.ChangeResolution(domain.ResolutionDone); !errors.Is(err, domain.ErrInvalidResolution) {
 		t.Fatalf("unresolved issue got a resolution: %v", err)
 	}
 	if len(domain.Resolutions()) != 4 {

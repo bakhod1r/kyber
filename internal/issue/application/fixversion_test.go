@@ -7,6 +7,7 @@ import (
 
 	"github.com/bakhod1r/kyber/internal/issue/application"
 	"github.com/bakhod1r/kyber/internal/issue/domain"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 )
 
 func TestFixVersions(t *testing.T) {
@@ -53,4 +54,34 @@ func TestFixVersions(t *testing.T) {
 	if fv := is.FixVersions(); len(fv) != 1 || fv[0] != domain.VersionID("v-2") {
 		t.Fatalf("KYB-1 versions = %v", fv)
 	}
+}
+
+// Versions released or deleted in the Agile context move their issues here, on the events.
+func TestOnVersionEvent(t *testing.T) {
+	ctx := context.Background()
+	s := seed(t, 2)
+	for _, key := range []string{"KYB-1", "KYB-2"} {
+		is, _ := s.Get(ctx, dev, key)
+		v := []string{"v-1"}
+		_, _ = s.Edit(ctx, dev, key, application.EditIssue{Version: is.Version(), FixVersions: &v})
+	}
+	_, _ = s.Transition(ctx, dev, "KYB-2", "done", "")
+	ev := func(name, payload string) {
+		t.Helper()
+		if err := s.OnVersionEvent(ctx, outbox.Message{Name: name, Payload: []byte(payload)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ev("version.released", `{"id":"v-1","project":"KYB","move_unresolved_to":"v-2","by":"`+lead+`"}`)
+	ev("version.released", `{"id":"v-1","project":"KYB","move_unresolved_to":"v-2","by":"`+lead+`"}`) // redelivery
+	if got := order(t, s, application.ListQuery{FixVersion: "v-2"}); got != "KYB-1" {
+		t.Fatalf("moved on release = %s", got)
+	}
+	ev("version.released", `{"id":"v-2","project":"KYB","by":"`+lead+`"}`) // nothing to move
+	ev("version.deleted", `{"id":"v-1","project":"KYB","by":"`+lead+`"}`)
+	if got := order(t, s, application.ListQuery{FixVersion: "v-1"}); got != "" {
+		t.Fatalf("v-1 left on %s", got)
+	}
+	ev("version.deleted", `garbage`)
+	ev("version.deleted", `{"project":"KYB"}`)
 }

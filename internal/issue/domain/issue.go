@@ -160,7 +160,7 @@ func Rehydrate(s Snapshot) *Issue {
 	is := &Issue{id: s.ID, key: s.Key, title: s.Title, typ: s.Type, status: s.Status,
 		description: s.Description, priority: s.Priority, assignee: s.Assignee, reporter: s.Reporter, estimate: s.Estimate, rank: s.Rank, sprint: s.Sprint,
 		parent: s.Parent, parentKey: s.ParentKey, security: s.Security, resolution: s.Resolution, version: s.Version}
-	is.SetFixVersions(s.FixVersions)
+	is.PlanForVersions(s.FixVersions)
 	is.markBaseline()
 	return is
 }
