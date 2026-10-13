@@ -45,6 +45,7 @@ import (
 	chatacl "github.com/bakhod1r/kyber/internal/chat/infrastructure/acl"
 	chatmemory "github.com/bakhod1r/kyber/internal/chat/infrastructure/memory"
 	chatpg "github.com/bakhod1r/kyber/internal/chat/infrastructure/postgres"
+	chatrealtime "github.com/bakhod1r/kyber/internal/chat/infrastructure/realtime"
 	chathttp "github.com/bakhod1r/kyber/internal/chat/interfaces/httpapi"
 	focusapp "github.com/bakhod1r/kyber/internal/focus/application"
 	focusdomain "github.com/bakhod1r/kyber/internal/focus/domain"
@@ -92,6 +93,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/id"
 	"github.com/bakhod1r/kyber/internal/platform/metrics"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
+	"github.com/bakhod1r/kyber/internal/platform/realtime"
 	projectapp "github.com/bakhod1r/kyber/internal/project/application"
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
 	"github.com/bakhod1r/kyber/internal/project/infrastructure/identitydir"
@@ -309,7 +311,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	calendar := calendarapp.NewService(d.meetings, calendaracl.NewMembers(workspaces, d.users), id.New, time.Now)
 	focus := focusapp.NewService(focusapp.Deps{Sessions: d.focusSessions, Calendar: focusacl.NewCalendar(calendar),
 		Issues: focusacl.NewIssues(issues, projectcompat.NewGate(projects, access, accessdomain.AssignableUser)), NewID: id.New, Clock: systemClock{}})
-	chat := chatapp.NewService(chatapp.Deps{Conversations: d.conversations, Messages: d.messages,
+	hub := realtime.NewHub(1024)
+	chat := chatapp.NewService(chatapp.Deps{Notifier: chatrealtime.New(hub), Conversations: d.conversations, Messages: d.messages,
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	relay := outbox.NewRelay(d.outbox, log)
 	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated", "issue.imported"} {
@@ -375,6 +378,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	calendarhttp.New(calendar, log, time.Now).Register(api)
 	focushttp.New(focus, log, time.Now).Register(api)
 	chathttp.New(chat, log).Register(api)
+	hub.Register(api, 25*time.Second)
 	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
 		auditacl.NewOwners(agile, d.boards, d.links), log)
 	audit.Register(api)
@@ -415,6 +419,8 @@ type statusRecorder struct {
 	http.ResponseWriter
 	status int
 }
+
+func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
 func (s *statusRecorder) WriteHeader(code int) {
 	s.status = code
@@ -463,6 +469,8 @@ func (f *fallbackWriter) WriteHeader(code int) {
 		f.ResponseWriter.WriteHeader(code)
 	}
 }
+
+func (f *fallbackWriter) Unwrap() http.ResponseWriter { return f.ResponseWriter }
 
 func (f *fallbackWriter) Write(b []byte) (int, error) {
 	if f.replaced {

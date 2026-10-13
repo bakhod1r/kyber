@@ -29,15 +29,28 @@ type clock struct{ t time.Time }
 
 func (c *clock) now() time.Time { c.t = c.t.Add(time.Second); return c.t }
 
+// events is a fake Notifier recording who was told what.
+type events []string
+
+func (e *events) Notify(_ context.Context, to []domain.UserID, ev domain.Event) {
+	*e = append(*e, fmt.Sprintf("%s→%v", ev.EventName(), to))
+}
+
 func setup(t *testing.T) (*app.Service, context.Context) {
+	svc, ctx, _ := setupWithEvents(t)
+	return svc, ctx
+}
+
+func setupWithEvents(t *testing.T) (*app.Service, context.Context, *events) {
 	t.Helper()
 	repo := memory.NewRepository()
 	n := 0
 	newID := func() string { n++; return fmt.Sprintf("id-%03d", n) }
 	c := &clock{t: time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)}
 	dir := members{"lead": {"w1"}, "dev": {"w1"}, "qa": {"w1"}, "eve": {"w2"}}
-	return app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Members: dir, NewID: newID, Now: c.now}),
-		tenant.With(context.Background(), "w1")
+	ev := &events{}
+	return app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Members: dir, NewID: newID, Now: c.now, Notifier: ev}),
+		tenant.With(context.Background(), "w1"), ev
 }
 
 func TestChannels(t *testing.T) {
@@ -161,5 +174,24 @@ func TestMessagesAndUnread(t *testing.T) {
 	}
 	if _, err := svc.Post(ctx, "lead", string(ch.ID), " "); !errors.Is(err, domain.ErrInvalidBody) {
 		t.Fatalf("blank = %v", err)
+	}
+}
+
+func TestRealtimeEvents(t *testing.T) {
+	svc, ctx, ev := setupWithEvents(t)
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "dev"})
+	_ = svc.Join(ctx, "dev", string(ch.ID))
+	m, _ := svc.Post(ctx, "lead", string(ch.ID), "hi")
+	_, _ = svc.Edit(ctx, "lead", string(m.ID), "hello")
+	_ = svc.Delete(ctx, "lead", string(m.ID))
+	if err := svc.Typing(ctx, "dev", string(ch.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Typing(ctx, "qa", string(ch.ID)); !errors.Is(err, domain.ErrNotMember) {
+		t.Fatalf("typing outside = %v", err)
+	}
+	want := []string{"message.posted→[dev lead]", "message.edited→[dev lead]", "message.deleted→[dev lead]", "typing→[lead]"}
+	if fmt.Sprint(*ev) != fmt.Sprint(want) {
+		t.Fatalf("events = %v, want %v", *ev, want)
 	}
 }

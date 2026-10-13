@@ -30,6 +30,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/conversations/{id}/leave", h.leave)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/members", h.invite)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/read", h.read)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/typing", h.typing)
 	mux.HandleFunc("GET /api/v1/conversations/{id}/messages", h.history)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/messages", h.post)
 	mux.HandleFunc("PATCH /api/v1/messages/{id}", h.edit)
@@ -256,4 +257,8 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	h.noContent(w, r, func() error { return h.svc.Delete(r.Context(), auth.Actor(r.Context()), r.PathValue("id")) })
+}
+
+func (h *Handler) typing(w http.ResponseWriter, r *http.Request) {
+	h.noContent(w, r, func() error { return h.svc.Typing(r.Context(), auth.Actor(r.Context()), r.PathValue("id")) })
 }

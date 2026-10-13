@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.27.0
+  version: 0.28.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -367,6 +367,39 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/stream:
+    get:
+      operationId: openStream
+      description: |
+        Server-Sent Events of this workspace for the caller (`message.posted`, `message.edited`,
+        `message.deleted`, `typing`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
+        what was missed. Keeping the stream open marks the caller online.
+      parameters:
+        - { name: Last-Event-ID, in: header, schema: { type: string } }
+      responses:
+        "200": { description: Event stream, content: { text/event-stream: { schema: { type: string } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/presence:
+    get:
+      operationId: getPresence
+      description: Which of the given users have Kyber open in this workspace.
+      parameters:
+        - { name: user_id, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [online], properties: { online: { type: array, items: { type: string } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/typing:
+    post:
+      operationId: sendTyping
+      description: Tells the other members that the caller is typing (not stored).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Sent }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/read:
     post:
       operationId: markConversationRead

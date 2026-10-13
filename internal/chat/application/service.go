@@ -23,7 +23,17 @@ type Members interface {
 	IsMember(ctx context.Context, workspace, user string) (bool, error)
 }
 
+// Notifier tells members' open tabs about an event (the realtime stream); best effort.
+type Notifier interface {
+	Notify(ctx context.Context, to []domain.UserID, e domain.Event)
+}
+
+type nobody struct{}
+
+func (nobody) Notify(context.Context, []domain.UserID, domain.Event) {}
+
 type Deps struct {
+	Notifier      Notifier // optional
 	Conversations domain.Repository
 	Messages      domain.Messages
 	Members       Members
@@ -33,7 +43,19 @@ type Deps struct {
 
 type Service struct{ d Deps }
 
-func NewService(d Deps) *Service { return &Service{d: d} }
+func NewService(d Deps) *Service {
+	if d.Notifier == nil {
+		d.Notifier = nobody{}
+	}
+	return &Service{d: d}
+}
+
+// tell notifies the members of the message's conversation.
+func (s *Service) tell(ctx context.Context, m *domain.Message, e domain.Event) {
+	if c, err := s.d.Conversations.ByID(ctx, m.Conversation); err == nil {
+		s.d.Notifier.Notify(ctx, c.Members, e)
+	}
+}
 
 // View is a conversation as one user sees it.
 type View struct {
@@ -182,6 +204,7 @@ func (s *Service) Post(ctx context.Context, actor, conv, body string) (*domain.M
 	if err := s.d.Messages.Post(ctx, m); err != nil {
 		return nil, err
 	}
+	s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *m})
 	// Your own message marks the conversation read up to it.
 	return m, s.d.Conversations.MarkRead(ctx, c.ID, domain.UserID(actor), now)
 }
@@ -206,7 +229,11 @@ func (s *Service) Edit(ctx context.Context, actor, id, body string) (*domain.Mes
 	if err := m.Edit(domain.UserID(actor), body, s.d.Now()); err != nil {
 		return nil, err
 	}
-	return m, s.d.Messages.Update(ctx, m)
+	if err := s.d.Messages.Update(ctx, m); err != nil {
+		return nil, err
+	}
+	s.tell(ctx, m, domain.MessageEdited{Message: *m})
+	return m, nil
 }
 
 func (s *Service) Delete(ctx context.Context, actor, id string) error {
@@ -217,7 +244,11 @@ func (s *Service) Delete(ctx context.Context, actor, id string) error {
 	if err := m.Delete(domain.UserID(actor), s.d.Now()); err != nil {
 		return err
 	}
-	return s.d.Messages.Update(ctx, m)
+	if err := s.d.Messages.Update(ctx, m); err != nil {
+		return err
+	}
+	s.tell(ctx, m, domain.MessageDeleted{Message: *m})
+	return nil
 }
 
 // History pages a conversation newest first; before is a message id of the same conversation.
@@ -246,4 +277,23 @@ func (s *Service) MarkRead(ctx context.Context, actor, conv string) error {
 		return domain.ErrNotMember
 	}
 	return s.d.Conversations.MarkRead(ctx, c.ID, domain.UserID(actor), s.d.Now())
+}
+
+// Typing tells the other members that actor is writing.
+func (s *Service) Typing(ctx context.Context, actor, conv string) error {
+	c, err := s.readable(ctx, actor, conv)
+	if err != nil {
+		return err
+	}
+	if !c.IsMember(domain.UserID(actor)) {
+		return domain.ErrNotMember
+	}
+	others := make([]domain.UserID, 0, len(c.Members))
+	for _, m := range c.Members {
+		if m != domain.UserID(actor) {
+			others = append(others, m)
+		}
+	}
+	s.d.Notifier.Notify(ctx, others, domain.Typing{Conversation: c.ID, User: domain.UserID(actor)})
+	return nil
 }

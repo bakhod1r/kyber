@@ -17,6 +17,9 @@ backends.
 - **S51 Realtime stream** — `GET /api/v1/stream` (SSE), in-process Hub port, events `message.*`,
   `conversation.*`, typing (`POST /conversations/{id}/typing`, ephemeral), presence (online while a stream is open).
   AC: a member receives a posted message within 1 s; non-members never receive it; reconnect resumes.
+  ✅ **Done:** `platform/realtime` Hub (ring of 1024 events for `Last-Event-ID` replay, slow tabs are closed and
+  reconnect), `GET /stream`, `GET /presence`, `POST /conversations/{id}/typing`, API 0.28.0. Multi-replica feed
+  (LISTEN/NOTIFY) follows with S58.
 - **S52 Threads, reactions, mentions, issue previews** — `thread_id` replies + reply count; reactions toggle
   (one per emoji per user); `@email`/`@name` mentions notify through the Notify context; issue keys in a message
   come back as previews only when the reader may browse the issue.
