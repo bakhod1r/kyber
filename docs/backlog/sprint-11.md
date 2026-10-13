@@ -79,3 +79,5 @@ backends.
   migration 0051), gauges `kyber_stream_connections` / `kyber_calls_active`, coturn in docker-compose
   (`--profile calls`) and `docs/ops/calls.md`. SFU ADR: later.
   Original scope: — coturn example in docker-compose/Helm docs, call metrics (`kyber_calls_active`), SFU ADR.
+- ✅ **S63 Whiteboard text in place** — text and sticky notes are typed directly on the canvas (Enter saves,
+  Shift+Enter new line, Esc cancels); double-click edits. Replaces the browser prompt.

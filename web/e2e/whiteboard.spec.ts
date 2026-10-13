@@ -63,6 +63,18 @@ test("two people draw on a whiteboard together", async ({ browser }) => {
   await b.mouse.up();
   await expect(ca.locator("polyline[data-id]")).toHaveCount(1);
 
+  // Text is typed in place on the canvas (S63), and edited again by double-clicking it.
+  await a.getByRole("button", { name: "Text" }).click();
+  await a.mouse.click(boxA.x + 100, boxA.y + 300);
+  await a.getByRole("textbox", { name: "Text" }).fill("Gateway");
+  await a.keyboard.press("Enter");
+  await expect(cb.getByText("Gateway")).toBeVisible();
+  await a.getByRole("button", { name: "Select" }).click();
+  await a.getByRole("img", { name: "Canvas" }).getByText("Gateway").dblclick({ force: true });
+  await a.getByRole("textbox", { name: "Text" }).fill("API gateway");
+  await a.keyboard.press("Enter");
+  await expect(cb.getByText("API gateway")).toBeVisible();
+
   // A sticky note becomes an issue in the project, and the note links to it.
   await ali.call("POST", `/api/v1/whiteboards/${board.id}/ops`, { ops: [{ op: "add", element: {
     id: "note", kind: "sticky", x: 1200, y: 600, w: 200, h: 120, text: "Cache the board\nUse Redis", color: "#fde68a", points: [], version: 0 } }] });

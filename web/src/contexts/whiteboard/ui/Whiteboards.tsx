@@ -99,6 +99,30 @@ function Label({ e }: { e: Element }) {
   );
 }
 
+/** Types an element's text in place over the canvas: Enter (Shift+Enter for a new line) or leaving saves, Escape cancels. */
+function TextEditor({ e, onDone }: { e: Element; onDone: (text: string | null) => void }) {
+  const done = useRef(false);
+  const finish = (text: string | null) => {
+    if (done.current) return;
+    done.current = true;
+    onDone(text);
+  };
+  const pct = (v: number, of: number) => `${(v / of) * 100}%`;
+  return (
+    <textarea className={`wb-editor ${e.kind === "sticky" ? "sticky" : ""}`} aria-label={e.kind === "sticky" ? "Sticky note text" : "Text"} autoFocus
+      defaultValue={e.text} placeholder={e.kind === "sticky" ? "Sticky note" : "Type…"}
+      style={{ left: pct(e.x, W), top: pct(e.y, H), width: pct(Math.max(e.w, 120), W), minHeight: pct(Math.max(e.h, 34), H), color: e.kind === "sticky" ? undefined : e.color }}
+      onKeyDown={(k) => {
+        if (k.key === "Escape") finish(null);
+        else if (k.key === "Enter" && !k.shiftKey) {
+          k.preventDefault();
+          finish(k.currentTarget.value);
+        }
+      }}
+      onBlur={(b) => finish(b.currentTarget.value)} />
+  );
+}
+
 /** One whiteboard to draw on (also what a huddle shows when it is presented). */
 export function WhiteboardBoard(props: { id: string; me: string; names: Map<string, string>; onClose?: () => void }) {
   return <Board {...props} />;
@@ -112,6 +136,8 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState<Element | null>(null); // the shape being drawn or dragged
   const drag = useRef<{ start: Point; origin: Element } | null>(null);
+  /** The element whose text is being typed in place (S63); fresh when it is not on the board yet. */
+  const [editing, setEditing] = useState<{ element: Element; fresh: boolean } | null>(null);
   const sel = selected ? (draft?.id === selected ? draft : wb.elements[selected]) : undefined;
 
   const at = (e: PointerEvent): Point => {
@@ -132,11 +158,9 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
     }
     const base = { id: newId(), kind: tool, x: p.x, y: p.y, w: 0, h: 0, points: [] as Point[], text: "", color, version: 0 };
     if (tool === "text" || tool === "sticky") {
-      const text = window.prompt(tool === "sticky" ? "Sticky note" : "Text") ?? "";
-      if (!text.trim()) return;
-      const el: Element = { ...base, text, w: tool === "sticky" ? 180 : Math.max(60, text.length * 10), h: tool === "sticky" ? 120 : 34, color: tool === "sticky" ? STICKY : color };
-      wb.change({ op: "add", element: el });
-      setSelected(el.id);
+      e.preventDefault(); // keep the focus for the editor
+      const el: Element = { ...base, w: tool === "sticky" ? 180 : 240, h: tool === "sticky" ? 120 : 34, color: tool === "sticky" ? STICKY : color };
+      setEditing({ element: el, fresh: true });
       setTool("select");
       return;
     }
@@ -188,10 +212,25 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
     wb.change({ op: "delete", element: sel });
     setSelected(null);
   };
+  const editable = (e?: Element) => !!e && (e.kind === "text" || e.kind === "sticky" || e.kind === "rect" || e.kind === "ellipse");
   const editText = () => {
-    if (!sel) return;
-    const text = window.prompt("Text", sel.text);
-    if (text !== null) wb.change({ op: "update", element: { ...sel, text } });
+    if (sel && editable(sel)) setEditing({ element: sel, fresh: false });
+  };
+  /** Saves the typed text: a new element is added (unless empty), an existing one updated. */
+  const finishEditing = (text: string | null) => {
+    const ed = editing;
+    setEditing(null);
+    if (!ed || text === null) return;
+    const el = ed.element;
+    if (ed.fresh) {
+      if (!text.trim()) return;
+      const w = el.kind === "text" ? Math.max(60, Math.max(...text.split("\n").map((l) => l.length)) * 10) : el.w;
+      const h = el.kind === "text" ? 34 * text.split("\n").length : el.h;
+      wb.change({ op: "add", element: { ...el, text, w, h } });
+      setSelected(el.id);
+    } else if (text !== el.text) {
+      wb.change({ op: "update", element: { ...(wb.elements[el.id] ?? el), text } });
+    }
   };
   const recolor = (c: string) => {
     setColor(c);
@@ -200,7 +239,7 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest("input, textarea")) return;
+      if ((e.target as HTMLElement).closest("input, textarea, select")) return;
       if ((e.key === "Delete" || e.key === "Backspace") && selected) remove();
       if ((e.ctrlKey || e.metaKey) && e.key === "z") e.shiftKey ? wb.redo() : wb.undo();
     };
@@ -254,7 +293,7 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
         <div className="row">
           <button className="ghost" onClick={wb.undo} disabled={!wb.canUndo}>Undo</button>
           <button className="ghost" onClick={wb.redo} disabled={!wb.canRedo}>Redo</button>
-          {sel && (sel.kind === "text" || sel.kind === "sticky" || sel.kind === "rect" || sel.kind === "ellipse") && <button className="ghost" onClick={editText}>Edit text</button>}
+          {sel && editable(sel) && <button className="ghost" onClick={editText}>Edit text</button>}
           {sel?.kind === "sticky" && sel.text.trim() && !linkedIssue(sel.text) && (projects.data?.length ?? 0) > 0 && (
             <select aria-label="Create issue from sticky note" value="" onChange={(e) => e.target.value && toIssue.mutate({ note: sel, key: e.target.value })}>
               <option value="">Create issue in…</option>
@@ -270,8 +309,10 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
           {onClose && <button className="ghost" aria-label="Close whiteboard" onClick={onClose}>✕</button>}
         </div>
       </header>
+      <div className="wb-stage">
       <svg ref={svg} role="img" aria-label="Canvas" viewBox={`0 0 ${W} ${H}`} className={`wb-canvas tool-${tool}`} xmlns="http://www.w3.org/2000/svg"
-        onPointerDown={down} onPointerMove={move} onPointerUp={up}>
+        onPointerDown={down} onPointerMove={move} onPointerUp={up}
+        onDoubleClick={() => editText()}>
         <defs>
           <marker id="wb-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" />
@@ -286,6 +327,8 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
           </g>
         ))}
       </svg>
+      {editing && <TextEditor key={editing.element.id} e={editing.element} onDone={finishEditing} />}
+      </div>
       {wb.error && <p role="status" className="muted">{wb.error}</p>}
       {toIssue.error && <p role="alert" className="error">{toIssue.error.message}</p>}
     </section>
