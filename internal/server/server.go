@@ -28,6 +28,12 @@ import (
 	agilepg "github.com/bakhod1r/kyber/internal/agile/infrastructure/postgres"
 	agileprojectacl "github.com/bakhod1r/kyber/internal/agile/infrastructure/projectacl"
 	agilehttp "github.com/bakhod1r/kyber/internal/agile/interfaces/httpapi"
+	annapp "github.com/bakhod1r/kyber/internal/announcement/application"
+	anndomain "github.com/bakhod1r/kyber/internal/announcement/domain"
+	annacl "github.com/bakhod1r/kyber/internal/announcement/infrastructure/acl"
+	annmemory "github.com/bakhod1r/kyber/internal/announcement/infrastructure/memory"
+	annpg "github.com/bakhod1r/kyber/internal/announcement/infrastructure/postgres"
+	annhttp "github.com/bakhod1r/kyber/internal/announcement/interfaces/httpapi"
 	auditapp "github.com/bakhod1r/kyber/internal/audit/application"
 	auditdomain "github.com/bakhod1r/kyber/internal/audit/domain"
 	auditacl "github.com/bakhod1r/kyber/internal/audit/infrastructure/acl"
@@ -143,6 +149,8 @@ type deps struct {
 	goals         goaldomain.Repository
 	pages         docsdomain.Repository
 	forms         formdomain.Repository
+	announcements anndomain.Repository
+	siteAdmins    map[string]bool // lower-case emails administering the default workspace
 	sprints       agiledomain.Repository
 	boards        agiledomain.BoardRepository
 	versions      agiledomain.VersionRepository
@@ -200,6 +208,30 @@ func WithPublicURL(u string) Option { return func(d *deps) { d.publicURL = u } }
 func WithDispatchEvery(every time.Duration) Option { return func(d *deps) { d.dispatchEvery = every } }
 
 // WithBaseDomain enables workspaces on subdomains of domain (ADR-0004).
+// WithSiteAdmins names (comma-separated emails) the administrators of the default workspace.
+func WithSiteAdmins(emails string) Option {
+	return func(d *deps) {
+		d.siteAdmins = map[string]bool{}
+		for _, e := range strings.Split(emails, ",") {
+			if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+				d.siteAdmins[e] = true
+			}
+		}
+	}
+}
+
+// siteAdmin reports whether user is a configured administrator of the default workspace.
+func (d *deps) siteAdmin(ctx context.Context, user string) (bool, error) {
+	if len(d.siteAdmins) == 0 {
+		return false, nil
+	}
+	u, err := d.users.ByID(ctx, identitydomain.UserID(user))
+	if err != nil {
+		return false, err
+	}
+	return d.siteAdmins[strings.ToLower(string(u.Email()))], nil
+}
+
 func WithBaseDomain(domain string) Option { return func(d *deps) { d.baseDomain = domain } }
 
 // Option configures optional infrastructure.
@@ -214,15 +246,16 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	issueRepo := issuememory.NewRepository()
 	sprintRepo := agilememory.NewRepository()
 	versionRepo := agilememory.NewVersionRepository()
+	annRepo := annmemory.NewRepository()
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), worklogs: issuememory.NewWorklogRepository(), fields: issuememory.NewCustomFieldRepository(),
-		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: docsmemory.NewRepository(), forms: formmemory.NewRepository(),
+		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: docsmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
-		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta)),
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
@@ -264,7 +297,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), worklogs: issuepg.NewWorklogRepository(pool), fields: issuepg.NewCustomFieldRepository(pool),
-		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), forms: formpg.NewRepository(pool),
+		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
@@ -313,7 +346,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	sprintACL.Sprints = agileacl.New(agile)
 	notify := notifyapp.NewService(notifyapp.Deps{
 		Repo: d.notes, Issues: notifyacl.NewIssues(issues), Members: notifyacl.NewMembers(issues), Workspaces: notifyacl.NewWorkspaces(projects),
-		Users: notifyacl.NewUsers(d.users), NewID: id.New, Now: time.Now, Log: log,
+		Users: notifyacl.NewUsers(d.users), Audience: notifyacl.NewAudience(projects, workspaces), NewID: id.New, Now: time.Now, Log: log,
 		Deliveries: d.deliveries, Prefs: d.prefs, Contacts: notifyacl.NewContacts(d.users, d.external),
 		Channels: d.channels(), PublicURL: d.publicURL,
 		Groups: d.groups, Admins: notifyacl.NewAdmins(access), BotName: d.social.TelegramBot,
@@ -348,6 +381,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 		relay.Handle(name, notify.OnProjectEvent)
 	}
 	relay.Handle("issue.assigned", notify.OnIssueAssigned)
+	relay.Handle("announcement.published", notify.OnAnnouncement)
+	relay.Handle("announcement.published", notify.OnProjectEvent)
 	relay.Handle("comment.added", notify.OnCommentAdded)
 	relay.Handle("issue.changed", notify.OnIssueChanged)
 	for _, name := range []string{"issue.created", "issue.assigned", "comment.added"} {
@@ -406,6 +441,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	searchhttp.New(search, log).Register(api)
 	goalhttp.New(goals, log).Register(api)
 	docshttp.New(pages, log).Register(api)
+	annhttp.New(annapp.NewService(annapp.Deps{Access: annacl.NewAccess(projects, workspaces, d.siteAdmin), Announcements: d.announcements,
+		NewID: id.New, Now: time.Now}), log).Register(api)
 	formhttp.New(forms, log).Register(api)
 	agilehttp.New(agile, log).Register(api)
 	notifyhttp.New(notify, log).Register(api)

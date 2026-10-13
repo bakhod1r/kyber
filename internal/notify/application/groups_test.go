@@ -44,7 +44,7 @@ func groupSetup(adm admins) (*application.Service, *memory.GroupRepository, *mem
 	groups, deliveries, bot := memory.NewGroupRepository(), memory.NewDeliveryRepository(), &replies{}
 	n := 0
 	return application.NewService(application.Deps{
-		Repo: memory.NewRepository(), Issues: f, Members: f, Workspaces: f, Users: f,
+		Repo: memory.NewRepository(), Issues: f, Members: f, Workspaces: f, Users: f, Audience: f,
 		Deliveries: deliveries, Prefs: memory.NewPrefsRepository(), Contacts: contacts{}, Channels: []domain.Channel{domain.ChannelTelegram},
 		PublicURL: "https://kyber.example", Groups: groups, Admins: adm, Bot: bot, BotName: "KyberBot", Lookups: lookups{},
 		NewID: func() string { n++; return fmt.Sprintf("00000000-0000-4000-8000-%012d", n) },

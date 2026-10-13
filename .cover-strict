@@ -29,3 +29,7 @@
 ./internal/form/infrastructure/memory
 ./internal/platform/otel
 ./internal/platform/live
+./internal/announcement/domain
+./internal/announcement/application
+./internal/announcement/infrastructure/memory
+./internal/announcement/infrastructure/acl

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { docsUseCases, type Page } from "../application";
-import { Markdown } from "./Markdown";
+import { Markdown } from "../../../shared/ui/Markdown";
 
 type Mode = { kind: "view" } | { kind: "edit"; page: Page | null } | { kind: "history" };
 

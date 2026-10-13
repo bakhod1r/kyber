@@ -19,6 +19,9 @@ type Config struct {
 	PublicURL string `env:"KYBER_PUBLIC_URL" default:"http://localhost:8080"`
 	// BaseDomain enables workspaces on subdomains (<slug>.<BaseDomain>, ADR-0004); empty = single-tenant.
 	BaseDomain string `env:"KYBER_BASE_DOMAIN"`
+	// AdminEmails (comma-separated) administer the default workspace: they publish workspace-wide
+	// announcements. Named workspaces have owners and admins of their own.
+	AdminEmails string `env:"KYBER_ADMIN_EMAILS"`
 	// Sign in with Google: create an OAuth client (Web application) in Google Cloud and add
 	// <PublicURL>/api/v1/auth/google/callback as an authorized redirect URI.
 	GoogleClientID     string `env:"KYBER_GOOGLE_CLIENT_ID"`

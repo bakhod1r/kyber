@@ -23,6 +23,8 @@ const (
 	KindMentioned Kind = "mentioned"
 	// KindTransitioned: the issue's status changed (told to its reporter, assignee and watchers).
 	KindTransitioned Kind = "transitioned"
+	// KindAnnouncement: news published to a project's or a workspace's members.
+	KindAnnouncement Kind = "announcement"
 )
 
 // Notification is one message to one recipient about one event. SourceEvent (the
@@ -33,7 +35,8 @@ type Notification struct {
 	Workspace   string // the issue's workspace: inboxes are per workspace (ADR-0004)
 	Kind        Kind
 	IssueKey    string
-	IssueTitle  string
+	IssueTitle  string // or the announcement's title
+	Project     string // the announced project ("" = the workspace); announcements only
 	ActorName   string
 	Excerpt     string
 	SourceEvent int64
@@ -42,6 +45,19 @@ type Notification struct {
 }
 
 func (n Notification) Read() bool { return !n.ReadAt.IsZero() }
+
+// AnnouncementRecipients: everyone in the audience once, except the author.
+func AnnouncementRecipients(author UserID, audience []UserID) []UserID {
+	seen := map[UserID]bool{author: true, "": true}
+	var out []UserID
+	for _, u := range audience {
+		if !seen[u] {
+			seen[u] = true
+			out = append(out, u)
+		}
+	}
+	return out
+}
 
 // AssignmentRecipients: the new assignee, unless they assigned themselves.
 func AssignmentRecipients(to, by UserID) []UserID {

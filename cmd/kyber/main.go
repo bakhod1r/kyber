@@ -95,7 +95,7 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		Telegram:    telegram.NewVerifier(cfg.TelegramBotToken, time.Now),
 		TelegramBot: cfg.TelegramBotName,
 	})
-	common := append([]server.Option{social, server.WithContext(ctx), server.WithBaseDomain(cfg.BaseDomain),
+	common := append([]server.Option{social, server.WithContext(ctx), server.WithBaseDomain(cfg.BaseDomain), server.WithSiteAdmins(cfg.AdminEmails),
 		server.WithPublicURL(cfg.PublicURL)}, telegramBot(cfg)...)
 	mailer, err := mailer(cfg)
 	if err != nil {

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { type Inline, parseMarkdown } from "../application";
+import { type Inline, parseMarkdown } from "../markdown";
 
 function inline(nodes: Inline[]): ReactNode[] {
   return nodes.map((n, i) => {

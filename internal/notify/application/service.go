@@ -37,6 +37,12 @@ type (
 	Workspaces interface {
 		WorkspaceOf(ctx context.Context, project string) (string, error)
 	}
+	// Audience lists who hears an announcement (ACL to Project/Workspace).
+	Audience interface {
+		ProjectMembers(ctx context.Context, project string) ([]string, error)
+		// WorkspaceMembers lists everyone in the request's workspace.
+		WorkspaceMembers(ctx context.Context) ([]string, error)
+	}
 	Users interface {
 		UserIDByEmail(ctx context.Context, email string) (id string, ok bool, err error)
 		DisplayName(ctx context.Context, id string) (string, error)
@@ -59,6 +65,7 @@ type Deps struct {
 	Members    Members
 	Workspaces Workspaces
 	Users      Users
+	Audience   Audience
 	NewID      func() string
 	Now        func() time.Time
 	Log        *slog.Logger
@@ -74,6 +81,52 @@ func NewService(d Deps) *Service {
 }
 
 const excerptLen = 140
+
+// announcement mirrors announcement.published (a published event contract).
+type announcement struct {
+	ID, Workspace, Project, Title, Excerpt, Author string
+}
+
+// OnAnnouncement tells the project's members (or the workspace's, without a project) about an
+// announcement, through their inbox and their chosen channels; never its author.
+func (s *Service) OnAnnouncement(ctx context.Context, m outbox.Message) error {
+	var a announcement
+	if err := json.Unmarshal(m.Payload, &a); err != nil {
+		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "name", m.Name)
+		return nil
+	}
+	var audience []string
+	var err error
+	if a.Project != "" {
+		audience, err = s.d.Audience.ProjectMembers(ctx, a.Project)
+	} else {
+		audience, err = s.d.Audience.WorkspaceMembers(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	ids := make([]domain.UserID, len(audience))
+	for i, u := range audience {
+		ids[i] = domain.UserID(u)
+	}
+	actor, err := s.d.Users.DisplayName(ctx, a.Author)
+	if err != nil {
+		return err
+	}
+	for _, u := range domain.AnnouncementRecipients(domain.UserID(a.Author), ids) {
+		n := domain.Notification{
+			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Workspace: a.Workspace, Kind: domain.KindAnnouncement,
+			Project: a.Project, IssueTitle: a.Title, ActorName: actor, Excerpt: a.Excerpt, SourceEvent: m.ID, CreatedAt: s.d.Now(),
+		}
+		if err := s.d.Repo.Add(ctx, n); err != nil {
+			return err
+		}
+		if err := s.enqueue(ctx, n, a.Project); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // OnIssueAssigned handles issue.assigned events.
 func (s *Service) OnIssueAssigned(ctx context.Context, m outbox.Message) error {

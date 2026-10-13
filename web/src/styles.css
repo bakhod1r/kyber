@@ -431,3 +431,11 @@ a.user:hover { text-decoration: underline; }
 .forms .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .form-designer, .form-filler { display: grid; gap: 0.75rem; max-width: 640px; }
 .form-designer fieldset { display: grid; gap: 0.5rem; border: 1px solid var(--border); border-radius: 8px; }
+
+/* Announcements (E1) */
+.announcements .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.announcements .row.between { justify-content: space-between; }
+.announcement-form { display: grid; gap: 0.75rem; max-width: 640px; margin-bottom: 1rem; }
+.announcement-feed { list-style: none; padding: 0; display: grid; gap: 10px; }
+.announcement-feed article { border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 10px 12px; }
+.announcement-feed h3 { margin: 0 0 4px; }

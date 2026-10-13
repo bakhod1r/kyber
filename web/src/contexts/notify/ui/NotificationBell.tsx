@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { notifyUseCases, type Notification } from "../application";
+import { notificationTarget, notifyUseCases, type Notification } from "../application";
 
 const VERB: Record<Notification["kind"], string> = {
   assigned: "assigned you",
   commented: "commented on",
   mentioned: "mentioned you on",
   transitioned: "changed the status of",
+  announcement: "announced",
 };
 
 export function NotificationBell() {
@@ -37,8 +38,7 @@ export function NotificationBell() {
   function openIssue(n: Notification) {
     if (!n.read) markRead.mutate(n.id);
     setOpen(false);
-    const project = n.issue_key.slice(0, n.issue_key.lastIndexOf("-"));
-    navigate(`/projects/${encodeURIComponent(project)}?issue=${encodeURIComponent(n.issue_key)}`);
+    navigate(notificationTarget(n));
   }
 
   return (
@@ -71,7 +71,7 @@ export function NotificationBell() {
               <li key={n.id}>
                 <button type="button" className={`note${n.read ? "" : " unread"}`} onClick={() => openIssue(n)}>
                   <span className="note-line">
-                    <strong>{n.actor_name}</strong> {VERB[n.kind]} <span className="key">{n.issue_key}</span>
+                    <strong>{n.actor_name}</strong> {VERB[n.kind]} <span className="key">{n.kind === "announcement" ? (n.project_key || "📣") : n.issue_key}</span>
                   </span>
                   <span className="note-title">{n.issue_title}</span>
                   {n.excerpt && <span className="note-excerpt">{n.excerpt}</span>}

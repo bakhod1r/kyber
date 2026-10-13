@@ -36,3 +36,10 @@ issues, `startDate`/`dueDate`/`due` in JQL, the Timeline tab). D4 Goals — done
 by JQL through the Search ACL; Goals tab). D5 Docs — done (docs context;
 Markdown pages with numbered revisions; safe Markdown rendering without raw HTML). D6 Forms — done (form context;
 submissions become issues through the Issue Tracking ACL). Section D is complete.
+
+## E. Team events and announcements (requested 2026-10-13)
+1. E1 Announcements — done: project admins (project) and workspace owners/admins or `KYBER_ADMIN_EMAILS`
+   (workspace) publish; every member is notified in the inbox, by email/Telegram per their settings, in
+   the project's Telegram groups, and open pages refresh live.
+2. E2 Team events: meetings for a project or the workspace with notifications on create/change/cancel,
+   a reminder 15 minutes before, and RSVP.

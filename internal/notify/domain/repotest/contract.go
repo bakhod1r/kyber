@@ -53,6 +53,19 @@ func Run(t *testing.T, newRepo func(t *testing.T) domain.Repository) {
 		}
 	})
 
+	t.Run("announcements keep their project", func(t *testing.T) {
+		repo := newRepo(t)
+		n := mk(1, Alice, 9)
+		n.Kind, n.IssueKey, n.Project, n.IssueTitle = domain.KindAnnouncement, "", "KYB", "Release Friday"
+		if err := repo.Add(ctx, n); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := repo.ListFor(ctx, inbox(Alice), false, 50)
+		if len(got) != 1 || got[0].Kind != domain.KindAnnouncement || got[0].Project != "KYB" || got[0].IssueKey != "" {
+			t.Fatalf("announcement = %+v", got)
+		}
+	})
+
 	t.Run("newest first, unread filter, counts and read state", func(t *testing.T) {
 		repo := newRepo(t)
 		for i := 1; i <= 3; i++ {

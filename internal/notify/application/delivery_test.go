@@ -50,7 +50,7 @@ func deliverySetup(channels ...domain.Channel) (*application.Service, *memory.De
 	deliveries, prefs := memory.NewDeliveryRepository(), memory.NewPrefsRepository()
 	n := 0
 	return application.NewService(application.Deps{
-		Repo: memory.NewRepository(), Issues: f, Members: f, Workspaces: f, Users: f,
+		Repo: memory.NewRepository(), Issues: f, Members: f, Workspaces: f, Users: f, Audience: f,
 		Deliveries: deliveries, Prefs: prefs, Contacts: contacts{chats: map[string]string{"bob": "777"}},
 		Channels: channels, PublicURL: "https://kyber.example",
 		NewID: func() string { n++; return fmt.Sprintf("00000000-0000-4000-8000-%012d", n) },
@@ -166,7 +166,7 @@ func TestDeliveryErrorsSurface(t *testing.T) {
 	}
 	f := &fakes{issues: map[string]application.IssueInfo{"KYB-1": {Project: "KYB", Title: "t"}}, members: map[string]bool{"KYB/ghost": true, "KYB/bob": true}}
 	mk := func(q domain.DeliveryRepository) *application.Service {
-		return application.NewService(application.Deps{Repo: memory.NewRepository(), Issues: f, Members: f, Workspaces: f, Users: f,
+		return application.NewService(application.Deps{Repo: memory.NewRepository(), Issues: f, Members: f, Workspaces: f, Users: f, Audience: f,
 			Deliveries: q, Prefs: memory.NewPrefsRepository(), Contacts: contacts{}, Channels: []domain.Channel{domain.ChannelEmail},
 			NewID: func() string { return "id" }, Now: func() time.Time { return clock }})
 	}
