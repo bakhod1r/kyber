@@ -580,3 +580,47 @@ func TestReadReceipts(t *testing.T) {
 		t.Fatalf("outsider = %v", err)
 	}
 }
+
+// S69: owners and admins rename, archive and remove; an archived channel is read-only.
+func TestChannelManagement(t *testing.T) {
+	svc, ctx, ev := setupWithEvents(t)
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "general"})
+	id := string(ch.ID)
+	_ = svc.Join(ctx, "dev", id)
+	_ = svc.Join(ctx, "qa", id)
+	if _, err := svc.Rename(ctx, "dev", id, "team", ""); !errors.Is(err, domain.ErrNotManager) {
+		t.Fatalf("member renames = %v", err)
+	}
+	if _, err := svc.MakeAdmin(ctx, "lead", id, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	*ev = nil
+	c, err := svc.Rename(ctx, "dev", id, "team", "The team")
+	if err != nil || c.Name != "team" || len(*ev) != 1 || !strings.HasPrefix((*ev)[0], "conversation.updated→") {
+		t.Fatalf("rename = %+v %v %v", c, err, *ev)
+	}
+	if _, err := svc.RemoveMember(ctx, "dev", id, "qa"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Post(ctx, "qa", id, "still here?"); !errors.Is(err, domain.ErrNotMember) {
+		t.Fatalf("removed member posts = %v", err)
+	}
+	if _, err := svc.Archive(ctx, "dev", id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Post(ctx, "lead", id, "hello?"); !errors.Is(err, domain.ErrArchived) {
+		t.Fatalf("post to archived = %v", err)
+	}
+	if h, err := svc.History(ctx, "lead", id, "", 10); err != nil || h == nil && err != nil {
+		t.Fatalf("reading an archived channel = %v", err)
+	}
+	if _, err := svc.Unarchive(ctx, "lead", id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Post(ctx, "lead", id, "back"); err != nil {
+		t.Fatalf("post after unarchive = %v", err)
+	}
+	if _, err := svc.RemoveAdmin(ctx, "dev", id, "dev"); !errors.Is(err, domain.ErrNotOwner) {
+		t.Fatalf("admin removes admin = %v", err)
+	}
+}

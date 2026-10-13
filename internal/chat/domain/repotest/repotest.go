@@ -451,3 +451,38 @@ func RunReceipts(t *testing.T, r domain.Repository) {
 		t.Fatalf("cursors = %v %v", got, err)
 	}
 }
+
+// RunManagement checks saving a channel's name, topic, admins and archived state (S69).
+func RunManagement(t *testing.T, r domain.Repository) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	a, _ := domain.NewChannel(cid(80), WS, "alpha", "", false, Lead, t0)
+	b, _ := domain.NewChannel(cid(81), WS, "beta", "", false, Lead, t0)
+	for _, c := range []*domain.Conversation{a, b} {
+		if err := r.Create(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = r.AddMember(ctx, a.ID, Dev, t0)
+	a, _ = r.ByID(ctx, a.ID)
+	_ = a.MakeAdmin(Lead, Dev)
+	_ = a.Rename(Lead, "gamma", "Gamma team")
+	_ = a.Archive(Lead, t0.Add(time.Hour))
+	if err := r.Update(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := r.ByID(ctx, a.ID)
+	if got.Name != "gamma" || got.Topic != "Gamma team" || len(got.Admins) != 1 || got.Admins[0] != Dev || !got.ArchivedAt.Equal(t0.Add(time.Hour)) {
+		t.Fatalf("after update = %+v", got)
+	}
+	got.ArchivedAt = time.Time{}
+	got.Admins = nil
+	_ = r.Update(ctx, got)
+	if again, _ := r.ByID(ctx, a.ID); again.Archived() || len(again.Admins) != 0 {
+		t.Fatalf("after unarchive = %+v", again)
+	}
+	b.Name = "gamma"
+	if err := r.Update(ctx, b); !errors.Is(err, domain.ErrNameTaken) {
+		t.Fatalf("taken name = %v", err)
+	}
+}

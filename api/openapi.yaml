@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.49.0
+  version: 0.50.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -498,6 +498,21 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: renameChannel
+      description: Owner or admins rename a channel and set its topic (S69).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string }, topic: { type: string } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/join:
     post:
       operationId: joinConversation
@@ -539,7 +554,7 @@ paths:
       operationId: openStream
       description: |
         Server-Sent Events of this workspace for the caller (`message.posted`, `message.edited`,
-        `message.deleted`, `message.reacted`, `message.pinned`, `typing`, `conversation.read` (DMs: who read up to when), `call.updated`, `call.signal`, `call.follow`, `whiteboard.ops`, `whiteboard.cursor`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
+        `message.deleted`, `message.reacted`, `message.pinned`, `typing`, `conversation.read` (DMs: who read up to when), `conversation.updated` (a channel was renamed, archived or its members changed), `call.updated`, `call.signal`, `call.follow`, `whiteboard.ops`, `whiteboard.cursor`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
         what was missed. Keeping the stream open marks the caller online.
       parameters:
         - { name: Last-Event-ID, in: header, schema: { type: string } }
@@ -1022,6 +1037,56 @@ paths:
                 properties:
                   items: { type: array, items: { type: object, required: [user_id, read_at], properties: { user_id: { type: string }, read_at: { type: string, format: date-time } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/archive:
+    post:
+      operationId: archiveChannel
+      description: Owner or admins make the channel read-only (S69).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/unarchive:
+    post:
+      operationId: unarchiveChannel
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/admins/{user}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: user, in: path, required: true, schema: { type: string } }
+    put:
+      operationId: makeChannelAdmin
+      description: The owner lets a member manage the channel.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: removeChannelAdmin
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/members/{user}:
+    delete:
+      operationId: removeChannelMember
+      description: Owner or admins take someone (not the owner) out of the channel.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: user, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/chat/saved:
     get:
@@ -2891,9 +2956,12 @@ components:
               screen: { type: boolean }
     Conversation:
       type: object
-      required: [id, kind, name, topic, private, member_ids, member, unread, created_at]
+      required: [id, kind, name, topic, private, member_ids, member, unread, created_at, owner_id, admin_ids, archived]
       properties:
         id: { type: string }
+        owner_id: { type: string, description: Who created it; owns a channel. }
+        admin_ids: { type: array, items: { type: string }, description: "Channel admins besides the owner (S69)." }
+        archived: { type: boolean, description: An archived channel is read-only. }
         kind: { type: string, enum: [channel, dm] }
         name: { type: string, description: Empty for DMs }
         topic: { type: string }

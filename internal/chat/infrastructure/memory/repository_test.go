@@ -24,3 +24,5 @@ func TestScheduledContract(t *testing.T) {
 }
 
 func TestReceiptsContract(t *testing.T) { repotest.RunReceipts(t, memory.NewRepository()) }
+
+func TestManagementContract(t *testing.T) { repotest.RunManagement(t, memory.NewRepository()) }

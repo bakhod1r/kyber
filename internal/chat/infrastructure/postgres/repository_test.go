@@ -39,3 +39,7 @@ func TestScheduledContract(t *testing.T) {
 func TestReceiptsContract(t *testing.T) {
 	repotest.RunReceipts(t, postgres.NewRepository(dbtest.New(t)))
 }
+
+func TestManagementContract(t *testing.T) {
+	repotest.RunManagement(t, postgres.NewRepository(dbtest.New(t)))
+}

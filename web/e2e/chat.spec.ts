@@ -61,4 +61,21 @@ test("chat between two people arrives live", async ({ browser }) => {
   await a.goto(`/chat/${dm.id}`);
   await expect(a.getByRole("log", { name: "Messages" })).toContainText("did you see the build?");
   await expect(b.getByLabel("Seen")).toBeVisible(); // live, without reloading
+
+  // S69: the owner renames the channel, makes Bobur an admin; Bobur archives it and it turns read-only for both.
+  await a.goto(`/chat/${channel.id}`);
+  await a.getByRole("button", { name: "⚙ Settings" }).click();
+  const settings = a.getByRole("region", { name: "Channel settings" });
+  await settings.getByLabel("Name").fill(`renamed-${id}`);
+  await settings.getByRole("button", { name: "Save" }).click();
+  await expect(a.getByRole("heading", { name: `# renamed-${id}` })).toBeVisible();
+  await settings.getByRole("listitem").filter({ hasText: "Bobur" }).getByRole("button", { name: "Make admin" }).click();
+  await expect(settings.getByRole("listitem").filter({ hasText: "Bobur" })).toContainText("admin");
+  await b.goto(`/chat/${channel.id}`);
+  await expect(b.getByRole("heading", { name: `# renamed-${id}` })).toBeVisible();
+  await b.getByRole("button", { name: "⚙ Settings" }).click();
+  await b.getByRole("button", { name: "Archive channel" }).click();
+  await expect(b.getByText("This channel is archived")).toBeVisible();
+  await expect(a.getByText("This channel is archived")).toBeVisible(); // live
+  await expect(a.getByRole("textbox", { name: /^Message/ })).toHaveCount(0);
 });

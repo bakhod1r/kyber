@@ -484,3 +484,54 @@ func TestReadReceipts(t *testing.T) {
 		expect(t, code, 404, b)
 	})
 }
+
+// S69: owners and admins manage a channel; archived channels are read-only.
+func TestChannelManagement(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		qa := anon.signedIn("qa@x.uz")
+		_, devMe := dev.do("GET", "/api/v1/me", nil)
+		_, qaMe := qa.do("GET", "/api/v1/me", nil)
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "general"})
+		lead.do("POST", "/api/v1/channels", map[string]any{"name": "taken"})
+		id := ch["id"].(string)
+		dev.do("POST", "/api/v1/conversations/"+id+"/join", nil)
+		qa.do("POST", "/api/v1/conversations/"+id+"/join", nil)
+
+		code, b := dev.do("PATCH", "/api/v1/conversations/"+id, map[string]any{"name": "team"})
+		expect(t, code, 403, b)
+		code, b = lead.do("PUT", "/api/v1/conversations/"+id+"/admins/"+devMe["id"].(string), nil)
+		expect(t, code, 200, b)
+		if b["admin_ids"].([]any)[0] != devMe["id"] {
+			t.Fatalf("admins = %v", b)
+		}
+		code, b = dev.do("PATCH", "/api/v1/conversations/"+id, map[string]any{"name": "taken"})
+		expect(t, code, 409, b)
+		code, b = dev.do("PATCH", "/api/v1/conversations/"+id, map[string]any{"name": "team", "topic": "The team"})
+		expect(t, code, 200, b)
+		if b["name"] != "team" || b["topic"] != "The team" {
+			t.Fatalf("renamed = %v", b)
+		}
+		code, b = dev.do("DELETE", "/api/v1/conversations/"+id+"/members/"+qaMe["id"].(string), nil)
+		expect(t, code, 200, b)
+		code, b = qa.do("POST", "/api/v1/conversations/"+id+"/messages", map[string]string{"body": "hi"})
+		expect(t, code, 403, b)
+		code, b = dev.do("POST", "/api/v1/conversations/"+id+"/archive", nil)
+		expect(t, code, 200, b)
+		if b["archived"] != true {
+			t.Fatalf("archived = %v", b)
+		}
+		code, b = lead.do("POST", "/api/v1/conversations/"+id+"/messages", map[string]string{"body": "anyone?"})
+		expect(t, code, 403, b)
+		code, b = lead.do("POST", "/api/v1/conversations/"+id+"/unarchive", nil)
+		expect(t, code, 200, b)
+		code, b = dev.do("DELETE", "/api/v1/conversations/"+id+"/admins/"+devMe["id"].(string), nil)
+		expect(t, code, 403, b)
+		code, b = lead.do("DELETE", "/api/v1/conversations/"+id+"/admins/"+devMe["id"].(string), nil)
+		expect(t, code, 200, b)
+		if len(b["admin_ids"].([]any)) != 0 {
+			t.Fatalf("admins after removal = %v", b)
+		}
+	})
+}

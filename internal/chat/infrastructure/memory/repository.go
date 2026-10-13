@@ -47,6 +47,7 @@ func NewRepository() *Repository {
 
 func clone(c domain.Conversation) *domain.Conversation {
 	c.Members = slices.Clone(c.Members)
+	c.Admins = slices.Clone(c.Admins)
 	return &c
 }
 
@@ -125,6 +126,23 @@ func (r *Repository) Visible(_ context.Context, ws domain.WorkspaceID, u domain.
 		return cmp.Or(cmp.Compare(a.Name, b.Name), a.CreatedAt.Compare(b.CreatedAt), cmp.Compare(a.ID, b.ID))
 	})
 	return out, nil
+}
+
+func (r *Repository) Update(_ context.Context, c *domain.Conversation) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cur, ok := r.convs[c.ID]
+	if !ok {
+		return domain.ErrConversationNotFound
+	}
+	for _, o := range r.convs {
+		if o.ID != c.ID && o.Workspace == c.Workspace && o.Kind == domain.KindChannel && o.Name == c.Name {
+			return domain.ErrNameTaken
+		}
+	}
+	cur.Name, cur.Topic, cur.Admins, cur.ArchivedAt = c.Name, c.Topic, slices.Clone(c.Admins), c.ArchivedAt
+	r.convs[c.ID] = cur
+	return nil
 }
 
 func (r *Repository) ReadCursors(_ context.Context, id domain.ConversationID) (map[domain.UserID]time.Time, error) {

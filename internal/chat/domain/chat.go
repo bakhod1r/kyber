@@ -62,6 +62,9 @@ type Conversation struct {
 	CreatedBy UserID
 	CreatedAt time.Time
 	Members   []UserID
+	// Channels (S69): the owner (CreatedBy) and these admins manage it; an archived channel is read-only.
+	Admins     []UserID
+	ArchivedAt time.Time
 }
 
 func NewChannel(id ConversationID, ws WorkspaceID, name, topic string, private bool, creator UserID, now time.Time) (*Conversation, error) {
@@ -113,6 +116,9 @@ func (c *Conversation) Join(u UserID) error {
 	if c.Kind != KindChannel || c.Private {
 		return ErrNotJoinable
 	}
+	if c.Archived() {
+		return ErrArchived
+	}
 	c.add(u)
 	return nil
 }
@@ -124,6 +130,9 @@ func (c *Conversation) Invite(by, u UserID) error {
 	}
 	if !c.IsMember(by) {
 		return ErrNotMember
+	}
+	if c.Archived() {
+		return ErrArchived
 	}
 	c.add(u)
 	return nil
@@ -138,6 +147,115 @@ func (c *Conversation) Leave(u UserID) error {
 		return ErrNotMember
 	}
 	c.Members = slices.Delete(c.Members, i, i+1)
+	return nil
+}
+
+var (
+	ErrNotManager = errors.New("only the channel's owner and admins can do that")
+	ErrNotOwner   = errors.New("only the channel's owner can do that")
+	ErrArchived   = errors.New("the channel is archived")
+)
+
+func (c *Conversation) Archived() bool { return !c.ArchivedAt.IsZero() }
+
+// Writable: nobody posts to, joins or changes an archived channel (unarchive it first).
+func (c *Conversation) Writable() error {
+	if c.Archived() {
+		return ErrArchived
+	}
+	return nil
+}
+
+// CanManage: the owner and the admins of a channel.
+func (c *Conversation) CanManage(u UserID) bool {
+	return c.Kind == KindChannel && (u == c.CreatedBy || slices.Contains(c.Admins, u))
+}
+
+func (c *Conversation) manage(by UserID) error {
+	if c.Kind != KindChannel {
+		return ErrNotJoinable
+	}
+	if !c.CanManage(by) {
+		return ErrNotManager
+	}
+	return nil
+}
+
+// Rename changes a channel's name and topic.
+func (c *Conversation) Rename(by UserID, name, topic string) error {
+	if err := c.manage(by); err != nil {
+		return err
+	}
+	name = strings.ToLower(strings.TrimSpace(name))
+	if !channelName.MatchString(name) {
+		return ErrInvalidName
+	}
+	c.Name, c.Topic = name, strings.TrimSpace(topic)
+	return nil
+}
+
+func (c *Conversation) Archive(by UserID, now time.Time) error {
+	if err := c.manage(by); err != nil {
+		return err
+	}
+	if !c.Archived() {
+		c.ArchivedAt = now.UTC()
+	}
+	return nil
+}
+
+func (c *Conversation) Unarchive(by UserID) error {
+	if err := c.manage(by); err != nil {
+		return err
+	}
+	c.ArchivedAt = time.Time{}
+	return nil
+}
+
+// MakeAdmin: the owner lets a member manage the channel.
+func (c *Conversation) MakeAdmin(by, u UserID) error {
+	if c.Kind != KindChannel {
+		return ErrNotJoinable
+	}
+	if by != c.CreatedBy {
+		return ErrNotOwner
+	}
+	if !c.IsMember(u) {
+		return ErrNotMember
+	}
+	if i, ok := slices.BinarySearch(c.Admins, u); !ok && u != c.CreatedBy {
+		c.Admins = slices.Insert(c.Admins, i, u)
+	}
+	return nil
+}
+
+func (c *Conversation) RemoveAdmin(by, u UserID) error {
+	if c.Kind != KindChannel {
+		return ErrNotJoinable
+	}
+	if by != c.CreatedBy {
+		return ErrNotOwner
+	}
+	if i, ok := slices.BinarySearch(c.Admins, u); ok {
+		c.Admins = slices.Delete(c.Admins, i, i+1)
+	}
+	return nil
+}
+
+// Remove: a manager takes someone out of the channel (never the owner).
+func (c *Conversation) Remove(by, u UserID) error {
+	if err := c.manage(by); err != nil {
+		return err
+	}
+	if u == c.CreatedBy {
+		return ErrNotOwner
+	}
+	if err := c.Leave(u); err != nil {
+		return err
+	}
+	if i, ok := slices.BinarySearch(c.Admins, u); ok {
+		c.Admins = slices.Delete(c.Admins, i, i+1)
+	}
 	return nil
 }
 
@@ -359,6 +477,8 @@ type Repository interface {
 	// Visible lists the workspace's public channels and every conversation u belongs to, by name then creation.
 	Visible(ctx context.Context, ws WorkspaceID, u UserID) ([]*Conversation, error)
 	MarkRead(ctx context.Context, id ConversationID, u UserID, at time.Time) error
+	// Update saves a channel's name, topic, admins and archived state (S69); ErrNameTaken for a used name.
+	Update(ctx context.Context, c *Conversation) error
 	// ReadCursors are how far each member who has read the conversation has read it (S68).
 	ReadCursors(ctx context.Context, id ConversationID) (map[UserID]time.Time, error)
 	// Unread counts, per conversation u belongs to, live top-level messages by others newer than u's read cursor.

@@ -87,6 +87,8 @@ func (n Notifier) Notify(ctx context.Context, to []domain.UserID, e domain.Event
 		data = toMessage(e.Message)
 	case domain.MessagePinned:
 		data = toMessage(e.Message)
+	case domain.ConversationChanged:
+		data = map[string]any{"conversation_id": string(e.Conversation.ID), "name": e.Conversation.Name, "archived": e.Conversation.Archived()}
 	case domain.Read:
 		data = map[string]any{"conversation_id": string(e.Conversation), "user_id": string(e.User), "at": e.At}
 	case domain.Typing:

@@ -21,13 +21,21 @@ type Repository struct{ pool *pgxpool.Pool }
 func NewRepository(pool *pgxpool.Pool) *Repository { return &Repository{pool: pool} }
 
 const convCols = `c.id, c.workspace_id, c.kind, c.name, c.topic, c.private, coalesce(c.dm_key, ''), c.created_by, c.created_at,
-	ARRAY(SELECT m.user_id::text FROM conversation_members m WHERE m.conversation_id = c.id ORDER BY m.user_id)`
+	ARRAY(SELECT m.user_id::text FROM conversation_members m WHERE m.conversation_id = c.id ORDER BY m.user_id),
+	ARRAY(SELECT a::text FROM unnest(c.admin_ids) a ORDER BY 1), c.archived_at`
 
 func scanConv(row pgx.CollectableRow) (*domain.Conversation, error) {
 	var c domain.Conversation
-	var members []string
-	if err := row.Scan(&c.ID, &c.Workspace, &c.Kind, &c.Name, &c.Topic, &c.Private, &c.Key, &c.CreatedBy, &c.CreatedAt, &members); err != nil {
+	var members, admins []string
+	var archived *time.Time
+	if err := row.Scan(&c.ID, &c.Workspace, &c.Kind, &c.Name, &c.Topic, &c.Private, &c.Key, &c.CreatedBy, &c.CreatedAt, &members, &admins, &archived); err != nil {
 		return nil, err
+	}
+	for _, a := range admins {
+		c.Admins = append(c.Admins, domain.UserID(a))
+	}
+	if archived != nil {
+		c.ArchivedAt = archived.UTC()
 	}
 	c.CreatedAt = c.CreatedAt.UTC()
 	c.Members = make([]domain.UserID, len(members))
@@ -56,6 +64,24 @@ func (r *Repository) Create(ctx context.Context, c *domain.Conversation) error {
 		}
 		return nil
 	})
+	var pg *pgconn.PgError
+	if errors.As(err, &pg) && pg.ConstraintName == "conversations_channel_name" {
+		return domain.ErrNameTaken
+	}
+	return err
+}
+
+func (r *Repository) Update(ctx context.Context, c *domain.Conversation) error {
+	admins := make([]string, len(c.Admins))
+	for i, a := range c.Admins {
+		admins[i] = string(a)
+	}
+	var archived *time.Time
+	if c.Archived() {
+		archived = &c.ArchivedAt
+	}
+	_, err := r.pool.Exec(ctx, `UPDATE conversations SET name = $2, topic = $3, admin_ids = $4::uuid[], archived_at = $5 WHERE id = $1`,
+		string(c.ID), c.Name, c.Topic, admins, archived)
 	var pg *pgconn.PgError
 	if errors.As(err, &pg) && pg.ConstraintName == "conversations_channel_name" {
 		return domain.ErrNameTaken

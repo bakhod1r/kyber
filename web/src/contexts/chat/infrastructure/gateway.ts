@@ -41,6 +41,12 @@ export const chatGateway = {
   cancelScheduled: (id: string) => request<undefined>("DELETE", `/api/v1/scheduled/${seg(id)}`),
   remind: (id: string, text: string, at: Date) => request<{ id: string; text: string; at: string }>("POST", `${conv(id)}/reminders`, { text, at: at.toISOString() }),
   receipts: (id: string) => request<List<Receipt>>("GET", `${conv(id)}/receipts`).then((r) => r.items),
+  rename: (id: string, name: string, topic: string) => request<Conversation>("PATCH", conv(id), { name, topic }),
+  archive: (id: string) => request<Conversation>("POST", `${conv(id)}/archive`),
+  unarchive: (id: string) => request<Conversation>("POST", `${conv(id)}/unarchive`),
+  makeAdmin: (id: string, user: string) => request<Conversation>("PUT", `${conv(id)}/admins/${seg(user)}`),
+  removeAdmin: (id: string, user: string) => request<Conversation>("DELETE", `${conv(id)}/admins/${seg(user)}`),
+  removeMember: (id: string, user: string) => request<Conversation>("DELETE", `${conv(id)}/members/${seg(user)}`),
   search: (q: string) => request<List<Message>>("GET", `/api/v1/chat/search?q=${encodeURIComponent(q)}`).then((r) => r.items),
   /** Uploads a file as a message (raw body; the header satisfies the CSRF guard for cookie sessions). */
   upload: async (id: string, file: Blob, name: string): Promise<Message> => {
@@ -55,13 +61,14 @@ export const chatGateway = {
     request<{ online: string[] }>("GET", `/api/v1/presence?${userIds.map((u) => `user_id=${encodeURIComponent(u)}`).join("&")}`).then((r) => r.online),
 };
 
-const EVENTS = ["message.posted", "message.edited", "message.deleted", "message.reacted", "message.pinned", "typing", "conversation.read"] as const;
+const EVENTS = ["message.posted", "message.edited", "message.deleted", "message.reacted", "message.pinned", "typing", "conversation.read", "conversation.updated"] as const;
 
 /** Chat events from the shared realtime stream. */
 export function openChatStream(onEvent: (e: ChatEvent) => void): () => void {
   return subscribe([...EVENTS], (type, data) => {
     if (type === "typing") onEvent({ type, ...(data as { conversation_id: string; user_id: string }) });
+    else if (type === "conversation.updated") onEvent({ type, conversation_id: (data as { conversation_id: string }).conversation_id });
     else if (type === "conversation.read") onEvent({ type, ...(data as { conversation_id: string; user_id: string; at: string }) });
-    else onEvent({ type: type as Exclude<ChatEvent["type"], "typing" | "conversation.read">, message: data as Message });
+    else onEvent({ type: type as Exclude<ChatEvent["type"], "typing" | "conversation.read" | "conversation.updated">, message: data as Message });
   });
 }

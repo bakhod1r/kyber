@@ -2,7 +2,13 @@
 export type Conversation = {
   id: string; kind: "channel" | "dm"; name: string; topic: string; private: boolean;
   member_ids: string[]; member: boolean; unread: number; created_at: string;
+  /** S69: the owner (creator) and admins manage a channel; an archived one is read-only. */
+  owner_id?: string; admin_ids?: string[]; archived?: boolean;
 };
+
+/** Whether u may rename, archive or remove people from the channel (S69). */
+export const canManage = (c: Pick<Conversation, "kind" | "owner_id" | "admin_ids">, u: string) =>
+  c.kind === "channel" && (c.owner_id === u || (c.admin_ids ?? []).includes(u));
 export type Reaction = { emoji: string; user_ids: string[] };
 export type IssuePreview = { key: string; title: string; status: string };
 export type Message = {
@@ -95,11 +101,12 @@ export function remindPresets(now: Date): { label: string; at: Date }[] {
 export type ChatEvent =
   | { type: "message.posted" | "message.edited" | "message.deleted" | "message.reacted" | "message.pinned"; message: Omit<Message, "issues"> & { issues?: IssuePreview[] } }
   | { type: "typing"; conversation_id: string; user_id: string }
-  | { type: "conversation.read"; conversation_id: string; user_id: string; at: string };
+  | { type: "conversation.read"; conversation_id: string; user_id: string; at: string }
+  | { type: "conversation.updated"; conversation_id: string };
 
 /** Applies a stream event to a conversation's newest-first, top-level history. */
 export function applyEvent(list: Message[], conversationId: string, e: ChatEvent): Message[] {
-  if (e.type === "typing" || e.type === "conversation.read" || e.message.conversation_id !== conversationId) return list;
+  if (e.type === "typing" || e.type === "conversation.read" || e.type === "conversation.updated" || e.message.conversation_id !== conversationId) return list;
   const m = e.message;
   if (m.thread_id) {
     if (e.type !== "message.posted") return list;

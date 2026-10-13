@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, type ChatEvent, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, type Message, parseRemind, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserStatus, useChatStream,
+  applyEvent, canManage, type ChatEvent, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, type Message, parseRemind, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserStatus, useChatStream,
 } from "../application";
 
 const PAGE = 50;
@@ -54,6 +54,10 @@ export function ChatPage({ extras, activity }: { extras?: ConversationSlot; /** 
   const [thread, setThread] = useState<string | null>(null);
 
   useChatStream((e: ChatEvent) => {
+    if (e.type === "conversation.updated") {
+      void qc.invalidateQueries({ queryKey: ["chat", "conversations"] });
+      return;
+    }
     if (e.type === "conversation.read") {
       qc.setQueryData<Receipt[]>(["chat", "receipts", e.conversation_id], (list) =>
         list ? [...list.filter((r) => r.user_id !== e.user_id), { user_id: e.user_id, read_at: e.at }] : list);
@@ -159,6 +163,46 @@ function MyStatus({ me }: { me: string }) {
         </form>
       )}
     </div>
+  );
+}
+
+/** Owner and admins: rename, archive, admins and members (S69). Everyone else sees who runs the channel. */
+function ChannelSettings({ c, me, names }: { c: Conversation; me: string; names: Map<string, string> }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState(c.name);
+  const [topic, setTopic] = useState(c.topic);
+  const done = () => qc.invalidateQueries({ queryKey: ["chat", "conversations"] });
+  const act = useMutation({ mutationFn: (f: () => Promise<Conversation>) => f(), onSuccess: done });
+  const manager = canManage(c, me);
+  const owner = c.owner_id === me;
+  const who = (u: string) => (u === me ? "You" : (names.get(u) ?? "Someone"));
+  return (
+    <section className="chat-settings panel" aria-label="Channel settings">
+      {manager && (
+        <form className="row" onSubmit={(e) => { e.preventDefault(); act.mutate(() => chatUseCases.rename(c.id, name, topic)); }}>
+          <label>Name <input value={name} onChange={(e) => setName(e.target.value)} disabled={c.archived} /></label>
+          <label>Topic <input value={topic} onChange={(e) => setTopic(e.target.value)} disabled={c.archived} /></label>
+          <button disabled={c.archived}>Save</button>
+          {c.archived
+            ? <button type="button" className="ghost" onClick={() => act.mutate(() => chatUseCases.unarchive(c.id))}>Unarchive</button>
+            : <button type="button" className="danger" onClick={() => act.mutate(() => chatUseCases.archive(c.id))}>Archive channel</button>}
+        </form>
+      )}
+      <ul aria-label="Channel members">
+        {c.member_ids.map((u) => (
+          <li key={u}>
+            {who(u)} {u === c.owner_id ? <span className="muted">· owner</span> : (c.admin_ids ?? []).includes(u) ? <span className="muted">· admin</span> : null}
+            {owner && u !== c.owner_id && ((c.admin_ids ?? []).includes(u)
+              ? <button className="ghost" onClick={() => act.mutate(() => chatUseCases.removeAdmin(c.id, u))}>Remove admin</button>
+              : <button className="ghost" onClick={() => act.mutate(() => chatUseCases.makeAdmin(c.id, u))}>Make admin</button>)}
+            {manager && !c.archived && u !== c.owner_id && u !== me && (
+              <button className="ghost" onClick={() => act.mutate(() => chatUseCases.removeMember(c.id, u))}>Remove</button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {act.error && <p role="alert" className="error">{act.error.message}</p>}
+    </section>
   );
 }
 
@@ -417,6 +461,7 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
     setOlder((o) => [...o, ...page]);
     if (page.length < PAGE) setExhausted(true);
   };
+  const [showSettings, setShowSettings] = useState(false);
   const messages = [...(history.data ?? []), ...older].reverse(); // oldest at the top
   const receipts = useQuery({ queryKey: ["chat", "receipts", id], queryFn: () => chatUseCases.receipts(id), enabled: conversation?.kind === "dm" });
   const seenId = conversation?.kind === "dm" ? seen(messages, receipts.data ?? [], me) : null;
@@ -427,7 +472,12 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
         <h1>{title}</h1>
         {conversation?.topic && <p className="muted">{conversation.topic}</p>}
         <button className="ghost" aria-expanded={showPins} onClick={() => setShowPins((v) => !v)}>📌 Pinned</button>
+        {conversation?.kind === "channel" && (
+          <button className="ghost" aria-expanded={showSettings} onClick={() => setShowSettings((v) => !v)}>⚙ Settings</button>
+        )}
       </header>
+      {conversation?.archived && <p className="chat-archived" role="status">🗄 This channel is archived — read-only.</p>}
+      {showSettings && conversation && <ChannelSettings c={conversation} me={me} names={names} />}
       {showPins && (
         <ul className="chat-pins panel" aria-label="Pinned messages">
           {pins.data?.length === 0 && <li className="muted">Nothing pinned yet.</li>}
@@ -446,7 +496,7 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
         ))}
       </div>
       <p className="chat-typing muted" aria-live="polite">{typers.length > 0 ? `${typers.join(", ")} ${typers.length === 1 ? "is" : "are"} typing…` : " "}</p>
-      {member ? (
+      {conversation?.archived ? null : member ? (
         <div className="chat-compose-row">
           <label className="ghost chat-attach" title="Attach a file (25 MB at most)">
             📎

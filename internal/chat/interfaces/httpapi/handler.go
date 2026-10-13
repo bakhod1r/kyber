@@ -50,6 +50,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/messages/{id}/save", h.unsave)
 	mux.HandleFunc("GET /api/v1/chat/saved", h.saved)
 	mux.HandleFunc("PUT /api/v1/me/status", h.setStatus)
+	mux.HandleFunc("PATCH /api/v1/conversations/{id}", h.rename)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/archive", h.archive)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/unarchive", h.unarchive)
+	mux.HandleFunc("PUT /api/v1/conversations/{id}/admins/{user}", h.makeAdmin)
+	mux.HandleFunc("DELETE /api/v1/conversations/{id}/admins/{user}", h.removeAdmin)
+	mux.HandleFunc("DELETE /api/v1/conversations/{id}/members/{user}", h.removeMember)
 	mux.HandleFunc("GET /api/v1/conversations/{id}/receipts", h.receipts)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/scheduled", h.schedule)
 	mux.HandleFunc("GET /api/v1/chat/scheduled", h.scheduledList)
@@ -74,7 +80,7 @@ func codeFor(err error) (string, bool) {
 	case errors.Is(err, domain.ErrNameTaken):
 		return httpx.CodeChannelNameTaken, true
 	case errors.Is(err, domain.ErrNotMember), errors.Is(err, domain.ErrNotAuthor), errors.Is(err, domain.ErrNotJoinable),
-		errors.Is(err, domain.ErrDeleted):
+		errors.Is(err, domain.ErrDeleted), errors.Is(err, domain.ErrNotManager), errors.Is(err, domain.ErrNotOwner), errors.Is(err, domain.ErrArchived):
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
@@ -96,13 +102,20 @@ type conversationDTO struct {
 	Member    bool      `json:"member"`
 	Unread    int       `json:"unread"`
 	CreatedAt time.Time `json:"created_at"`
+	OwnerID   string    `json:"owner_id"`
+	AdminIDs  []string  `json:"admin_ids"`
+	Archived  bool      `json:"archived"`
 }
 
 func toConversation(v app.View, actor string) conversationDTO {
 	d := conversationDTO{ID: string(v.ID), Kind: string(v.Kind), Name: v.Name, Topic: v.Topic, Private: v.Private,
-		MemberIDs: make([]string, len(v.Members)), Member: v.IsMember(domain.UserID(actor)), Unread: v.Unread, CreatedAt: v.CreatedAt}
+		MemberIDs: make([]string, len(v.Members)), Member: v.IsMember(domain.UserID(actor)), Unread: v.Unread, CreatedAt: v.CreatedAt,
+		OwnerID: string(v.CreatedBy), AdminIDs: []string{}, Archived: v.Archived()}
 	for i, m := range v.Members {
 		d.MemberIDs[i] = string(m)
+	}
+	for _, a := range v.Admins {
+		d.AdminIDs = append(d.AdminIDs, string(a))
 	}
 	return d
 }
@@ -729,4 +742,51 @@ func (h *Handler) receipts(w http.ResponseWriter, r *http.Request) {
 	}
 	slices.SortFunc(out, func(a, b receipt) int { return strings.Compare(a.UserID, b.UserID) })
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+// managed answers with the channel (as the actor sees it) after a management action.
+func (h *Handler) managed(w http.ResponseWriter, r *http.Request, _ *domain.Conversation, err error) {
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.get(w, r)
+}
+
+func (h *Handler) rename(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name  string `json:"name"`
+		Topic string `json:"topic"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	c, err := h.svc.Rename(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Name, in.Topic)
+	h.managed(w, r, c, err)
+}
+
+func (h *Handler) archive(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.Archive(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	h.managed(w, r, c, err)
+}
+
+func (h *Handler) unarchive(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.Unarchive(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	h.managed(w, r, c, err)
+}
+
+func (h *Handler) makeAdmin(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.MakeAdmin(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), r.PathValue("user"))
+	h.managed(w, r, c, err)
+}
+
+func (h *Handler) removeAdmin(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.RemoveAdmin(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), r.PathValue("user"))
+	h.managed(w, r, c, err)
+}
+
+func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.RemoveMember(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), r.PathValue("user"))
+	h.managed(w, r, c, err)
 }

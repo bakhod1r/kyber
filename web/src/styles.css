@@ -546,3 +546,6 @@ label.button { cursor: pointer; }
 .chat-status { margin-bottom: 8px; }
 .chat-status > button { width: 100%; text-align: left; }
 .chat-seen { text-align: right; font-size: 12px; margin: -4px 0 4px; }
+.chat-archived { background: var(--surface-2, #f1f5f9); padding: 6px 10px; border-radius: 6px; }
+.chat-settings { margin: 8px 0; }
+.chat-settings ul { list-style: none; padding: 0; }

@@ -33,8 +33,11 @@ Order: daily use first, then channel management, Jira integration, huddle extras
 
 ## 2. Channels
 
-- **S69 Channel management** — rename, archive/unarchive (read-only when archived), owner and admins of a channel
+- ✅ **S69 Channel management** — rename, archive/unarchive (read-only when archived), owner and admins of a channel
   (owner = creator). AC: only owner/admins rename, archive, remove members.
+  **Done:** `PATCH /conversations/{id}`, `POST …/archive|unarchive`, `PUT/DELETE …/admins/{user}`,
+  `DELETE …/members/{user}`, migration 0058; archived channels refuse every write (and scheduled messages to them
+  are dropped); live `conversation.updated`; "⚙ Settings" panel. API 0.50.0.
 - **S70 User groups** — `@backend` style groups per workspace; mentioning a group notifies its members. AC: a
   group mention only notifies members who may read the conversation.
 - **S71 Sidebar sections and notification levels** — my own sections (e.g. "Project", "Team") with drag to

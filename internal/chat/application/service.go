@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -226,6 +227,9 @@ func (s *Service) Post(ctx context.Context, actor, conv, body string) (*domain.M
 	if !c.IsMember(domain.UserID(actor)) {
 		return nil, domain.ErrNotMember
 	}
+	if err := c.Writable(); err != nil {
+		return nil, err
+	}
 	now := s.d.Now()
 	m, err := domain.NewMessage(domain.MessageID(s.d.NewID()), c.ID, domain.UserID(actor), body, now)
 	if err != nil {
@@ -379,6 +383,9 @@ func (s *Service) asMember(ctx context.Context, actor, id string) (*domain.Messa
 	}
 	if !c.IsMember(domain.UserID(actor)) {
 		return nil, nil, domain.ErrNotMember
+	}
+	if err := c.Writable(); err != nil {
+		return nil, nil, err
 	}
 	return m, c, nil
 }
@@ -582,6 +589,9 @@ func (s *Service) upload(ctx context.Context, actor, conv, name string, body io.
 	if !c.IsMember(domain.UserID(actor)) {
 		return nil, domain.ErrNotMember
 	}
+	if err := c.Writable(); err != nil {
+		return nil, err
+	}
 	br := bufio.NewReaderSize(body, 512)
 	head, _ := br.Peek(512)
 	typ, _, _ := strings.Cut(http.DetectContentType(head), ";")
@@ -762,6 +772,9 @@ func (s *Service) memberOf(ctx context.Context, actor, conv string) (*domain.Con
 	if !c.IsMember(domain.UserID(actor)) {
 		return nil, domain.ErrNotMember
 	}
+	if err := c.Writable(); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -829,7 +842,7 @@ func (s *Service) SendDue(ctx context.Context) (int, error) {
 	for _, sc := range due {
 		wctx := tenant.With(ctx, string(sc.Workspace))
 		c, err := s.d.Conversations.ByID(wctx, sc.Conversation)
-		if errors.Is(err, domain.ErrConversationNotFound) || (err == nil && !c.IsMember(sc.Author)) {
+		if errors.Is(err, domain.ErrConversationNotFound) || (err == nil && (!c.IsMember(sc.Author) || c.Archived())) {
 			if err := s.d.Scheduled.Delete(wctx, sc.ID); err != nil {
 				return sent, err
 			}
@@ -890,4 +903,65 @@ func (s *Service) remindPersonal(ctx context.Context) (int, error) {
 		}
 	}
 	return sent, nil
+}
+
+// manageChannel loads a channel the actor may read, applies a change and saves it; the members (and whoever was
+// removed) hear conversation.updated.
+func (s *Service) manageChannel(ctx context.Context, actor, id string, change func(c *domain.Conversation) error) (*domain.Conversation, error) {
+	c, err := s.readable(ctx, actor, id)
+	if err != nil {
+		return nil, err
+	}
+	before := slices.Clone(c.Members)
+	if err := change(c); err != nil {
+		return nil, err
+	}
+	if err := s.d.Conversations.Update(ctx, c); err != nil {
+		return nil, err
+	}
+	for _, u := range before {
+		if !c.IsMember(u) {
+			if err := s.d.Conversations.RemoveMember(ctx, c.ID, u); err != nil {
+				return nil, err
+			}
+		}
+	}
+	s.d.Notifier.Notify(ctx, before, domain.ConversationChanged{Conversation: *c})
+	return c, nil
+}
+
+func (s *Service) Rename(ctx context.Context, actor, id, name, topic string) (*domain.Conversation, error) {
+	return s.manageChannel(ctx, actor, id, func(c *domain.Conversation) error {
+		if err := c.Writable(); err != nil {
+			return err
+		}
+		return c.Rename(domain.UserID(actor), name, topic)
+	})
+}
+
+func (s *Service) Archive(ctx context.Context, actor, id string) (*domain.Conversation, error) {
+	now := s.d.Now()
+	return s.manageChannel(ctx, actor, id, func(c *domain.Conversation) error { return c.Archive(domain.UserID(actor), now) })
+}
+
+func (s *Service) Unarchive(ctx context.Context, actor, id string) (*domain.Conversation, error) {
+	return s.manageChannel(ctx, actor, id, func(c *domain.Conversation) error { return c.Unarchive(domain.UserID(actor)) })
+}
+
+func (s *Service) MakeAdmin(ctx context.Context, actor, id, user string) (*domain.Conversation, error) {
+	return s.manageChannel(ctx, actor, id, func(c *domain.Conversation) error { return c.MakeAdmin(domain.UserID(actor), domain.UserID(user)) })
+}
+
+func (s *Service) RemoveAdmin(ctx context.Context, actor, id, user string) (*domain.Conversation, error) {
+	return s.manageChannel(ctx, actor, id, func(c *domain.Conversation) error { return c.RemoveAdmin(domain.UserID(actor), domain.UserID(user)) })
+}
+
+// RemoveMember: an owner or admin takes someone out of the channel.
+func (s *Service) RemoveMember(ctx context.Context, actor, id, user string) (*domain.Conversation, error) {
+	return s.manageChannel(ctx, actor, id, func(c *domain.Conversation) error {
+		if err := c.Writable(); err != nil {
+			return err
+		}
+		return c.Remove(domain.UserID(actor), domain.UserID(user))
+	})
 }

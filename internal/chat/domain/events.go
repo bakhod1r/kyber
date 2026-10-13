@@ -11,6 +11,8 @@ type (
 	MessageDeleted struct{ Message Message }
 	MessageReacted struct{ Message Message }
 	MessagePinned  struct{ Message Message } // pinned or unpinned
+	// ConversationChanged: a channel was renamed, archived or its members or admins changed (S69).
+	ConversationChanged struct{ Conversation Conversation }
 	// Read: someone read a DM up to At (S68); told to the others in the DM only.
 	Read struct {
 		Conversation ConversationID
@@ -31,6 +33,9 @@ func (MessageReacted) EventName() string { return "message.reacted" }
 func (MessagePinned) EventName() string  { return "message.pinned" }
 func (Typing) EventName() string         { return "typing" }
 func (Read) EventName() string           { return "conversation.read" }
+func (ConversationChanged) EventName() string {
+	return "conversation.updated"
+}
 
 // MessageWritten is the published event (outbox) for a new message or reply: other contexts
 // (Notification: mentions) react to it.
