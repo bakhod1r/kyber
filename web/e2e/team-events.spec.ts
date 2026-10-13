@@ -15,9 +15,11 @@ test("team event for a project", async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`/projects/${key}$`));
 
   await page.getByRole("link", { name: "Time table" }).click();
+  // Wait for the page: until then getByLabel("Title") also matches the board's "New issue title".
+  await expect(page.getByRole("heading", { name: "Time table" })).toBeVisible();
   const tomorrow = new Date(Date.now() + 24 * 3600_000);
   const local = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60_000).toISOString().slice(0, 11) + "15:00";
-  await page.getByLabel("Title").fill("Sprint review");
+  await page.getByLabel("Title", { exact: true }).fill("Sprint review");
   await page.getByLabel("Starts").fill(local);
   await page.getByLabel("Invite").selectOption(`project:${key}`);
   await expect(page.getByText(/reminded 15 minutes before/)).toBeVisible();

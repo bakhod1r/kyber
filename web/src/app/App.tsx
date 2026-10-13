@@ -10,6 +10,7 @@ import { AdminPage } from "../contexts/admin/ui/AdminPage";
 import { Announcements } from "../contexts/announcement/ui/Announcements";
 import { ProjectPage } from "./ProjectPage";
 import { SettingsPage } from "../contexts/notify/ui/SettingsPage";
+import { AccessTokens } from "../contexts/identity/ui/AccessTokens";
 import { ProjectsPage } from "../contexts/project/ui/ProjectsPage";
 import { identityUseCases } from "../contexts/identity/application";
 import { SearchPage } from "../contexts/search/ui/SearchPage";
@@ -73,7 +74,7 @@ export function AppRoutes() {
       <Route path="/projects/:key/notifications" element={<RequireUser><ProjectPage view="notifications" /></RequireUser>} />
       <Route path="/meetings" element={<RequireUser><MeetingsPage /></RequireUser>} />
       <Route path="/search" element={<RequireUser><SearchPage /></RequireUser>} />
-      <Route path="/settings" element={<RequireUser><SettingsPage /></RequireUser>} />
+      <Route path="/settings" element={<RequireUser><SettingsPage /><AccessTokens /></RequireUser>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

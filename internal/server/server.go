@@ -168,6 +168,7 @@ type deps struct {
 	versions      agiledomain.VersionRepository
 	users         identitydomain.Users
 	external      identitydomain.ExternalIdentities
+	tokens        identitydomain.PersonalTokens
 	social        identityhttp.Social
 	otps          identitydomain.OTPChallenges
 	telegramBot   *telegram.Bot
@@ -276,7 +277,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta)),
-		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
+		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
 		o(&d)
@@ -322,7 +323,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
-		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
+		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
 		o(&d)
@@ -435,7 +436,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	go relay.Run(d.ctx, d.relayEvery)
 	go dispatch(d.ctx, log, notify, d.senders(), d.dispatchEvery)
 	go remindMeetings(d.ctx, log, calendar, d.reminderEvery)
-	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external)}
+	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
 	}

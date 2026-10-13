@@ -29,6 +29,7 @@ architecture test, Vitest, e2e ×3) → commit + push → short report.
 8. Admin panel (workspace users, projects, settings), MCP server (tools over the API), PostgreSQL RLS.
    C8a admin panel — done: members and roles, projects, stuck events (view, retry). 
    C8b MCP server — done: POST /api/v1/mcp with list_projects, search_issues, get_issue, create_issue, add_comment (ADR-0009).
+   Personal access tokens — done: kpat_ tokens for scripts and MCP, Settings → Access tokens (ADR-0012).
    C8c PostgreSQL RLS — done: tenant_isolation policy on every workspace table, pool scopes each connection to the request's workspace (ADR-0010).
 
 ## D. Jira project navigation (requested 2026-10-13)

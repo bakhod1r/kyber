@@ -43,6 +43,9 @@ func (h *Handler) RegisterProtected(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/logout", h.logout)
 	mux.HandleFunc("GET /api/v1/me", h.me)
 	mux.HandleFunc("POST /api/v1/me/telegram/connect", h.telegramConnect)
+	mux.HandleFunc("GET /api/v1/me/tokens", h.tokens)
+	mux.HandleFunc("POST /api/v1/me/tokens", h.createToken)
+	mux.HandleFunc("DELETE /api/v1/me/tokens/{id}", h.revokeToken)
 }
 
 // telegramConnect returns the deep link that connects the caller's Telegram for notifications.
@@ -82,6 +85,12 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeTooManyAttempts, true
 	case errors.Is(err, errProviderDisabled), errors.Is(err, application.ErrExternalDisabled):
 		return httpx.CodeProviderDisabled, true
+	case errors.Is(err, domain.ErrInvalidToken):
+		return httpx.CodeValidation, true
+	case errors.Is(err, domain.ErrTokenNotFound):
+		return httpx.CodeTokenNotFound, true
+	case errors.Is(err, errTokenScope):
+		return httpx.CodeTokenScope, true
 	case errors.Is(err, application.ErrUnauthenticated):
 		return httpx.CodeAuthRequired, true
 	}
@@ -166,6 +175,9 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 		ctx := context.WithValue(r.Context(), ctxKey{}, u)
+		if application.IsPersonalToken(token) {
+			ctx = context.WithValue(ctx, viaTokenKey{}, true)
+		}
 		next.ServeHTTP(w, r.WithContext(auth.WithActor(ctx, string(u.ID()))))
 	})
 }

@@ -450,3 +450,6 @@ a.user:hover { text-decoration: underline; }
 .attachment-list { list-style: none; padding: 0; margin: 0.5rem 0 0; display: grid; gap: 0.25rem; }
 .attachment-thumb { width: 2.5rem; height: 2.5rem; object-fit: cover; border-radius: 4px; }
 label.button { cursor: pointer; }
+
+/* Access tokens */
+.secret { display: block; overflow-wrap: anywhere; padding: 0.5rem; margin: 0.25rem 0; }

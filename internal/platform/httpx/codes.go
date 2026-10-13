@@ -67,6 +67,8 @@ const (
 	CodeDeadLetterNotFound   = "DEAD_LETTER_NOT_FOUND"
 	CodeAttachmentNotFound   = "ATTACHMENT_NOT_FOUND"
 	CodeAttachmentTooLarge   = "ATTACHMENT_TOO_LARGE"
+	CodeTokenNotFound        = "TOKEN_NOT_FOUND"
+	CodeTokenScope           = "TOKEN_SCOPE"
 	CodeNotificationNotFound = "NOTIFICATION_NOT_FOUND"
 	CodeImportTooLarge       = "IMPORT_TOO_LARGE"
 	CodeImportInvalidFile    = "IMPORT_INVALID_FILE"
@@ -144,6 +146,8 @@ var codes = []code{
 	{CodeDeadLetterNotFound, "6045", 404, "No such stuck event.", "Bunday to'xtab qolgan hodisa yo'q.", "Такого зависшего события нет.", errorx.CategoryBusiness},
 	{CodeAttachmentNotFound, "6046", 404, "Attachment not found.", "Ilova topilmadi.", "Вложение не найдено.", errorx.CategoryBusiness},
 	{CodeAttachmentTooLarge, "6047", 413, "The file is too large (at most 25 MiB).", "Fayl juda katta (ko'pi bilan 25 MiB).", "Файл слишком большой (не более 25 МиБ).", errorx.CategoryValidation},
+	{CodeTokenNotFound, "6048", 404, "Access token not found.", "Kirish tokeni topilmadi.", "Токен доступа не найден.", errorx.CategoryBusiness},
+	{CodeTokenScope, "6049", 403, "Access tokens cannot manage access tokens; sign in instead.", "Tokenlar bilan tokenlarni boshqarib bo'lmaydi; tizimga kiring.", "Токенами нельзя управлять токенами; войдите в систему.", errorx.CategorySecurity},
 	{CodeLastBoard, "6026", 409, "A project must keep at least one board.", "Loyihada kamida bitta board qolishi kerak.", "В проекте должна остаться хотя бы одна доска.", errorx.CategoryBusiness},
 	{CodeNotificationNotFound, "6040", 404, "Notification not found.", "Bildirishnoma topilmadi.", "Уведомление не найдено.", errorx.CategoryBusiness},
 	{CodeImportTooLarge, "6050", 413, "The file is too large to import (10 MB max).", "Fayl import uchun juda katta (ko'pi bilan 10 MB).", "Файл слишком большой для импорта (не более 10 МБ).", errorx.CategoryValidation},

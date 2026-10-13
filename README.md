@@ -64,6 +64,7 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/probl
 | GET | `/healthz` · `/readyz` · `/metrics` | Liveness · readiness (DB) · Prometheus |
 | POST | `/api/v1/auth/signup` · `/auth/login` · `/auth/logout` | Accounts & sessions (cookie or Bearer) |
 | GET | `/api/v1/me` | Current user |
+| GET · POST · DELETE | `/api/v1/me/tokens[/{id}]` | Personal access tokens (`kpat_…`, secret shown once; not usable with a token) |
 | GET / POST | `/api/v1/projects/{key}/members` | List members / add or change a member's role (admin) |
 | POST / GET | `/api/v1/projects` | Create / list projects |
 | GET | `/api/v1/projects/{key}` | Get project |
@@ -85,8 +86,8 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/probl
 
 Kyber is a [Model Context Protocol](https://modelcontextprotocol.io) server at `POST /api/v1/mcp`
 (Streamable HTTP, ADR-0009). Tools: `list_projects`, `search_issues` (JQL), `get_issue`,
-`create_issue`, `add_comment`; each runs with your own permissions. Use a session token from
-`/api/v1/auth/login` (keep it out of shared config files):
+`create_issue`, `add_comment`; each runs with your own permissions. Create a personal access token
+in **Settings → Access tokens** (ADR-0012) and keep it out of shared config files:
 
 ```sh
 claude mcp add --transport http kyber https://kyber.example.com/api/v1/mcp \
