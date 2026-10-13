@@ -43,7 +43,7 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await dialog.getByLabel("Description").fill("Drag cards between columns.\nKeyboard support later.");
   await dialog.getByLabel("Priority").selectOption("highest");
   await dialog.getByLabel("Assignee").selectOption({ label: "E2E User" });
-  await dialog.getByRole("button", { name: "Save" }).click();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect(dialog.getByText("Saved")).toBeVisible();
   await dialog.getByLabel("Add a comment").fill("Looks great!");
   await dialog.getByRole("button", { name: "Comment" }).click();

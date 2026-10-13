@@ -25,7 +25,7 @@ test("a project admin plans and releases a version", async ({ page }) => {
   await page.getByText("Ship login").click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("group", { name: "Fix versions" }).getByLabel("1.0").check();
-  await dialog.getByRole("button", { name: "Save" }).click();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect(dialog.getByText("Saved")).toBeVisible();
   await page.keyboard.press("Escape");
 

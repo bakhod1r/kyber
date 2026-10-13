@@ -74,6 +74,8 @@ func (a Issues) Facts(ctx context.Context, actor, project string) ([]domain.Issu
 			Summary: is.Title(), Description: is.Description(), Type: string(is.Type()), Status: string(is.Status()),
 			StatusName: names[is.Status()], Category: string(wf.CategoryOf(is.Status())), Priority: string(is.Priority()),
 			Assignee: string(is.Assignee()), Reporter: string(is.Reporter()), Resolution: string(is.Resolution())}
+		start, due := is.Schedule()
+		f.StartDate, f.DueDate = string(start), string(due)
 		if sp := is.Sprint(); sp != "" {
 			f.Sprints = []string{string(sp)}
 		}

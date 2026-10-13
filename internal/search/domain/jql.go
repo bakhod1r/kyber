@@ -45,6 +45,7 @@ type Issue struct {
 	Resolution           string
 	Parent               string // parent key
 	Points               *float64
+	StartDate, DueDate   string            // YYYY-MM-DD, "" = not set
 	Custom               map[string]string // custom field values by lower-case field name
 }
 
@@ -157,6 +158,8 @@ var fields = map[string]fieldDef{
 	"assignee": {"assignee", kEnum}, "reporter": {"reporter", kEnum}, "sprint": {"sprint", kEnum},
 	"fixversion": {"fixversion", kEnum}, "resolution": {"resolution", kEnum}, "parent": {"parent", kEnum},
 	"summary": {"summary", kText}, "description": {"description", kText}, "text": {"text", kText},
+	"startdate": {"startdate", kDate}, "start date": {"startdate", kDate},
+	"duedate": {"duedate", kDate}, "due date": {"duedate", kDate}, "due": {"duedate", kDate},
 	"story points": {"points", kNumber}, "storypoints": {"points", kNumber}, "points": {"points", kNumber},
 }
 
@@ -472,6 +475,10 @@ func values(is *Issue, field string) []string {
 		return one(is.Resolution)
 	case "parent":
 		return one(is.Parent)
+	case "startdate":
+		return one(is.StartDate)
+	case "duedate":
+		return one(is.DueDate)
 	}
 	return one(is.Custom[strings.TrimPrefix(field, "cf:")])
 }
@@ -586,7 +593,7 @@ func (c clause) number(is *Issue) bool {
 
 // date compares YYYY-MM-DD values (they sort as text).
 func (c clause) date(is *Issue) bool {
-	have := is.Custom[strings.TrimPrefix(c.field, "cf:")]
+	have := strings.Join(values(is, c.field), "")
 	if c.op == "is" || c.op == "is not" || c.values[0].empty {
 		return (have == "") == (c.op == "is" || c.op == "=")
 	}

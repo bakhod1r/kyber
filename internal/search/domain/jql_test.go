@@ -161,25 +161,25 @@ func TestParseErrors(t *testing.T) {
 }
 
 func TestCustomFields(t *testing.T) {
-	custom := map[string]domain.CustomType{"customer": domain.CustomText, "budget": domain.CustomNumber, "due": domain.CustomDate, "tier": domain.CustomSelect}
+	custom := map[string]domain.CustomType{"customer": domain.CustomText, "budget": domain.CustomNumber, "deadline": domain.CustomDate, "tier": domain.CustomSelect}
 	issues := []domain.Issue{
-		{Key: "KYB-1", Project: "KYB", Number: 1, Custom: map[string]string{"customer": "Acme Corp", "budget": "1200", "due": "2026-12-01", "tier": "Gold"}},
-		{Key: "KYB-2", Project: "KYB", Number: 2, Custom: map[string]string{"customer": "Globex", "budget": "300", "due": "2027-01-15", "tier": "Silver"}},
+		{Key: "KYB-1", Project: "KYB", Number: 1, Custom: map[string]string{"customer": "Acme Corp", "budget": "1200", "deadline": "2026-12-01", "tier": "Gold"}},
+		{Key: "KYB-2", Project: "KYB", Number: 2, Custom: map[string]string{"customer": "Globex", "budget": "300", "deadline": "2027-01-15", "tier": "Silver"}},
 		{Key: "KYB-3", Project: "KYB", Number: 3},
 	}
 	for jql, want := range map[string]string{
-		`Customer ~ acme`:                         "KYB-1",
-		`customer is empty`:                       "KYB-3",
-		`"Budget" > 500`:                          "KYB-1",
-		`budget <= 300`:                           "KYB-2",
-		`budget is not empty`:                     "KYB-1,KYB-2",
-		`budget = EMPTY`:                          "KYB-3",
-		`due < 2027-01-01`:                        "KYB-1",
-		`due >= 2026-12-01 and due != 2026-12-01`: "KYB-2",
-		`due is empty`:                            "KYB-3",
-		`due = EMPTY`:                             "KYB-3",
-		`tier in (gold)`:                          "KYB-1",
-		`tier != Gold`:                            "KYB-2",
+		`Customer ~ acme`:       "KYB-1",
+		`customer is empty`:     "KYB-3",
+		`"Budget" > 500`:        "KYB-1",
+		`budget <= 300`:         "KYB-2",
+		`budget is not empty`:   "KYB-1,KYB-2",
+		`budget = EMPTY`:        "KYB-3",
+		`deadline < 2027-01-01`: "KYB-1",
+		`deadline >= 2026-12-01 and deadline != 2026-12-01`: "KYB-2",
+		`deadline is empty`: "KYB-3",
+		`deadline = EMPTY`:  "KYB-3",
+		`tier in (gold)`:    "KYB-1",
+		`tier != Gold`:      "KYB-2",
 	} {
 		q, err := domain.ParseWith(jql, custom)
 		if err != nil {
@@ -194,10 +194,43 @@ func TestCustomFields(t *testing.T) {
 			t.Errorf("%q = %s, want %s", jql, got, want)
 		}
 	}
-	for jql, pos := range map[string]int{`due > tomorrow`: 6, `budget ~ 3`: 7, `colour = red`: 0} {
+	for jql, pos := range map[string]int{`deadline > tomorrow`: 11, `budget ~ 3`: 7, `colour = red`: 0} {
 		var pe *domain.ParseError
 		if _, err := domain.ParseWith(jql, custom); !errors.As(err, &pe) || pe.Pos != pos {
 			t.Errorf("%q: %v, want position %d", jql, err, pos)
 		}
+	}
+}
+
+func TestScheduleDates(t *testing.T) {
+	issues := []domain.Issue{
+		{Key: "KYB-1", Project: "KYB", Number: 1, StartDate: "2026-10-01", DueDate: "2026-10-10"},
+		{Key: "KYB-2", Project: "KYB", Number: 2, DueDate: "2026-11-01"},
+		{Key: "KYB-3", Project: "KYB", Number: 3},
+	}
+	for jql, want := range map[string]string{
+		`dueDate < 2026-10-31`:                "KYB-1",
+		`duedate >= 2026-10-10 ORDER BY key`:  "KYB-1 KYB-2",
+		`due is empty`:                        "KYB-3",
+		`startDate is not empty`:              "KYB-1",
+		`"start date" = 2026-10-01`:           "KYB-1",
+		`"due date" > 2026-10-10`:             "KYB-2",
+		`startdate is empty AND due is EMPTY`: "KYB-3",
+	} {
+		q, err := domain.Parse(jql)
+		if err != nil {
+			t.Fatalf("%s: %v", jql, err)
+		}
+		out, _ := q.Run(issues, resolver{})
+		var got []string
+		for _, is := range out {
+			got = append(got, is.Key)
+		}
+		if strings.Join(got, " ") != want {
+			t.Errorf("%s = %v, want %s", jql, got, want)
+		}
+	}
+	if _, err := domain.Parse(`dueDate = soon`); !errors.Is(err, domain.ErrInvalidJQL) {
+		t.Fatalf("not a date: %v", err)
 	}
 }

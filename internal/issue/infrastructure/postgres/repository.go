@@ -23,6 +23,7 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		var tag interface{ RowsAffected() int64 }
 		tt := is.TimeTracking()
+		start, due := is.Schedule()
 		fields := is.Fields()
 		if fields == nil {
 			fields = map[domain.FieldID]string{}
@@ -30,19 +31,19 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 		var err error
 		if is.Version() == 0 {
 			tag, err = tx.Exec(ctx, `INSERT INTO issues (id, project_key, number, title, type, status,
-				description, priority, assignee_id, rank, sprint_id, reporter_id, estimate_tenths, version, workspace_id, parent_id, security_level, resolution, original_estimate_s, remaining_estimate_s, time_spent_s, custom_fields)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, $14, $15, $16, $17, $18, $19, $20, $21) ON CONFLICT DO NOTHING`,
+				description, priority, assignee_id, rank, sprint_id, reporter_id, estimate_tenths, version, workspace_id, parent_id, security_level, resolution, original_estimate_s, remaining_estimate_s, time_spent_s, custom_fields, start_date, due_date)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, $14, $15, $16, $17, $18, $19, $20, $21, NULLIF($22, '')::date, NULLIF($23, '')::date) ON CONFLICT DO NOTHING`,
 				string(is.ID()), is.Key().Project(), is.Key().Number(), is.Title(), string(is.Type()), string(is.Status()),
 				is.Description(), string(is.Priority()), nullable(string(is.Assignee())), string(is.Rank()),
-				nullable(string(is.Sprint())), nullable(string(is.Reporter())), estimateCol(is), tenant.Workspace(ctx), nullable(string(is.Parent())), is.SecurityLevel(), string(is.Resolution()), tt.Original, tt.Remaining, tt.Spent, fields)
+				nullable(string(is.Sprint())), nullable(string(is.Reporter())), estimateCol(is), tenant.Workspace(ctx), nullable(string(is.Parent())), is.SecurityLevel(), string(is.Resolution()), tt.Original, tt.Remaining, tt.Spent, fields, string(start), string(due))
 		} else {
 			tag, err = tx.Exec(ctx, `UPDATE issues SET title = $2, type = $3, status = $4, description = $5,
 				priority = $6, assignee_id = $7, rank = $8, sprint_id = $9, estimate_tenths = $11,
-				parent_id = $13, security_level = $14, resolution = $15, original_estimate_s = $16, remaining_estimate_s = $17, time_spent_s = $18, custom_fields = $19, version = version + 1, updated_at = now()
+				parent_id = $13, security_level = $14, resolution = $15, original_estimate_s = $16, remaining_estimate_s = $17, time_spent_s = $18, custom_fields = $19, start_date = NULLIF($20, '')::date, due_date = NULLIF($21, '')::date, version = version + 1, updated_at = now()
 				WHERE id = $1 AND version = $10 AND workspace_id = $12`,
 				string(is.ID()), is.Title(), string(is.Type()), string(is.Status()), is.Description(),
 				string(is.Priority()), nullable(string(is.Assignee())), string(is.Rank()), nullable(string(is.Sprint())),
-				is.Version(), estimateCol(is), tenant.Workspace(ctx), nullable(string(is.Parent())), is.SecurityLevel(), string(is.Resolution()), tt.Original, tt.Remaining, tt.Spent, fields)
+				is.Version(), estimateCol(is), tenant.Workspace(ctx), nullable(string(is.Parent())), is.SecurityLevel(), string(is.Resolution()), tt.Original, tt.Remaining, tt.Spent, fields, string(start), string(due))
 		}
 		if err != nil {
 			return err
@@ -65,6 +66,7 @@ func (r *Repository) Save(ctx context.Context, is *domain.Issue, events []domain
 const selectCols = `SELECT id::text, project_key, number, title, type, status, description, priority,
 	COALESCE(assignee_id::text, ''), rank, COALESCE(sprint_id::text, ''), COALESCE(reporter_id::text, ''), estimate_tenths, version,
 	COALESCE(parent_id::text, ''), COALESCE((SELECT p.number FROM issues p WHERE p.id = issues.parent_id), 0), security_level, resolution, original_estimate_s, remaining_estimate_s, time_spent_s, custom_fields,
+	COALESCE(to_char(start_date, 'YYYY-MM-DD'), ''), COALESCE(to_char(due_date, 'YYYY-MM-DD'), ''),
 	ARRAY(SELECT f.version_id::text FROM issue_fix_versions f WHERE f.issue_id = issues.id ORDER BY 1) FROM issues`
 
 func (r *Repository) ByKey(ctx context.Context, key domain.IssueKey) (*domain.Issue, error) {
@@ -143,7 +145,7 @@ func scan(row pgx.Row) (*domain.Issue, error) {
 	var number, parentNumber int
 	var fixVersions []string
 	if err := row.Scan(&s.ID, &project, &number, &s.Title, &s.Type, &s.Status, &s.Description,
-		&s.Priority, &s.Assignee, &s.Rank, &s.Sprint, &s.Reporter, &s.Estimate, &s.Version, &s.Parent, &parentNumber, &s.Security, &s.Resolution, &s.Time.Original, &s.Time.Remaining, &s.Time.Spent, &s.Fields, &fixVersions); err != nil {
+		&s.Priority, &s.Assignee, &s.Rank, &s.Sprint, &s.Reporter, &s.Estimate, &s.Version, &s.Parent, &parentNumber, &s.Security, &s.Resolution, &s.Time.Original, &s.Time.Remaining, &s.Time.Spent, &s.Fields, &s.StartDate, &s.DueDate, &fixVersions); err != nil {
 		return nil, err
 	}
 	for _, v := range fixVersions {

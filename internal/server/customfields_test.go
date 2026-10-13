@@ -20,7 +20,7 @@ func TestCustomFields(t *testing.T) {
 		expect(t, code, 201, tier)
 		code, b = lead.do("POST", "/api/v1/projects/KYB/fields", map[string]any{"name": "tier", "type": "text"})
 		expect(t, code, 409, b)
-		_, due := lead.do("POST", "/api/v1/projects/KYB/fields", map[string]any{"name": "Due", "type": "date"})
+		_, due := lead.do("POST", "/api/v1/projects/KYB/fields", map[string]any{"name": "Deadline", "type": "date"})
 		_, list := dev.do("GET", "/api/v1/projects/KYB/fields", nil)
 		if len(list["items"].([]any)) != 2 {
 			t.Fatalf("fields = %v", list)
@@ -36,7 +36,7 @@ func TestCustomFields(t *testing.T) {
 		if cf := is["custom_fields"].(map[string]any); cf[tid] != "Gold" || cf[did] != "2026-12-01" {
 			t.Fatalf("values = %v", cf)
 		}
-		for jql, want := range map[string]string{`Tier = gold`: "KYB-1", `Due < 2027-01-01`: "KYB-1", `tier is empty`: "KYB-2"} {
+		for jql, want := range map[string]string{`Tier = gold`: "KYB-1", `Deadline < 2027-01-01`: "KYB-1", `tier is empty`: "KYB-2"} {
 			code, b := dev.do("GET", "/api/v1/search?jql="+url.QueryEscape(jql), nil)
 			expect(t, code, 200, b)
 			if got := keysOf(b); got != want {
@@ -47,7 +47,7 @@ func TestCustomFields(t *testing.T) {
 		expect(t, code, 200, b)
 		code, b = lead.do("DELETE", "/api/v1/fields/"+did, nil)
 		expect(t, code, 204, b)
-		code, b = dev.do("GET", "/api/v1/search?jql="+url.QueryEscape("Due < 2027-01-01"), nil)
+		code, b = dev.do("GET", "/api/v1/search?jql="+url.QueryEscape("Deadline < 2027-01-01"), nil)
 		expect(t, code, 422, b) // the field is gone
 		code, b = lead.do("DELETE", "/api/v1/fields/"+did, nil)
 		expect(t, code, 404, b)

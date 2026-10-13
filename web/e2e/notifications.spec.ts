@@ -32,7 +32,7 @@ test("assignment and mention notify a teammate", async ({ browser }) => {
   const dialog = alice.getByRole("dialog");
   await expect(dialog.getByText("Reporter: Alice Ali")).toBeVisible();
   await dialog.getByLabel("Assignee").selectOption({ label: "Bob Bek" });
-  await dialog.getByRole("button", { name: "Save" }).click();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect(dialog.getByText("Saved")).toBeVisible();
   await dialog.getByLabel("Add a comment").fill(`@bob-${id}@example.com can you take this today?`);
   await dialog.getByRole("button", { name: "Comment" }).click();

@@ -30,7 +30,7 @@ func (IssueChanged) EventName() string { return "issue.changed" }
 func (i *Issue) Snapshot() Snapshot {
 	return Snapshot{ID: i.id, Key: i.key, Title: i.title, Type: i.typ, Status: i.status, Description: i.description,
 		Priority: i.priority, Assignee: i.assignee, Reporter: i.reporter, Estimate: i.estimate, Rank: i.rank, Sprint: i.sprint,
-		Parent: i.parent, ParentKey: i.parentKey, Security: i.security, Resolution: i.resolution, FixVersions: slices.Clone(i.fixVersions), Time: i.time, Fields: maps.Clone(i.fields), Version: i.version}
+		Parent: i.parent, ParentKey: i.parentKey, Security: i.security, Resolution: i.resolution, FixVersions: slices.Clone(i.fixVersions), Time: i.time, StartDate: i.start, DueDate: i.due, Fields: maps.Clone(i.fields), Version: i.version}
 }
 
 func (i *Issue) markBaseline() {
@@ -74,6 +74,8 @@ func (i *Issue) Changelog(by UserID) (IssueChanged, bool) {
 	add("original_estimate", durationOrEmpty(b.Time.Original), durationOrEmpty(a.Time.Original))
 	add("remaining_estimate", durationOrEmpty(b.Time.Remaining), durationOrEmpty(a.Time.Remaining))
 	add("time_spent", durationOrEmpty(b.Time.Spent), durationOrEmpty(a.Time.Spent))
+	add("start_date", string(b.StartDate), string(a.StartDate))
+	add("due_date", string(b.DueDate), string(a.DueDate))
 	items = append(items, i.fieldChanges(b.Fields, a.Fields)...)
 	if len(items) == 0 {
 		return IssueChanged{}, false

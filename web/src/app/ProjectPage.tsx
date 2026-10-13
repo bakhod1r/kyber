@@ -16,12 +16,13 @@ import { TelegramGroups } from "../contexts/notify/ui/TelegramGroups";
 import { WorkflowEditor } from "../contexts/issue/ui/WorkflowEditor";
 import { JiraImport } from "../contexts/importer/ui/ImportPage";
 import { Reports } from "../contexts/insights/ui/ReportsPage";
+import { Timeline } from "../contexts/issue/ui/Timeline";
 import { ProjectSummary } from "../contexts/insights/ui/ProjectSummary";
 import { IssueList } from "../contexts/search/ui/IssueList";
 import { type QuickFilterState, QuickFilters } from "../contexts/search/ui/QuickFilters";
 import { useState } from "react";
 
-export function ProjectPage({ view = "board" }: { view?: "summary" | "list" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" }) {
+export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" }) {
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
   const project = projects.data?.find((p) => p.key === key);
@@ -43,6 +44,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "list" | "b
       </h1>
       <nav className="tabs" aria-label="Project views">
         <NavLink to={`/projects/${encodeURIComponent(key)}/summary`}>Summary</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/timeline`}>Timeline</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/backlog`}>Backlog</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}`} end>
           Active sprints
@@ -62,6 +64,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "list" | "b
       </nav>
       <div className="project-grid">
         {view === "summary" && <ProjectSummary projectKey={key} />}
+        {view === "timeline" && <Timeline projectKey={key} onOpen={setOpen} />}
         {view === "list" && <IssueList projectKey={key} onOpen={setOpen} />}
         {view === "board" && (
           <div>

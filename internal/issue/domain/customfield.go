@@ -42,7 +42,7 @@ const (
 // reserved are the built-in fields of JQL; custom fields may not shadow them.
 var reserved = []string{"project", "key", "issuekey", "type", "issuetype", "status", "statuscategory", "priority",
 	"assignee", "reporter", "sprint", "fixversion", "resolution", "parent", "summary", "description", "text",
-	"story points", "storypoints", "points"}
+	"story points", "storypoints", "points", "startdate", "start date", "duedate", "due date", "due"}
 
 // CustomField is a project's own issue field (Jira's custom field): text, number, date or a
 // choice from options. Issues hold its values; the definition says how values are checked.

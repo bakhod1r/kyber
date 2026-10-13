@@ -68,6 +68,8 @@ type issueDTO struct {
 	FixVersions []string          `json:"fix_versions"`
 	Time        timeDTO           `json:"time_tracking"`
 	Fields      map[string]string `json:"custom_fields"`
+	StartDate   *string           `json:"start_date"`
+	DueDate     *string           `json:"due_date"`
 	Version     int               `json:"version"`
 }
 
@@ -75,6 +77,9 @@ func toDTO(is *domain.Issue) issueDTO {
 	d := issueDTO{ID: string(is.ID()), Key: is.Key().String(), Title: is.Title(), Type: string(is.Type()),
 		Status: string(is.Status()), Description: is.Description(), Priority: string(is.Priority()),
 		Rank: string(is.Rank()), Security: is.SecurityLevel(), Resolution: string(is.Resolution()), FixVersions: fixVersions(is), Time: timeOut(is.TimeTracking()), Fields: fieldsOut(is), Version: is.Version()}
+	if start, due := is.Schedule(); start != "" || due != "" {
+		d.StartDate, d.DueDate = dateOut(start), dateOut(due)
+	}
 	if is.Parent() != "" {
 		k := is.ParentKey().String()
 		d.ParentKey = &k
@@ -109,7 +114,7 @@ func codeFor(err error) (string, bool) {
 		errors.Is(err, domain.ErrInvalidWorkflow), errors.Is(err, domain.ErrUnknownStatus),
 		errors.Is(err, application.ErrInvalidSecurityLevel), errors.Is(err, domain.ErrInvalidResolution), errors.Is(err, application.ErrInvalidVersion),
 		errors.Is(err, domain.ErrInvalidDuration), errors.Is(err, domain.ErrInvalidWorklog),
-		errors.Is(err, domain.ErrInvalidCustomField), errors.Is(err, domain.ErrInvalidFieldValue):
+		errors.Is(err, domain.ErrInvalidCustomField), errors.Is(err, domain.ErrInvalidFieldValue), errors.Is(err, domain.ErrInvalidSchedule):
 		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrFieldNotFound):
 		return httpx.CodeFieldNotFound, true
@@ -214,6 +219,8 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		Original    *string           `json:"original_estimate"`
 		Remaining   *string           `json:"remaining_estimate"`
 		Fields      map[string]string `json:"custom_fields"`
+		StartDate   *string           `json:"start_date"`
+		DueDate     *string           `json:"due_date"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
@@ -224,7 +231,7 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cmd := application.EditIssue{Version: *in.Version, Title: in.Title, Description: in.Description, Priority: in.Priority, Security: in.Security, Resolution: in.Resolution, FixVersions: in.FixVersions,
-		OriginalEstimate: in.Original, RemainingEstimate: in.Remaining, Fields: in.Fields}
+		OriginalEstimate: in.Original, RemainingEstimate: in.Remaining, Fields: in.Fields, StartDate: in.StartDate, DueDate: in.DueDate}
 	if in.AssigneeID != nil {
 		cmd.AssigneeSet = true
 		if string(in.AssigneeID) != "null" {
@@ -386,4 +393,13 @@ func (h *Handler) unwatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// dateOut renders an unset date as null.
+func dateOut(d domain.Date) *string {
+	if d == "" {
+		return nil
+	}
+	s := string(d)
+	return &s
 }

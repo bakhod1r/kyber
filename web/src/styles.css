@@ -425,3 +425,12 @@ a.user:hover { text-decoration: underline; }
 @media (max-width: 800px) {
   .chat, .chat:has(.chat-thread) { grid-template-columns: 1fr; }
 }
+/* Timeline (D3) */
+.timeline-rows { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.timeline-row { display: grid; grid-template-columns: minmax(140px, 32%) 1fr; gap: 8px; align-items: center; }
+.timeline-row.depth-1 .timeline-open { padding-left: 20px; }
+.timeline-open { text-align: left; border: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-track { background: color-mix(in srgb, var(--border) 40%, transparent); border-radius: 4px; min-height: 18px; display: flex; align-items: center; }
+.timeline-bar { height: 14px; min-width: 4px; border-radius: 4px; background: var(--accent); }
+.timeline-bar.type-epic { background: #8e44ad; }
+.timeline-bar.type-bug { background: #d64545; }

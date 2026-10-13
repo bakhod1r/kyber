@@ -123,6 +123,23 @@ func Run(t *testing.T, newRepo Factory) {
 		if got, _ := repo.ByKey(ctx, is.Key()); got.Resolution() != domain.ResolutionDuplicate {
 			t.Fatalf("resolution = %q", got.Resolution())
 		}
+		// The schedule is persisted and can be cleared.
+		sch, _ := repo.ByKey(ctx, is.Key())
+		if err := sch.Plan("2026-10-13", "2026-10-31"); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.Save(ctx, sch, nil); err != nil {
+			t.Fatal(err)
+		}
+		got, _ = repo.ByKey(ctx, is.Key())
+		if s, d := got.Schedule(); s != "2026-10-13" || d != "2026-10-31" {
+			t.Fatalf("schedule = %q %q", s, d)
+		}
+		_ = got.Plan("", "")
+		_ = repo.Save(ctx, got, nil)
+		if again, _ := repo.ByKey(ctx, is.Key()); again.Snapshot().DueDate != "" {
+			t.Fatal("schedule not cleared")
+		}
 	})
 
 	t.Run("fix versions persist and filter", func(t *testing.T) {
