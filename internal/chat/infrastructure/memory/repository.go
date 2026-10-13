@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/chat/domain"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
 type member struct {
@@ -21,6 +23,21 @@ type Repository struct {
 	convs    map[domain.ConversationID]domain.Conversation
 	readAt   map[member]time.Time
 	messages map[domain.MessageID]domain.Message
+	outbox   []domain.MessageWritten
+	outAt    []outbox.Meta
+}
+
+// Outbox returns the published events written so far; OutboxMeta their time and workspace.
+func (r *Repository) Outbox() []domain.MessageWritten {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]domain.MessageWritten(nil), r.outbox...)
+}
+
+func (r *Repository) OutboxMeta() []outbox.Meta {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]outbox.Meta(nil), r.outAt...)
 }
 
 func NewRepository() *Repository {
@@ -157,13 +174,17 @@ func (s *Messages) read(m domain.Message) *domain.Message {
 	return &c
 }
 
-func (s *Messages) Post(_ context.Context, m *domain.Message) error {
+func (s *Messages) Post(ctx context.Context, m *domain.Message) error {
 	s.r.mu.Lock()
 	defer s.r.mu.Unlock()
 	if _, ok := s.r.convs[m.Conversation]; !ok {
 		return domain.ErrConversationNotFound
 	}
 	s.r.messages[m.ID] = cloneMsg(*m)
+	at := outbox.Meta{At: time.Now(), Workspace: tenant.Workspace(ctx)}
+	for _, e := range m.PullEvents() {
+		s.r.outbox, s.r.outAt = append(s.r.outbox, e), append(s.r.outAt, at)
+	}
 	return nil
 }
 

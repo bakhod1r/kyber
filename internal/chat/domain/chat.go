@@ -153,6 +153,18 @@ type Message struct {
 	Thread       MessageID  // the parent message; empty for a top-level message
 	ReplyCount   int        // read model: live replies of a top-level message
 	Reactions    []Reaction // sorted by emoji
+	events       []MessageWritten
+}
+
+// PullEvents returns and clears the recorded published events.
+func (m *Message) PullEvents() []MessageWritten {
+	ev := m.events
+	m.events = nil
+	return ev
+}
+
+func (m *Message) written() {
+	m.events = append(m.events, MessageWritten{ID: m.ID, Conversation: m.Conversation, Thread: m.Thread, Author: m.Author, Body: m.Body})
 }
 
 // Reaction is one emoji and who reacted with it (sorted).
@@ -174,7 +186,9 @@ func NewMessage(id MessageID, conv ConversationID, author UserID, text string, n
 	if err != nil {
 		return nil, err
 	}
-	return &Message{ID: id, Conversation: conv, Author: author, Body: b, CreatedAt: now.UTC()}, nil
+	m := &Message{ID: id, Conversation: conv, Author: author, Body: b, CreatedAt: now.UTC()}
+	m.written()
+	return m, nil
 }
 
 // NewReply answers a top-level message in its thread.
@@ -185,11 +199,12 @@ func NewReply(id MessageID, parent *Message, author UserID, text string, now tim
 	if parent.Deleted {
 		return nil, ErrDeleted
 	}
-	m, err := NewMessage(id, parent.Conversation, author, text, now)
+	b, err := body(text)
 	if err != nil {
 		return nil, err
 	}
-	m.Thread = parent.ID
+	m := &Message{ID: id, Conversation: parent.Conversation, Thread: parent.ID, Author: author, Body: b, CreatedAt: now.UTC()}
+	m.written()
 	return m, nil
 }
 

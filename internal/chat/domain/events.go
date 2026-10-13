@@ -20,3 +20,15 @@ func (MessageEdited) EventName() string  { return "message.edited" }
 func (MessageDeleted) EventName() string { return "message.deleted" }
 func (MessageReacted) EventName() string { return "message.reacted" }
 func (Typing) EventName() string         { return "typing" }
+
+// MessageWritten is the published event (outbox) for a new message or reply: other contexts
+// (Notification: mentions) react to it.
+type MessageWritten struct {
+	ID           MessageID      `json:"id"`
+	Conversation ConversationID `json:"conversation_id"`
+	Thread       MessageID      `json:"thread_id"`
+	Author       UserID         `json:"author_id"`
+	Body         string         `json:"body"`
+}
+
+func (MessageWritten) EventName() string { return "chat.message_posted" }

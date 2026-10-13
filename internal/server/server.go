@@ -209,7 +209,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
 		conversations: chatRepo, messages: chatRepo.Messages(),
-		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta)),
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
@@ -324,6 +324,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	hub := realtime.NewHub(1024)
 	chat := chatapp.NewService(chatapp.Deps{Notifier: chatrealtime.New(hub), Conversations: d.conversations, Messages: d.messages,
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
+	notify.WithConversations(notifyacl.NewConversations(chat))
 	relay := outbox.NewRelay(d.outbox, log)
 	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated", "issue.imported"} {
 		relay.Handle(name, insights.OnIssueEvent)
@@ -336,6 +337,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	}
 	relay.Handle("issue.assigned", notify.OnIssueAssigned)
 	relay.Handle("comment.added", notify.OnCommentAdded)
+	relay.Handle("chat.message_posted", notify.OnChatMessage)
 	relay.Handle("issue.changed", notify.OnIssueChanged)
 	for _, name := range []string{"issue.created", "issue.assigned", "comment.added"} {
 		relay.Handle(name, issues.OnWatchTrigger)

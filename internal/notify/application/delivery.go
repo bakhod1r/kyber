@@ -47,6 +47,9 @@ func (s *Service) enqueue(ctx context.Context, n domain.Notification, project st
 		return err
 	}
 	link := fmt.Sprintf("%s/projects/%s?issue=%s", s.d.PublicURL, url.PathEscape(project), url.QueryEscape(n.IssueKey))
+	if n.ConversationID != "" {
+		link = fmt.Sprintf("%s/chat/%s", s.d.PublicURL, url.PathEscape(n.ConversationID))
+	}
 	subject, text := domain.Render(n, link)
 	for _, ch := range []domain.Channel{domain.ChannelEmail, domain.ChannelTelegram} {
 		if !slices.Contains(s.d.Channels, ch) || !prefs.Wants(ch) {

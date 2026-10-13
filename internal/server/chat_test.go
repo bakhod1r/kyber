@@ -1,7 +1,9 @@
 package server_test
 
 import (
+	"strings"
 	"testing"
+	"time"
 )
 
 // S50 Chat core: channels, DMs, messages, unread; private conversations look missing to outsiders.
@@ -145,6 +147,34 @@ func TestChatThreadsAndReactions(t *testing.T) {
 		_, m = dev.do("POST", pURL+"/reactions", map[string]string{"emoji": "🎉"})
 		if len(m["reactions"].([]any)) != 0 {
 			t.Fatalf("toggle off = %v", m)
+		}
+	})
+}
+
+// S52b: @email mentions in chat notify people who can read the conversation.
+func TestChatMentions(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		qa := anon.signedIn("qa@x.uz")
+		_, pub := lead.do("POST", "/api/v1/channels", map[string]any{"name": "general"})
+		_, priv := lead.do("POST", "/api/v1/channels", map[string]any{"name": "secret", "private": true})
+		lead.do("POST", "/api/v1/conversations/"+pub["id"].(string)+"/messages",
+			map[string]string{"body": "@dev@x.uz @qa@x.uz @lead@x.uz please review"})
+		lead.do("POST", "/api/v1/conversations/"+priv["id"].(string)+"/messages", map[string]string{"body": "@qa@x.uz psst"})
+
+		eventuallyJSON(t, dev, "/api/v1/notifications", func(b map[string]any) bool { return len(b["items"].([]any)) == 1 })
+		eventuallyJSON(t, qa, "/api/v1/notifications", func(b map[string]any) bool { return len(b["items"].([]any)) == 1 })
+		time.Sleep(300 * time.Millisecond)
+		_, inbox := qa.do("GET", "/api/v1/notifications", nil)
+		items := inbox["items"].([]any)
+		n := items[0].(map[string]any)
+		if len(items) != 1 || n["kind"] != "mentioned" || n["conversation_id"] != pub["id"] || n["conversation_name"] != "general" ||
+			!strings.Contains(n["excerpt"].(string), "please review") {
+			t.Fatalf("qa inbox = %v (only the public channel: qa cannot read #secret)", inbox)
+		}
+		if _, own := lead.do("GET", "/api/v1/notifications", nil); len(own["items"].([]any)) != 0 {
+			t.Fatalf("author told about own mention: %v", own)
 		}
 	})
 }

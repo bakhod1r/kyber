@@ -53,6 +53,19 @@ func Run(t *testing.T, newRepo func(t *testing.T) domain.Repository) {
 		}
 	})
 
+	t.Run("chat mention round trip", func(t *testing.T) {
+		repo := newRepo(t)
+		n := mk(5, Alice, 9)
+		n.Kind, n.IssueKey, n.IssueTitle, n.ConversationID, n.ConversationName = domain.KindMentioned, "", "", "72000000-0000-4000-8000-000000000001", "general"
+		if err := repo.Add(ctx, n); err != nil {
+			t.Fatal(err)
+		}
+		a, _ := repo.ListFor(ctx, inbox(Alice), false, 50)
+		if len(a) != 1 || a[0].ConversationID != n.ConversationID || a[0].ConversationName != "general" || a[0].IssueKey != "" {
+			t.Fatalf("round trip = %+v", a)
+		}
+	})
+
 	t.Run("newest first, unread filter, counts and read state", func(t *testing.T) {
 		repo := newRepo(t)
 		for i := 1; i <= 3; i++ {

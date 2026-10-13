@@ -155,3 +155,16 @@ func TestReact(t *testing.T) {
 		t.Fatalf("react to deleted = %v", err)
 	}
 }
+
+func TestPostedEvent(t *testing.T) {
+	m, _ := domain.NewMessage("m-1", "c-1", "u-a", "hi @b@x.uz", t0)
+	r, _ := domain.NewReply("m-2", m, "u-b", "hello", t0)
+	ev := m.PullEvents()
+	if len(ev) != 1 || ev[0] != (domain.MessageWritten{ID: "m-1", Conversation: "c-1", Author: "u-a", Body: "hi @b@x.uz"}) ||
+		ev[0].EventName() != "chat.message_posted" || len(m.PullEvents()) != 0 {
+		t.Fatalf("events = %+v", ev)
+	}
+	if ev := r.PullEvents(); len(ev) != 1 || ev[0].Thread != "m-1" {
+		t.Fatalf("reply events = %+v", ev)
+	}
+}

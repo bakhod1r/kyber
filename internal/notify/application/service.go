@@ -43,25 +43,31 @@ type (
 	}
 )
 
+// Conversations is the port to the Chat context: may user read the conversation, and its name.
+type Conversations interface {
+	Readable(ctx context.Context, user, conversation string) (name string, ok bool, err error)
+}
+
 type Deps struct {
-	Repo       domain.Repository
-	Deliveries domain.DeliveryRepository // optional: email/Telegram copies of notifications
-	Prefs      domain.PrefsRepository
-	Contacts   Contacts
-	Channels   []domain.Channel       // channels configured on this server (SMTP, Telegram bot)
-	PublicURL  string                 // base of the links in messages
-	Groups     domain.GroupRepository // optional: Telegram groups subscribed to projects
-	Admins     Admins
-	Bot        Messenger // replies in Telegram when a group is connected
-	BotName    string
-	Lookups    Lookups
-	Issues     Issues
-	Members    Members
-	Workspaces Workspaces
-	Users      Users
-	NewID      func() string
-	Now        func() time.Time
-	Log        *slog.Logger
+	Conversations Conversations // optional: chat mentions
+	Repo          domain.Repository
+	Deliveries    domain.DeliveryRepository // optional: email/Telegram copies of notifications
+	Prefs         domain.PrefsRepository
+	Contacts      Contacts
+	Channels      []domain.Channel       // channels configured on this server (SMTP, Telegram bot)
+	PublicURL     string                 // base of the links in messages
+	Groups        domain.GroupRepository // optional: Telegram groups subscribed to projects
+	Admins        Admins
+	Bot           Messenger // replies in Telegram when a group is connected
+	BotName       string
+	Lookups       Lookups
+	Issues        Issues
+	Members       Members
+	Workspaces    Workspaces
+	Users         Users
+	NewID         func() string
+	Now           func() time.Time
+	Log           *slog.Logger
 }
 
 type Service struct{ d Deps }
@@ -73,7 +79,63 @@ func NewService(d Deps) *Service {
 	return &Service{d: d}
 }
 
+// WithConversations enables notifications for mentions in chat.
+func (s *Service) WithConversations(c Conversations) *Service {
+	s.d.Conversations = c
+	return s
+}
+
 const excerptLen = 140
+
+// OnChatMessage tells people mentioned (@email) in a chat message, if they may read it.
+func (s *Service) OnChatMessage(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		Conversation string `json:"conversation_id"`
+		Author       string `json:"author_id"`
+		Body         string `json:"body"`
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "err", err)
+		return nil
+	}
+	if s.d.Conversations == nil {
+		return nil
+	}
+	var actorName string
+	for _, email := range domain.ParseMentions(e.Body) {
+		id, ok, err := s.d.Users.UserIDByEmail(ctx, email)
+		if err != nil {
+			return err
+		}
+		if !ok || id == e.Author {
+			continue
+		}
+		name, readable, err := s.d.Conversations.Readable(ctx, id, e.Conversation)
+		if err != nil {
+			return err
+		}
+		if !readable {
+			continue
+		}
+		if actorName == "" {
+			if actorName, err = s.d.Users.DisplayName(ctx, e.Author); err != nil {
+				return err
+			}
+		}
+		n := domain.Notification{
+			ID: domain.NotificationID(s.d.NewID()), Recipient: domain.UserID(id), Workspace: tenant.Workspace(ctx),
+			Kind: domain.KindMentioned, ConversationID: e.Conversation, ConversationName: name, ActorName: actorName,
+			Excerpt: excerpt(e.Body), SourceEvent: m.ID, CreatedAt: s.d.Now(),
+		}
+		if err := s.d.Repo.Add(ctx, n); err != nil {
+			return err
+		}
+		if err := s.enqueue(ctx, n, ""); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // OnIssueAssigned handles issue.assigned events.
 func (s *Service) OnIssueAssigned(ctx context.Context, m outbox.Message) error {

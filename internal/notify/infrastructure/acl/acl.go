@@ -9,6 +9,8 @@ import (
 	accessapp "github.com/bakhod1r/kyber/internal/access/application"
 	accessdomain "github.com/bakhod1r/kyber/internal/access/domain"
 	agiledomain "github.com/bakhod1r/kyber/internal/agile/domain"
+	chatapp "github.com/bakhod1r/kyber/internal/chat/application"
+	chatdomain "github.com/bakhod1r/kyber/internal/chat/domain"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
 	issueapp "github.com/bakhod1r/kyber/internal/issue/application"
 	issuedomain "github.com/bakhod1r/kyber/internal/issue/domain"
@@ -197,4 +199,24 @@ func (l Lookups) SprintName(ctx context.Context, id string) (string, string, err
 		return "", "", err
 	}
 	return sp.Project(), sp.Name(), nil
+}
+
+// Chat is the port to the Chat context: whether a user may read a conversation, and its name.
+type Chat interface {
+	Conversation(ctx context.Context, actor, id string) (chatapp.View, error)
+}
+
+type Conversations struct{ chat Chat }
+
+func NewConversations(chat Chat) Conversations { return Conversations{chat: chat} }
+
+func (c Conversations) Readable(ctx context.Context, user, conversation string) (string, bool, error) {
+	v, err := c.chat.Conversation(ctx, user, conversation)
+	if errors.Is(err, chatdomain.ErrConversationNotFound) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return v.Name, true, nil
 }

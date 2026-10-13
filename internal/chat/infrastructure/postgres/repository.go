@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/bakhod1r/kyber/internal/chat/domain"
+	"github.com/bakhod1r/kyber/internal/platform/db"
 	"github.com/bakhod1r/kyber/internal/platform/id"
 )
 
@@ -182,9 +183,13 @@ func (s *Messages) Post(ctx context.Context, m *domain.Message) error {
 	if m.Thread != "" {
 		thread = (*string)(&m.Thread)
 	}
-	_, err := s.pool.Exec(ctx, `INSERT INTO messages (`+insertCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		string(m.ID), string(m.Conversation), string(m.Author), m.Body, m.CreatedAt, editedAt(m), m.Deleted, thread)
-	return err
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `INSERT INTO messages (`+insertCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			string(m.ID), string(m.Conversation), string(m.Author), m.Body, m.CreatedAt, editedAt(m), m.Deleted, thread); err != nil {
+			return err
+		}
+		return db.WriteOutbox(ctx, tx, m.PullEvents())
+	})
 }
 
 // Update rewrites the message and replaces its reactions.

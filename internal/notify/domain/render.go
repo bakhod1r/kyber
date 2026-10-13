@@ -3,8 +3,16 @@ package domain
 import "fmt"
 
 // Render writes the email subject and the message text (email body and Telegram message) for a
-// notification; link opens the issue in Kyber.
+// notification; link opens the issue (or the conversation) in Kyber.
 func Render(n Notification, link string) (subject, text string) {
+	if n.ConversationID != "" {
+		where := "a direct message"
+		if n.ConversationName != "" {
+			where = "#" + n.ConversationName
+		}
+		subject = fmt.Sprintf("%s mentioned you in %s", n.ActorName, where)
+		return subject, subject + ":\n\n" + n.Excerpt + "\n\n" + link
+	}
 	switch n.Kind {
 	case KindAssigned:
 		subject = fmt.Sprintf("[%s] %s assigned you: %s", n.IssueKey, n.ActorName, n.IssueTitle)

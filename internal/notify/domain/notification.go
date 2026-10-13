@@ -28,17 +28,20 @@ const (
 // Notification is one message to one recipient about one event. SourceEvent (the
 // outbox message id) plus Recipient is unique, which makes delivery idempotent.
 type Notification struct {
-	ID          NotificationID
-	Recipient   UserID
-	Workspace   string // the issue's workspace: inboxes are per workspace (ADR-0004)
-	Kind        Kind
-	IssueKey    string
-	IssueTitle  string
-	ActorName   string
-	Excerpt     string
-	SourceEvent int64
-	CreatedAt   time.Time
-	ReadAt      time.Time // zero = unread
+	ID         NotificationID
+	Recipient  UserID
+	Workspace  string // the issue's workspace: inboxes are per workspace (ADR-0004)
+	Kind       Kind
+	IssueKey   string // empty for chat notifications
+	IssueTitle string
+	// ConversationID is set for a mention in chat; ConversationName is the channel ("" for a DM).
+	ConversationID   string
+	ConversationName string
+	ActorName        string
+	Excerpt          string
+	SourceEvent      int64
+	CreatedAt        time.Time
+	ReadAt           time.Time // zero = unread
 }
 
 func (n Notification) Read() bool { return !n.ReadAt.IsZero() }

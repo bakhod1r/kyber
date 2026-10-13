@@ -24,7 +24,10 @@ backends.
   (one per emoji per user); `@email`/`@name` mentions notify through the Notify context; issue keys in a message
   come back as previews only when the reader may browse the issue.
   ✅ **Threads and reactions done** (replies stay out of channel history and unread, `reply_count`, toggle
-  reactions, `message.reacted` on the stream; API 0.29.0). Mentions and issue previews follow (S52b).
+  reactions, `message.reacted` on the stream; API 0.29.0).
+  ✅ **Mentions done (S52b):** `chat.message_posted` goes through the outbox; Notify tells `@email`-mentioned people who
+  may read the conversation (inbox + email/Telegram copies, link to `/chat/{id}`); migration 0040, API 0.30.0.
+  Issue previews follow (S52c).
 - **S53 Chat UI** — sidebar (channels, DMs, unread badges), channel view with infinite scroll, composer with
   mentions, thread panel, reactions, typing line; TanStack Query + the stream.
 - **S54 Pins, search, files** (P1) — pin messages, search in messages I can read, file attachments via BlobStore.

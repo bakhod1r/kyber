@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.29.0
+  version: 0.30.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -2254,13 +2254,15 @@ components:
         remaining_issues: { type: integer }
     Notification:
       type: object
-      required: [id, kind, issue_key, issue_title, actor_name, excerpt, read, created_at]
+      required: [id, kind, issue_key, issue_title, conversation_id, conversation_name, actor_name, excerpt, read, created_at]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
         kind: { type: string, enum: [assigned, commented, mentioned, transitioned], description: "transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To)." }
         issue_key: { type: string }
         issue_title: { type: string }
+        conversation_id: { type: string, description: "Set (and issue_key empty) for a mention in chat." }
+        conversation_name: { type: string, description: "The channel of a chat mention; empty for a direct message." }
         actor_name: { type: string }
         excerpt: { type: string, description: Start of the comment (commented/mentioned). }
         read: { type: boolean }
