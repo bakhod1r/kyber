@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.31.0
+  version: 0.32.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1449,6 +1449,78 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/docs:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listPages
+      description: The project's Markdown pages by title (anyone who can browse the project).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Page" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createPage
+      description: Project members write a page; it is revision 1 of its history.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PageInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/docs/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: getPage
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      operationId: revisePage
+      description: Project members save a new title and body over the page loaded at `version`; an unchanged save records no revision.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf: [{ $ref: "#/components/schemas/PageInput" }]
+              required: [version]
+              properties: { version: { type: integer } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deletePage
+      description: Project members delete a page with its history.
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/docs/{id}/history:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: pageHistory
+      description: The page's revisions, newest first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/PageRevision" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/fields:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -1909,6 +1981,33 @@ components:
         assignee_id: { type: [string, "null"] }
         resolution: { type: string }
         points: { type: [number, "null"] }
+    PageInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        body: { type: string, maxLength: 100000, description: Markdown. }
+    Page:
+      type: object
+      required: [id, project_key, title, body, author_id, updated_by, updated_at, version]
+      properties:
+        id: { type: string }
+        project_key: { type: string }
+        title: { type: string }
+        body: { type: string }
+        author_id: { type: string }
+        updated_by: { type: string }
+        updated_at: { type: string, format: date-time }
+        version: { type: integer, description: Number of the latest revision. }
+    PageRevision:
+      type: object
+      required: [number, title, body, by, at]
+      properties:
+        number: { type: integer }
+        title: { type: string }
+        body: { type: string }
+        by: { type: string }
+        at: { type: string, format: date-time }
     GoalStatus: { type: string, enum: [on_track, at_risk, off_track, done] }
     GoalInput:
       type: object

@@ -21,3 +21,6 @@
 ./internal/goal/domain
 ./internal/goal/application
 ./internal/goal/infrastructure/memory
+./internal/docs/domain
+./internal/docs/application
+./internal/docs/infrastructure/memory

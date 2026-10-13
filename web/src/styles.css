@@ -412,3 +412,15 @@ a.user:hover { text-decoration: underline; }
 .goal-progress > div { height: 100%; background: var(--accent); }
 .goals .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; }
 .goals .row.between { justify-content: space-between; align-items: center; }
+
+/* Docs (D5) */
+.docs-grid { display: grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: 16px; }
+@media (max-width: 640px) { .docs-grid { grid-template-columns: 1fr; } }
+.docs nav ul { list-style: none; padding: 0; }
+.docs nav button[aria-current="page"] { color: var(--accent); font-weight: 600; }
+.docs .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.docs .row.between { justify-content: space-between; }
+.page-editor { display: grid; gap: 0.75rem; }
+.page-editor textarea { width: 100%; font-family: ui-monospace, monospace; }
+.markdown pre { background: color-mix(in srgb, var(--border) 35%, transparent); padding: 8px; border-radius: 6px; overflow-x: auto; }
+.markdown blockquote { border-left: 3px solid var(--border); margin: 0; padding-left: 10px; color: var(--muted); }
