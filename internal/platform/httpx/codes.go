@@ -28,6 +28,8 @@ const (
 	CodeCallNotFound         = "CALL_NOT_FOUND"
 	CodeCallFull             = "CALL_FULL"
 	CodeCallState            = "CALL_STATE"
+	CodeWhiteboardNotFound   = "WHITEBOARD_NOT_FOUND"
+	CodeWhiteboardBusy       = "WHITEBOARD_BUSY"
 	CodeWorkspaceSlugTaken   = "WORKSPACE_SLUG_TAKEN"
 	CodeOTPPending           = "AUTH_OTP_PENDING"
 	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
@@ -107,6 +109,8 @@ var codes = []code{
 	{CodeCallNotFound, "6104", 404, "Call not found.", "Qo'ng'iroq topilmadi.", "Звонок не найден.", errorx.CategoryBusiness},
 	{CodeCallFull, "6105", 409, "The call is full (6 people at most).", "Qo'ng'iroq to'lgan (ko'pi bilan 6 kishi).", "Звонок заполнен (не более 6 человек).", errorx.CategoryBusiness},
 	{CodeCallState, "6106", 409, "You are not in this call.", "Siz bu qo'ng'iroqda emassiz.", "Вы не участвуете в этом звонке.", errorx.CategoryBusiness},
+	{CodeWhiteboardNotFound, "6107", 404, "Whiteboard not found.", "Doska topilmadi.", "Доска не найдена.", errorx.CategoryBusiness},
+	{CodeWhiteboardBusy, "6108", 409, "The whiteboard is busy. Try again.", "Doska band. Qayta urinib ko'ring.", "Доска занята. Попробуйте снова.", errorx.CategoryBusiness},
 	{CodeChatForbidden, "6103", 403, "You cannot do that in this conversation.", "Bu suhbatda buni qila olmaysiz.", "В этой беседе так сделать нельзя.", errorx.CategorySecurity},
 	{CodeProjectNotFound, "6002", 404, "Project not found.", "Loyiha topilmadi.", "Проект не найден.", errorx.CategoryBusiness},
 	{CodeProjectKeyTaken, "6003", 409, "This project key is already taken.", "Bu loyiha kaliti band.", "Этот ключ проекта уже занят.", errorx.CategoryBusiness},

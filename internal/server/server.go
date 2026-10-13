@@ -133,6 +133,13 @@ import (
 	searchmemory "github.com/bakhod1r/kyber/internal/search/infrastructure/memory"
 	searchpg "github.com/bakhod1r/kyber/internal/search/infrastructure/postgres"
 	searchhttp "github.com/bakhod1r/kyber/internal/search/interfaces/httpapi"
+	wbapp "github.com/bakhod1r/kyber/internal/whiteboard/application"
+	wbdomain "github.com/bakhod1r/kyber/internal/whiteboard/domain"
+	wbacl "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/acl"
+	wbmemory "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/memory"
+	wbpg "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/postgres"
+	wbrealtime "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/realtime"
+	wbhttp "github.com/bakhod1r/kyber/internal/whiteboard/interfaces/httpapi"
 	workspaceapp "github.com/bakhod1r/kyber/internal/workspace/application"
 	workspacedomain "github.com/bakhod1r/kyber/internal/workspace/domain"
 	workspacememory "github.com/bakhod1r/kyber/internal/workspace/infrastructure/memory"
@@ -186,6 +193,7 @@ type deps struct {
 	conversations chatdomain.Repository
 	messages      chatdomain.Messages
 	calls         calldomain.Repository
+	whiteboards   wbdomain.Repository
 	baseDomain    string // "" = single-tenant (ADR-0004)
 	ice           ice.Config
 	outbox        outbox.Store
@@ -247,7 +255,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
-		conversations: chatRepo, messages: chatRepo.Messages(), calls: callmemory.NewRepository(),
+		conversations: chatRepo, messages: chatRepo.Messages(), calls: callmemory.NewRepository(), whiteboards: wbmemory.NewRepository(),
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
@@ -295,7 +303,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool),
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
-		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), calls: callpg.NewRepository(pool),
+		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
@@ -444,6 +452,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 	focushttp.New(focus, log, time.Now).Register(api)
 	chathttp.New(chat, log).Register(api)
 	hub.Register(api, 25*time.Second)
+	whiteboards := wbapp.NewService(wbapp.Deps{Boards: d.whiteboards, Conversations: wbacl.NewConversations(chat),
+		Notifier: wbrealtime.New(hub, func(e wbdomain.Element) any { return wbhttp.ToDTO(e) }), NewID: id.New, Now: time.Now})
+	wbhttp.New(whiteboards, log).Register(api)
 	callhttp.New(calls, log, func(user string, now time.Time) any { return d.ice.Servers(user, now) }).Register(api)
 	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
 		auditacl.NewOwners(agile, d.boards, d.links), log)

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.35.0
+  version: 0.36.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -372,7 +372,7 @@ paths:
       operationId: openStream
       description: |
         Server-Sent Events of this workspace for the caller (`message.posted`, `message.edited`,
-        `message.deleted`, `message.reacted`, `typing`, `call.updated`, `call.signal`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
+        `message.deleted`, `message.reacted`, `typing`, `call.updated`, `call.signal`, `whiteboard.ops`, `whiteboard.cursor`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
         what was missed. Keeping the stream open marks the caller online.
       parameters:
         - { name: Last-Event-ID, in: header, schema: { type: string } }
@@ -585,6 +585,91 @@ paths:
                       type: object
                       required: [urls]
                       properties: { urls: { type: array, items: { type: string } }, username: { type: string }, credential: { type: string } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/whiteboards:
+    get:
+      operationId: listWhiteboards
+      description: The conversation's whiteboards, newest first (members only).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Whiteboard" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createWhiteboard
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [title], properties: { title: { type: string } } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Whiteboard" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/whiteboards/{id}:
+    get:
+      operationId: getWhiteboard
+      description: The whiteboard with all its elements, in drawing order.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Whiteboard" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/whiteboards/{id}/ops:
+    post:
+      operationId: applyWhiteboardOps
+      description: |
+        Adds, updates or deletes elements (at most 200 per request). Updates and deletes name the version they
+        were made on; each op applies or fails on its own (error stale, not_found, exists, full or invalid) and
+        returns the element's current state. Applied changes reach the members as `whiteboard.ops`.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ops]
+              properties:
+                ops:
+                  type: array
+                  items: { type: object, required: [op, element], properties: { op: { type: string, enum: [add, update, delete] }, element: { $ref: "#/components/schemas/WhiteboardElement" } } }
+      responses:
+        "200":
+          description: Results, in op order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [applied, error, element]
+                      properties:
+                        applied: { type: boolean }
+                        error: { type: string, enum: ["", stale, not_found, exists, full, invalid] }
+                        element: { $ref: "#/components/schemas/WhiteboardElement" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/whiteboards/{id}/cursor:
+    post:
+      operationId: shareWhiteboardCursor
+      description: Shows the caller's pointer to the other members (`whiteboard.cursor`; not stored).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [x, y], properties: { x: { type: number }, y: { type: number } } } } }
+      responses:
+        "204": { description: Shared }
+        "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/focus:
@@ -2200,6 +2285,33 @@ components:
         application/json:
           schema: { type: object, required: [body], properties: { body: { type: string } } }
   schemas:
+    Whiteboard:
+      type: object
+      required: [id, conversation_id, title, created_by, created_at]
+      properties:
+        id: { type: string }
+        conversation_id: { type: string }
+        title: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        elements: { type: array, items: { $ref: "#/components/schemas/WhiteboardElement" } }
+    WhiteboardElement:
+      type: object
+      required: [id, kind, x, y, w, h, points, text, color, version]
+      properties:
+        id: { type: string }
+        kind: { type: string, description: "rect, ellipse, arrow, line, freehand, text or sticky" }
+        x: { type: number }
+        y: { type: number }
+        w: { type: number }
+        h: { type: number }
+        points: { type: array, items: { type: object, required: [x, y], properties: { x: { type: number }, y: { type: number } } } }
+        text: { type: string }
+        color: { type: string }
+        version: { type: integer }
+        updated_by: { type: string }
+        updated_at: { type: string, format: date-time }
+        deleted: { type: boolean }
     Call:
       type: object
       required: [id, conversation_id, started_by, started_at, live, participants]

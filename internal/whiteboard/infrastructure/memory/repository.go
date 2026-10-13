@@ -15,7 +15,9 @@ type Repository struct {
 	boards map[domain.WhiteboardID]*domain.Whiteboard
 }
 
-func NewRepository() *Repository { return &Repository{boards: map[domain.WhiteboardID]*domain.Whiteboard{}} }
+func NewRepository() *Repository {
+	return &Repository{boards: map[domain.WhiteboardID]*domain.Whiteboard{}}
+}
 
 func clone(b *domain.Whiteboard) *domain.Whiteboard {
 	c := *b
