@@ -248,12 +248,12 @@ func TestChatPinsAndSearch(t *testing.T) {
 
 // upload sends raw bytes as a file (POST /conversations/{id}/files) with the upload header; cookie, when set,
 // authenticates instead of the client's token.
-func (c *client) upload(conv, name string, body []byte, header bool, cookie *http.Cookie) (int, map[string]any) {
+func (c *client) chatUpload(conv, name string, body []byte, header bool, cookie *http.Cookie) (int, map[string]any) {
 	c.t.Helper()
 	req, _ := http.NewRequest("POST", c.srv.URL+"/api/v1/conversations/"+conv+"/files?name="+url.QueryEscape(name), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/octet-stream")
 	if header {
-		req.Header.Set("X-Kyber-Upload", "1")
+		req.Header.Set("X-Kyber-Request", "1")
 	}
 	if cookie != nil {
 		req.AddCookie(cookie)
@@ -280,7 +280,7 @@ func TestChatFiles(t *testing.T) {
 		conv := ch["id"].(string)
 		png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{7}, 200)...)
 
-		code, m := lead.upload(conv, "../mock up.png", png, true, nil)
+		code, m := lead.chatUpload(conv, "../mock up.png", png, true, nil)
 		expect(t, code, 201, m)
 		f := m["file"].(map[string]any)
 		if f["name"] != "mock up.png" || f["type"] != "image/png" || f["size"] != float64(len(png)) || m["body"] != "mock up.png" {
@@ -297,11 +297,11 @@ func TestChatFiles(t *testing.T) {
 		res = dev.raw("GET", f["url"].(string), nil, nil)
 		res.Body.Close()
 		expect(t, res.StatusCode, 404, nil)
-		code, b := dev.upload(conv, "x.txt", []byte("x"), true, nil)
+		code, b := dev.chatUpload(conv, "x.txt", []byte("x"), true, nil)
 		expect(t, code, 404, b)
 
 		// An HTML file is downloaded, never rendered in Kyber's origin.
-		code, h := lead.upload(conv, "page.html", []byte("<html><script>alert(1)</script></html>"), true, nil)
+		code, h := lead.chatUpload(conv, "page.html", []byte("<html><script>alert(1)</script></html>"), true, nil)
 		expect(t, code, 201, h)
 		res = lead.raw("GET", h["file"].(map[string]any)["url"].(string), nil, nil)
 		res.Body.Close()
@@ -318,12 +318,12 @@ func TestChatFiles(t *testing.T) {
 				ck = x
 			}
 		}
-		code, b = lead.upload(conv, "a.txt", []byte("hello"), false, ck)
+		code, b = lead.chatUpload(conv, "a.txt", []byte("hello"), false, ck)
 		expect(t, code, 403, b)
-		code, b = lead.upload(conv, "a.txt", []byte("hello"), true, ck)
+		code, b = lead.chatUpload(conv, "a.txt", []byte("hello"), true, ck)
 		expect(t, code, 201, b)
 
-		code, b = lead.upload(conv, "big.bin", bytes.Repeat([]byte{1}, 25<<20+1), true, nil)
+		code, b = lead.chatUpload(conv, "big.bin", bytes.Repeat([]byte{1}, 25<<20+1), true, nil)
 		expect(t, code, 422, b)
 		code, b = lead.do("DELETE", "/api/v1/messages/"+m["id"].(string), nil)
 		expect(t, code, 204, b)

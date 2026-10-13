@@ -1,6 +1,6 @@
 // issue: HTTP gateway to the issue API (infrastructure).
-import { request, seg, type List } from "../../../shared/http";
-import type { Comment, HistoryEntry, Issue, IssueLink, IssuePatch, IssueType, LinkType, Status, Workflow, Worklog, CustomField, CustomFieldInput } from "../domain/model";
+import { request, seg, upload, type List } from "../../../shared/http";
+import type { Attachment, Comment, HistoryEntry, Issue, IssueLink, IssuePatch, IssueType, LinkType, Status, Workflow, Worklog, CustomField, CustomFieldInput } from "../domain/model";
 
 export const issueGateway = {
   /** Issues in backlog rank order; `sprint` filters to a sprint id or "backlog". */
@@ -27,6 +27,9 @@ export const issueGateway = {
   deleteWorklog: (id: string) => request<undefined>("DELETE", `/api/v1/worklogs/${seg(id)}`),
   watchers: (issueKey: string) =>
     request<{ watching: boolean; items: { user_id: string; name: string }[] }>("GET", `/api/v1/issues/${seg(issueKey)}/watchers`),
+  attachments: (issueKey: string) => request<List<Attachment>>("GET", `/api/v1/issues/${seg(issueKey)}/attachments`).then((r) => r.items),
+  attach: (issueKey: string, file: File) => upload<Attachment>(`/api/v1/issues/${seg(issueKey)}/attachments`, file),
+  deleteAttachment: (id: string) => request<undefined>("DELETE", `/api/v1/attachments/${seg(id)}`),
   watch: (issueKey: string) => request<undefined>("POST", `/api/v1/issues/${seg(issueKey)}/watchers`),
   unwatch: (issueKey: string) => request<undefined>("DELETE", `/api/v1/issues/${seg(issueKey)}/watchers`),
   history: (issueKey: string) => request<List<HistoryEntry>>("GET", `/api/v1/issues/${seg(issueKey)}/history`).then((r) => r.items),

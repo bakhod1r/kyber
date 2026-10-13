@@ -33,7 +33,7 @@ export const chatGateway = {
   /** Uploads a file as a message (raw body; the header satisfies the CSRF guard for cookie sessions). */
   upload: async (id: string, file: Blob, name: string): Promise<Message> => {
     const res = await fetch(`${conv(id)}/files?name=${encodeURIComponent(name)}`, {
-      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream", "X-Kyber-Upload": "1" }, body: file,
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream", "X-Kyber-Request": "1" }, body: file,
     });
     const data: unknown = await res.json().catch(() => undefined);
     if (!res.ok) throw new ApiError(res.status, isProblem(data) ? data.detail || data.title : `upload failed (${res.status})`, isProblem(data) ? data.code : "");

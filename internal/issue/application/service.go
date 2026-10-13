@@ -157,6 +157,11 @@ func (s *Service) Get(ctx context.Context, actor, rawKey string) (*domain.Issue,
 	return s.load(ctx, actor, rawKey, PermBrowse)
 }
 
+// Authorize loads the issue the actor may exercise perm on (for other contexts' ACLs).
+func (s *Service) Authorize(ctx context.Context, actor, rawKey string, perm Permission) (*domain.Issue, error) {
+	return s.load(ctx, actor, rawKey, perm)
+}
+
 // load parses the key and authorizes before touching the issue, so outsiders
 // cannot distinguish missing issues from hidden ones.
 // The issue's own attributes (reporter, assignee, status) then decide perm (ABAC).

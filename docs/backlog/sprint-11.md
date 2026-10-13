@@ -37,7 +37,7 @@ backends.
   ✅ **S54a done:** pins (`message.pinned`), search across readable conversations (every word, case-insensitive);
   API 0.41.0. ✅ **S54b done:** files in chat (≤ 25 MB) over `platform/blob` (disk via `KYBER_FILES_DIR`, memory in
   dev; S3/MinIO adapter later); type sniffed by the server, members-only download with nosniff + sandbox CSP,
-  HTML/SVG never inline; cookie uploads need `X-Kyber-Upload: 1`; API 0.42.0.
+  HTML/SVG never inline; cookie uploads need `X-Kyber-Request: 1`; API 0.42.0.
 
 ## Video calls (huddles)
 

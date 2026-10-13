@@ -27,6 +27,7 @@ services:
       KYBER_ICE_SERVERS: stun:turn.example.com:3478,turn:turn.example.com:3478?transport=udp,turn:turn.example.com:3478?transport=tcp
       KYBER_TURN_SECRET: change-me-to-a-long-random-secret
     ports: ["8080:8080"]
+    volumes: ["attachments:/data/attachments"] # uploaded files; back up with the database
     depends_on:
       postgres:
         condition: service_healthy
@@ -53,3 +54,4 @@ services:
     profiles: ["calls"] # docker compose --profile calls up
 volumes:
   pgdata:
+  attachments:

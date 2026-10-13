@@ -173,3 +173,28 @@ export function planTimeline(issues: Issue[]): TimelinePlan {
   const unscheduled = byRank.filter((i) => !shown.has(i.key) && i.type !== "subtask");
   return { from: new Date(first * DAY).toISOString().slice(0, 10), days: last - first + 1, rows, unscheduled };
 }
+
+/** Attachment: a file on an issue (C5). */
+export type Attachment = {
+  id: string;
+  issue_key: string;
+  name: string;
+  content_type: string;
+  size: number;
+  sha256: string;
+  uploaded_by: string;
+  uploaded_at: string;
+  /** Browsers may show it in place (images, PDF). */
+  inline: boolean;
+  url: string;
+};
+
+/** The upload limit the server enforces (25 MiB). */
+export const maxAttachmentSize = 25 * 1024 * 1024;
+
+/** formatSize renders a byte count for people: 512 B, 1.5 KB, 3.2 MB. */
+export function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}

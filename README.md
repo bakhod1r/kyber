@@ -6,7 +6,8 @@
 > categories), Scrum & Kanban boards with status-mapped columns and WIP limits, backlog & sprints, reports (burndown,
 > velocity, created vs resolved, cycle time, workload), notifications & @mentions, Pomodoro focus with a meetings
 > time table, eye-break exercises, Jira CSV import/export, Google & Telegram sign-in, multi-tenant workspaces on
-> subdomains, OpenAPI contract, localized errors (en/uz/ru), PostgreSQL, optional Redis.
+> subdomains, Slack-style chat with video huddles (screen share, recording) and shared whiteboards,
+> OpenAPI contract, localized errors (en/uz/ru), PostgreSQL, optional Redis.
 
 <p align="center"><img src="docs/assets/landing.png" alt="Kyber landing page" width="820"></p>
 
@@ -18,8 +19,10 @@
 | **Backlog & sprints** — rank issues, plan, start and complete sprints. | **Reports** — KPIs, distributions, burndown, velocity, cycle time. |
 | <img src="docs/assets/issue-panel.png" alt="Issue panel with focus timer and comments"> | <img src="docs/assets/meetings.png" alt="Meetings time table"> |
 | **Issue** — details, Pomodoro focus, comments with @mentions. | **Time table** — no Pomodoro can start during a meeting. |
-| <img src="docs/assets/notifications.png" alt="Notifications for mentions and comments"> | |
-| **Notifications** — comments and mentions, per workspace. | |
+| <img src="docs/assets/notifications.png" alt="Notifications for mentions and comments"> | <img src="docs/assets/chat.png" alt="Chat channel with a thread, reactions and an issue preview"> |
+| **Notifications** — comments and mentions, per workspace. | **Chat** — channels, DMs, threads, reactions, @mentions, pins, search, files, issue previews. |
+| <img src="docs/assets/huddle.png" alt="Video huddle with two cameras while recording"> | <img src="docs/assets/whiteboard.png" alt="Shared whiteboard with an architecture sketch"> |
+| **Huddles** — video, audio and screen share (WebRTC, up to 6), present a doc or whiteboard to everyone, record to the channel. | **Whiteboards** — draw architecture together in real time; stickies become issues; export SVG/PNG. |
 
 Screenshots are generated from a seeded demo with `make screenshots`.
 
@@ -41,7 +44,8 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 | Env | Default | Purpose |
 |---|---|---|
 | `KYBER_ADDR` | `:8080` | Listen address |
-| `KYBER_DATABASE_URL` | — | PostgreSQL URL; unset = in-memory dev mode |
+| `KYBER_ATTACHMENTS_DIR` | `./data/attachments` | Uploaded files (`<dir>/<workspace>/<id>`, at most 25 MiB each); back it up together with the database |
+| `KYBER_DATABASE_URL` | — | PostgreSQL URL; unset = in-memory dev mode. Connect as a non-superuser role so row-level security (ADR-0010) applies |
 | `KYBER_REDIS_URL` | — | Optional; shares the login limiter across replicas (guard) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Enables OpenTelemetry tracing (OTLP/HTTP, e.g. `http://otel-collector:4318`); unset = tracing off. The standard `OTEL_*` variables apply (`OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_SDK_DISABLED`). See ADR-0006 |
 | — | — | Operators: `kyber outbox dead-letters` lists outbox events parked after 10 failed deliveries, `kyber outbox retry <id>` queues one again (needs `KYBER_DATABASE_URL`; ADR-0007) |
@@ -69,6 +73,8 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/probl
 | POST / GET | `/api/v1/projects/{key}/issues[?status=]` | Create / list issues |
 | GET · PATCH | `/api/v1/issues/{KEY-N}` | Get issue · edit title/description/priority/assignee (with `version`) |
 | GET · POST | `/api/v1/issues/{KEY-N}/comments` | List · add comments |
+| GET · POST | `/api/v1/issues/{KEY-N}/attachments` | List · upload files (multipart `file`, ≤ 25 MiB) |
+| GET · DELETE | `/api/v1/attachments/{id}` | Download (images/PDF inline, others as attachment) · remove |
 | POST | `/api/v1/issues/{KEY-N}/rank` | Move in the backlog (`after` / `before` another issue) |
 | GET · POST | `/api/v1/projects/{key}/sprints` | List · create sprints |
 | POST | `/api/v1/sprints/{id}/start` · `/complete` | Start · complete (unfinished issues return to the backlog) |

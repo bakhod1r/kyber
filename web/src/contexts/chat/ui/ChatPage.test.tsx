@@ -156,7 +156,7 @@ describe("Chat files (S54b)", () => {
     await screen.findByText("morning");
     await user.upload(screen.getByLabelText("Attach a file"), new File(["hello"], "notes.txt", { type: "text/plain" }));
     expect(await screen.findByRole("link", { name: "📎 notes.txt (5 B)" })).toBeInTheDocument();
-    expect(uploads[0]?.headers.get("X-Kyber-Upload")).toBe("1");
+    expect(uploads[0]?.headers.get("X-Kyber-Request")).toBe("1");
     expect(calls.length).toBeGreaterThan(0);
   });
 });

@@ -4,10 +4,13 @@ import { chromium } from "@playwright/test";
 
 const base = process.env.KYBER_URL ?? "http://localhost:18080";
 const out = new URL("../../docs/assets/", import.meta.url).pathname;
-const browser = await chromium.launch({ executablePath: process.env.KYBER_CHROMIUM || undefined });
+const browser = await chromium.launch({
+  executablePath: process.env.KYBER_CHROMIUM || undefined,
+  args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"], // huddle cameras
+});
 
 async function user(email, name) {
-  const ctx = await browser.newContext({ viewport: { width: 1360, height: 820 }, deviceScaleFactor: 2, baseURL: base });
+  const ctx = await browser.newContext({ viewport: { width: 1360, height: 820 }, deviceScaleFactor: 2, baseURL: base, permissions: ["microphone", "camera"] });
   const r = await ctx.request.post("/api/v1/auth/signup", { data: { email, name, password: "a very long password" } });
   if (!r.ok()) throw new Error(`signup ${email}: ${r.status()}`);
   await ctx.request.post("/api/v1/auth/login", { data: { email, password: "a very long password" } });
@@ -90,9 +93,9 @@ console.log("docs/assets/landing.png");
 
 await shot("board", "/projects/KYB", () => page.getByRole("region", { name: "Code Review" }).getByText("Board columns").waitFor());
 await shot("workflow", "/projects/KYB/workflow", () => page.getByRole("button", { name: "Save workflow" }).waitFor());
-await shot("backlog", "/projects/KYB/backlog", () => page.getByText("Sprint 13").first().waitFor());
+await shot("backlog", "/projects/KYB/backlog", () => page.locator("text=Sprint 13 >> visible=true").first().waitFor());
 await shot("issue-panel", `/projects/KYB?issue=${created[1].key}`, async () => {
-  await page.getByText("Verified on Chrome").waitFor();
+  await page.getByLabel("Comments").getByText("Verified on Chrome").waitFor();
   await page.getByRole("heading", { name: "Comments" }).evaluate((el) => el.scrollIntoView({ block: "center" }));
 });
 await shot("reports", "/projects/KYB/reports", () => page.getByText(/velocity/i).first().waitFor());
@@ -103,4 +106,45 @@ await page.getByRole("dialog", { name: "Notifications" }).waitFor();
 await page.waitForTimeout(400);
 await page.screenshot({ path: `${out}notifications.png` });
 console.log("docs/assets/notifications.png");
+
+// Chat, whiteboard and a recorded video huddle (S50–S62).
+const general = await api("POST", "/api/v1/channels", { name: "general", topic: "Team-wide announcements" });
+await api("POST", "/api/v1/channels", { name: "backend" });
+await dev.api("POST", `/api/v1/conversations/${general.id}/join`, {});
+await api("POST", `/api/v1/conversations/${general.id}/messages`, { body: "Good morning team! Release planning at 11:00" });
+const ready = await dev.api("POST", `/api/v1/conversations/${general.id}/messages`, { body: `${created[1].key} is ready for review @aziza@kyber.dev` });
+await api("POST", `/api/v1/messages/${ready.id}/reactions`, { emoji: "🎉" });
+await api("POST", `/api/v1/messages/${ready.id}/replies`, { body: "Looking now" });
+await api("POST", `/api/v1/conversations/${general.id}/whiteboards`, { title: "Architecture" });
+await shot("chat", `/chat/${general.id}`, async () => {
+  await page.getByRole("button", { name: "1 reply" }).click();
+  await page.getByText("Looking now").waitFor();
+});
+await shot("whiteboard", `/chat/${general.id}`, async () => {
+  await page.getByRole("button", { name: "Whiteboards" }).click();
+  await page.getByRole("button", { name: "Architecture" }).click();
+  const c = await page.getByRole("img", { name: "Canvas" }).boundingBox();
+  const draw = async (tool, x1, y1, x2, y2) => {
+    await page.getByRole("button", { name: tool }).click();
+    await page.mouse.move(c.x + x1, c.y + y1);
+    await page.mouse.down();
+    await page.mouse.move(c.x + x2, c.y + y2, { steps: 5 });
+    await page.mouse.up();
+  };
+  await draw("Rectangle", 80, 80, 260, 160);
+  await draw("Rectangle", 420, 80, 600, 160);
+  await draw("Ellipse", 250, 260, 430, 340);
+  await draw("Arrow", 260, 120, 420, 120);
+  await draw("Arrow", 510, 160, 400, 270);
+});
+const other = await dev.ctx.newPage();
+await shot("huddle", `/chat/${general.id}`, async () => {
+  await page.getByRole("button", { name: "Start huddle" }).click();
+  await other.goto(`/chat/${general.id}`);
+  await other.getByRole("button", { name: "Join huddle (1)" }).click();
+  await page.getByRole("button", { name: "Start camera" }).click();
+  await other.getByRole("button", { name: "Start camera" }).click();
+  await page.getByRole("button", { name: "Record" }).click();
+  await page.waitForTimeout(2500);
+});
 await browser.close();

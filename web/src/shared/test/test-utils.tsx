@@ -13,7 +13,7 @@ export function mockApi(routes: Record<string, Handler | Route>) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), "http://localhost");
     const key = `${init?.method ?? "GET"} ${url.pathname}${url.search}`;
-    calls.push({ key, body: init?.body ? JSON.parse(String(init.body)) : undefined, headers: new Headers(init?.headers) });
+    calls.push({ key, body: typeof init?.body === "string" ? JSON.parse(init.body) : init?.body, headers: new Headers(init?.headers) });
     const route = routes[key];
     if (!route) return new Response(JSON.stringify({ error: `unmocked ${key}` }), { status: 500 });
     const { status, body } = typeof route === "function" ? route(init) : route;

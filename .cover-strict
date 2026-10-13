@@ -36,3 +36,6 @@
 ./internal/admin/application
 ./internal/admin/infrastructure/acl
 ./internal/platform/mcp
+./internal/attachment/domain
+./internal/attachment/application
+./internal/attachment/infrastructure/memory

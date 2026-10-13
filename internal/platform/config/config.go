@@ -17,6 +17,8 @@ type Config struct {
 	SessionPurgeEvery time.Duration `env:"KYBER_SESSION_PURGE_EVERY" default:"1h"`
 	// PublicURL is the external base URL (OAuth redirect URIs are built from it).
 	PublicURL string `env:"KYBER_PUBLIC_URL" default:"http://localhost:8080"`
+	// AttachmentsDir holds uploaded files (<dir>/<workspace>/<id>); back it up with the database.
+	AttachmentsDir string `env:"KYBER_ATTACHMENTS_DIR" default:"./data/attachments"`
 	// BaseDomain enables workspaces on subdomains (<slug>.<BaseDomain>, ADR-0004); empty = single-tenant.
 	BaseDomain string `env:"KYBER_BASE_DOMAIN"`
 	// AdminEmails (comma-separated) administer the default workspace: they publish workspace-wide

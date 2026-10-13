@@ -77,6 +77,8 @@ const (
 	CodeSingleTenantRoles    = "SINGLE_TENANT_ROLES"
 	CodeMemberNotFound       = "MEMBER_NOT_FOUND"
 	CodeDeadLetterNotFound   = "DEAD_LETTER_NOT_FOUND"
+	CodeAttachmentNotFound   = "ATTACHMENT_NOT_FOUND"
+	CodeAttachmentTooLarge   = "ATTACHMENT_TOO_LARGE"
 	CodeNotificationNotFound = "NOTIFICATION_NOT_FOUND"
 	CodeImportTooLarge       = "IMPORT_TOO_LARGE"
 	CodeImportInvalidFile    = "IMPORT_INVALID_FILE"
@@ -164,6 +166,8 @@ var codes = []code{
 	{CodeSingleTenantRoles, "6043", 409, "Roles in this installation are set with KYBER_ADMIN_EMAILS.", "Bu o'rnatishda rollar KYBER_ADMIN_EMAILS orqali belgilanadi.", "В этой установке роли задаются через KYBER_ADMIN_EMAILS.", errorx.CategoryBusiness},
 	{CodeMemberNotFound, "6044", 404, "This person is not a member of the workspace.", "Bu kishi workspace a'zosi emas.", "Этот человек не состоит в рабочем пространстве.", errorx.CategoryBusiness},
 	{CodeDeadLetterNotFound, "6045", 404, "No such stuck event.", "Bunday to'xtab qolgan hodisa yo'q.", "Такого зависшего события нет.", errorx.CategoryBusiness},
+	{CodeAttachmentNotFound, "6046", 404, "Attachment not found.", "Ilova topilmadi.", "Вложение не найдено.", errorx.CategoryBusiness},
+	{CodeAttachmentTooLarge, "6047", 413, "The file is too large (at most 25 MiB).", "Fayl juda katta (ko'pi bilan 25 MiB).", "Файл слишком большой (не более 25 МиБ).", errorx.CategoryValidation},
 	{CodeLastBoard, "6026", 409, "A project must keep at least one board.", "Loyihada kamida bitta board qolishi kerak.", "В проекте должна остаться хотя бы одна доска.", errorx.CategoryBusiness},
 	{CodeNotificationNotFound, "6040", 404, "Notification not found.", "Bildirishnoma topilmadi.", "Уведомление не найдено.", errorx.CategoryBusiness},
 	{CodeImportTooLarge, "6050", 413, "The file is too large to import (10 MB max).", "Fayl import uchun juda katta (ko'pi bilan 10 MB).", "Файл слишком большой для импорта (не более 10 МБ).", errorx.CategoryValidation},

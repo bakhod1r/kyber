@@ -5,12 +5,14 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"github.com/bakhod1r/kyber/internal/platform/otel"
 	"io/fs"
 	"sort"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/bakhod1r/kyber/internal/platform/otel"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
 //go:embed migrations/*.sql
@@ -27,6 +29,7 @@ func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
 }
 
 func OpenConfig(ctx context.Context, cfg *pgxpool.Config) (*pgxpool.Pool, error) {
+	cfg.PrepareConn = scopeToTenant
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -80,4 +83,23 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 func MigrationSQL(name string) (string, error) {
 	b, err := migrations.ReadFile("migrations/" + name)
 	return string(b), err
+}
+
+// workspaceKey caches, per connection, the workspace its session is scoped to.
+const workspaceKey = "kyber.workspace"
+
+// scopeToTenant scopes each acquired connection to the caller's workspace for row-level
+// security (ADR-0010); calls without a workspace (jobs, relay) run unscoped. The setting is only
+// sent when it changes for that connection.
+func scopeToTenant(ctx context.Context, conn *pgx.Conn) (bool, error) {
+	want, _ := tenant.From(ctx)
+	data := conn.PgConn().CustomData()
+	if have, ok := data[workspaceKey]; ok && have == want {
+		return true, nil
+	}
+	if _, err := conn.Exec(ctx, `SELECT set_config('kyber.workspace', $1, false)`, want); err != nil {
+		return false, fmt.Errorf("scope connection to workspace: %w", err)
+	}
+	data[workspaceKey] = want
+	return true, nil
 }

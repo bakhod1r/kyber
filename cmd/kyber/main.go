@@ -97,7 +97,8 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		TelegramBot: cfg.TelegramBotName,
 	})
 	common := append([]server.Option{social, server.WithContext(ctx), server.WithBaseDomain(cfg.BaseDomain), server.WithSiteAdmins(cfg.AdminEmails),
-		server.WithPublicURL(cfg.PublicURL), server.WithICE(ice.Parse(cfg.ICEServers), cfg.TURNSecret)}, telegramBot(cfg)...)
+		server.WithPublicURL(cfg.PublicURL), server.WithAttachmentsDir(cfg.AttachmentsDir),
+		server.WithICE(ice.Parse(cfg.ICEServers), cfg.TURNSecret)}, telegramBot(cfg)...)
 	if cfg.FilesDir != "" {
 		common = append(common, server.WithFilesDir(cfg.FilesDir))
 	}

@@ -23,7 +23,7 @@ export const callGateway = {
   /** Posts the finished recording to the conversation (raw body; the header satisfies the CSRF guard). */
   uploadRecording: async (conversationId: string, video: Blob, name: string): Promise<void> => {
     const res = await fetch(`/api/v1/conversations/${seg(conversationId)}/files?recording=1&name=${encodeURIComponent(name)}`, {
-      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream", "X-Kyber-Upload": "1" }, body: video,
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream", "X-Kyber-Request": "1" }, body: video,
     });
     if (!res.ok) throw new Error(`Uploading the recording failed (${res.status})`);
   },

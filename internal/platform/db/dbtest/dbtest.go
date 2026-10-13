@@ -14,6 +14,9 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/db"
 )
 
+// Role is the unprivileged role test pools run as.
+const Role = "kyber_test_app"
+
 func New(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	url := os.Getenv("KYBER_TEST_DATABASE_URL")
@@ -29,11 +32,17 @@ func New(t *testing.T) *pgxpool.Pool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
+	// Tests run as a plain role: superusers bypass row-level security (ADR-0010).
+	if _, err := admin.Exec(ctx, `DO $$ BEGIN CREATE ROLE `+Role+` NOSUPERUSER NOBYPASSRLS;
+		EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+schema+" AUTHORIZATION "+Role); err != nil {
 		t.Fatal(err)
 	}
 	cfg, _ := pgxpool.ParseConfig(url)
 	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+	cfg.ConnConfig.RuntimeParams["role"] = Role
 	pool, err := db.OpenConfig(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)

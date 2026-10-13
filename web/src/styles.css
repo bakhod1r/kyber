@@ -528,3 +528,8 @@ a.user:hover { text-decoration: underline; }
 .chat-file { display: inline-block; margin: 4px 0; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .huddle-recording { margin: 0 0 8px; color: #d33; font-weight: 600; }
+/* Attachments (C5) */
+.attachments h4 { margin: 0; }
+.attachment-list { list-style: none; padding: 0; margin: 0.5rem 0 0; display: grid; gap: 0.25rem; }
+.attachment-thumb { width: 2.5rem; height: 2.5rem; object-fit: cover; border-radius: 4px; }
+label.button { cursor: pointer; }
