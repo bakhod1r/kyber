@@ -432,3 +432,22 @@ func RunScheduled(t *testing.T, r domain.Repository, sched domain.ScheduledMessa
 		t.Fatalf("left = %+v", left)
 	}
 }
+
+// RunReceipts checks read cursors (S68).
+func RunReceipts(t *testing.T, r domain.Repository) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	dm, _ := domain.OpenDM(cid(70), WS, Lead, []domain.UserID{Dev}, t0)
+	if err := r.Create(ctx, dm); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := r.ReadCursors(ctx, dm.ID); err != nil || len(got) != 0 {
+		t.Fatalf("nobody read yet = %v %v", got, err)
+	}
+	_ = r.MarkRead(ctx, dm.ID, Dev, t0.Add(time.Minute))
+	_ = r.MarkRead(ctx, dm.ID, Other, t0.Add(time.Minute)) // not a member: ignored
+	got, err := r.ReadCursors(ctx, dm.ID)
+	if err != nil || len(got) != 1 || !got[Dev].Equal(t0.Add(time.Minute)) {
+		t.Fatalf("cursors = %v %v", got, err)
+	}
+}

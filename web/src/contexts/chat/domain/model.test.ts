@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter, parseRemind } from "./model";
+import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter, parseRemind, seen } from "./model";
 
 const msg = (id: string, body: string, extra: Partial<Message> = {}): Message => ({
   id, conversation_id: "c-1", author_id: "u-1", body, created_at: "2026-10-13T09:00:00Z", edited_at: null, deleted: false,
@@ -83,5 +83,18 @@ describe("/remind (S67)", () => {
   });
   it("is null for anything else", () => {
     for (const s of ["hello", "/remind me", "/remind me in 5 weeks x", "/remind me at 25:00 x", "/remind you in 5m x"]) expect(parseRemind(s, now)).toBeNull();
+  });
+});
+
+describe("seen (S68)", () => {
+  const msgs = [
+    { id: "1", author_id: "dev", created_at: "2026-10-13T09:00:00.000Z" },
+    { id: "2", author_id: "me", created_at: "2026-10-13T09:01:00.000Z" },
+  ];
+  it("marks my last message once someone else read up to it", () => {
+    expect(seen(msgs, [{ user_id: "dev", read_at: "2026-10-13T09:00:30.000Z" }], "me")).toBeNull();
+    expect(seen(msgs, [{ user_id: "dev", read_at: "2026-10-13T09:02:00.000Z" }], "me")).toBe("2");
+    expect(seen(msgs, [{ user_id: "me", read_at: "2026-10-13T09:02:00.000Z" }], "me")).toBeNull();
+    expect(seen([...msgs, { id: "3", author_id: "dev", created_at: "2026-10-13T09:03:00.000Z" }], [{ user_id: "dev", read_at: "2026-10-13T09:04:00.000Z" }], "me")).toBeNull();
   });
 });

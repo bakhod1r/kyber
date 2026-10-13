@@ -62,8 +62,8 @@ type Deps struct {
 	Notifier      Notifier // optional
 	Conversations domain.Repository
 	Messages      domain.Messages
-	Saved         domain.SavedMessages // optional: save for later (S65)
-	Statuses      domain.Statuses      // optional: status and DND (S66)
+	Saved         domain.SavedMessages     // optional: save for later (S65)
+	Statuses      domain.Statuses          // optional: status and DND (S66)
 	Scheduled     domain.ScheduledMessages // optional: scheduled messages (S67)
 	Reminders     domain.Reminders         // optional: /remind me (S67)
 	Members       Members
@@ -310,7 +310,42 @@ func (s *Service) MarkRead(ctx context.Context, actor, conv string) error {
 	if !c.IsMember(domain.UserID(actor)) {
 		return domain.ErrNotMember
 	}
-	return s.d.Conversations.MarkRead(ctx, c.ID, domain.UserID(actor), s.d.Now())
+	now := s.d.Now()
+	if err := s.d.Conversations.MarkRead(ctx, c.ID, domain.UserID(actor), now); err != nil {
+		return err
+	}
+	if c.Kind == domain.KindDM {
+		s.d.Notifier.Notify(ctx, others(c, domain.UserID(actor)), domain.Read{Conversation: c.ID, User: domain.UserID(actor), At: now})
+	}
+	return nil
+}
+
+// others are the members of c but u.
+func others(c *domain.Conversation, u domain.UserID) []domain.UserID {
+	out := make([]domain.UserID, 0, len(c.Members))
+	for _, m := range c.Members {
+		if m != u {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// Receipts are how far each member of a DM has read it (S68); empty for channels.
+func (s *Service) Receipts(ctx context.Context, actor, conv string) (map[string]time.Time, error) {
+	c, err := s.readable(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]time.Time{}
+	if c.Kind != domain.KindDM {
+		return out, nil
+	}
+	cursors, err := s.d.Conversations.ReadCursors(ctx, c.ID)
+	for u, at := range cursors {
+		out[string(u)] = at
+	}
+	return out, err
 }
 
 // Typing tells the other members that actor is writing.

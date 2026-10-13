@@ -550,3 +550,33 @@ func TestScheduledMessages(t *testing.T) {
 		t.Fatalf("reminder outbox = %+v", out)
 	}
 }
+
+// S68: in a DM the others learn how far I have read ("Seen"); channels keep it private.
+func TestReadReceipts(t *testing.T) {
+	svc, ctx, ev := setupWithEvents(t)
+	dm, _ := svc.OpenDM(ctx, "lead", []string{"dev"})
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "general"})
+	_, _ = svc.Post(ctx, "lead", string(dm.ID), "hi")
+	*ev = nil
+	if err := svc.MarkRead(ctx, "dev", string(dm.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if len(*ev) != 1 || (*ev)[0] != "conversation.read→[lead]" {
+		t.Fatalf("events = %v", *ev)
+	}
+	got, err := svc.Receipts(ctx, "lead", string(dm.ID))
+	if err != nil || len(got) != 2 || got["dev"].IsZero() {
+		t.Fatalf("receipts = %v %v (lead read it by posting)", got, err)
+	}
+	*ev = nil
+	_ = svc.MarkRead(ctx, "lead", string(ch.ID))
+	if len(*ev) != 0 {
+		t.Fatalf("channel read announced: %v", *ev)
+	}
+	if got, _ := svc.Receipts(ctx, "lead", string(ch.ID)); len(got) != 0 {
+		t.Fatalf("channel receipts = %v", got)
+	}
+	if _, err := svc.Receipts(ctx, "qa", string(dm.ID)); !errors.Is(err, domain.ErrConversationNotFound) {
+		t.Fatalf("outsider = %v", err)
+	}
+}

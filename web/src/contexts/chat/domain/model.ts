@@ -34,6 +34,15 @@ export function clearAfter(now: Date): { label: string; at: Date | null }[] {
   ];
 }
 
+export type Receipt = { user_id: string; read_at: string };
+
+/** "Seen" (S68): my latest message in a DM was read by someone else (their read cursor reached it). */
+export function seen(messages: Pick<Message, "id" | "author_id" | "created_at">[], receipts: Receipt[], me: string): string | null {
+  const mine = [...messages].reverse().find((m) => m.author_id === me);
+  if (!mine || messages[messages.length - 1]?.id !== mine.id) return null; // only under my latest, last message
+  return receipts.some((r) => r.user_id !== me && Date.parse(r.read_at) >= Date.parse(mine.created_at)) ? mine.id : null;
+}
+
 /** A message I scheduled (S67). */
 export type ScheduledMessage = { id: string; conversation_id: string; body: string; send_at: string; created_at: string };
 
@@ -85,11 +94,12 @@ export function remindPresets(now: Date): { label: string; at: Date }[] {
 /** Events on the realtime stream (GET /api/v1/stream). Stream messages carry no issue previews. */
 export type ChatEvent =
   | { type: "message.posted" | "message.edited" | "message.deleted" | "message.reacted" | "message.pinned"; message: Omit<Message, "issues"> & { issues?: IssuePreview[] } }
-  | { type: "typing"; conversation_id: string; user_id: string };
+  | { type: "typing"; conversation_id: string; user_id: string }
+  | { type: "conversation.read"; conversation_id: string; user_id: string; at: string };
 
 /** Applies a stream event to a conversation's newest-first, top-level history. */
 export function applyEvent(list: Message[], conversationId: string, e: ChatEvent): Message[] {
-  if (e.type === "typing" || e.message.conversation_id !== conversationId) return list;
+  if (e.type === "typing" || e.type === "conversation.read" || e.message.conversation_id !== conversationId) return list;
   const m = e.message;
   if (m.thread_id) {
     if (e.type !== "message.posted") return list;

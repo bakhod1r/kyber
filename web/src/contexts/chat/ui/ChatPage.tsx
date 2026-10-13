@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, type ChatEvent, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, type Message, parseRemind, remindPresets, type ScheduledMessage, type SavedItem, splitMentions, STATUS_PRESETS, type UserStatus, useChatStream,
+  applyEvent, type ChatEvent, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, type Message, parseRemind, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserStatus, useChatStream,
 } from "../application";
 
 const PAGE = 50;
@@ -54,6 +54,11 @@ export function ChatPage({ extras, activity }: { extras?: ConversationSlot; /** 
   const [thread, setThread] = useState<string | null>(null);
 
   useChatStream((e: ChatEvent) => {
+    if (e.type === "conversation.read") {
+      qc.setQueryData<Receipt[]>(["chat", "receipts", e.conversation_id], (list) =>
+        list ? [...list.filter((r) => r.user_id !== e.user_id), { user_id: e.user_id, read_at: e.at }] : list);
+      return;
+    }
     if (e.type === "typing") {
       setTyping((t) => ({ ...t, [e.conversation_id]: [...(t[e.conversation_id] ?? []).filter((x) => x.user !== e.user_id), { user: e.user_id, until: Date.now() + TYPING_MS }] }));
       return;
@@ -413,6 +418,8 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
     if (page.length < PAGE) setExhausted(true);
   };
   const messages = [...(history.data ?? []), ...older].reverse(); // oldest at the top
+  const receipts = useQuery({ queryKey: ["chat", "receipts", id], queryFn: () => chatUseCases.receipts(id), enabled: conversation?.kind === "dm" });
+  const seenId = conversation?.kind === "dm" ? seen(messages, receipts.data ?? [], me) : null;
   const member = conversation?.member ?? true;
   return (
     <section className="chat-main">
@@ -432,7 +439,10 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
         {(history.data?.length ?? 0) >= PAGE && !exhausted && <button className="ghost" onClick={() => void loadOlder()}>Load older</button>}
         {history.data?.length === 0 && <p className="muted">No messages yet. Say hello!</p>}
         {messages.map((m) => (
-          <MessageItem key={m.id} m={m} names={names} me={me} canAct={member} onChange={replace} onThread={() => onThread(m.id)} />
+          <div key={m.id}>
+            <MessageItem m={m} names={names} me={me} canAct={member} onChange={replace} onThread={() => onThread(m.id)} />
+            {m.id === seenId && <p className="chat-seen muted" aria-label="Seen">✓ Seen</p>}
+          </div>
         ))}
       </div>
       <p className="chat-typing muted" aria-live="polite">{typers.length > 0 ? `${typers.join(", ")} ${typers.length === 1 ? "is" : "are"} typing…` : " "}</p>

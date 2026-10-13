@@ -359,6 +359,8 @@ type Repository interface {
 	// Visible lists the workspace's public channels and every conversation u belongs to, by name then creation.
 	Visible(ctx context.Context, ws WorkspaceID, u UserID) ([]*Conversation, error)
 	MarkRead(ctx context.Context, id ConversationID, u UserID, at time.Time) error
+	// ReadCursors are how far each member who has read the conversation has read it (S68).
+	ReadCursors(ctx context.Context, id ConversationID) (map[UserID]time.Time, error)
 	// Unread counts, per conversation u belongs to, live top-level messages by others newer than u's read cursor.
 	Unread(ctx context.Context, u UserID) (map[ConversationID]int, error)
 }

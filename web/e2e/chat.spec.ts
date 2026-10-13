@@ -48,4 +48,17 @@ test("chat between two people arrives live", async ({ browser }) => {
   const img = b.getByRole("img", { name: "dot.png" });
   await expect(img).toBeVisible();
   await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(1);
+
+  // S68: in a DM, "Seen" appears under my message once the other has read it.
+  const aliId = (await ali.call("GET", "/api/v1/me")).id;
+  const dm = await bobur.call("POST", "/api/v1/dms", { user_ids: [aliId] });
+  await b.goto(`/chat/${dm.id}`);
+  const dmBox = b.getByRole("textbox", { name: /^Message / });
+  await dmBox.fill("did you see the build?");
+  await dmBox.press("Enter");
+  await expect(b.getByRole("log", { name: "Messages" })).toContainText("did you see the build?");
+  await expect(b.getByLabel("Seen")).toHaveCount(0);
+  await a.goto(`/chat/${dm.id}`);
+  await expect(a.getByRole("log", { name: "Messages" })).toContainText("did you see the build?");
+  await expect(b.getByLabel("Seen")).toBeVisible(); // live, without reloading
 });

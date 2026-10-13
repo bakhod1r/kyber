@@ -26,8 +26,10 @@ Order: daily use first, then channel management, Jira integration, huddle extras
   `POST /conversations/{id}/reminders`; migration 0057 (RLS); the job posts each once (message `ref`), drops it
   if the author left; reminders reuse `chat.reminder`. UI: 🕒 "Send later", `/remind me in|tomorrow|at …`,
   "Scheduled" in Activity. API 0.48.0.
-- **S68 Typing and read receipts** — "X is typing…" (typing API exists since S51) in the UI; in DMs "Seen" under
+- ✅ **S68 Typing and read receipts** — "X is typing…" (typing API exists since S51) in the UI; in DMs "Seen" under
   my last message. AC: receipts only in DMs; never for channels.
+  **Done:** `GET /conversations/{id}/receipts`, live `conversation.read` to the others in a DM; "✓ Seen" under my
+  latest message. API 0.49.0.
 
 ## 2. Channels
 

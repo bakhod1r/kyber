@@ -35,3 +35,7 @@ func TestScheduledContract(t *testing.T) {
 	pool := dbtest.New(t)
 	repotest.RunScheduled(t, postgres.NewRepository(pool), postgres.NewScheduled(pool), postgres.NewReminders(pool))
 }
+
+func TestReceiptsContract(t *testing.T) {
+	repotest.RunReceipts(t, postgres.NewRepository(dbtest.New(t)))
+}

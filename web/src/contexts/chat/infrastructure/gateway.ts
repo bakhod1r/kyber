@@ -3,7 +3,7 @@ import { ApiError, isProblem, request, seg, type List } from "../../../shared/ht
 import { onConnect, subscribe } from "../../../shared/stream";
 
 export { onConnect };
-import type { ChatEvent, Conversation, Message, SavedItem, ScheduledMessage, UserStatus } from "../domain/model";
+import type { ChatEvent, Conversation, Message, Receipt, SavedItem, ScheduledMessage, UserStatus } from "../domain/model";
 
 const conv = (id: string) => `/api/v1/conversations/${seg(id)}`;
 const msg = (id: string) => `/api/v1/messages/${seg(id)}`;
@@ -40,6 +40,7 @@ export const chatGateway = {
   scheduled: () => request<List<ScheduledMessage>>("GET", "/api/v1/chat/scheduled").then((r) => r.items),
   cancelScheduled: (id: string) => request<undefined>("DELETE", `/api/v1/scheduled/${seg(id)}`),
   remind: (id: string, text: string, at: Date) => request<{ id: string; text: string; at: string }>("POST", `${conv(id)}/reminders`, { text, at: at.toISOString() }),
+  receipts: (id: string) => request<List<Receipt>>("GET", `${conv(id)}/receipts`).then((r) => r.items),
   search: (q: string) => request<List<Message>>("GET", `/api/v1/chat/search?q=${encodeURIComponent(q)}`).then((r) => r.items),
   /** Uploads a file as a message (raw body; the header satisfies the CSRF guard for cookie sessions). */
   upload: async (id: string, file: Blob, name: string): Promise<Message> => {
@@ -54,12 +55,13 @@ export const chatGateway = {
     request<{ online: string[] }>("GET", `/api/v1/presence?${userIds.map((u) => `user_id=${encodeURIComponent(u)}`).join("&")}`).then((r) => r.online),
 };
 
-const EVENTS = ["message.posted", "message.edited", "message.deleted", "message.reacted", "message.pinned", "typing"] as const;
+const EVENTS = ["message.posted", "message.edited", "message.deleted", "message.reacted", "message.pinned", "typing", "conversation.read"] as const;
 
 /** Chat events from the shared realtime stream. */
 export function openChatStream(onEvent: (e: ChatEvent) => void): () => void {
   return subscribe([...EVENTS], (type, data) => {
     if (type === "typing") onEvent({ type, ...(data as { conversation_id: string; user_id: string }) });
-    else onEvent({ type: type as Exclude<ChatEvent["type"], "typing">, message: data as Message });
+    else if (type === "conversation.read") onEvent({ type, ...(data as { conversation_id: string; user_id: string; at: string }) });
+    else onEvent({ type: type as Exclude<ChatEvent["type"], "typing" | "conversation.read">, message: data as Message });
   });
 }

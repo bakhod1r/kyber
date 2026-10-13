@@ -454,3 +454,33 @@ func TestScheduledMessagesAndReminders(t *testing.T) {
 		})
 	}, server.WithReminderEvery(100*time.Millisecond))
 }
+
+// S68: read receipts in DMs.
+func TestReadReceipts(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		_, devMe := dev.do("GET", "/api/v1/me", nil)
+		_, dm := lead.do("POST", "/api/v1/dms", map[string]any{"user_ids": []string{devMe["id"].(string)}})
+		conv := dm["id"].(string)
+		lead.do("POST", "/api/v1/conversations/"+conv+"/messages", map[string]string{"body": "hi"})
+		_, before := lead.do("GET", "/api/v1/conversations/"+conv+"/receipts", nil)
+		for _, r := range before["items"].([]any) {
+			if r.(map[string]any)["user_id"] == devMe["id"] {
+				t.Fatalf("dev has not read yet: %v", before)
+			}
+		}
+		code, b := dev.do("POST", "/api/v1/conversations/"+conv+"/read", nil)
+		expect(t, code, 204, b)
+		_, after := lead.do("GET", "/api/v1/conversations/"+conv+"/receipts", nil)
+		found := false
+		for _, r := range after["items"].([]any) {
+			found = found || r.(map[string]any)["user_id"] == devMe["id"]
+		}
+		if !found {
+			t.Fatalf("receipts = %v", after)
+		}
+		code, b = anon.signedIn("qa@x.uz").do("GET", "/api/v1/conversations/"+conv+"/receipts", nil)
+		expect(t, code, 404, b)
+	})
+}

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +50,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/messages/{id}/save", h.unsave)
 	mux.HandleFunc("GET /api/v1/chat/saved", h.saved)
 	mux.HandleFunc("PUT /api/v1/me/status", h.setStatus)
+	mux.HandleFunc("GET /api/v1/conversations/{id}/receipts", h.receipts)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/scheduled", h.schedule)
 	mux.HandleFunc("GET /api/v1/chat/scheduled", h.scheduledList)
 	mux.HandleFunc("PATCH /api/v1/scheduled/{id}", h.reschedule)
@@ -709,4 +711,22 @@ func (h *Handler) remind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, map[string]any{"id": string(rem.ID), "text": rem.Text, "at": rem.At})
+}
+
+func (h *Handler) receipts(w http.ResponseWriter, r *http.Request) {
+	got, err := h.svc.Receipts(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	type receipt struct {
+		UserID string    `json:"user_id"`
+		ReadAt time.Time `json:"read_at"`
+	}
+	out := []receipt{}
+	for u, at := range got {
+		out = append(out, receipt{UserID: u, ReadAt: at})
+	}
+	slices.SortFunc(out, func(a, b receipt) int { return strings.Compare(a.UserID, b.UserID) })
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
 }

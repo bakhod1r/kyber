@@ -127,6 +127,18 @@ func (r *Repository) Visible(_ context.Context, ws domain.WorkspaceID, u domain.
 	return out, nil
 }
 
+func (r *Repository) ReadCursors(_ context.Context, id domain.ConversationID) (map[domain.UserID]time.Time, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := map[domain.UserID]time.Time{}
+	for k, at := range r.readAt {
+		if k.conv == id && !at.IsZero() {
+			out[k.user] = at
+		}
+	}
+	return out, nil
+}
+
 func (r *Repository) MarkRead(_ context.Context, id domain.ConversationID, u domain.UserID, at time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

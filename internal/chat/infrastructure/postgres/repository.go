@@ -116,6 +116,25 @@ func (r *Repository) MarkRead(ctx context.Context, cid domain.ConversationID, u 
 	return err
 }
 
+func (r *Repository) ReadCursors(ctx context.Context, cid domain.ConversationID) (map[domain.UserID]time.Time, error) {
+	out := map[domain.UserID]time.Time{}
+	rows, err := r.pool.Query(ctx, `SELECT user_id::text, last_read_at FROM conversation_members
+		WHERE conversation_id = $1 AND last_read_at > '-infinity'`, string(cid))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var u string
+		var at time.Time
+		if err := rows.Scan(&u, &at); err != nil {
+			return nil, err
+		}
+		out[domain.UserID(u)] = at.UTC()
+	}
+	return out, rows.Err()
+}
+
 func (r *Repository) Unread(ctx context.Context, u domain.UserID) (map[domain.ConversationID]int, error) {
 	out := map[domain.ConversationID]int{}
 	if !id.Valid(string(u)) {
