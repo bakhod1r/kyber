@@ -482,3 +482,15 @@ a.user:hover { text-decoration: underline; }
 .forms .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .form-designer, .form-filler { display: grid; gap: 0.75rem; max-width: 640px; }
 .form-designer fieldset { display: grid; gap: 0.5rem; border: 1px solid var(--border); border-radius: 8px; }
+
+/* Whiteboards (S59) */
+.conversation-extras { display: grid; gap: 8px; }
+.wb-list ul { list-style: none; padding: 0; }
+.wb-list header, .wb-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.wb-bar button { padding: 2px 8px; min-height: 0; }
+.wb-bar button.active { outline: 2px solid var(--accent); }
+.wb-swatch { width: 20px; height: 20px; border-radius: 50%; padding: 0; border: 2px solid transparent; }
+.wb-swatch[aria-checked="true"] { border-color: var(--text, #000); }
+.wb-canvas { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; touch-action: none; background: #fff; margin-top: 8px; }
+.wb-canvas.tool-select { cursor: default; }
+.wb-canvas:not(.tool-select) { cursor: crosshair; }

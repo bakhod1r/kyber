@@ -56,6 +56,9 @@ backends.
   arrows, lines, freehand, text and sticky notes (e.g. an architecture diagram); everyone sees changes and
   cursors live; undo/redo; export PNG/SVG; sticky note → issue. AC: only conversation members open or edit it;
   two people moving the same shape end in one consistent state; it is kept after the call ends.
+  ✅ **Done:** Whiteboard context (per-element versions, atomic batches, reload-and-reapply), migration 0047, API
+  0.36.0; SVG canvas with select/move, rectangle, ellipse, arrow, line, pen, text, sticky notes, colors, undo/redo,
+  live changes and named cursors, SVG/PNG export; e2e with two browsers drawing together. Sticky note → issue: next.
 - **S60 Shared file in a call** — "present to all": everyone opens the same Markdown doc or whiteboard, edits it
   together and comments on a line/element; the presenter can follow-me (everyone scrolls with them).
 - **S58 Ops** (P1) — coturn example in docker-compose/Helm docs, call metrics (`kyber_calls_active`), SFU ADR.

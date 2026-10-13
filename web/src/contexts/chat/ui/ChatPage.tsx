@@ -25,11 +25,11 @@ function usePeople() {
   return names;
 }
 
-/** A slot the app shell fills with another context's UI (the huddle of the open conversation). */
-export type HuddleSlot = (conversationId: string, me: string, names: Map<string, string>) => ReactNode;
+/** A slot the app shell fills with other contexts' UIs for the open conversation (huddle, whiteboards). */
+export type ConversationSlot = (conversationId: string, me: string, names: Map<string, string>) => ReactNode;
 
 /** Team chat (S53, ADR-0007): channels and DMs on the left, the open conversation and its threads on the right. */
-export function ChatPage({ huddle }: { huddle?: HuddleSlot }) {
+export function ChatPage({ extras }: { extras?: ConversationSlot }) {
   const { id } = useParams();
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: identityUseCases.me });
@@ -63,7 +63,7 @@ export function ChatPage({ huddle }: { huddle?: HuddleSlot }) {
       <Sidebar conversations={conversations.data ?? []} current={id} title={title} names={names} me={myId} />
       {id ? (
         <ConversationView key={id} id={id} conversation={current} title={current ? title(current) : ""} names={names} me={myId}
-          typers={typers} onThread={setThread} huddle={current?.member && myId ? huddle?.(id, myId, names) : undefined} />
+          typers={typers} onThread={setThread} extras={current?.member && myId ? extras?.(id, myId, names) : undefined} />
       ) : (
         <section className="chat-empty muted">Pick a channel or start a direct message.</section>
       )}
@@ -141,9 +141,9 @@ function Sidebar({ conversations, current, title, names, me }: {
   );
 }
 
-function ConversationView({ id, conversation, title, names, me, typers, onThread, huddle }: {
+function ConversationView({ id, conversation, title, names, me, typers, onThread, extras }: {
   id: string; conversation?: Conversation; title: string; names: Map<string, string>; me: string; typers: string[];
-  onThread: (id: string) => void; huddle?: ReactNode;
+  onThread: (id: string) => void; extras?: ReactNode;
 }) {
   const qc = useQueryClient();
   const history = useQuery({ queryKey: historyKey(id), queryFn: () => chatUseCases.history(id) });
@@ -176,7 +176,7 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
         <h1>{title}</h1>
         {conversation?.topic && <p className="muted">{conversation.topic}</p>}
       </header>
-      {huddle}
+      {extras}
       <div role="log" aria-label="Messages" className="chat-log">
         {(history.data?.length ?? 0) >= PAGE && !exhausted && <button className="ghost" onClick={() => void loadOlder()}>Load older</button>}
         {history.data?.length === 0 && <p className="muted">No messages yet. Say hello!</p>}
