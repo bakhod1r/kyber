@@ -32,4 +32,5 @@ Tabs like Jira's: Summary, Timeline, Backlog, Active sprints, Reports, List, For
 filters on the board and the list (and saved filters reused there).
 
 Status: D1 Summary, Active sprints, List and quick filters — done. D3 Timeline — done (start/due dates on
-issues, `startDate`/`dueDate`/`due` in JQL, the Timeline tab). Next: D4 Goals, D5 Docs, D6 Forms.
+issues, `startDate`/`dueDate`/`due` in JQL, the Timeline tab). D4 Goals — done (goal context; progress
+by JQL through the Search ACL; Goals tab). Next: D5 Docs, D6 Forms.

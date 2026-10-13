@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.30.0
+  version: 0.31.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1394,6 +1394,61 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/goals:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listGoals
+      description: The project's goals by target date (none last), each with the progress of its JQL over the issues the caller may see.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Goal" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createGoal
+      description: Project members add a goal; it starts on track and the caller owns it.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GoalInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Goal" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/goals/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: updateGoal
+      description: Project members change a goal loaded at `version` and report its status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf: [{ $ref: "#/components/schemas/GoalInput" }]
+              required: [version, status]
+              properties:
+                version: { type: integer }
+                status: { $ref: "#/components/schemas/GoalStatus" }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Goal" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteGoal
+      description: Project members delete a goal.
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/fields:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -1854,6 +1909,29 @@ components:
         assignee_id: { type: [string, "null"] }
         resolution: { type: string }
         points: { type: [number, "null"] }
+    GoalStatus: { type: string, enum: [on_track, at_risk, off_track, done] }
+    GoalInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        target_date: { type: string, description: "YYYY-MM-DD; empty = no target date." }
+        jql: { type: string, maxLength: 2000, description: "Issues of the project that measure the goal (no ORDER BY); empty = none." }
+    Goal:
+      type: object
+      required: [id, project_key, owner_id, name, target_date, jql, status, done, total, percent, version]
+      properties:
+        id: { type: string }
+        project_key: { type: string }
+        owner_id: { type: string }
+        name: { type: string }
+        target_date: { type: [string, "null"], format: date }
+        jql: { type: string }
+        status: { $ref: "#/components/schemas/GoalStatus" }
+        done: { type: integer, description: Issues the query finds in a Done status. }
+        total: { type: integer, description: Issues the query finds (that the caller may see). }
+        percent: { type: integer }
+        version: { type: integer }
     Filter:
       type: object
       required: [id, owner_id, name, jql, shared, version, mine]

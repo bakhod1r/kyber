@@ -46,6 +46,12 @@ import (
 	focusmemory "github.com/bakhod1r/kyber/internal/focus/infrastructure/memory"
 	focuspg "github.com/bakhod1r/kyber/internal/focus/infrastructure/postgres"
 	focushttp "github.com/bakhod1r/kyber/internal/focus/interfaces/httpapi"
+	goalapp "github.com/bakhod1r/kyber/internal/goal/application"
+	goaldomain "github.com/bakhod1r/kyber/internal/goal/domain"
+	goalacl "github.com/bakhod1r/kyber/internal/goal/infrastructure/acl"
+	goalmemory "github.com/bakhod1r/kyber/internal/goal/infrastructure/memory"
+	goalpg "github.com/bakhod1r/kyber/internal/goal/infrastructure/postgres"
+	goalhttp "github.com/bakhod1r/kyber/internal/goal/interfaces/httpapi"
 	identityapp "github.com/bakhod1r/kyber/internal/identity/application"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
 	"github.com/bakhod1r/kyber/internal/identity/infrastructure/argon2"
@@ -120,6 +126,7 @@ type deps struct {
 	audit         auditdomain.Repository
 	schemes       accessdomain.SchemeRepository
 	filters       searchdomain.FilterRepository
+	goals         goaldomain.Repository
 	sprints       agiledomain.Repository
 	boards        agiledomain.BoardRepository
 	versions      agiledomain.VersionRepository
@@ -193,7 +200,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), worklogs: issuememory.NewWorklogRepository(), fields: issuememory.NewCustomFieldRepository(),
-		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(),
+		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(),
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
@@ -240,7 +247,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), worklogs: issuepg.NewWorklogRepository(pool), fields: issuepg.NewCustomFieldRepository(pool),
-		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool),
+		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool),
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
@@ -297,6 +304,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	search := searchapp.NewService(searchapp.Deps{Projects: searchacl.NewProjects(projects), Issues: searchacl.NewIssues(issues),
 		Users: searchacl.NewUsers(d.users), Planning: searchacl.NewPlanning(agile), Filters: d.filters, NewID: id.New})
+	goals := goalapp.NewService(goalapp.Deps{Projects: goalacl.NewProjects(projects), Issues: goalacl.NewIssues(search), Goals: d.goals, NewID: id.New})
 	insights := insightsapp.NewService(insightsapp.Deps{
 		Repo: d.activity, Access: insightsacl.NewAccess(projectcompat.NewGate(projects, access, accessdomain.BrowseProjects)), Issues: insightsacl.NewIssues(issues),
 		Users: insightsacl.NewUsers(d.users), Sprints: insightsacl.NewSprints(agile), Now: time.Now, Log: log,
@@ -369,6 +377,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	issuehttp.New(issues, log).Register(api)
 	accesshttp.New(access, log).Register(api)
 	searchhttp.New(search, log).Register(api)
+	goalhttp.New(goals, log).Register(api)
 	agilehttp.New(agile, log).Register(api)
 	notifyhttp.New(notify, log).Register(api)
 	insightshttp.New(insights, log).Register(api)

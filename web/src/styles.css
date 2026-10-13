@@ -400,3 +400,15 @@ a.user:hover { text-decoration: underline; }
 .timeline-bar { height: 14px; min-width: 4px; border-radius: 4px; background: var(--accent); }
 .timeline-bar.type-epic { background: #8e44ad; }
 .timeline-bar.type-bug { background: #d64545; }
+
+/* Goals (D4) */
+.goal-list { list-style: none; padding: 0; display: grid; gap: 10px; }
+.goal { border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px; padding: 10px 12px; }
+.goal.status-on_track { border-left-color: #2e9e5b; }
+.goal.status-at_risk { border-left-color: #e0a100; }
+.goal.status-off_track { border-left-color: #d64545; }
+.goal.status-done { border-left-color: var(--accent); }
+.goal-progress { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--border) 60%, transparent); overflow: hidden; margin: 8px 0 4px; }
+.goal-progress > div { height: 100%; background: var(--accent); }
+.goals .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; }
+.goals .row.between { justify-content: space-between; align-items: center; }

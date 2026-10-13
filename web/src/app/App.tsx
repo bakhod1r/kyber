@@ -57,6 +57,7 @@ export function AppRoutes() {
       <Route path="/projects/:key/audit" element={<RequireUser><ProjectPage view="audit" /></RequireUser>} />
       <Route path="/projects/:key/summary" element={<RequireUser><ProjectPage view="summary" /></RequireUser>} />
       <Route path="/projects/:key/timeline" element={<RequireUser><ProjectPage view="timeline" /></RequireUser>} />
+      <Route path="/projects/:key/goals" element={<RequireUser><ProjectPage view="goals" /></RequireUser>} />
       <Route path="/projects/:key/list" element={<RequireUser><ProjectPage view="list" /></RequireUser>} />
       <Route path="/projects/:key/fields" element={<RequireUser><ProjectPage view="fields" /></RequireUser>} />
       <Route path="/projects/:key/board-settings" element={<RequireUser><ProjectPage view="board-settings" /></RequireUser>} />

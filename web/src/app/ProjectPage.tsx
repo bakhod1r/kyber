@@ -16,13 +16,14 @@ import { TelegramGroups } from "../contexts/notify/ui/TelegramGroups";
 import { WorkflowEditor } from "../contexts/issue/ui/WorkflowEditor";
 import { JiraImport } from "../contexts/importer/ui/ImportPage";
 import { Reports } from "../contexts/insights/ui/ReportsPage";
+import { Goals } from "../contexts/goal/ui/Goals";
 import { Timeline } from "../contexts/issue/ui/Timeline";
 import { ProjectSummary } from "../contexts/insights/ui/ProjectSummary";
 import { IssueList } from "../contexts/search/ui/IssueList";
 import { type QuickFilterState, QuickFilters } from "../contexts/search/ui/QuickFilters";
 import { useState } from "react";
 
-export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" }) {
+export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" }) {
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
   const project = projects.data?.find((p) => p.key === key);
@@ -52,6 +53,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         <NavLink to={`/projects/${encodeURIComponent(key)}/reports`}>Reports</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/list`}>List</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/releases`}>Releases</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/goals`}>Goals</NavLink>
       </nav>
       <nav className="tabs settings-tabs" aria-label="Project settings">
         <NavLink to={`/projects/${encodeURIComponent(key)}/workflow`}>Workflow</NavLink>
@@ -80,6 +82,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         {view === "fields" && <CustomFieldsAdmin projectKey={key} />}
         {view === "board-settings" && <BoardSettings projectKey={key} />}
         {view === "releases" && <Releases projectKey={key} />}
+        {view === "goals" && <Goals projectKey={key} />}
         {view === "permissions" && <PermissionScheme projectKey={key} />}
         {view === "notifications" && <TelegramGroups projectKey={key} />}
         <Members projectKey={key} />
