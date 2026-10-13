@@ -795,7 +795,7 @@ function Attachment({ file }: { file: NonNullable<Message["file"]> }) {
   return <a className="chat-file" href={file.url} download={file.name}>📎 {label}</a>;
 }
 
-function ThreadPanel({ parent, names, me, onClose }: { parent: string; names: Map<string, string>; me: string; onClose: () => void }) {
+export function ThreadPanel({ parent, names, me, onClose }: { parent: string; names: Map<string, string>; me: string; onClose: () => void }) {
   const qc = useQueryClient();
   const replies = useQuery({ queryKey: threadKey(parent), queryFn: () => chatUseCases.replies(parent) });
   const refresh = () => qc.invalidateQueries({ queryKey: threadKey(parent) });

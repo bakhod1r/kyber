@@ -3,7 +3,7 @@ import { request, seg } from "../../../shared/http";
 import { onConnect, subscribe } from "../../../shared/stream";
 
 export { onConnect };
-import type { Call, FollowView, IceServer, Media, PresentKind, Signal, SignalKind } from "../domain/model";
+import type { Call, FollowView, IceServer, Media, PresentKind, Reaction, Signal, SignalKind } from "../domain/model";
 
 const conv = (id: string) => `/api/v1/conversations/${seg(id)}/call`;
 const call = (id: string) => `/api/v1/calls/${seg(id)}`;
@@ -27,14 +27,18 @@ export const callGateway = {
     });
     if (!res.ok) throw new Error(`Uploading the recording failed (${res.status})`);
   },
+  raiseHand: (callId: string, raised: boolean) => request<Call>("PUT", `${call(callId)}/hand`, { raised }),
+  react: (callId: string, emoji: string) => request<undefined>("POST", `${call(callId)}/reactions`, { emoji }),
   ice: () => request<{ ice_servers: IceServer[] }>("GET", "/api/v1/calls/ice").then((r) => r.ice_servers),
 };
 
-/** call.updated, call.signal and call.follow from the shared realtime stream. */
-export function onCallEvents(onCall: (c: Call) => void, onSignal: (s: Signal) => void, onFollow: (v: FollowView) => void = () => {}): () => void {
-  return subscribe(["call.updated", "call.signal", "call.follow"], (type, data) => {
+/** call.updated, call.signal, call.follow and call.reaction from the shared realtime stream. */
+export function onCallEvents(onCall: (c: Call) => void, onSignal: (s: Signal) => void, onFollow: (v: FollowView) => void = () => {},
+  onReaction: (r: Reaction) => void = () => {}): () => void {
+  return subscribe(["call.updated", "call.signal", "call.follow", "call.reaction"], (type, data) => {
     if (type === "call.updated") onCall(data as Call);
     else if (type === "call.signal") onSignal(data as Signal);
+    else if (type === "call.reaction") onReaction(data as Reaction);
     else onFollow(data as FollowView);
   });
 }

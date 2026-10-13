@@ -67,8 +67,11 @@ Order: daily use first, then channel management, Jira integration, huddle extras
 
 ## 4. Huddles
 
-- **S75 Huddle chat and reactions** — chat inside the huddle (stored as a thread of the huddle_started message),
+- ✅ **S75 Huddle chat and reactions** — chat inside the huddle (stored as a thread of the huddle_started message),
   raise hand ✋ and emoji reactions shown over the tile. AC: reactions are ephemeral (not stored).
+  **Done:** `PUT /calls/{id}/hand` (stored on the participant, migration 0062), `POST /calls/{id}/reactions` →
+  live `call.reaction`; "💬 Huddle chat" is the thread of the call's "started a huddle" message, composed by the app
+  shell. API 0.54.0.
 - **S76 Join a meeting's huddle** — a meeting in the Time table can be linked to a channel; "Join" opens its
   huddle. AC: only for people invited to the meeting who may read the channel.
 - **S77 Recording transcripts (optional)** — a transcript and summary for a recording when a speech-to-text

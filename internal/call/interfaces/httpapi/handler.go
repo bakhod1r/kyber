@@ -37,6 +37,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/calls/{id}/presentation", h.stopPresenting)
 	mux.HandleFunc("POST /api/v1/calls/{id}/presentation/follow", h.follow)
 	mux.HandleFunc("PUT /api/v1/calls/{id}/recording", h.startRecording)
+	mux.HandleFunc("PUT /api/v1/calls/{id}/hand", h.hand)
+	mux.HandleFunc("POST /api/v1/calls/{id}/reactions", h.react)
 	mux.HandleFunc("DELETE /api/v1/calls/{id}/recording", h.stopRecording)
 }
 
@@ -58,7 +60,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeCallNotRecorder, true
 	case errors.Is(err, domain.ErrNotPresenter):
 		return httpx.CodeCallNotPresenter, true
-	case errors.Is(err, domain.ErrInvalidSignal), errors.Is(err, domain.ErrInvalidPresentation):
+	case errors.Is(err, domain.ErrInvalidSignal), errors.Is(err, domain.ErrInvalidPresentation), errors.Is(err, domain.ErrInvalidReaction):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -73,6 +75,7 @@ type ParticipantDTO struct {
 	Audio    bool   `json:"audio"`
 	Video    bool   `json:"video"`
 	Screen   bool   `json:"screen"`
+	Hand     bool   `json:"hand"`
 }
 
 type CallDTO struct {
@@ -108,7 +111,7 @@ func ToDTO(c *domain.Call) CallDTO {
 	}
 	for _, p := range c.Participants {
 		d.Participants = append(d.Participants, ParticipantDTO{UserID: string(p.User), JoinedAt: p.JoinedAt.Format(time.RFC3339Nano),
-			Audio: p.Media.Audio, Video: p.Media.Video, Screen: p.Media.Screen})
+			Audio: p.Media.Audio, Video: p.Media.Video, Screen: p.Media.Screen, Hand: p.Hand})
 	}
 	return d
 }
@@ -246,4 +249,37 @@ func (h *Handler) stopRecording(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+// hand: {"raised": true|false} (S75).
+func (h *Handler) hand(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Raised bool `json:"raised"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	c, err := h.svc.RaiseHand(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Raised)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+// react: {"emoji": "🎉"} shown to the others as call.reaction (S75).
+func (h *Handler) react(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Emoji string `json:"emoji"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := h.svc.React(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Emoji); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

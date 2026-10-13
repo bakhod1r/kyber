@@ -8,7 +8,9 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var (
@@ -37,6 +39,7 @@ type Participant struct {
 	User     UserID
 	JoinedAt time.Time
 	Media    Media
+	Hand     bool // raised hand (S75), until lowered
 }
 
 type Call struct {
@@ -220,6 +223,30 @@ func (c *Call) SetMedia(u UserID, m Media) error {
 		}
 	}
 	c.Participants[i].Media = m
+	return nil
+}
+
+// ErrInvalidReaction: a reaction is one emoji (a few characters).
+var ErrInvalidReaction = errors.New("a reaction is one emoji")
+
+// RaiseHand raises or lowers u's hand.
+func (c *Call) RaiseHand(u UserID, raised bool) error {
+	i := c.index(u)
+	if !c.Live() || i < 0 {
+		return ErrNotInCall
+	}
+	c.Participants[i].Hand = raised
+	return nil
+}
+
+// CanReact: participants send short emoji reactions to the others (ephemeral, S75).
+func (c *Call) CanReact(u UserID, emoji string) error {
+	if !c.Live() || c.index(u) < 0 {
+		return ErrNotInCall
+	}
+	if n := utf8.RuneCountInString(strings.TrimSpace(emoji)); n == 0 || n > 8 || strings.ContainsAny(emoji, " \t\n") {
+		return ErrInvalidReaction
+	}
 	return nil
 }
 

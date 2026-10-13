@@ -222,3 +222,35 @@ func TestHuddleRecording(t *testing.T) {
 		expect(t, res.StatusCode, 404, nil)
 	})
 }
+
+// S75: raised hands are on the participant; reactions reach the others live.
+func TestHuddleHandsAndReactions(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		eve := anon.signedIn("eve@x.uz")
+		_, devMe := dev.do("GET", "/api/v1/me", nil)
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "hands", "private": true})
+		conv := ch["id"].(string)
+		lead.do("POST", "/api/v1/conversations/"+conv+"/members", map[string]string{"user_id": devMe["id"].(string)})
+		_, call := lead.do("POST", "/api/v1/conversations/"+conv+"/call", nil)
+		dev.do("POST", "/api/v1/conversations/"+conv+"/call", nil)
+		base := "/api/v1/calls/" + call["id"].(string)
+		leadStream := lead.stream("")
+
+		code, c := dev.do("PUT", base+"/hand", map[string]bool{"raised": true})
+		expect(t, code, 200, c)
+		if p := c["participants"].([]any)[1].(map[string]any); p["hand"] != true {
+			t.Fatalf("hand = %v", c)
+		}
+		code, b := dev.do("POST", base+"/reactions", map[string]string{"emoji": "🎉"})
+		expect(t, code, 204, b)
+		if e := next(t, leadStream, "call.reaction"); !strings.Contains(e.data, `"emoji":"🎉"`) {
+			t.Fatalf("reaction event = %+v", e)
+		}
+		code, b = dev.do("POST", base+"/reactions", map[string]string{"emoji": "way too long for an emoji"})
+		expect(t, code, 422, b)
+		code, b = eve.do("POST", base+"/reactions", map[string]string{"emoji": "🎉"})
+		expect(t, code, 404, b)
+	})
+}

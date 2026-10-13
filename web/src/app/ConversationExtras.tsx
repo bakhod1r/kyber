@@ -8,6 +8,24 @@ import { DocPage } from "../contexts/docs/ui/DocPage";
 import { projectUseCases } from "../contexts/project/application";
 import { whiteboardUseCases } from "../contexts/whiteboard/application";
 import { WhiteboardBoard, Whiteboards } from "../contexts/whiteboard/ui/Whiteboards";
+import { type Call } from "../contexts/call/application";
+import { chatUseCases } from "../contexts/chat/application";
+import { ThreadPanel } from "../contexts/chat/ui/ChatPage";
+
+/** The huddle's chat (S75): the thread of the conversation's "started a huddle" message for this call. */
+function HuddleChat({ call, me, names }: { call: Call; me: string; names: Map<string, string> }) {
+  const started = useQuery({
+    queryKey: ["chat", "huddle-start", call.id],
+    queryFn: async () => {
+      const at = Date.parse(call.started_at);
+      const page = await chatUseCases.history(call.conversation_id);
+      return page.find((m) => m.kind === "huddle_started" && Math.abs(Date.parse(m.created_at) - at) < 60_000)?.id ?? null;
+    },
+    refetchInterval: (q) => (q.state.data ? false : 2000), // the system message is written by the relay
+  });
+  if (!started.data) return <p className="muted">Opening the huddle chat…</p>;
+  return <ThreadPanel parent={started.data} names={names} me={me} onClose={() => {}} />;
+}
 
 /**
  * The huddle and whiteboards of the open conversation, composed by the app shell: the huddle can present
@@ -30,7 +48,8 @@ export function ConversationExtras({ conversationId, me, names }: { conversation
     p.kind === "whiteboard" ? <WhiteboardBoard id={p.ref} me={me} names={names} /> : <DocPage id={p.ref} />;
   return (
     <div className="conversation-extras">
-      <Huddle conversationId={conversationId} me={me} names={names} presentables={presentables} renderPresentation={render} />
+      <Huddle conversationId={conversationId} me={me} names={names} presentables={presentables} renderPresentation={render}
+        renderChat={(call) => <HuddleChat call={call} me={me} names={names} />} />
       <Whiteboards conversationId={conversationId} me={me} names={names} />
     </div>
   );

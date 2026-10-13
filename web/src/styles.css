@@ -553,3 +553,6 @@ label.button { cursor: pointer; }
 .chat-sidebar li { display: flex; align-items: center; gap: 4px; }
 .chat-sidebar li > a { flex: 1; }
 .conv-options { width: 2.2em; padding: 0; border: none; background: transparent; }
+.huddle-tile { position: relative; }
+.huddle-reaction { position: absolute; top: 6px; right: 8px; font-size: 32px; animation: huddle-pop 4s ease-out forwards; }
+@keyframes huddle-pop { 0% { transform: scale(.5); opacity: 0; } 10% { transform: scale(1.2); opacity: 1; } 80% { opacity: 1; } 100% { transform: translateY(-30px); opacity: 0; } }

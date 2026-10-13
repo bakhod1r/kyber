@@ -31,8 +31,8 @@ func writeParticipants(ctx context.Context, tx pgx.Tx, c *domain.Call) error {
 		return err
 	}
 	for _, p := range c.Participants {
-		if _, err := tx.Exec(ctx, `INSERT INTO call_participants (call_id, user_id, joined_at, audio, video, screen) VALUES ($1, $2, $3, $4, $5, $6)`,
-			string(c.ID), string(p.User), p.JoinedAt, p.Media.Audio, p.Media.Video, p.Media.Screen); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO call_participants (call_id, user_id, joined_at, audio, video, screen, hand) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			string(c.ID), string(p.User), p.JoinedAt, p.Media.Audio, p.Media.Video, p.Media.Screen, p.Hand); err != nil {
 			return err
 		}
 	}
@@ -117,14 +117,14 @@ func (r *Repository) one(ctx context.Context, where string, arg string) (*domain
 	if pKind != nil && pRef != nil && pBy != nil {
 		c.Presentation = &domain.Presentation{Kind: domain.PresentKind(*pKind), Ref: *pRef, By: domain.UserID(*pBy)}
 	}
-	rows, err := r.pool.Query(ctx, `SELECT user_id, joined_at, audio, video, screen FROM call_participants WHERE call_id = $1
+	rows, err := r.pool.Query(ctx, `SELECT user_id, joined_at, audio, video, screen, hand FROM call_participants WHERE call_id = $1
 		ORDER BY joined_at, user_id`, string(c.ID))
 	if err != nil {
 		return nil, err
 	}
 	c.Participants, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Participant, error) {
 		var p domain.Participant
-		err := row.Scan(&p.User, &p.JoinedAt, &p.Media.Audio, &p.Media.Video, &p.Media.Screen)
+		err := row.Scan(&p.User, &p.JoinedAt, &p.Media.Audio, &p.Media.Video, &p.Media.Screen, &p.Hand)
 		p.JoinedAt = p.JoinedAt.UTC()
 		return p, err
 	})

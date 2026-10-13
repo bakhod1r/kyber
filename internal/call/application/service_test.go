@@ -40,6 +40,10 @@ func (t *told) Notify(_ context.Context, to []string, c *domain.Call) {
 
 func (t *told) Follow(context.Context, []string, *domain.Call, app.View) {}
 
+func (t *told) React(_ context.Context, to []string, _ *domain.Call, from, emoji string) {
+	*t = append(*t, fmt.Sprintf("react %s %s→%v", from, emoji, to))
+}
+
 func setup() (*app.Service, context.Context, *told) {
 	n := 0
 	tl := &told{}
@@ -136,5 +140,26 @@ func TestSignalRelay(t *testing.T) {
 	}
 	if len(*r) != 1 || (*r)[0].To != "dev" || (*r)[0].Data != "sdp" {
 		t.Fatalf("relayed = %+v", *r)
+	}
+}
+
+// S75: raise a hand (stored on the participant) and send reactions to the others (not stored).
+func TestHandsAndReactions(t *testing.T) {
+	svc, ctx, tl := setup()
+	c, _ := svc.Join(ctx, "lead", "dev")
+	_, _ = svc.Join(ctx, "dev", "dev")
+	got, err := svc.RaiseHand(ctx, "dev", string(c.ID), true)
+	if err != nil || !got.Participants[1].Hand {
+		t.Fatalf("raise = %+v %v", got, err)
+	}
+	*tl = nil
+	if err := svc.React(ctx, "dev", string(c.ID), "🎉"); err != nil {
+		t.Fatal(err)
+	}
+	if len(*tl) != 1 || (*tl)[0] != "react dev 🎉→[lead]" {
+		t.Fatalf("told = %v", *tl)
+	}
+	if err := svc.React(ctx, "qa", string(c.ID), "🎉"); err == nil {
+		t.Fatal("someone outside the call reacted")
 	}
 }

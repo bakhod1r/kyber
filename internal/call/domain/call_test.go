@@ -177,3 +177,28 @@ func TestRecording(t *testing.T) {
 		t.Fatalf("after the recorder left = %+v", c.Recording)
 	}
 }
+
+// S75: raised hands stay until lowered (or leaving); reactions are checked, never stored.
+func TestHandsAndReactions(t *testing.T) {
+	t0 := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	c := domain.Start("k-1", "ws", "c-1", "a", t0)
+	_ = c.Join("b", t0)
+	if err := c.RaiseHand("x", true); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("outsider raises = %v", err)
+	}
+	if err := c.RaiseHand("b", true); err != nil || !c.Participants[1].Hand {
+		t.Fatalf("raise = %v %+v", err, c.Participants)
+	}
+	if err := c.RaiseHand("b", false); err != nil || c.Participants[1].Hand {
+		t.Fatalf("lower = %v", err)
+	}
+	if err := c.CanReact("b", "🎉"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.CanReact("b", "not an emoji at all"); !errors.Is(err, domain.ErrInvalidReaction) {
+		t.Fatalf("long reaction = %v", err)
+	}
+	if err := c.CanReact("x", "🎉"); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("outsider reacts = %v", err)
+	}
+}

@@ -6,6 +6,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/call/domain"
@@ -28,6 +29,8 @@ type Conversations interface {
 type Notifier interface {
 	Notify(ctx context.Context, to []string, c *domain.Call)
 	Follow(ctx context.Context, to []string, c *domain.Call, view View)
+	// React shows a participant's emoji to the others (S75, not stored).
+	React(ctx context.Context, to []string, c *domain.Call, from, emoji string)
 }
 
 // View is the presenter's position in the presented file (fractions of its size, and zoom).
@@ -40,9 +43,10 @@ type Signals interface {
 
 type nobody struct{}
 
-func (nobody) Notify(context.Context, []string, *domain.Call)       {}
-func (nobody) Follow(context.Context, []string, *domain.Call, View) {}
-func (nobody) Relay(context.Context, domain.Signal)                 {}
+func (nobody) Notify(context.Context, []string, *domain.Call)                {}
+func (nobody) Follow(context.Context, []string, *domain.Call, View)          {}
+func (nobody) React(context.Context, []string, *domain.Call, string, string) {}
+func (nobody) Relay(context.Context, domain.Signal)                          {}
 
 type Deps struct {
 	Calls         domain.Repository
@@ -198,6 +202,30 @@ func (s *Service) Follow(ctx context.Context, actor, id string, v View) error {
 		}
 	}
 	s.d.Notifier.Follow(ctx, to, c, v)
+	return nil
+}
+
+// RaiseHand raises or lowers the actor's hand in the call (S75).
+func (s *Service) RaiseHand(ctx context.Context, actor, id string, raised bool) (*domain.Call, error) {
+	return s.change(ctx, actor, id, func(c *domain.Call) error { return c.RaiseHand(domain.UserID(actor), raised) })
+}
+
+// React shows an emoji from the actor to the other participants (not stored).
+func (s *Service) React(ctx context.Context, actor, id, emoji string) error {
+	c, _, err := s.load(ctx, actor, id)
+	if err != nil {
+		return err
+	}
+	if err := c.CanReact(domain.UserID(actor), emoji); err != nil {
+		return err
+	}
+	var to []string
+	for _, p := range c.Participants {
+		if string(p.User) != actor {
+			to = append(to, string(p.User))
+		}
+	}
+	s.d.Notifier.React(ctx, to, c, actor, strings.TrimSpace(emoji))
 	return nil
 }
 

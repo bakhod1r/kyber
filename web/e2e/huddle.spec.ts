@@ -56,6 +56,19 @@ test("two people meet in a huddle with camera and screen share", async ({ browse
   await expect(b.getByText("Ali is presenting")).toBeVisible();
   await playing(b, "Ali's screen");
 
+  // S75: Bobur raises his hand and reacts; both chat in the huddle's thread.
+  await b.getByRole("button", { name: "✋ Raise hand" }).click();
+  await expect(a.getByRole("list", { name: "Participants" }).getByLabel("hand raised")).toBeVisible();
+  await b.getByRole("button", { name: "React 🎉" }).click();
+  await expect(a.getByLabel("Bobur reacted 🎉")).toBeVisible();
+  await b.getByRole("button", { name: "Lower hand" }).click();
+  await expect(a.getByRole("list", { name: "Participants" }).getByLabel("hand raised")).toHaveCount(0);
+  await b.getByRole("button", { name: "💬 Huddle chat" }).click();
+  await b.getByRole("textbox", { name: "Reply" }).fill("can you zoom in?");
+  await b.getByRole("textbox", { name: "Reply" }).press("Enter");
+  await a.getByRole("button", { name: "💬 Huddle chat" }).click();
+  await expect(a.getByRole("region", { name: "Huddle" })).toContainText("can you zoom in?");
+
   await b.getByRole("button", { name: "Leave" }).click();
   await expect(a.getByRole("list", { name: "Participants" })).not.toContainText("Bobur");
   await a.getByRole("button", { name: "Leave" }).click();

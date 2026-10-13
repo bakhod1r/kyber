@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
-  fromFraction, MAX_PARTICIPANTS, type Platform, type Presentable, type Presentation, presenter, toFraction, useHuddle, useSpeaking,
+  type Call, fromFraction, MAX_PARTICIPANTS, type Platform, type Presentable, type Presentation, presenter, REACTIONS, toFraction, useHuddle, useSpeaking,
 } from "../application";
 
 /** The app shell renders presented files (docs, whiteboards), which belong to other contexts. */
@@ -67,14 +67,17 @@ function StreamAudio({ stream }: { stream?: MediaStream }) {
  * Zoom-style huddle of a conversation (S57): start or join, then a grid of participants with microphone,
  * camera and screen-share controls. Media flows browser to browser (WebRTC mesh, ADR-0009).
  */
-export function Huddle({ conversationId, me, names, platform, presentables = [], renderPresentation }: {
+export function Huddle({ conversationId, me, names, platform, presentables = [], renderPresentation, renderChat }: {
   conversationId: string; me: string; names: Map<string, string>; platform?: Platform;
   /** Docs and whiteboards that can be presented; renderPresentation draws the presented one. */
   presentables?: Presentable[]; renderPresentation?: RenderPresentation;
+  /** The huddle's chat (S75), composed by the app shell. */
+  renderChat?: (call: Call) => ReactNode;
 }) {
   const h = useHuddle(conversationId, me, platform);
   const { call, state } = h;
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
   const remoteAudio: Record<string, MediaStream | undefined> = {};
   for (const [id, r] of Object.entries(state.remotes)) remoteAudio[id] = r.camera;
   const speaking = useSpeaking({ ...remoteAudio, [me]: state.joined && state.media.audio ? state.local : undefined });
@@ -94,6 +97,7 @@ export function Huddle({ conversationId, me, names, platform, presentables = [],
     );
   }
 
+  const mine = call?.participants.find((p) => p.user_id === me);
   const sharer = presenter(call);
   const shared = sharer === me ? state.screen : sharer ? state.remotes[sharer]?.screen : undefined;
   const pickDevices = async () => setDevices(devices.length ? [] : await h.devices().catch(() => []));
@@ -118,10 +122,14 @@ export function Huddle({ conversationId, me, names, platform, presentables = [],
           const stream = p.user_id === me ? state.local : state.remotes[p.user_id]?.camera;
           return (
             <li key={p.user_id} className={`huddle-tile ${speaking.has(p.user_id) ? "speaking" : ""}`}>
+              {h.reactions.filter((r) => r.from === p.user_id).slice(-1).map((r) => (
+                <span key={r.at} className="huddle-reaction" aria-label={`${name(p.user_id)} reacted ${r.emoji}`}>{r.emoji}</span>
+              ))}
               {p.video ? <StreamVideo key={stream?.getVideoTracks()[0]?.id ?? "none"} stream={stream} muted={p.user_id === me} label={`${name(p.user_id)}'s camera`} /> : <span className="avatar">{name(p.user_id).slice(0, 1)}</span>}
               {p.user_id !== me && <StreamAudio stream={stream} />}
               <span className="huddle-name">
                 {name(p.user_id)} {!p.audio && <span aria-label="muted">🔇</span>} {p.screen && <span aria-label="sharing screen">🖥️</span>}
+                {p.hand && <span aria-label="hand raised"> ✋</span>}
               </span>
             </li>
           );
@@ -142,6 +150,11 @@ export function Huddle({ conversationId, me, names, platform, presentables = [],
         )}
         {!call?.recording && <button onClick={() => void h.startRecording().catch(() => {})}>Record</button>}
         {call?.recording?.by === me && <button aria-pressed onClick={() => void h.stopRecording()}>Stop recording</button>}
+        <button aria-pressed={!!mine?.hand} onClick={() => void h.raiseHand(!mine?.hand)}>{mine?.hand ? "Lower hand" : "✋ Raise hand"}</button>
+        <span className="row" role="group" aria-label="Reactions">
+          {REACTIONS.map((e) => <button key={e} className="ghost" aria-label={`React ${e}`} onClick={() => void h.react(e)}>{e}</button>)}
+        </span>
+        {renderChat && call && <button className="ghost" aria-expanded={chatOpen} onClick={() => setChatOpen((v) => !v)}>💬 Huddle chat</button>}
         <button className="ghost" onClick={() => void pickDevices()}>Devices</button>
         <button className="danger" onClick={() => void h.leave()}>Leave</button>
       </div>
@@ -163,6 +176,7 @@ export function Huddle({ conversationId, me, names, platform, presentables = [],
           </label>
         </div>
       )}
+      {chatOpen && renderChat && call && renderChat(call)}
       {state.error && <p role="alert" className="error">{state.error}</p>}
     </section>
   );

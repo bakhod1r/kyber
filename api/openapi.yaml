@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.53.0
+  version: 0.54.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -554,7 +554,7 @@ paths:
       operationId: openStream
       description: |
         Server-Sent Events of this workspace for the caller (`message.posted`, `message.edited`,
-        `message.deleted`, `message.reacted`, `message.pinned`, `typing`, `conversation.read` (DMs: who read up to when), `conversation.updated` (a channel was renamed, archived or its members changed), `call.updated`, `call.signal`, `call.follow`, `whiteboard.ops`, `whiteboard.cursor`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
+        `message.deleted`, `message.reacted`, `message.pinned`, `typing`, `conversation.read` (DMs: who read up to when), `conversation.updated` (a channel was renamed, archived or its members changed), `call.updated`, `call.signal`, `call.follow`, `call.reaction` (an emoji from a participant, not stored), `whiteboard.ops`, `whiteboard.cursor`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
         what was missed. Keeping the stream open marks the caller online.
       parameters:
         - { name: Last-Event-ID, in: header, schema: { type: string } }
@@ -911,6 +911,35 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/hand:
+    put:
+      operationId: raiseHand
+      description: Raises or lowers my hand in the huddle (S75).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [raised], properties: { raised: { type: boolean } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/reactions:
+    post:
+      operationId: reactInCall
+      description: Shows an emoji to the others in the huddle as `call.reaction` (not stored).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [emoji], properties: { emoji: { type: string } } } } }
+      responses:
+        "204": { description: Sent }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/messages/{id}/save:
     put:
       operationId: saveMessage
@@ -3048,13 +3077,14 @@ components:
           type: array
           items:
             type: object
-            required: [user_id, joined_at, audio, video, screen]
+            required: [user_id, joined_at, audio, video, screen, hand]
             properties:
               user_id: { type: string }
               joined_at: { type: string, format: date-time }
               audio: { type: boolean }
               video: { type: boolean }
               screen: { type: boolean }
+              hand: { type: boolean, description: "A raised hand (S75), until lowered" }
     Conversation:
       type: object
       required: [id, kind, name, topic, private, member_ids, member, unread, created_at, owner_id, admin_ids, archived, project_key]

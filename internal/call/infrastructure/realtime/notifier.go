@@ -37,3 +37,8 @@ func (n Notifier) Relay(ctx context.Context, s domain.Signal) {
 func (n Notifier) Follow(ctx context.Context, to []string, c *domain.Call, v application.View) {
 	_ = n.hub.Publish(tenant.Workspace(ctx), to, "call.follow", map[string]any{"call_id": string(c.ID), "x": v.X, "y": v.Y, "zoom": v.Zoom})
 }
+
+// React sends call.reaction (an emoji from a participant) to the others.
+func (n Notifier) React(ctx context.Context, to []string, c *domain.Call, from, emoji string) {
+	_ = n.hub.Publish(tenant.Workspace(ctx), to, "call.reaction", map[string]any{"call_id": string(c.ID), "from": from, "emoji": emoji})
+}

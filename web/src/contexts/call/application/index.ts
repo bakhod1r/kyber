@@ -1,7 +1,7 @@
 // call: application layer — the huddle of a conversation as a React hook over HuddleEngine.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { Call, FollowView, PresentKind } from "../domain/model";
+import type { Call, FollowView, PresentKind, Reaction } from "../domain/model";
 import { callGateway, onCallEvents, onConnect } from "../infrastructure/gateway";
 import { type Recorder, startRecorder } from "../infrastructure/recorder";
 import { browserPlatform } from "../infrastructure/webrtc";
@@ -20,6 +20,12 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
   const engine = useMemo(() => new HuddleEngine(user, callGateway, platform), [user, platform]);
   const state = useSyncExternalStore((fn) => engine.onChange(fn), () => engine.snapshot);
   const [view, setView] = useState<FollowView | null>(null);
+  const [reactions, setReactions] = useState<(Reaction & { at: number })[]>([]);
+  const showReaction = (r: Reaction) => {
+    const at = Date.now();
+    setReactions((list) => [...list.filter((x) => at - x.at < 4000), { ...r, at }]);
+    setTimeout(() => setReactions((list) => list.filter((x) => x.at !== at)), 4000);
+  };
 
   useEffect(
     () =>
@@ -34,6 +40,9 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
         (s) => void engine.onSignal(s),
         (v) => {
           if (v.call_id === engine.snapshot.call?.id) setView(v);
+        },
+        (r) => {
+          if (r.call_id === engine.snapshot.call?.id) showReaction(r);
         },
       ),
     [conversationId, engine, qc],
@@ -89,6 +98,18 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
     stopPresenting: async () => {
       const id = engine.snapshot.call?.id;
       if (id) engine.update(await callGateway.stopPresenting(id));
+    },
+    /** Recent reactions (S75), newest last; each fades after 4 s. */
+    reactions,
+    raiseHand: async (raised: boolean) => {
+      const id = engine.snapshot.call?.id;
+      if (id) engine.update(await callGateway.raiseHand(id, raised));
+    },
+    react: async (emoji: string) => {
+      const id = engine.snapshot.call?.id;
+      if (!id) return;
+      showReaction({ call_id: id, from: user, emoji });
+      await callGateway.react(id, emoji).catch(() => {});
     },
     /** The recording is being uploaded (S62). */
     saving,

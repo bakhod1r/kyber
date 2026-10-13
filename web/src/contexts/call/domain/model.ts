@@ -1,7 +1,10 @@
 // call: domain model — huddles (ADR-0009). Media flows browser to browser over a WebRTC mesh; the server
 // keeps the participants and relays signaling. Pure types and rules, no I/O.
 export type Media = { audio: boolean; video: boolean; screen: boolean };
-export type Participant = Media & { user_id: string; joined_at: string };
+export type Participant = Media & { user_id: string; joined_at: string; /** S75 */ hand?: boolean };
+/** An emoji someone in the huddle sent (S75); shown for a few seconds, never stored. */
+export type Reaction = { call_id: string; from: string; emoji: string };
+export const REACTIONS = ["👍", "🎉", "😂", "❤️", "👏", "🙏"];
 export type PresentKind = "doc" | "whiteboard";
 export type Presentation = { kind: PresentKind; ref: string; by: string };
 export type Call = {
