@@ -30,3 +30,7 @@ func TestManagementContract(t *testing.T) { repotest.RunManagement(t, memory.New
 func TestGroupsContract(t *testing.T) { repotest.RunGroups(t, memory.NewGroups()) }
 
 func TestPrefsContract(t *testing.T) { repotest.RunPrefs(t, memory.NewRepository(), memory.NewPrefs()) }
+
+func TestBookmarksContract(t *testing.T) {
+	repotest.RunBookmarks(t, memory.NewRepository(), memory.NewBookmarks())
+}

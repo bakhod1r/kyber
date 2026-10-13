@@ -585,3 +585,37 @@ func RunPrefs(t *testing.T, r domain.Repository, prefs domain.Prefs) {
 		t.Fatalf("other workspace = %+v", l)
 	}
 }
+
+// RunBookmarks checks bookmarks (S79) over the store of r.
+func RunBookmarks(t *testing.T, r domain.Repository, bm domain.Bookmarks) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	ch, _ := domain.NewChannel(cid(95), WS, "bm", "", false, Lead, t0)
+	if err := r.Create(ctx, ch); err != nil {
+		t.Fatal(err)
+	}
+	bid := func(n int) domain.BookmarkID { return domain.BookmarkID(fmt.Sprintf("78000000-0000-4000-8000-%012d", n)) }
+	a, _ := domain.NewBookmark(bid(1), WS, ch.ID, domain.BookmarkDoc, "75000000-0000-4000-8000-000000000001", "Design", Lead, t0)
+	b, _ := domain.NewBookmark(bid(2), WS, ch.ID, domain.BookmarkLink, "https://ci.example", "CI", Dev, t0.Add(time.Minute))
+	for _, x := range []*domain.Bookmark{a, b} {
+		if err := bm.Add(ctx, x); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := bm.In(ctx, ch.ID)
+	if err != nil || len(list) != 2 || list[0].Title != "Design" || list[1].Ref != "https://ci.example" || list[1].AddedBy != Dev ||
+		list[0].Kind != domain.BookmarkDoc || !list[1].AddedAt.Equal(t0.Add(time.Minute)) || list[0].Workspace != WS {
+		t.Fatalf("In = %+v %v", list, err)
+	}
+	if got, err := bm.ByID(ctx, b.ID); err != nil || got.Conversation != ch.ID {
+		t.Fatalf("ByID = %+v %v", got, err)
+	}
+	if err := bm.Remove(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []domain.BookmarkID{a.ID, "nope"} {
+		if _, err := bm.ByID(ctx, id); !errors.Is(err, domain.ErrBookmarkNotFound) {
+			t.Fatalf("ByID %s = %v", id, err)
+		}
+	}
+}

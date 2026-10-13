@@ -66,6 +66,7 @@ export function ChatPage({ extras, activity, commands, issueMaker }: {
   useChatStream((e: ChatEvent) => {
     if (e.type === "conversation.updated") {
       void qc.invalidateQueries({ queryKey: ["chat", "conversations"] });
+      void qc.invalidateQueries({ queryKey: ["chat", "bookmarks", e.conversation_id] });
       return;
     }
     if (e.type === "conversation.read") {

@@ -790,3 +790,38 @@ func TestRecordingTranscript(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// S79: members keep docs and links in the channel's header; the one who added it or a manager removes it.
+func TestBookmarks(t *testing.T) {
+	svc, ctx, ev := setupWithEvents(t)
+	svc = svc.WithBookmarks(memory.NewBookmarks())
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "general"})
+	id := string(ch.ID)
+	if _, err := svc.AddBookmark(ctx, "dev", id, domain.BookmarkLink, "https://ci.example", "CI"); !errors.Is(err, domain.ErrNotMember) {
+		t.Fatalf("non-member adds = %v", err)
+	}
+	_ = svc.Join(ctx, "dev", id)
+	_ = svc.Join(ctx, "qa", id)
+	*ev = nil
+	b, err := svc.AddBookmark(ctx, "dev", id, domain.BookmarkLink, "https://ci.example", "CI")
+	if err != nil || len(*ev) != 1 {
+		t.Fatalf("add = %+v %v %v", b, err, *ev)
+	}
+	if list, _ := svc.Bookmarks(ctx, "qa", id); len(list) != 1 {
+		t.Fatalf("list = %+v", list)
+	}
+	if err := svc.RemoveBookmark(ctx, "qa", string(b.ID)); !errors.Is(err, domain.ErrNotManager) {
+		t.Fatalf("someone else removes = %v", err)
+	}
+	if err := svc.RemoveBookmark(ctx, "lead", string(b.ID)); err != nil {
+		t.Fatalf("owner removes = %v", err)
+	}
+	for i := 0; i < domain.MaxBookmarks; i++ {
+		if _, err := svc.AddBookmark(ctx, "dev", id, domain.BookmarkLink, "https://x.example", "x"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := svc.AddBookmark(ctx, "dev", id, domain.BookmarkLink, "https://x.example", "x"); !errors.Is(err, domain.ErrTooManyBookmarks) {
+		t.Fatalf("21st = %v", err)
+	}
+}

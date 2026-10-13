@@ -63,6 +63,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/conversations/{id}/admins/{user}", h.removeAdmin)
 	mux.HandleFunc("DELETE /api/v1/conversations/{id}/members/{user}", h.removeMember)
 	mux.HandleFunc("PUT /api/v1/conversations/{id}/project", h.linkProject)
+	mux.HandleFunc("GET /api/v1/conversations/{id}/bookmarks", h.bookmarks)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/bookmarks", h.addBookmark)
+	mux.HandleFunc("DELETE /api/v1/bookmarks/{id}", h.removeBookmark)
 	mux.HandleFunc("GET /api/v1/conversations/{id}/receipts", h.receipts)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/scheduled", h.schedule)
 	mux.HandleFunc("GET /api/v1/chat/scheduled", h.scheduledList)
@@ -82,6 +85,8 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeConversationNotFound, true
 	case errors.Is(err, domain.ErrHandleTaken):
 		return httpx.CodeGroupHandleTaken, true
+	case errors.Is(err, domain.ErrBookmarkNotFound):
+		return httpx.CodeBookmarkNotFound, true
 	case errors.Is(err, domain.ErrGroupNotFound):
 		return httpx.CodeGroupNotFound, true
 	case errors.Is(err, domain.ErrScheduledNotFound):
@@ -96,7 +101,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
-		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle), errors.Is(err, domain.ErrInvalidPref), errors.Is(err, domain.ErrInvalidProject):
+		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle), errors.Is(err, domain.ErrInvalidPref), errors.Is(err, domain.ErrInvalidProject), errors.Is(err, domain.ErrInvalidBookmark), errors.Is(err, domain.ErrTooManyBookmarks):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -928,4 +933,56 @@ func (h *Handler) linkProject(w http.ResponseWriter, r *http.Request) {
 	}
 	c, err := h.svc.LinkProject(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Project)
 	h.managed(w, r, c, err)
+}
+
+type bookmarkDTO struct {
+	ID      string    `json:"id"`
+	Kind    string    `json:"kind"`
+	Ref     string    `json:"ref"`
+	Title   string    `json:"title"`
+	AddedBy string    `json:"added_by"`
+	AddedAt time.Time `json:"added_at"`
+}
+
+func toBookmark(b *domain.Bookmark) bookmarkDTO {
+	return bookmarkDTO{ID: string(b.ID), Kind: string(b.Kind), Ref: b.Ref, Title: b.Title, AddedBy: string(b.AddedBy), AddedAt: b.AddedAt}
+}
+
+func (h *Handler) bookmarks(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.Bookmarks(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := make([]bookmarkDTO, len(list))
+	for i, b := range list {
+		out[i] = toBookmark(b)
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+func (h *Handler) addBookmark(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Kind  string `json:"kind"`
+		Ref   string `json:"ref"`
+		Title string `json:"title"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	b, err := h.svc.AddBookmark(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), domain.BookmarkKind(in.Kind), in.Ref, in.Title)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, toBookmark(b))
+}
+
+func (h *Handler) removeBookmark(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.RemoveBookmark(r.Context(), auth.Actor(r.Context()), r.PathValue("id")); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

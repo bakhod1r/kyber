@@ -50,3 +50,8 @@ func TestPrefsContract(t *testing.T) {
 	pool := dbtest.New(t)
 	repotest.RunPrefs(t, postgres.NewRepository(pool), postgres.NewPrefs(pool))
 }
+
+func TestBookmarksContract(t *testing.T) {
+	pool := dbtest.New(t)
+	repotest.RunBookmarks(t, postgres.NewRepository(pool), postgres.NewBookmarks(pool))
+}

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.56.0
+  version: 0.57.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1123,6 +1123,38 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/bookmarks:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: listBookmarks
+      description: Docs and links kept at hand in the conversation's header (S79), in the order added.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Bookmark" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: addBookmark
+      description: A member adds a doc (by id) or an http(s) link; at most 20 per conversation.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [kind, ref, title], properties: { kind: { type: string, enum: [doc, link] }, ref: { type: string }, title: { type: string } } } } }
+      responses:
+        "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/Bookmark" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/bookmarks/{id}:
+    delete:
+      operationId: removeBookmark
+      description: Whoever added it, or the channel's owner and admins.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/members/{user}:
     delete:
       operationId: removeChannelMember
@@ -3010,6 +3042,16 @@ components:
         updated_by: { type: string }
         updated_at: { type: string, format: date-time }
         deleted: { type: boolean }
+    Bookmark:
+      type: object
+      required: [id, kind, ref, title, added_by, added_at]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [doc, link] }
+        ref: { type: string, description: "The doc id, or the URL" }
+        title: { type: string }
+        added_by: { type: string }
+        added_at: { type: string, format: date-time }
     ConversationPrefs:
       type: object
       required: [conversation_id, level, section]

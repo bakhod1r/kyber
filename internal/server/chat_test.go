@@ -637,3 +637,27 @@ func TestProjectChannels(t *testing.T) {
 		}
 	})
 }
+
+// S79: bookmarks in a conversation's header.
+func TestBookmarks(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "general"})
+		url := "/api/v1/conversations/" + ch["id"].(string) + "/bookmarks"
+		code, b := lead.do("POST", url, map[string]string{"kind": "link", "ref": "javascript:alert(1)", "title": "x"})
+		expect(t, code, 422, b)
+		code, bm := lead.do("POST", url, map[string]string{"kind": "link", "ref": "https://ci.example", "title": "CI"})
+		expect(t, code, 201, bm)
+		code, b = dev.do("POST", url, map[string]string{"kind": "doc", "ref": "abc", "title": "Design"})
+		expect(t, code, 403, b) // not a member yet
+		_, list := dev.do("GET", url, nil)
+		if items := list["items"].([]any); len(items) != 1 || items[0].(map[string]any)["title"] != "CI" {
+			t.Fatalf("bookmarks = %v", list)
+		}
+		code, b = dev.do("DELETE", "/api/v1/bookmarks/"+bm["id"].(string), nil)
+		expect(t, code, 403, b)
+		code, b = lead.do("DELETE", "/api/v1/bookmarks/"+bm["id"].(string), nil)
+		expect(t, code, 204, b)
+	})
+}

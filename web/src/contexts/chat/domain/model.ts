@@ -90,6 +90,9 @@ export function sections(convs: Conversation[], prefs: ConversationPrefs[]): { t
 /** A user group (S70): @handle notifies its members. */
 export type UserGroup = { id: string; handle: string; name: string; member_ids: string[]; created_by: string; created_at: string };
 
+/** A doc or link kept in a conversation's header (S79). */
+export type Bookmark = { id: string; kind: "doc" | "link"; ref: string; title: string; added_by: string; added_at: string };
+
 /** A clip (S78) is at most five minutes long. */
 export const MAX_CLIP_MS = 5 * 60 * 1000;
 export const clipName = (kind: "video" | "voice", at: Date) =>

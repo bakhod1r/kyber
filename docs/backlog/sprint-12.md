@@ -88,7 +88,9 @@ Order: daily use first, then channel management, Jira integration, huddle extras
 - ✅ **S78 Clips** — record a short video or voice message (≤ 5 min) and post it.
   **Done:** 🎬 in the composer records with MediaRecorder at low bitrates (5 min of video stays under 25 MB),
   stops itself at 5:00 and posts the WebM as a file (played inline).
-- **S79 Docs in channels** — attach docs to a channel (like Slack canvases); shown in the channel header.
+- ✅ **S79 Docs in channels** — attach docs to a channel (like Slack canvases); shown in the channel header.
+  **Done:** bookmarks (`GET/POST /conversations/{id}/bookmarks`, `DELETE /bookmarks/{id}`, migration 0065): a doc
+  by id or an http(s) link, ≤ 20 per conversation; the header bar opens docs inline (app shell). API 0.57.0.
 - **S80 Workflows** — simple automations: on member joined / on schedule → post a message.
 - **S81 Incoming webhooks and bot tokens** — a channel webhook URL (secret, rotatable) that posts messages, e.g.
   from CI. AC: the secret is stored hashed and never shown again; rate limited.

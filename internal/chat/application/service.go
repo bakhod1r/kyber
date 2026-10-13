@@ -84,6 +84,7 @@ type Deps struct {
 	Prefs         domain.Prefs             // optional: levels and sections (S71)
 	Projects      Projects                 // optional: project channels (S73)
 	Transcriber   Transcriber              // optional: recording transcripts (S77); nothing leaves the server without it
+	Bookmarks     domain.Bookmarks         // optional: docs and links in a conversation's header (S79)
 	Members       Members
 	NewID         func() string
 	Now           func() time.Time
@@ -1263,4 +1264,59 @@ func (s *Service) OnRecordingPosted(ctx context.Context, m outbox.Message) error
 		s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *t})
 	}
 	return nil
+}
+
+func (s *Service) WithBookmarks(b domain.Bookmarks) *Service { s.d.Bookmarks = b; return s }
+
+// AddBookmark: a member keeps a doc or link in the conversation's header (S79); the members hear about it.
+func (s *Service) AddBookmark(ctx context.Context, actor, conv string, kind domain.BookmarkKind, ref, title string) (*domain.Bookmark, error) {
+	c, err := s.memberOf(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	list, err := s.d.Bookmarks.In(ctx, c.ID)
+	if err != nil {
+		return nil, err
+	}
+	if len(list) >= domain.MaxBookmarks {
+		return nil, domain.ErrTooManyBookmarks
+	}
+	b, err := domain.NewBookmark(domain.BookmarkID(s.d.NewID()), c.Workspace, c.ID, kind, ref, title, domain.UserID(actor), s.d.Now())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.d.Bookmarks.Add(ctx, b); err != nil {
+		return nil, err
+	}
+	s.d.Notifier.Notify(ctx, c.Members, domain.ConversationChanged{Conversation: *c})
+	return b, nil
+}
+
+// RemoveBookmark: whoever added it, or the channel's owner and admins.
+func (s *Service) RemoveBookmark(ctx context.Context, actor, id string) error {
+	b, err := s.d.Bookmarks.ByID(ctx, domain.BookmarkID(id))
+	if err != nil {
+		return err
+	}
+	c, err := s.readable(ctx, actor, string(b.Conversation))
+	if err != nil {
+		return domain.ErrBookmarkNotFound
+	}
+	if string(b.AddedBy) != actor && !c.CanManage(domain.UserID(actor)) {
+		return domain.ErrNotManager
+	}
+	if err := s.d.Bookmarks.Remove(ctx, b.ID); err != nil {
+		return err
+	}
+	s.d.Notifier.Notify(ctx, c.Members, domain.ConversationChanged{Conversation: *c})
+	return nil
+}
+
+// Bookmarks are a conversation's docs and links, for anyone who may read it.
+func (s *Service) Bookmarks(ctx context.Context, actor, conv string) ([]*domain.Bookmark, error) {
+	c, err := s.readable(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	return s.d.Bookmarks.In(ctx, c.ID)
 }

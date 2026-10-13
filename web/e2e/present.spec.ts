@@ -47,4 +47,16 @@ test("present to everyone in a huddle and follow the presenter", async ({ browse
   await expect(a.getByRole("figure", { name: "Presentation" }).getByRole("img", { name: "Canvas" })).toBeVisible();
   await b.getByRole("button", { name: "Stop presenting" }).click();
   await expect(a.getByRole("figure", { name: "Presentation" })).toHaveCount(0);
+
+  // S79: the doc and a link kept in the channel's header; Bobur opens the doc right there.
+  await a.getByRole("button", { name: "+ Bookmark" }).click();
+  await a.getByLabel("Add a doc").selectOption({ label: `${key}: Design notes` });
+  await a.getByRole("button", { name: "+ Bookmark" }).click();
+  await a.getByLabel("Link", { exact: true }).fill("https://ci.example/builds");
+  await a.getByLabel("Link title").fill("CI");
+  await a.getByRole("button", { name: "Add link" }).click();
+  const marks = b.getByRole("list", { name: "Bookmarks" });
+  await expect(marks.getByRole("link", { name: "🔗 CI" })).toHaveAttribute("href", "https://ci.example/builds"); // live
+  await marks.getByRole("button", { name: `📄 ${key}: Design notes` }).click();
+  await expect(b.getByRole("article", { name: "Doc Design notes" })).toContainText("Paragraph 1 of the design.");
 });
