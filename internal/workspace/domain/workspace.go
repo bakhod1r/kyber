@@ -17,6 +17,7 @@ var (
 	ErrInvalidRole       = errors.New("role must be owner, admin or member")
 	ErrLastOwner         = errors.New("a workspace must keep at least one owner")
 	ErrWorkspaceNotFound = errors.New("workspace not found")
+	ErrNotMember         = errors.New("not a member of the workspace")
 )
 
 type (
@@ -112,6 +113,14 @@ func (w *Workspace) AddMember(u UserID, r Role) error {
 	}
 	w.members[u] = r
 	return nil
+}
+
+// ChangeRole changes a member's role (an administrator's action); the last owner cannot be demoted.
+func (w *Workspace) ChangeRole(u UserID, r Role) error {
+	if !w.IsMember(u) {
+		return ErrNotMember
+	}
+	return w.AddMember(u, r)
 }
 
 func (w *Workspace) owners() int {

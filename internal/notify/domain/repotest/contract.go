@@ -53,6 +53,19 @@ func Run(t *testing.T, newRepo func(t *testing.T) domain.Repository) {
 		}
 	})
 
+	t.Run("announcements keep their project", func(t *testing.T) {
+		repo := newRepo(t)
+		n := mk(1, Alice, 9)
+		n.Kind, n.IssueKey, n.Project, n.IssueTitle = domain.KindAnnouncement, "", "KYB", "Release Friday"
+		if err := repo.Add(ctx, n); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := repo.ListFor(ctx, inbox(Alice), false, 50)
+		if len(got) != 1 || got[0].Kind != domain.KindAnnouncement || got[0].Project != "KYB" || got[0].IssueKey != "" {
+			t.Fatalf("announcement = %+v", got)
+		}
+	})
+
 	t.Run("chat mention round trip", func(t *testing.T) {
 		repo := newRepo(t)
 		n := mk(5, Alice, 9)

@@ -70,7 +70,7 @@ func setup() (*application.Service, *memory.Repository) {
 	repo := memory.NewRepository()
 	n := 0
 	return application.NewService(application.Deps{
-		Repo: repo, Issues: f, Members: f, Workspaces: f, Users: f, Lookups: lookups{},
+		Repo: repo, Issues: f, Members: f, Workspaces: f, Users: f, Audience: f, Lookups: lookups{},
 		NewID: func() string { n++; return fmt.Sprintf("n-%02d", n) },
 		Now:   func() time.Time { return time.Date(2026, 4, 1, 10, n, 0, 0, time.UTC) },
 	}), repo
@@ -207,7 +207,7 @@ func TestDeliveryNeedsTheWorkspace(t *testing.T) {
 	s, _ := setup()
 	f := &fakes{issues: map[string]application.IssueInfo{"BROKEN-1": {Project: "BROKEN", Title: "x"}}, members: map[string]bool{"BROKEN/bob": true},
 		names: map[string]string{"alice": "Alice"}}
-	s = application.NewService(application.Deps{Repo: memory.NewRepository(), Issues: f, Members: f, Workspaces: f, Users: f,
+	s = application.NewService(application.Deps{Repo: memory.NewRepository(), Issues: f, Members: f, Workspaces: f, Users: f, Audience: f,
 		NewID: func() string { return "n" }, Now: time.Now})
 	if err := s.OnIssueAssigned(context.Background(), msg(1, "issue.assigned", `{"key":"BROKEN-1","to":"bob","by":"alice"}`)); err == nil {
 		t.Fatal("expected the workspace lookup error")

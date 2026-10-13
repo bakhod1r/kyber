@@ -133,3 +133,26 @@ func TestMaxAttemptsDefaultsAndFloor(t *testing.T) {
 		t.Fatalf("default = %d", outbox.DefaultMaxAttempts)
 	}
 }
+
+func TestDeadLettersOfAWorkspace(t *testing.T) {
+	ctx := context.Background()
+	store := outbox.NewMemoryStore(stamped(func() []outbox.Event { return []outbox.Event{ev{"bad"}, ev{"bad"}} }))
+	relay := outbox.NewRelay(store, quiet(), outbox.MaxAttempts(1))
+	relay.Handle("bad", func(context.Context, outbox.Message) error { return errors.New("x") })
+	_, _ = relay.ProcessOnce(ctx)
+	if dead, _ := store.DeadLettersOf(ctx, "w-1", 1); len(dead) != 1 {
+		t.Fatalf("limit = %v", dead)
+	}
+	if dead, _ := store.DeadLettersOf(ctx, "w-2", 10); len(dead) != 0 {
+		t.Fatalf("other workspace sees %v", dead)
+	}
+	if err := store.RetryOf(ctx, "w-2", 1); !errors.Is(err, outbox.ErrNotDead) {
+		t.Fatalf("other workspace retries: %v", err)
+	}
+	if err := store.RetryOf(ctx, "w-1", 1); err != nil {
+		t.Fatal(err)
+	}
+	if dead, _ := store.DeadLettersOf(ctx, "w-1", 10); len(dead) != 1 || dead[0].ID != 2 {
+		t.Fatalf("after retry = %v", dead)
+	}
+}

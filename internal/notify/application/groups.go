@@ -121,14 +121,23 @@ func (s *Service) OnProjectEvent(ctx context.Context, m outbox.Message) error {
 		return nil
 	}
 	var e struct {
-		ID, Key, Title, Reporter, By, Project string
-		Items                                 []fieldChange
+		ID, Key, Title, Reporter, By, Project, Author, Excerpt string
+		Items                                                  []fieldChange
+		Start, End                                             time.Time
 	}
 	if err := json.Unmarshal(m.Payload, &e); err != nil {
 		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "name", m.Name)
 		return nil
 	}
 	ev, project, err := s.projectEvent(ctx, m.Name, e.ID, e.Key, e.Title, e.Reporter, e.By, e.Items)
+	if m.Name == "announcement.published" && e.Project != "" {
+		var actor string
+		actor, err = s.d.Users.DisplayName(ctx, e.Author)
+		ev, project = domain.ProjectEvent{Kind: domain.EventAnnouncement, Actor: actor, Title: e.Title, Text: e.Excerpt}, e.Project
+	}
+	if strings.HasPrefix(m.Name, "meeting.") && e.Project != "" {
+		ev, project = domain.ProjectEvent{Kind: domain.EventMeeting, Title: e.Title, Text: domain.MeetingText(m.Name, e.Start, e.End)}, e.Project
+	}
 	if err != nil || project == "" {
 		return err
 	}
@@ -137,7 +146,12 @@ func (s *Service) OnProjectEvent(ctx context.Context, m outbox.Message) error {
 		return err
 	}
 	text := ev.Message(fmt.Sprintf("%s/projects/%s", s.d.PublicURL, url.PathEscape(project)))
-	if ev.IssueKey != "" {
+	switch {
+	case ev.Kind == domain.EventMeeting:
+		text = ev.Message(s.d.PublicURL + "/meetings")
+	case ev.Kind == domain.EventAnnouncement:
+		text = ev.Message(announcementLink(s.d.PublicURL, project))
+	case ev.IssueKey != "":
 		text = ev.Message(fmt.Sprintf("%s/projects/%s?issue=%s", s.d.PublicURL, url.PathEscape(project), url.QueryEscape(ev.IssueKey)))
 	}
 	for _, c := range chats {

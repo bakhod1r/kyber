@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.38.0
+  version: 0.39.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -235,6 +235,81 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
 
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/access:
+    get:
+      operationId: adminAccess
+      description: Whether the caller administers this workspace (owners/admins; KYBER_ADMIN_EMAILS in single-tenant mode).
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, required: [admin], properties: { admin: { type: boolean } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/members:
+    get:
+      operationId: adminMembers
+      description: The workspace's people and roles (single-tenant mode - everyone in a project).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/AdminMember" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/members/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: adminChangeRole
+      description: Changes a member's workspace role; the last owner stays. Not available in single-tenant mode (409).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [role], properties: { role: { type: string, enum: [owner, admin, member] } } } } }
+      responses:
+        "204": { description: Changed }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/projects:
+    get:
+      operationId: adminProjects
+      description: Every project of the workspace with its member count.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/AdminProject" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/dead-letters:
+    get:
+      operationId: adminDeadLetters
+      description: The workspace's events whose handlers kept failing (ADR-0007), oldest first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/DeadLetter" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/dead-letters/{id}/retry:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: adminRetryDeadLetter
+      description: Queues a dead letter again once its handler is fixed.
+      responses:
+        "204": { description: Queued }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/meetings:
     get:
       operationId: listMeetings
@@ -253,7 +328,11 @@ paths:
         "422": { $ref: "#/components/responses/Error" }
     post:
       operationId: scheduleMeeting
-      description: Books a meeting; the organizer always attends. During a meeting its attendees cannot run a Pomodoro.
+      description: |
+        Books a meeting; the organizer always attends. During a meeting its attendees cannot run a Pomodoro.
+        scope "project" (with project_key; project members with write access) or "workspace" (workspace owners/admins,
+        KYBER_ADMIN_EMAILS in single-tenant mode) invites every member. Everyone invited is notified, and reminded 15 minutes
+        before the start.
       requestBody:
         required: true
         content:
@@ -266,10 +345,13 @@ paths:
                 starts_at: { type: string, format: date-time }
                 ends_at: { type: string, format: date-time }
                 attendee_ids: { type: array, items: { type: string } }
+                scope: { type: string, enum: ["", people, project, workspace] }
+                project_key: { type: string }
       responses:
         "201": { description: Scheduled, content: { application/json: { schema: { $ref: "#/components/schemas/Meeting" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/meetings/{id}:
@@ -281,6 +363,22 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/meetings/{id}/response:
+    put:
+      operationId: respondToMeeting
+      description: An attendee answers the invitation.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [response], properties: { response: { type: string, enum: [going, maybe, declined] } } }
+      responses:
+        "200": { description: Answered, content: { application/json: { schema: { $ref: "#/components/schemas/Meeting" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/conversations:
     get:
       operationId: listConversations
@@ -1822,6 +1920,86 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/events:
+    get:
+      operationId: liveEvents
+      description: |
+        Server-Sent Events stream of change hints for the caller's workspace (ADR-0008). An `event: change`
+        carries only `{"project","event"}` for projects the caller may browse, never content; clients refetch
+        through the API. `event: resync` means hints were dropped (refetch everything). Comments keep the
+        connection alive every 25 s; `retry: 3000` sets the reconnect delay.
+      responses:
+        "200":
+          description: The event stream (never ends on its own)
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/announcements:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listProjectAnnouncements
+      description: The newest 50 announcements of the project (anyone who can browse it), newest first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Announcement" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: publishProjectAnnouncement
+      description: Project admins publish; every member is notified (inbox, email/Telegram by their settings, and the project's Telegram groups) and open pages refresh.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 120 }
+                body: { type: string, maxLength: 10000, description: Markdown. }
+      responses:
+        "201": { description: Published, content: { application/json: { schema: { $ref: "#/components/schemas/Announcement" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/announcements:
+    get:
+      operationId: listWorkspaceAnnouncements
+      description: The newest 50 announcements to the whole workspace (its members), newest first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Announcement" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: publishWorkspaceAnnouncement
+      description: "Workspace owners and admins (in single-tenant mode: KYBER_ADMIN_EMAILS) publish; every member is notified (inbox, email/Telegram by their settings) and open pages refresh."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 120 }
+                body: { type: string, maxLength: 10000, description: Markdown. }
+      responses:
+        "201": { description: Published, content: { application/json: { schema: { $ref: "#/components/schemas/Announcement" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/goals:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -2410,7 +2588,7 @@ components:
     Meeting:
       type: object
       additionalProperties: false
-      required: [id, title, starts_at, ends_at, organizer_id, attendee_ids]
+      required: [id, title, starts_at, ends_at, organizer_id, attendee_ids, scope, project_key, responses]
       properties:
         id: { type: string }
         title: { type: string }
@@ -2418,6 +2596,9 @@ components:
         ends_at: { type: string, format: date-time }
         organizer_id: { type: string }
         attendee_ids: { type: array, items: { type: string } }
+        scope: { type: string, enum: [people, project, workspace] }
+        project_key: { type: [string, "null"] }
+        responses: { type: object, additionalProperties: { type: string, enum: [going, maybe, declined] }, description: Attendee id → answer (those who answered). }
     FocusSession:
       type: object
       additionalProperties: false
@@ -2637,6 +2818,38 @@ components:
         body: { type: string }
         by: { type: string }
         at: { type: string, format: date-time }
+    AdminMember:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [owner, admin, member] }
+    AdminProject:
+      type: object
+      required: [key, name, members]
+      properties: { key: { type: string }, name: { type: string }, members: { type: integer } }
+    DeadLetter:
+      type: object
+      required: [id, event, actor_id, at, attempts, last_error]
+      properties:
+        id: { type: integer }
+        event: { type: string }
+        actor_id: { type: string }
+        at: { type: string, format: date-time }
+        attempts: { type: integer }
+        last_error: { type: string }
+    Announcement:
+      type: object
+      required: [id, project_key, title, body, author_id, created_at]
+      properties:
+        id: { type: string }
+        project_key: { type: [string, "null"], description: null for a workspace-wide announcement. }
+        title: { type: string }
+        body: { type: string, description: Markdown. }
+        author_id: { type: string }
+        created_at: { type: string, format: date-time }
     GoalStatus: { type: string, enum: [on_track, at_risk, off_track, done] }
     GoalInput:
       type: object
@@ -2890,13 +3103,14 @@ components:
         remaining_issues: { type: integer }
     Notification:
       type: object
-      required: [id, kind, issue_key, issue_title, conversation_id, conversation_name, actor_name, excerpt, read, created_at]
+      required: [id, kind, issue_key, issue_title, project_key, conversation_id, conversation_name, actor_name, excerpt, read, created_at]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [assigned, commented, mentioned, transitioned], description: "transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To)." }
+        kind: { type: string, enum: [assigned, commented, mentioned, transitioned, announcement, meeting], description: "meeting: a meeting you are invited to was scheduled or cancelled, or starts soon (excerpt: when). transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To). announcement: news to a project (project_key) or the workspace (project_key empty); issue_key is empty and issue_title holds its title." }
         issue_key: { type: string }
         issue_title: { type: string }
+        project_key: { type: string, description: The announced project; empty for issue notifications and workspace announcements. }
         conversation_id: { type: string, description: "Set (and issue_key empty) for a mention in chat." }
         conversation_name: { type: string, description: "The channel of a chat mention; empty for a direct message." }
         actor_name: { type: string }

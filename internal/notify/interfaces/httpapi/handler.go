@@ -121,6 +121,7 @@ type notificationDTO struct {
 	IssueTitle string    `json:"issue_title"`
 	ConvID     string    `json:"conversation_id"`
 	ConvName   string    `json:"conversation_name"`
+	ProjectKey string    `json:"project_key"`
 	ActorName  string    `json:"actor_name"`
 	Excerpt    string    `json:"excerpt"`
 	Read       bool      `json:"read"`
@@ -153,7 +154,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	for _, n := range items {
 		out = append(out, notificationDTO{ID: string(n.ID), Kind: string(n.Kind), IssueKey: n.IssueKey, IssueTitle: n.IssueTitle,
 			ConvID: n.ConversationID, ConvName: n.ConversationName,
-			ActorName: n.ActorName, Excerpt: n.Excerpt, Read: n.Read(), CreatedAt: n.CreatedAt.UTC()})
+			ProjectKey: n.Project, ActorName: n.ActorName, Excerpt: n.Excerpt, Read: n.Read(), CreatedAt: n.CreatedAt.UTC()})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": out, "unread": unread})
 }

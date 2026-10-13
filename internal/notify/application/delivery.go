@@ -50,6 +50,12 @@ func (s *Service) enqueue(ctx context.Context, n domain.Notification, project st
 	if n.ConversationID != "" {
 		link = fmt.Sprintf("%s/chat/%s", s.d.PublicURL, url.PathEscape(n.ConversationID))
 	}
+	switch n.Kind {
+	case domain.KindAnnouncement:
+		link = announcementLink(s.d.PublicURL, project)
+	case domain.KindMeeting:
+		link = s.d.PublicURL + "/meetings"
+	}
 	subject, text := domain.Render(n, link)
 	for _, ch := range []domain.Channel{domain.ChannelEmail, domain.ChannelTelegram} {
 		if !slices.Contains(s.d.Channels, ch) || !prefs.Wants(ch) {
@@ -142,4 +148,12 @@ func (s *Service) Settings(ctx context.Context, user string) (Settings, error) {
 
 func (s *Service) SetPrefs(ctx context.Context, user string, p domain.Prefs) error {
 	return s.d.Prefs.SetPrefs(ctx, domain.UserID(user), p)
+}
+
+// announcementLink opens a project's announcements, or the home page for the workspace's own.
+func announcementLink(base, project string) string {
+	if project == "" {
+		return base + "/"
+	}
+	return fmt.Sprintf("%s/projects/%s/announcements", base, url.PathEscape(project))
 }

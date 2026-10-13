@@ -55,6 +55,9 @@ func TestRepository(t *testing.T) {
 	if ps, _ := repo.ListForUser(ctx, bob); len(ps) != 2 || ps[0].Key() != "KYB" || ps[1].Key() != "ZED" {
 		t.Fatalf("ListForUser(bob) = %v", ps)
 	}
+	if ps, err := repo.InWorkspace(ctx); err != nil || len(ps) != 2 || ps[0].Key() != "KYB" {
+		t.Fatalf("InWorkspace = %v %v", ps, err)
+	}
 	if ps, _ := repo.ListForUser(ctx, alice); len(ps) != 1 {
 		t.Fatalf("ListForUser(alice) = %v", ps)
 	}

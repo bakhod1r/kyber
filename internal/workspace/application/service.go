@@ -47,6 +47,66 @@ func (s *Service) IsMember(ctx context.Context, workspace, user string) (bool, e
 	return w.IsMember(domain.UserID(user)), nil
 }
 
+// Administers reports whether user is an owner or admin of a named workspace. The default
+// workspace has no stored members: its administrators are configured (KYBER_ADMIN_EMAILS).
+func (s *Service) Administers(ctx context.Context, workspace, user string) (bool, error) {
+	if domain.WorkspaceID(workspace) == domain.DefaultID {
+		return false, nil
+	}
+	w, err := s.repo.ByID(ctx, domain.WorkspaceID(workspace))
+	if err != nil {
+		return false, err
+	}
+	r, ok := w.RoleOf(domain.UserID(user))
+	return ok && (r == domain.RoleOwner || r == domain.RoleAdmin), nil
+}
+
+// MemberIDs lists a named workspace's members (a read model for other contexts). The default
+// workspace stores none: callers decide who is in it.
+func (s *Service) MemberIDs(ctx context.Context, workspace string) ([]string, error) {
+	if domain.WorkspaceID(workspace) == domain.DefaultID {
+		return nil, nil
+	}
+	w, err := s.repo.ByID(ctx, domain.WorkspaceID(workspace))
+	if err != nil {
+		return nil, err
+	}
+	ms := w.Members()
+	ids := make([]string, len(ms))
+	for i, m := range ms {
+		ids[i] = string(m.UserID)
+	}
+	return ids, nil
+}
+
+// Members lists a named workspace's members with their roles (the default workspace has none).
+func (s *Service) Members(ctx context.Context, workspace string) ([]domain.Member, error) {
+	if domain.WorkspaceID(workspace) == domain.DefaultID {
+		return nil, nil
+	}
+	w, err := s.repo.ByID(ctx, domain.WorkspaceID(workspace))
+	if err != nil {
+		return nil, err
+	}
+	return w.Members(), nil
+}
+
+// ChangeRole sets a member's role in a named workspace (authorization is the caller's).
+func (s *Service) ChangeRole(ctx context.Context, workspace, user, role string) error {
+	r, err := domain.ParseRole(role)
+	if err != nil {
+		return err
+	}
+	w, err := s.repo.ByID(ctx, domain.WorkspaceID(workspace))
+	if err != nil {
+		return err
+	}
+	if err := w.ChangeRole(domain.UserID(user), r); err != nil {
+		return err
+	}
+	return s.repo.SaveMembers(ctx, w)
+}
+
 // Join makes user a member (used when a project admin adds someone to a project).
 // Existing members keep their role.
 func (s *Service) Join(ctx context.Context, workspace, user string) error {

@@ -21,6 +21,9 @@ import (
 	accesspg "github.com/bakhod1r/kyber/internal/access/infrastructure/postgres"
 	"github.com/bakhod1r/kyber/internal/access/infrastructure/projectcompat"
 	accesshttp "github.com/bakhod1r/kyber/internal/access/interfaces/httpapi"
+	adminapp "github.com/bakhod1r/kyber/internal/admin/application"
+	adminacl "github.com/bakhod1r/kyber/internal/admin/infrastructure/acl"
+	adminhttp "github.com/bakhod1r/kyber/internal/admin/interfaces/httpapi"
 	agileapp "github.com/bakhod1r/kyber/internal/agile/application"
 	agiledomain "github.com/bakhod1r/kyber/internal/agile/domain"
 	agileissueacl "github.com/bakhod1r/kyber/internal/agile/infrastructure/issueacl"
@@ -28,6 +31,12 @@ import (
 	agilepg "github.com/bakhod1r/kyber/internal/agile/infrastructure/postgres"
 	agileprojectacl "github.com/bakhod1r/kyber/internal/agile/infrastructure/projectacl"
 	agilehttp "github.com/bakhod1r/kyber/internal/agile/interfaces/httpapi"
+	annapp "github.com/bakhod1r/kyber/internal/announcement/application"
+	anndomain "github.com/bakhod1r/kyber/internal/announcement/domain"
+	annacl "github.com/bakhod1r/kyber/internal/announcement/infrastructure/acl"
+	annmemory "github.com/bakhod1r/kyber/internal/announcement/infrastructure/memory"
+	annpg "github.com/bakhod1r/kyber/internal/announcement/infrastructure/postgres"
+	annhttp "github.com/bakhod1r/kyber/internal/announcement/interfaces/httpapi"
 	auditapp "github.com/bakhod1r/kyber/internal/audit/application"
 	auditdomain "github.com/bakhod1r/kyber/internal/audit/domain"
 	auditacl "github.com/bakhod1r/kyber/internal/audit/infrastructure/acl"
@@ -117,6 +126,7 @@ import (
 	notifyhttp "github.com/bakhod1r/kyber/internal/notify/interfaces/httpapi"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 	"github.com/bakhod1r/kyber/internal/platform/id"
+	"github.com/bakhod1r/kyber/internal/platform/live"
 	"github.com/bakhod1r/kyber/internal/platform/metrics"
 	"github.com/bakhod1r/kyber/internal/platform/otel"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
@@ -165,6 +175,8 @@ type deps struct {
 	goals         goaldomain.Repository
 	pages         docsdomain.Repository
 	forms         formdomain.Repository
+	announcements anndomain.Repository
+	siteAdmins    map[string]bool // lower-case emails administering the default workspace
 	sprints       agiledomain.Repository
 	boards        agiledomain.BoardRepository
 	versions      agiledomain.VersionRepository
@@ -197,12 +209,17 @@ type deps struct {
 	baseDomain    string // "" = single-tenant (ADR-0004)
 	ice           ice.Config
 	outbox        outbox.Store
+	livePool      *pgxpool.Pool   // set: hints cross replicas through NOTIFY
 	ctx           context.Context // lifetime of background work (outbox relay)
 	relayEvery    time.Duration
+	reminderEvery time.Duration // how often due meeting reminders are sent (default 30s)
 }
 
 // WithContext bounds background work (the outbox relay) to ctx.
 func WithContext(ctx context.Context) Option { return func(d *deps) { d.ctx = ctx } }
+
+// WithReminderEvery sets how often due meeting reminders are looked for (default 30s).
+func WithReminderEvery(every time.Duration) Option { return func(d *deps) { d.reminderEvery = every } }
 
 // WithRelayEvery sets how often the outbox relay polls (default 1s).
 func WithRelayEvery(every time.Duration) Option { return func(d *deps) { d.relayEvery = every } }
@@ -226,6 +243,30 @@ func WithPublicURL(u string) Option { return func(d *deps) { d.publicURL = u } }
 func WithDispatchEvery(every time.Duration) Option { return func(d *deps) { d.dispatchEvery = every } }
 
 // WithBaseDomain enables workspaces on subdomains of domain (ADR-0004).
+// WithSiteAdmins names (comma-separated emails) the administrators of the default workspace.
+func WithSiteAdmins(emails string) Option {
+	return func(d *deps) {
+		d.siteAdmins = map[string]bool{}
+		for _, e := range strings.Split(emails, ",") {
+			if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+				d.siteAdmins[e] = true
+			}
+		}
+	}
+}
+
+// siteAdmin reports whether user is a configured administrator of the default workspace.
+func (d *deps) siteAdmin(ctx context.Context, user string) (bool, error) {
+	if len(d.siteAdmins) == 0 {
+		return false, nil
+	}
+	u, err := d.users.ByID(ctx, identitydomain.UserID(user))
+	if err != nil {
+		return false, err
+	}
+	return d.siteAdmins[strings.ToLower(string(u.Email()))], nil
+}
+
 func WithBaseDomain(domain string) Option { return func(d *deps) { d.baseDomain = domain } }
 
 // WithICE sets the STUN/TURN servers for calls; TURN gets short-lived credentials from secret
@@ -248,16 +289,18 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	issueRepo := issuememory.NewRepository()
 	sprintRepo := agilememory.NewRepository()
 	versionRepo := agilememory.NewVersionRepository()
+	annRepo := annmemory.NewRepository()
+	meetingRepo := calendarmemory.NewRepository()
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), worklogs: issuememory.NewWorklogRepository(), fields: issuememory.NewCustomFieldRepository(),
-		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: docsmemory.NewRepository(), forms: formmemory.NewRepository(),
+		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: docsmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
-		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
+		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
 		conversations: chatRepo, messages: chatRepo.Messages(), calls: callRepo, whiteboards: wbmemory.NewRepository(),
-		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta)),
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
@@ -299,9 +342,9 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), worklogs: issuepg.NewWorklogRepository(pool), fields: issuepg.NewCustomFieldRepository(pool),
-		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), forms: formpg.NewRepository(pool),
+		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
-		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool),
+		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool),
@@ -349,7 +392,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	sprintACL.Sprints = agileacl.New(agile)
 	notify := notifyapp.NewService(notifyapp.Deps{
 		Repo: d.notes, Issues: notifyacl.NewIssues(issues), Members: notifyacl.NewMembers(issues), Workspaces: notifyacl.NewWorkspaces(projects),
-		Users: notifyacl.NewUsers(d.users), NewID: id.New, Now: time.Now, Log: log,
+		Users: notifyacl.NewUsers(d.users), Audience: notifyacl.NewAudience(projects, workspaces), NewID: id.New, Now: time.Now, Log: log,
 		Deliveries: d.deliveries, Prefs: d.prefs, Contacts: notifyacl.NewContacts(d.users, d.external),
 		Channels: d.channels(), PublicURL: d.publicURL,
 		Groups: d.groups, Admins: notifyacl.NewAdmins(access), BotName: d.social.TelegramBot,
@@ -369,18 +412,20 @@ func build(log *slog.Logger, d deps) http.Handler {
 		Access: importeracl.NewProject(importGate), Members: importeracl.NewProject(importGate),
 		Issues: importeracl.NewIssues(issues, time.Now), Mappings: d.mappings, Source: importeracl.NewSource(issues, d.users),
 	})
-	calendar := calendarapp.NewService(d.meetings, calendaracl.NewMembers(workspaces, d.users), id.New, time.Now)
+	teams := calendaracl.NewTeams(projects, workspaces, d.siteAdmin)
+	calendar := calendarapp.NewService(d.meetings, calendaracl.NewMembers(workspaces, d.users), id.New, time.Now).WithTeams(teams, teams)
 	focus := focusapp.NewService(focusapp.Deps{Sessions: d.focusSessions, Calendar: focusacl.NewCalendar(calendar),
 		Issues: focusacl.NewIssues(issues, projectcompat.NewGate(projects, access, accessdomain.AssignableUser)), NewID: id.New, Clock: systemClock{}})
-	hub := realtime.NewHub(1024)
-	chat := chatapp.NewService(chatapp.Deps{Notifier: chatrealtime.New(hub), Conversations: d.conversations, Messages: d.messages,
+	rt := realtime.NewHub(1024)
+	chat := chatapp.NewService(chatapp.Deps{Notifier: chatrealtime.New(rt), Conversations: d.conversations, Messages: d.messages,
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	chat.WithIssues(chatacl.NewIssues(issues))
-	callEvents := callrealtime.New(hub, func(c *calldomain.Call) any { return callhttp.ToDTO(c) })
+	callEvents := callrealtime.New(rt, func(c *calldomain.Call) any { return callhttp.ToDTO(c) })
 	calls := callapp.NewService(callapp.Deps{Calls: d.calls, Conversations: callacl.NewConversations(chat),
 		Notifier: callEvents, Signals: callEvents, NewID: id.New, Now: time.Now})
 	notify.WithConversations(notifyacl.NewConversations(chat))
 	relay := outbox.NewRelay(d.outbox, log)
+	hub := live.NewHub()
 	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated", "issue.imported"} {
 		relay.Handle(name, insights.OnIssueEvent)
 	}
@@ -391,6 +436,12 @@ func build(log *slog.Logger, d deps) http.Handler {
 		relay.Handle(name, notify.OnProjectEvent)
 	}
 	relay.Handle("issue.assigned", notify.OnIssueAssigned)
+	relay.Handle("announcement.published", notify.OnAnnouncement)
+	relay.Handle("announcement.published", notify.OnProjectEvent)
+	for _, name := range []string{"meeting.scheduled", "meeting.cancelled", "meeting.reminder"} {
+		relay.Handle(name, notify.OnMeetingEvent)
+		relay.Handle(name, notify.OnProjectEvent)
+	}
 	relay.Handle("comment.added", notify.OnCommentAdded)
 	relay.Handle("chat.message_posted", notify.OnChatMessage)
 	relay.Handle("call.started", chat.OnCallEvent)
@@ -405,6 +456,13 @@ func build(log *slog.Logger, d deps) http.Handler {
 	for _, name := range []string{"version.released", "version.deleted"} {
 		relay.Handle(name, issues.OnVersionEvent)
 	}
+	var hints live.Broadcaster = hub
+	if d.livePool != nil {
+		pg := live.NewPostgres(d.livePool, hub, log)
+		go pg.Listen(d.liveCtx())
+		hints = pg
+	}
+	relay.HandleAll(live.OnEvent(hints, log))
 	if d.ctx == nil {
 		d.ctx = context.Background()
 	}
@@ -413,6 +471,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	}
 	go relay.Run(d.ctx, d.relayEvery)
 	go dispatch(d.ctx, log, notify, d.senders(), d.dispatchEvery)
+	go remindMeetings(d.ctx, log, calendar, d.reminderEvery)
 	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
@@ -445,18 +504,29 @@ func build(log *slog.Logger, d deps) http.Handler {
 	searchhttp.New(search, log).Register(api)
 	goalhttp.New(goals, log).Register(api)
 	docshttp.New(pages, log).Register(api)
+	annhttp.New(annapp.NewService(annapp.Deps{Access: annacl.NewAccess(projects, workspaces, d.siteAdmin), Announcements: d.announcements,
+		NewID: id.New, Now: time.Now}), log).Register(api)
 	formhttp.New(forms, log).Register(api)
 	agilehttp.New(agile, log).Register(api)
 	notifyhttp.New(notify, log).Register(api)
 	insightshttp.New(insights, log).Register(api)
 	importerhttp.New(importer, log).Register(api)
 	tenancy.Register(api)
+	if dead, ok := d.outbox.(adminacl.Store); ok {
+		adminhttp.New(adminapp.NewService(adminapp.Deps{
+			Gate: adminacl.NewGate(workspaces, d.siteAdmin), Directory: adminacl.NewDirectory(workspaces, projects, d.users, d.siteAdmin),
+			Projects: adminacl.NewProjects(projects), DeadLetters: adminacl.NewDeadLetters(dead),
+		}), log).Register(api)
+	}
+	api.Handle("GET /api/v1/events", hub.Handler(func(ctx context.Context, user, project string) bool {
+		return projects.Authorize(ctx, projectdomain.UserID(user), project, projectdomain.PermRead) == nil
+	}, 25*time.Second))
 	calendarhttp.New(calendar, log, time.Now).Register(api)
 	focushttp.New(focus, log, time.Now).Register(api)
 	chathttp.New(chat, log).Register(api)
-	hub.Register(api, 25*time.Second)
+	rt.Register(api, 25*time.Second)
 	whiteboards := wbapp.NewService(wbapp.Deps{Boards: d.whiteboards, Conversations: wbacl.NewConversations(chat),
-		Notifier: wbrealtime.New(hub, func(e wbdomain.Element) any { return wbhttp.ToDTO(e) }), NewID: id.New, Now: time.Now})
+		Notifier: wbrealtime.New(rt, func(e wbdomain.Element) any { return wbhttp.ToDTO(e) }), NewID: id.New, Now: time.Now})
 	wbhttp.New(whiteboards, log).Register(api)
 	callhttp.New(calls, log, func(user string, now time.Time) any { return d.ice.Servers(user, now) }).Register(api)
 	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
@@ -500,6 +570,7 @@ type statusRecorder struct {
 	status int
 }
 
+// Unwrap lets http.ResponseController reach the connection (flushing an event stream).
 func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
 func (s *statusRecorder) WriteHeader(code int) {
@@ -536,6 +607,9 @@ type fallbackWriter struct {
 	replaced bool
 }
 
+// Unwrap lets http.ResponseController reach the connection (flushing an event stream).
+func (f *fallbackWriter) Unwrap() http.ResponseWriter { return f.ResponseWriter }
+
 func (f *fallbackWriter) WriteHeader(code int) {
 	plain := strings.HasPrefix(f.Header().Get("Content-Type"), "text/plain")
 	switch {
@@ -549,8 +623,6 @@ func (f *fallbackWriter) WriteHeader(code int) {
 		f.ResponseWriter.WriteHeader(code)
 	}
 }
-
-func (f *fallbackWriter) Unwrap() http.ResponseWriter { return f.ResponseWriter }
 
 func (f *fallbackWriter) Write(b []byte) (int, error) {
 	if f.replaced {
@@ -583,6 +655,25 @@ func (d deps) senders() map[notifydomain.Channel]notifyapp.Sender {
 }
 
 // dispatch sends due email/Telegram deliveries until ctx ends.
+// remindMeetings sends due meeting reminders until ctx ends (once per meeting, across replicas).
+func remindMeetings(ctx context.Context, log *slog.Logger, calendar *calendarapp.Service, every time.Duration) {
+	if every == 0 {
+		every = 30 * time.Second
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if _, err := calendar.RemindDue(ctx); err != nil {
+				log.WarnContext(ctx, "meeting reminders: will retry", "err", err)
+			}
+		}
+	}
+}
+
 func dispatch(ctx context.Context, log *slog.Logger, notify *notifyapp.Service, senders map[notifydomain.Channel]notifyapp.Sender, every time.Duration) {
 	if len(senders) == 0 {
 		return
@@ -616,4 +707,12 @@ func (d deps) botMessenger() notifyapp.Messenger {
 		return nil
 	}
 	return d.telegramBot
+}
+
+// liveCtx bounds the replica's live listener like the relay (d.ctx may be set after construction).
+func (d *deps) liveCtx() context.Context {
+	if d.ctx == nil {
+		return context.Background()
+	}
+	return d.ctx
 }

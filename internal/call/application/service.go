@@ -1,4 +1,4 @@
-// Package application holds the Call context use cases (ADR-0008): joining, leaving and media
+// Package application holds the Call context use cases (ADR-0009): joining, leaving and media
 // state of huddles. Only members of the conversation take part; a call of a conversation the
 // actor may not read looks missing.
 package application

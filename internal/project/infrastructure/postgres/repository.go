@@ -62,8 +62,17 @@ func (r *Repository) ByKey(ctx context.Context, key string) (*domain.Project, er
 }
 
 func (r *Repository) ListForUser(ctx context.Context, u domain.UserID) ([]*domain.Project, error) {
-	rows, err := r.pool.Query(ctx, `SELECT p.key FROM projects p
+	return r.list(ctx, `SELECT p.key FROM projects p
 		JOIN project_members m ON m.project_id = p.id WHERE m.user_id = $1 AND p.workspace_id = $2 ORDER BY p.key`, string(u), tenant.Workspace(ctx))
+}
+
+func (r *Repository) InWorkspace(ctx context.Context) ([]*domain.Project, error) {
+	return r.list(ctx, `SELECT key FROM projects WHERE workspace_id = $1 ORDER BY key`, tenant.Workspace(ctx))
+}
+
+// list loads the projects whose keys the query selects.
+func (r *Repository) list(ctx context.Context, query string, args ...any) ([]*domain.Project, error) {
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

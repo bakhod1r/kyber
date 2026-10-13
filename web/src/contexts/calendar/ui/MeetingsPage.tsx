@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { calendarUseCases } from "../application";
+import { audienceLabel, calendarUseCases, RESPONSES, type MeetingResponse, tally } from "../application";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 
@@ -23,12 +23,16 @@ export function MeetingsPage() {
   const [starts, setStarts] = useState("");
   const [mins, setMins] = useState(30);
   const [picked, setPicked] = useState<string[]>([]);
+  /** "people", "workspace" or "project:KEY". */
+  const [invite, setInvite] = useState("people");
   const refresh = () => qc.invalidateQueries({ queryKey: ["meetings"] });
   const schedule = useMutation({
     mutationFn: () => {
       const start = new Date(starts);
+      const [scope, project] = invite.split(":") as ["people" | "project" | "workspace", string | undefined];
       return calendarUseCases.scheduleMeeting({
-        title, starts_at: start.toISOString(), ends_at: new Date(start.getTime() + mins * 60_000).toISOString(), attendee_ids: picked,
+        title, starts_at: start.toISOString(), ends_at: new Date(start.getTime() + mins * 60_000).toISOString(),
+        attendee_ids: scope === "people" ? picked : [], scope, ...(project ? { project_key: project } : {}),
       });
     },
     onSuccess: () => {
@@ -38,6 +42,10 @@ export function MeetingsPage() {
     },
   });
   const cancel = useMutation({ mutationFn: calendarUseCases.cancelMeeting, onSuccess: refresh });
+  const respond = useMutation({
+    mutationFn: ({ id, r }: { id: string; r: MeetingResponse }) => calendarUseCases.respond(id, r),
+    onSuccess: refresh,
+  });
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -53,9 +61,26 @@ export function MeetingsPage() {
         {meetings.data?.map((m) => (
           <li key={m.id}>
             <b>{m.title}</b> · {fmt(m.starts_at)} – {new Date(m.ends_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ·{" "}
+            {audienceLabel(m) && <span className="badge-label">{audienceLabel(m)}</span>}{" "}
             <span className="muted">
               {m.attendee_ids.length} {m.attendee_ids.length === 1 ? "person" : "people"}
+              {tally(m) && ` · ${tally(m)}`}
             </span>
+            {me.data && m.attendee_ids.includes(me.data.id) && m.organizer_id !== me.data.id && (
+              <span className="rsvp" role="group" aria-label={`Answer ${m.title}`}>
+                {RESPONSES.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    className="ghost"
+                    aria-pressed={m.responses?.[me.data.id] === r.id}
+                    onClick={() => respond.mutate({ id: m.id, r: r.id })}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </span>
+            )}
             {m.organizer_id === me.data?.id && (
               <button className="ghost" aria-label={`Cancel ${m.title}`} onClick={() => cancel.mutate(m.id)}>
                 Cancel
@@ -78,7 +103,20 @@ export function MeetingsPage() {
           Minutes
           <input type="number" min={5} max={480} value={mins} onChange={(e) => setMins(Number(e.target.value))} required />
         </label>
-        <fieldset>
+        <label>
+          Invite
+          <select value={invite} onChange={(e) => setInvite(e.target.value)}>
+            <option value="people">Chosen people</option>
+            {projects.data?.map((p) => (
+              <option key={p.key} value={`project:${p.key}`}>
+                Everyone in {p.key}
+              </option>
+            ))}
+            <option value="workspace">Everyone in the workspace</option>
+          </select>
+        </label>
+        {invite !== "people" && <p className="muted">Everyone invited is notified now and reminded 15 minutes before it starts.</p>}
+        <fieldset hidden={invite !== "people"}>
           <legend>Attendees</legend>
           {people.size === 0 && <span className="muted">Only you — add people to a project to invite them.</span>}
           {[...people].map(([id, name]) => (

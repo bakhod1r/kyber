@@ -1,4 +1,4 @@
-// chat: domain model (types and pure rules) — no I/O. Slack-style channels and DMs (ADR-0008).
+// chat: domain model (types and pure rules) — no I/O. Slack-style channels and DMs (ADR-0009).
 export type Conversation = {
   id: string; kind: "channel" | "dm"; name: string; topic: string; private: boolean;
   member_ids: string[]; member: boolean; unread: number; created_at: string;

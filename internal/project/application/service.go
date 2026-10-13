@@ -163,6 +163,42 @@ func (s *Service) WorkspaceOf(ctx context.Context, key string) (domain.Workspace
 	return p.Workspace(), nil
 }
 
+// MemberIDs lists a project's members, sorted (a read model for other contexts; no actor check).
+func (s *Service) MemberIDs(ctx context.Context, key string) ([]domain.UserID, error) {
+	p, err := s.repo.ByKey(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]domain.UserID, 0, len(p.Members()))
+	for _, m := range p.Members() {
+		ids = append(ids, m.UserID)
+	}
+	slices.Sort(ids)
+	return ids, nil
+}
+
+// InWorkspace lists every project of the request's workspace (a read model for admins and other
+// contexts; no actor check).
+func (s *Service) InWorkspace(ctx context.Context) ([]*domain.Project, error) {
+	return s.repo.InWorkspace(ctx)
+}
+
+// WorkspaceMemberIDs lists everyone who belongs to a project of the request's workspace, sorted.
+func (s *Service) WorkspaceMemberIDs(ctx context.Context) ([]domain.UserID, error) {
+	ps, err := s.repo.InWorkspace(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var ids []domain.UserID
+	for _, p := range ps {
+		for _, m := range p.Members() {
+			ids = append(ids, m.UserID)
+		}
+	}
+	slices.Sort(ids)
+	return slices.Compact(ids), nil
+}
+
 // NextIssueNumber atomically advances the project's issue sequence.
 func (s *Service) NextIssueNumber(ctx context.Context, key string) (int, error) {
 	var n int

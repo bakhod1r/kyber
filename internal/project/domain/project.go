@@ -172,4 +172,6 @@ type Repository interface {
 	Update(ctx context.Context, key string, fn func(*Project) error) error
 	ByKey(ctx context.Context, key string) (*Project, error) // ErrProjectNotFound
 	ListForUser(ctx context.Context, u UserID) ([]*Project, error)
+	// InWorkspace lists every project of the request's workspace, by key.
+	InWorkspace(ctx context.Context) ([]*Project, error)
 }

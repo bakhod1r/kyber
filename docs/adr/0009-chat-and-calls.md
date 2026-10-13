@@ -1,4 +1,4 @@
-# ADR-0008 — Team chat and calls (Slack-style messaging, huddles with video, audio and screen share)
+# ADR-0009 — Team chat and calls (Slack-style messaging, huddles with video, audio and screen share)
 
 - **Status:** Accepted (2026-10-13), implementation in Sprint 11 (S50–S58)
 - **Related:** ADR-0005 (four DDD layers), ADR-0003 (access control), ADR-0004 (workspaces), PLAN §3.5 (bounded contexts)
@@ -54,7 +54,7 @@ SaaS: everything runs on the operator's server.
      TURN credentials are short-lived (HMAC, coturn `use-auth-secret`) and issued by `GET /api/v1/calls/ice`.
    - Later (ADR to follow): an SFU (LiveKit or pion) behind the same signaling port for >6 people and recording.
 5. **Persistence.** Hand-written pgx repositories (ADR-0002) with the shared contract tests; migrations
-   `0045_chat`, `0047_calls`. Signaling messages are never stored.
+   `0047_chat`, `0049_calls`. Signaling messages are never stored.
 6. **Events.** Chat writes `message.posted` (and edited/deleted) to the outbox in the same transaction; Notify
    consumes it for mentions; the realtime Hub is fed from the app layer after commit.
 

@@ -2,6 +2,7 @@
 package application
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -37,6 +38,12 @@ type (
 	Workspaces interface {
 		WorkspaceOf(ctx context.Context, project string) (string, error)
 	}
+	// Audience lists who hears an announcement (ACL to Project/Workspace).
+	Audience interface {
+		ProjectMembers(ctx context.Context, project string) ([]string, error)
+		// WorkspaceMembers lists everyone in the request's workspace.
+		WorkspaceMembers(ctx context.Context) ([]string, error)
+	}
 	Users interface {
 		UserIDByEmail(ctx context.Context, email string) (id string, ok bool, err error)
 		DisplayName(ctx context.Context, id string) (string, error)
@@ -65,6 +72,7 @@ type Deps struct {
 	Members       Members
 	Workspaces    Workspaces
 	Users         Users
+	Audience      Audience
 	NewID         func() string
 	Now           func() time.Time
 	Log           *slog.Logger
@@ -87,50 +95,90 @@ func (s *Service) WithConversations(c Conversations) *Service {
 
 const excerptLen = 140
 
-// OnChatMessage tells people mentioned (@email) in a chat message, if they may read it.
-func (s *Service) OnChatMessage(ctx context.Context, m outbox.Message) error {
-	var e struct {
-		Conversation string `json:"conversation_id"`
-		Author       string `json:"author_id"`
-		Body         string `json:"body"`
-	}
-	if err := json.Unmarshal(m.Payload, &e); err != nil {
-		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "err", err)
+// announcement mirrors announcement.published (a published event contract).
+type announcement struct {
+	ID, Workspace, Project, Title, Excerpt, Author string
+}
+
+// OnAnnouncement tells the project's members (or the workspace's, without a project) about an
+// announcement, through their inbox and their chosen channels; never its author.
+func (s *Service) OnAnnouncement(ctx context.Context, m outbox.Message) error {
+	var a announcement
+	if err := json.Unmarshal(m.Payload, &a); err != nil {
+		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "name", m.Name)
 		return nil
 	}
-	if s.d.Conversations == nil {
-		return nil
+	var audience []string
+	var err error
+	if a.Project != "" {
+		audience, err = s.d.Audience.ProjectMembers(ctx, a.Project)
+	} else {
+		audience, err = s.d.Audience.WorkspaceMembers(ctx)
 	}
-	var actorName string
-	for _, email := range domain.ParseMentions(e.Body) {
-		id, ok, err := s.d.Users.UserIDByEmail(ctx, email)
-		if err != nil {
-			return err
-		}
-		if !ok || id == e.Author {
-			continue
-		}
-		name, readable, err := s.d.Conversations.Readable(ctx, id, e.Conversation)
-		if err != nil {
-			return err
-		}
-		if !readable {
-			continue
-		}
-		if actorName == "" {
-			if actorName, err = s.d.Users.DisplayName(ctx, e.Author); err != nil {
-				return err
-			}
-		}
+	if err != nil {
+		return err
+	}
+	ids := make([]domain.UserID, len(audience))
+	for i, u := range audience {
+		ids[i] = domain.UserID(u)
+	}
+	actor, err := s.d.Users.DisplayName(ctx, a.Author)
+	if err != nil {
+		return err
+	}
+	for _, u := range domain.AnnouncementRecipients(domain.UserID(a.Author), ids) {
 		n := domain.Notification{
-			ID: domain.NotificationID(s.d.NewID()), Recipient: domain.UserID(id), Workspace: tenant.Workspace(ctx),
-			Kind: domain.KindMentioned, ConversationID: e.Conversation, ConversationName: name, ActorName: actorName,
-			Excerpt: excerpt(e.Body), SourceEvent: m.ID, CreatedAt: s.d.Now(),
+			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Workspace: a.Workspace, Kind: domain.KindAnnouncement,
+			Project: a.Project, IssueTitle: a.Title, ActorName: actor, Excerpt: a.Excerpt, SourceEvent: m.ID, CreatedAt: s.d.Now(),
 		}
 		if err := s.d.Repo.Add(ctx, n); err != nil {
 			return err
 		}
-		if err := s.enqueue(ctx, n, ""); err != nil {
+		if err := s.enqueue(ctx, n, a.Project); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// meeting mirrors the meeting.* events (a published event contract of the Calendar context).
+type meeting struct {
+	Workspace, Project, Title string
+	Start, End                time.Time
+	Attendees                 []string
+	Organizer, By             string
+}
+
+// OnMeetingEvent tells the invited about meeting.scheduled and meeting.cancelled (not whoever did
+// it) and reminds them before meeting.reminder's start.
+func (s *Service) OnMeetingEvent(ctx context.Context, m outbox.Message) error {
+	var e meeting
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "name", m.Name)
+		return nil
+	}
+	actor := cmp.Or(e.Organizer, e.By)
+	actorName := ""
+	if actor != "" {
+		name, err := s.d.Users.DisplayName(ctx, actor)
+		if err != nil {
+			return err
+		}
+		actorName = name
+	}
+	ids := make([]domain.UserID, len(e.Attendees))
+	for i, u := range e.Attendees {
+		ids[i] = domain.UserID(u)
+	}
+	for _, u := range domain.AnnouncementRecipients(domain.UserID(actor), ids) {
+		n := domain.Notification{
+			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Workspace: e.Workspace, Kind: domain.KindMeeting, Project: e.Project,
+			IssueTitle: e.Title, ActorName: actorName, Excerpt: domain.MeetingText(m.Name, e.Start, e.End), SourceEvent: m.ID, CreatedAt: s.d.Now(),
+		}
+		if err := s.d.Repo.Add(ctx, n); err != nil {
+			return err
+		}
+		if err := s.enqueue(ctx, n, e.Project); err != nil {
 			return err
 		}
 	}
@@ -323,4 +371,54 @@ func (s *Service) MarkRead(ctx context.Context, user, id string) error {
 
 func (s *Service) MarkAllRead(ctx context.Context, user string) error {
 	return s.d.Repo.MarkAllRead(ctx, inbox(ctx, user), s.d.Now())
+}
+
+// OnChatMessage tells people mentioned (@email) in a chat message, if they may read it.
+func (s *Service) OnChatMessage(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		Conversation string `json:"conversation_id"`
+		Author       string `json:"author_id"`
+		Body         string `json:"body"`
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "err", err)
+		return nil
+	}
+	if s.d.Conversations == nil {
+		return nil
+	}
+	var actorName string
+	for _, email := range domain.ParseMentions(e.Body) {
+		id, ok, err := s.d.Users.UserIDByEmail(ctx, email)
+		if err != nil {
+			return err
+		}
+		if !ok || id == e.Author {
+			continue
+		}
+		name, readable, err := s.d.Conversations.Readable(ctx, id, e.Conversation)
+		if err != nil {
+			return err
+		}
+		if !readable {
+			continue
+		}
+		if actorName == "" {
+			if actorName, err = s.d.Users.DisplayName(ctx, e.Author); err != nil {
+				return err
+			}
+		}
+		n := domain.Notification{
+			ID: domain.NotificationID(s.d.NewID()), Recipient: domain.UserID(id), Workspace: tenant.Workspace(ctx),
+			Kind: domain.KindMentioned, ConversationID: e.Conversation, ConversationName: name, ActorName: actorName,
+			Excerpt: excerpt(e.Body), SourceEvent: m.ID, CreatedAt: s.d.Now(),
+		}
+		if err := s.d.Repo.Add(ctx, n); err != nil {
+			return err
+		}
+		if err := s.enqueue(ctx, n, ""); err != nil {
+			return err
+		}
+	}
+	return nil
 }

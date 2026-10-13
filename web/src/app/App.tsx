@@ -13,6 +13,8 @@ import { ConversationExtras } from "./ConversationExtras";
 const extras: ConversationSlot = (conversationId, me, names) => (
   <ConversationExtras key={conversationId} conversationId={conversationId} me={me} names={names} />
 );
+import { AdminPage } from "../contexts/admin/ui/AdminPage";
+import { Announcements } from "../contexts/announcement/ui/Announcements";
 import { ProjectPage } from "./ProjectPage";
 import { SettingsPage } from "../contexts/notify/ui/SettingsPage";
 import { ProjectsPage } from "../contexts/project/ui/ProjectsPage";
@@ -45,6 +47,7 @@ function Home() {
   if (!me.data) return <LandingPage />;
   return (
     <Layout user={me.data}>
+      <Announcements projectKey={null} />
       <ProjectsPage />
     </Layout>
   );
@@ -56,6 +59,7 @@ export function AppRoutes() {
       <Route path="/login" element={<AuthPage mode="login" />} />
       <Route path="/signup" element={<AuthPage mode="signup" />} />
       <Route path="/" element={<Home />} />
+      <Route path="/admin" element={<RequireUser><AdminPage /></RequireUser>} />
       <Route path="/projects/:key" element={<RequireUser><ProjectPage /></RequireUser>} />
       <Route path="/projects/:key/backlog" element={<RequireUser><ProjectPage view="backlog" /></RequireUser>} />
       <Route path="/projects/:key/reports" element={<RequireUser><ProjectPage view="reports" /></RequireUser>} />
@@ -64,6 +68,7 @@ export function AppRoutes() {
       <Route path="/projects/:key/audit" element={<RequireUser><ProjectPage view="audit" /></RequireUser>} />
       <Route path="/projects/:key/summary" element={<RequireUser><ProjectPage view="summary" /></RequireUser>} />
       <Route path="/projects/:key/timeline" element={<RequireUser><ProjectPage view="timeline" /></RequireUser>} />
+      <Route path="/projects/:key/announcements" element={<RequireUser><ProjectPage view="announcements" /></RequireUser>} />
       <Route path="/projects/:key/forms" element={<RequireUser><ProjectPage view="forms" /></RequireUser>} />
       <Route path="/projects/:key/docs" element={<RequireUser><ProjectPage view="docs" /></RequireUser>} />
       <Route path="/projects/:key/goals" element={<RequireUser><ProjectPage view="goals" /></RequireUser>} />

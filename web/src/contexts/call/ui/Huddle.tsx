@@ -65,7 +65,7 @@ function StreamAudio({ stream }: { stream?: MediaStream }) {
 
 /**
  * Zoom-style huddle of a conversation (S57): start or join, then a grid of participants with microphone,
- * camera and screen-share controls. Media flows browser to browser (WebRTC mesh, ADR-0008).
+ * camera and screen-share controls. Media flows browser to browser (WebRTC mesh, ADR-0009).
  */
 export function Huddle({ conversationId, me, names, platform, presentables = [], renderPresentation }: {
   conversationId: string; me: string; names: Map<string, string>; platform?: Platform;

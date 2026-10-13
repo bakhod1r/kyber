@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/bakhod1r/kyber/internal/calendar/domain/repotest"
@@ -17,4 +18,14 @@ func TestContract(t *testing.T) {
 		}
 	}
 	repotest.Run(t, postgres.NewRepository(pool))
+	var names []string
+	rows, _ := pool.Query(context.Background(), `SELECT name FROM outbox ORDER BY id`)
+	for rows.Next() {
+		var n string
+		_ = rows.Scan(&n)
+		names = append(names, n)
+	}
+	if strings.Join(names, ",") != "meeting.scheduled,meeting.scheduled,meeting.reminder,meeting.cancelled" {
+		t.Fatalf("outbox = %v", names)
+	}
 }

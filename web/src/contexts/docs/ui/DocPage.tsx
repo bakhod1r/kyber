@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { docsUseCases } from "../application";
-import { Markdown } from "./Markdown";
+import { Markdown } from "../../../shared/ui/Markdown";
 
 /** A read-only doc page (what a huddle shows when the page is presented). Readers without access see a note. */
 export function DocPage({ id }: { id: string }) {

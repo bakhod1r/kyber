@@ -1,4 +1,4 @@
-// Package domain is the Chat context (ADR-0008): channels and direct messages of a workspace,
+// Package domain is the Chat context (ADR-0009): channels and direct messages of a workspace,
 // and the messages posted in them. A public channel is readable by every workspace member;
 // private channels and DMs only by their members.
 package domain

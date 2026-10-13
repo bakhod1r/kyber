@@ -76,3 +76,76 @@ func TestJoinAndMembership(t *testing.T) {
 		t.Fatalf("member missing err = %v", err)
 	}
 }
+
+func TestAdministers(t *testing.T) {
+	ctx := context.Background()
+	s := setup()
+	w, _ := s.Create(ctx, "u-1", "acme", "Acme")
+	_ = s.Join(ctx, string(w.ID()), "u-2")
+	for _, tc := range []struct {
+		ws, user string
+		want     bool
+	}{
+		{string(w.ID()), "u-1", true},  // owner
+		{string(w.ID()), "u-2", false}, // member
+		{string(w.ID()), "u-9", false}, // stranger
+		{string(domain.DefaultID), "u-1", false},
+	} {
+		if got, err := s.Administers(ctx, tc.ws, tc.user); err != nil || got != tc.want {
+			t.Errorf("%s/%s = %v %v", tc.ws, tc.user, got, err)
+		}
+	}
+	if _, err := s.Administers(ctx, "missing", "u-1"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+}
+
+func TestMemberIDs(t *testing.T) {
+	ctx := context.Background()
+	s := setup()
+	w, _ := s.Create(ctx, "u-1", "acme", "Acme")
+	_ = s.Join(ctx, string(w.ID()), "u-2")
+	if ids, err := s.MemberIDs(ctx, string(w.ID())); err != nil || len(ids) != 2 || ids[0] != "u-1" || ids[1] != "u-2" {
+		t.Fatalf("members = %v %v", ids, err)
+	}
+	if ids, err := s.MemberIDs(ctx, string(domain.DefaultID)); err != nil || ids != nil {
+		t.Fatalf("default = %v %v", ids, err)
+	}
+	if _, err := s.MemberIDs(ctx, "missing"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+}
+
+func TestMembersAndRoles(t *testing.T) {
+	ctx := context.Background()
+	s := setup()
+	w, _ := s.Create(ctx, "u-1", "acme", "Acme")
+	ws := string(w.ID())
+	_ = s.Join(ctx, ws, "u-2")
+	if err := s.ChangeRole(ctx, ws, "u-2", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	ms, err := s.Members(ctx, ws)
+	if err != nil || len(ms) != 2 || ms[1].UserID != "u-2" || ms[1].Role != domain.RoleAdmin {
+		t.Fatalf("members = %+v %v", ms, err)
+	}
+	for _, tc := range []struct {
+		ws, user, role string
+		want           error
+	}{
+		{ws, "u-1", "member", domain.ErrLastOwner},
+		{ws, "u-9", "member", domain.ErrNotMember},
+		{ws, "u-2", "boss", domain.ErrInvalidRole},
+		{"missing", "u-2", "member", domain.ErrWorkspaceNotFound},
+	} {
+		if err := s.ChangeRole(ctx, tc.ws, tc.user, tc.role); !errors.Is(err, tc.want) {
+			t.Errorf("%+v: %v", tc, err)
+		}
+	}
+	if ms, err := s.Members(ctx, string(domain.DefaultID)); err != nil || ms != nil {
+		t.Fatalf("default = %v %v", ms, err)
+	}
+	if _, err := s.Members(ctx, "missing"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+}

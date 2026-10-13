@@ -62,6 +62,20 @@ func (r *Repository) ByKey(ctx context.Context, key string) (*domain.Project, er
 	return clone(p), nil
 }
 
+func (r *Repository) InWorkspace(ctx context.Context) ([]*domain.Project, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ws := domain.WorkspaceID(tenant.Workspace(ctx))
+	var out []*domain.Project
+	for _, p := range r.byKey {
+		if p.Workspace() == ws {
+			out = append(out, clone(p))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key() < out[j].Key() })
+	return out, nil
+}
+
 func (r *Repository) ListForUser(ctx context.Context, u domain.UserID) ([]*domain.Project, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

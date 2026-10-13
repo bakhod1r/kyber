@@ -71,6 +71,7 @@ type Relay struct {
 	maxAttempts int
 	mu          sync.RWMutex
 	handlers    map[string][]Handler
+	all         []Handler
 }
 
 // DefaultMaxAttempts is how often a message may fail before it becomes a dead letter.
@@ -89,6 +90,13 @@ func NewRelay(store Store, log *slog.Logger, opts ...Option) *Relay {
 	return r
 }
 
+// HandleAll subscribes h to every event, after the handlers of its name.
+func (r *Relay) HandleAll(h Handler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.all = append(r.all, h)
+}
+
 // Handle subscribes h to events named name.
 func (r *Relay) Handle(name string, h Handler) {
 	r.mu.Lock()
@@ -102,7 +110,7 @@ const batch = 100
 func (r *Relay) ProcessOnce(ctx context.Context) (int, error) {
 	return r.store.Process(ctx, batch, func(m Message) error {
 		r.mu.RLock()
-		hs := r.handlers[m.Name]
+		hs := append(slices.Clone(r.handlers[m.Name]), r.all...)
 		r.mu.RUnlock()
 		hctx := ctx
 		if m.Workspace != "" {
@@ -224,6 +232,27 @@ func (s *MemoryStore) DeadLetters() []Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.dead)
+}
+
+// DeadLettersOf lists one workspace's parked messages, oldest first.
+func (s *MemoryStore) DeadLettersOf(_ context.Context, workspace string, limit int) ([]Message, error) {
+	var out []Message
+	for _, m := range s.DeadLetters() {
+		if m.Workspace == workspace && len(out) < limit {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+// RetryOf retries a dead letter of the workspace; ErrNotDead for any other message.
+func (s *MemoryStore) RetryOf(_ context.Context, workspace string, id int64) error {
+	for _, m := range s.DeadLetters() {
+		if m.ID == id && m.Workspace == workspace {
+			return s.Retry(id)
+		}
+	}
+	return ErrNotDead
 }
 
 // Retry puts a dead letter back at the head of the queue with its attempts reset.

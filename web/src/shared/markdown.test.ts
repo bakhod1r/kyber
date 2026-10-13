@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInline, parseMarkdown, safeHref } from "./model";
+import { parseInline, parseMarkdown, safeHref } from "./markdown";
 
 describe("markdown", () => {
   it("reads inline marks and keeps unsafe links as text", () => {

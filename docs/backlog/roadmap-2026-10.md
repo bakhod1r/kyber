@@ -24,8 +24,9 @@ architecture test, Vitest, e2e ×3) → commit + push → short report.
 4. ✅ Custom fields: per-project definitions (text, number, date, select), values on issues, API/UI, JQL.
 5. Attachments: storage port; MinIO/S3 and local adapters; size limits, authorization, UI.
 6. S49: event envelope (workspace, project, actor, occurred_at, schema version) and a dead-letter queue. — done (ADR-0007: actor, trace context, schema version; dead letters after 10 failures; `kyber outbox` CLI).
-7. Real time (SSE): outbox relay → per-workspace stream filtered by visibility; UI invalidates queries.
+7. Real time (SSE): outbox relay → per-workspace stream filtered by visibility; UI invalidates queries. — done (ADR-0008; hints only, NOTIFY across replicas).
 8. Admin panel (workspace users, projects, settings), MCP server (tools over the API), PostgreSQL RLS.
+   C8a admin panel — done: members and roles, projects, stuck events (view, retry). Next: C8b MCP, C8c RLS.
 
 ## D. Jira project navigation (requested 2026-10-13)
 Tabs like Jira's: Summary, Timeline, Backlog, Active sprints, Reports, List, Forms, Goals, Docs — plus quick
@@ -36,3 +37,12 @@ issues, `startDate`/`dueDate`/`due` in JQL, the Timeline tab). D4 Goals — done
 by JQL through the Search ACL; Goals tab). D5 Docs — done (docs context;
 Markdown pages with numbered revisions; safe Markdown rendering without raw HTML). D6 Forms — done (form context;
 submissions become issues through the Issue Tracking ACL). Section D is complete.
+
+## E. Team events and announcements (requested 2026-10-13)
+1. E1 Announcements — done: project admins (project) and workspace owners/admins or `KYBER_ADMIN_EMAILS`
+   (workspace) publish; every member is notified in the inbox, by email/Telegram per their settings, in
+   the project's Telegram groups, and open pages refresh live.
+2. E2 Team events — done: meetings for chosen people, a project's members or the workspace's; everyone
+   invited is notified when it is scheduled or cancelled (inbox, email/Telegram, the project's Telegram
+   groups), reminded once 15 minutes before (once across replicas), and answers going/maybe/declined.
+   Rescheduling (moving a meeting) is not there yet.
