@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.36.0
+  version: 0.37.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -372,7 +372,7 @@ paths:
       operationId: openStream
       description: |
         Server-Sent Events of this workspace for the caller (`message.posted`, `message.edited`,
-        `message.deleted`, `message.reacted`, `typing`, `call.updated`, `call.signal`, `whiteboard.ops`, `whiteboard.cursor`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
+        `message.deleted`, `message.reacted`, `typing`, `call.updated`, `call.signal`, `call.follow`, `whiteboard.ops`, `whiteboard.cursor`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
         what was missed. Keeping the stream open marks the caller online.
       parameters:
         - { name: Last-Event-ID, in: header, schema: { type: string } }
@@ -671,6 +671,43 @@ paths:
         "204": { description: Shared }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/presentation:
+    put:
+      operationId: presentToCall
+      description: Opens a doc or whiteboard for everyone in the call (replacing the current presentation). Each viewer opens it with their own permissions.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [kind, ref], properties: { kind: { type: string, enum: [doc, whiteboard] }, ref: { type: string } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: stopPresenting
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/presentation/follow:
+    post:
+      operationId: followPresenter
+      description: The presenter's view (scroll position as fractions, and zoom) for the others, as `call.follow`; not stored.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [x, y, zoom], properties: { x: { type: number }, y: { type: number }, zoom: { type: number } } } } }
+      responses:
+        "204": { description: Sent }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/focus:
     get:
@@ -2314,13 +2351,17 @@ components:
         deleted: { type: boolean }
     Call:
       type: object
-      required: [id, conversation_id, started_by, started_at, live, participants]
+      required: [id, conversation_id, started_by, started_at, live, participants, presentation]
       properties:
         id: { type: string }
         conversation_id: { type: string }
         started_by: { type: string }
         started_at: { type: string, format: date-time }
         live: { type: boolean }
+        presentation:
+          oneOf:
+            - { type: "null" }
+            - { type: object, required: [kind, ref, by], properties: { kind: { type: string, enum: [doc, whiteboard] }, ref: { type: string }, by: { type: string } } }
         participants:
           type: array
           items:

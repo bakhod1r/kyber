@@ -7,6 +7,10 @@ CREATE TABLE calls (
     started_by      uuid NOT NULL,
     started_at      timestamptz NOT NULL,
     ended_at        timestamptz,
+    -- S60: a doc or whiteboard presented to everyone in the call
+    presentation_kind text CHECK (presentation_kind IN ('doc', 'whiteboard')),
+    presentation_ref  text,
+    presentation_by   uuid,
     version         integer NOT NULL DEFAULT 0
 );
 -- One live call per conversation, enforced by the database.

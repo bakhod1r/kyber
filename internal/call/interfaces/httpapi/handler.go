@@ -33,6 +33,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/calls/{id}/media", h.media)
 	mux.HandleFunc("POST /api/v1/calls/{id}/signal", h.signal)
 	mux.HandleFunc("GET /api/v1/calls/ice", h.iceServers)
+	mux.HandleFunc("PUT /api/v1/calls/{id}/presentation", h.present)
+	mux.HandleFunc("DELETE /api/v1/calls/{id}/presentation", h.stopPresenting)
+	mux.HandleFunc("POST /api/v1/calls/{id}/presentation/follow", h.follow)
 }
 
 func codeFor(err error) (string, bool) {
@@ -47,7 +50,9 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeCallFull, true
 	case errors.Is(err, domain.ErrNotInCall), errors.Is(err, domain.ErrCallEnded), errors.Is(err, domain.ErrConflict):
 		return httpx.CodeCallState, true
-	case errors.Is(err, domain.ErrInvalidSignal):
+	case errors.Is(err, domain.ErrNotPresenter):
+		return httpx.CodeCallNotPresenter, true
+	case errors.Is(err, domain.ErrInvalidSignal), errors.Is(err, domain.ErrInvalidPresentation):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -71,11 +76,21 @@ type CallDTO struct {
 	StartedAt      string           `json:"started_at"`
 	Live           bool             `json:"live"`
 	Participants   []ParticipantDTO `json:"participants"`
+	Presentation   *PresentationDTO `json:"presentation"`
+}
+
+type PresentationDTO struct {
+	Kind string `json:"kind"`
+	Ref  string `json:"ref"`
+	By   string `json:"by"`
 }
 
 func ToDTO(c *domain.Call) CallDTO {
 	d := CallDTO{ID: string(c.ID), ConversationID: string(c.Conversation), StartedBy: string(c.StartedBy),
 		StartedAt: c.StartedAt.Format(time.RFC3339Nano), Live: c.Live(), Participants: []ParticipantDTO{}}
+	if p := c.Presentation; p != nil {
+		d.Presentation = &PresentationDTO{Kind: string(p.Kind), Ref: p.Ref, By: string(p.By)}
+	}
 	for _, p := range c.Participants {
 		d.Participants = append(d.Participants, ParticipantDTO{UserID: string(p.User), JoinedAt: p.JoinedAt.Format(time.RFC3339Nano),
 			Audio: p.Media.Audio, Video: p.Media.Video, Screen: p.Media.Screen})
@@ -155,4 +170,47 @@ func (h *Handler) signal(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) iceServers(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{"ice_servers": h.ice(auth.Actor(r.Context()), time.Now())})
+}
+
+func (h *Handler) present(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Kind string `json:"kind"`
+		Ref  string `json:"ref"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	c, err := h.svc.Present(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), domain.PresentKind(in.Kind), in.Ref)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+func (h *Handler) stopPresenting(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.StopPresenting(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+func (h *Handler) follow(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		X    float64 `json:"x"`
+		Y    float64 `json:"y"`
+		Zoom float64 `json:"zoom"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := h.svc.Follow(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), application.View{X: in.X, Y: in.Y, Zoom: in.Zoom}); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

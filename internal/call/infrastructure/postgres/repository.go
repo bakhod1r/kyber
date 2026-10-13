@@ -56,8 +56,9 @@ func (r *Repository) Create(ctx context.Context, c *domain.Call) error {
 
 func (r *Repository) Save(ctx context.Context, c *domain.Call) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE calls SET ended_at = $3, version = version + 1 WHERE id = $1 AND version = $2`,
-			string(c.ID), c.Version, ended(c))
+		kind, ref, by := presentation(c)
+		tag, err := tx.Exec(ctx, `UPDATE calls SET ended_at = $3, presentation_kind = $4, presentation_ref = $5, presentation_by = $6,
+			version = version + 1 WHERE id = $1 AND version = $2`, string(c.ID), c.Version, ended(c), kind, ref, by)
 		if err != nil {
 			return err
 		}
@@ -72,13 +73,23 @@ func (r *Repository) Save(ctx context.Context, c *domain.Call) error {
 	})
 }
 
-const cols = `c.id, c.workspace_id, c.conversation_id, c.started_by, c.started_at, c.ended_at, c.version`
+const cols = `c.id, c.workspace_id, c.conversation_id, c.started_by, c.started_at, c.ended_at, c.version,
+	c.presentation_kind, c.presentation_ref, c.presentation_by::text`
+
+func presentation(c *domain.Call) (kind, ref, by *string) {
+	if p := c.Presentation; p != nil {
+		k, r, b := string(p.Kind), p.Ref, string(p.By)
+		return &k, &r, &b
+	}
+	return nil, nil, nil
+}
 
 func (r *Repository) one(ctx context.Context, where string, arg string) (*domain.Call, error) {
 	var c domain.Call
 	var end *time.Time
+	var pKind, pRef, pBy *string
 	err := r.pool.QueryRow(ctx, `SELECT `+cols+` FROM calls c WHERE `+where, arg).
-		Scan(&c.ID, &c.Workspace, &c.Conversation, &c.StartedBy, &c.StartedAt, &end, &c.Version)
+		Scan(&c.ID, &c.Workspace, &c.Conversation, &c.StartedBy, &c.StartedAt, &end, &c.Version, &pKind, &pRef, &pBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrCallNotFound
 	}
@@ -88,6 +99,9 @@ func (r *Repository) one(ctx context.Context, where string, arg string) (*domain
 	c.StartedAt = c.StartedAt.UTC()
 	if end != nil {
 		c.EndedAt = end.UTC()
+	}
+	if pKind != nil && pRef != nil && pBy != nil {
+		c.Presentation = &domain.Presentation{Kind: domain.PresentKind(*pKind), Ref: *pRef, By: domain.UserID(*pBy)}
 	}
 	rows, err := r.pool.Query(ctx, `SELECT user_id, joined_at, audio, video, screen FROM call_participants WHERE call_id = $1
 		ORDER BY joined_at, user_id`, string(c.ID))

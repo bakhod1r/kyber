@@ -1,5 +1,49 @@
-import { useEffect, useRef, useState } from "react";
-import { MAX_PARTICIPANTS, type Platform, presenter, useHuddle, useSpeaking } from "../application";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  fromFraction, MAX_PARTICIPANTS, type Platform, type Presentable, type Presentation, presenter, toFraction, useHuddle, useSpeaking,
+} from "../application";
+
+/** The app shell renders presented files (docs, whiteboards), which belong to other contexts. */
+export type RenderPresentation = (p: Presentation) => ReactNode;
+
+/**
+ * The file presented to everyone (S60). The presenter's scrolling is shared; others follow it unless they
+ * turn following off to look around on their own.
+ */
+function PresentationView({ p, mine, title, by, view, onScroll, onStop, render }: {
+  p: Presentation; mine: boolean; title: string; by: string; view: { x: number; y: number } | null;
+  onScroll: (x: number, y: number) => void; onStop: () => void; render: RenderPresentation;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const [follow, setFollow] = useState(true);
+  const last = useRef(0);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || mine || !follow || !view) return;
+    el.scrollTo({ left: fromFraction(view.x, el.scrollWidth, el.clientWidth), top: fromFraction(view.y, el.scrollHeight, el.clientHeight) });
+  }, [view, follow, mine]);
+  return (
+    <figure className="huddle-presentation" aria-label="Presentation">
+      <figcaption className="row">
+        <span>{mine ? "You are presenting" : `${by} is presenting`} <b>{title}</b></span>
+        {mine ? (
+          <button className="ghost" onClick={onStop}>Stop presenting</button>
+        ) : (
+          <label><input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> Follow presenter</label>
+        )}
+      </figcaption>
+      <div ref={box} className="huddle-presentation-body" data-testid="presentation-scroll"
+        onScroll={() => {
+          const el = box.current;
+          if (!mine || !el || Date.now() - last.current < 120) return;
+          last.current = Date.now();
+          onScroll(toFraction(el.scrollLeft, el.scrollWidth, el.clientWidth), toFraction(el.scrollTop, el.scrollHeight, el.clientHeight));
+        }}>
+        {render(p)}
+      </div>
+    </figure>
+  );
+}
 
 /** A <video> bound to a MediaStream (our own preview is muted to avoid echo). */
 function StreamVideo({ stream, muted, label }: { stream?: MediaStream; muted?: boolean; label: string }) {
@@ -23,8 +67,10 @@ function StreamAudio({ stream }: { stream?: MediaStream }) {
  * Zoom-style huddle of a conversation (S57): start or join, then a grid of participants with microphone,
  * camera and screen-share controls. Media flows browser to browser (WebRTC mesh, ADR-0008).
  */
-export function Huddle({ conversationId, me, names, platform }: {
+export function Huddle({ conversationId, me, names, platform, presentables = [], renderPresentation }: {
   conversationId: string; me: string; names: Map<string, string>; platform?: Platform;
+  /** Docs and whiteboards that can be presented; renderPresentation draws the presented one. */
+  presentables?: Presentable[]; renderPresentation?: RenderPresentation;
 }) {
   const h = useHuddle(conversationId, me, platform);
   const { call, state } = h;
@@ -51,8 +97,14 @@ export function Huddle({ conversationId, me, names, platform }: {
   const sharer = presenter(call);
   const shared = sharer === me ? state.screen : sharer ? state.remotes[sharer]?.screen : undefined;
   const pickDevices = async () => setDevices(devices.length ? [] : await h.devices().catch(() => []));
+  const shown = call?.presentation;
+  const shownTitle = shown ? (presentables.find((x) => x.kind === shown.kind && x.ref === shown.ref)?.title ?? (shown.kind === "doc" ? "a doc" : "a whiteboard")) : "";
   return (
     <section className="huddle" aria-label="Huddle">
+      {shown && renderPresentation && (
+        <PresentationView p={shown} mine={shown.by === me} title={shownTitle} by={name(shown.by)} view={h.view}
+          onScroll={(x, y) => h.follow(x, y)} onStop={() => void h.stopPresenting()} render={renderPresentation} />
+      )}
       {shared && sharer && (
         <figure className="huddle-screen">
           <StreamVideo key={shared.getVideoTracks()[0]?.id ?? "none"} stream={shared} muted label={`${name(sharer)}'s screen`} />
@@ -77,6 +129,15 @@ export function Huddle({ conversationId, me, names, platform }: {
         <button aria-pressed={state.media.audio} onClick={() => void h.toggleMic()}>{state.media.audio ? "Mute" : "Unmute"}</button>
         <button aria-pressed={state.media.video} onClick={() => void h.toggleCamera()}>{state.media.video ? "Stop camera" : "Start camera"}</button>
         <button aria-pressed={state.media.screen} onClick={() => void h.shareScreen()}>{state.media.screen ? "Stop sharing" : "Share screen"}</button>
+        {renderPresentation && presentables.length > 0 && (
+          <select aria-label="Present to everyone" value="" onChange={(e) => {
+            const [kind, ref] = e.target.value.split(":") as ["doc" | "whiteboard", string];
+            if (ref) void h.present(kind, ref);
+          }}>
+            <option value="">Present…</option>
+            {presentables.map((x) => <option key={`${x.kind}:${x.ref}`} value={`${x.kind}:${x.ref}`}>{x.kind === "doc" ? "📄" : "🖍"} {x.title}</option>)}
+          </select>
+        )}
         <button className="ghost" onClick={() => void pickDevices()}>Devices</button>
         <button className="danger" onClick={() => void h.leave()}>Leave</button>
       </div>

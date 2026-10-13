@@ -38,6 +38,8 @@ func (t *told) Notify(_ context.Context, to []string, c *domain.Call) {
 	*t = append(*t, fmt.Sprintf("%v:%d", to, len(c.Participants)))
 }
 
+func (t *told) Follow(context.Context, []string, *domain.Call, app.View) {}
+
 func setup() (*app.Service, context.Context, *told) {
 	n := 0
 	tl := &told{}

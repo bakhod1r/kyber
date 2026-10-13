@@ -18,6 +18,10 @@ func NewRepository() *Repository { return &Repository{calls: map[domain.CallID]d
 
 func clone(c domain.Call) *domain.Call {
 	c.Participants = slices.Clone(c.Participants)
+	if c.Presentation != nil {
+		p := *c.Presentation
+		c.Presentation = &p
+	}
 	return &c
 }
 

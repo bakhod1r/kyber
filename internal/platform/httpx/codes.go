@@ -30,6 +30,7 @@ const (
 	CodeCallState            = "CALL_STATE"
 	CodeWhiteboardNotFound   = "WHITEBOARD_NOT_FOUND"
 	CodeWhiteboardBusy       = "WHITEBOARD_BUSY"
+	CodeCallNotPresenter     = "CALL_NOT_PRESENTER"
 	CodeWorkspaceSlugTaken   = "WORKSPACE_SLUG_TAKEN"
 	CodeOTPPending           = "AUTH_OTP_PENDING"
 	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
@@ -111,6 +112,7 @@ var codes = []code{
 	{CodeCallState, "6106", 409, "You are not in this call.", "Siz bu qo'ng'iroqda emassiz.", "Вы не участвуете в этом звонке.", errorx.CategoryBusiness},
 	{CodeWhiteboardNotFound, "6107", 404, "Whiteboard not found.", "Doska topilmadi.", "Доска не найдена.", errorx.CategoryBusiness},
 	{CodeWhiteboardBusy, "6108", 409, "The whiteboard is busy. Try again.", "Doska band. Qayta urinib ko'ring.", "Доска занята. Попробуйте снова.", errorx.CategoryBusiness},
+	{CodeCallNotPresenter, "6109", 403, "Only the presenter can do that.", "Buni faqat taqdimotchi qila oladi.", "Это может сделать только докладчик.", errorx.CategoryBusiness},
 	{CodeChatForbidden, "6103", 403, "You cannot do that in this conversation.", "Bu suhbatda buni qila olmaysiz.", "В этой беседе так сделать нельзя.", errorx.CategorySecurity},
 	{CodeProjectNotFound, "6002", 404, "Project not found.", "Loyiha topilmadi.", "Проект не найден.", errorx.CategoryBusiness},
 	{CodeProjectKeyTaken, "6003", 409, "This project key is already taken.", "Bu loyiha kaliti band.", "Этот ключ проекта уже занят.", errorx.CategoryBusiness},

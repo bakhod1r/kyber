@@ -7,15 +7,11 @@ import { AuthPage } from "../contexts/identity/ui/AuthPage";
 import { LandingPage } from "./LandingPage";
 import { MeetingsPage } from "../contexts/calendar/ui/MeetingsPage";
 import { ChatPage, type ConversationSlot } from "../contexts/chat/ui/ChatPage";
-import { Huddle } from "../contexts/call/ui/Huddle";
-import { Whiteboards } from "../contexts/whiteboard/ui/Whiteboards";
+import { ConversationExtras } from "./ConversationExtras";
 
 /** Huddle and whiteboards of the open conversation, composed into the chat. */
 const extras: ConversationSlot = (conversationId, me, names) => (
-  <div key={conversationId} className="conversation-extras">
-    <Huddle conversationId={conversationId} me={me} names={names} />
-    <Whiteboards conversationId={conversationId} me={me} names={names} />
-  </div>
+  <ConversationExtras key={conversationId} conversationId={conversationId} me={me} names={names} />
 );
 import { ProjectPage } from "./ProjectPage";
 import { SettingsPage } from "../contexts/notify/ui/SettingsPage";

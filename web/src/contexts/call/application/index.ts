@@ -1,7 +1,7 @@
 // call: application layer — the huddle of a conversation as a React hook over HuddleEngine.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import type { Call } from "../domain/model";
+import type { Call, FollowView, PresentKind } from "../domain/model";
 import { callGateway, onCallEvents } from "../infrastructure/gateway";
 import { browserPlatform } from "../infrastructure/webrtc";
 import type { Platform } from "../domain/model";
@@ -18,6 +18,7 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
   const live = useQuery({ queryKey: liveKey(conversationId), queryFn: () => callGateway.live(conversationId) });
   const engine = useMemo(() => new HuddleEngine(user, callGateway, platform), [user, platform]);
   const state = useSyncExternalStore((fn) => engine.onChange(fn), () => engine.snapshot);
+  const [view, setView] = useState<FollowView | null>(null);
 
   useEffect(
     () =>
@@ -28,6 +29,9 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
           engine.update(c);
         },
         (s) => void engine.onSignal(s),
+        (v) => {
+          if (v.call_id === engine.snapshot.call?.id) setView(v);
+        },
       ),
     [conversationId, engine, qc],
   );
@@ -50,6 +54,20 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
     useMicrophone: (deviceId: string) => engine.useMicrophone(deviceId),
     shareScreen: () => engine.shareScreen(),
     devices: () => engine.devices(),
+    /** The presenter's latest view (for follow me). */
+    view,
+    present: async (kind: PresentKind, ref: string) => {
+      const id = engine.snapshot.call?.id;
+      if (id) engine.update(await callGateway.present(id, kind, ref));
+    },
+    stopPresenting: async () => {
+      const id = engine.snapshot.call?.id;
+      if (id) engine.update(await callGateway.stopPresenting(id));
+    },
+    follow: (x: number, y: number, zoom = 1) => {
+      const id = engine.snapshot.call?.id;
+      if (id) void callGateway.follow(id, { x, y, zoom }).catch(() => {});
+    },
   };
 }
 

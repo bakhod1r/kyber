@@ -494,3 +494,8 @@ a.user:hover { text-decoration: underline; }
 .wb-canvas { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; touch-action: none; background: #fff; margin-top: 8px; }
 .wb-canvas.tool-select { cursor: default; }
 .wb-canvas:not(.tool-select) { cursor: crosshair; }
+
+/* Present to everyone (S60) */
+.huddle-presentation { margin: 0 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg, #fff); }
+.huddle-presentation figcaption { justify-content: space-between; padding: 6px 10px; font-size: 0.9rem; border-bottom: 1px solid var(--border); }
+.huddle-presentation-body { max-height: 60vh; overflow: auto; padding: 8px; }

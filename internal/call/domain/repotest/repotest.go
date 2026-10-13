@@ -42,6 +42,7 @@ func Run(t *testing.T, r domain.Repository) {
 	b, _ := r.ByID(ctx, c.ID)
 	_ = a.Join(Dev, t0.Add(time.Minute))
 	_ = a.SetMedia(Dev, domain.Media{Video: true, Screen: true})
+	_ = a.Present(Dev, domain.PresentDoc, "doc-42")
 	if err := r.Save(ctx, a); err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +52,8 @@ func Run(t *testing.T, r domain.Repository) {
 	}
 	got, _ := r.ByID(ctx, c.ID)
 	if len(got.Participants) != 2 || got.Participants[1].User != Dev || got.Participants[1].Media != (domain.Media{Video: true, Screen: true}) ||
-		!got.Participants[1].JoinedAt.Equal(t0.Add(time.Minute)) || got.Version != 1 {
+		!got.Participants[1].JoinedAt.Equal(t0.Add(time.Minute)) || got.Version != 1 ||
+		got.Presentation == nil || *got.Presentation != (domain.Presentation{Kind: domain.PresentDoc, Ref: "doc-42", By: Dev}) {
 		t.Fatalf("after save = %+v", got)
 	}
 

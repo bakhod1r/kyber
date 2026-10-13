@@ -47,7 +47,56 @@ type Call struct {
 	StartedAt    time.Time
 	EndedAt      time.Time     // zero while live
 	Participants []Participant // in joining order
+	Presentation *Presentation // what everyone looks at together, if anything
 	Version      int           // optimistic locking
+}
+
+// A Presentation is a shared file opened for everyone in the call ("present to all"); each viewer opens it
+// with their own permissions.
+type PresentKind string
+
+const (
+	PresentDoc        PresentKind = "doc"
+	PresentWhiteboard PresentKind = "whiteboard"
+)
+
+type Presentation struct {
+	Kind PresentKind
+	Ref  string // the doc or whiteboard id
+	By   UserID
+}
+
+var (
+	ErrInvalidPresentation = errors.New("present a doc or a whiteboard")
+	ErrNotPresenter        = errors.New("only the presenter can do that")
+)
+
+// Present opens a doc or whiteboard for everyone, replacing any current presentation.
+func (c *Call) Present(by UserID, kind PresentKind, ref string) error {
+	if !c.Live() || !c.In(by) {
+		return ErrNotInCall
+	}
+	if (kind != PresentDoc && kind != PresentWhiteboard) || ref == "" || len(ref) > 200 {
+		return ErrInvalidPresentation
+	}
+	c.Presentation = &Presentation{Kind: kind, Ref: ref, By: by}
+	return nil
+}
+
+func (c *Call) StopPresenting(by UserID) error {
+	if c.Presentation == nil || c.Presentation.By != by {
+		return ErrNotPresenter
+	}
+	c.Presentation = nil
+	return nil
+}
+
+// CanFollow: only the presenter steers where everyone looks (follow me).
+func (c *Call) CanFollow(by UserID) error {
+	if !c.Live() || c.Presentation == nil || c.Presentation.By != by {
+		return ErrNotPresenter
+	}
+	return nil
 }
 
 // Start opens a call; the starter joins with the microphone on.
@@ -86,6 +135,9 @@ func (c *Call) Leave(u UserID, now time.Time) error {
 		return ErrNotInCall
 	}
 	c.Participants = slices.Delete(c.Participants, i, i+1)
+	if c.Presentation != nil && c.Presentation.By == u {
+		c.Presentation = nil
+	}
 	if len(c.Participants) == 0 {
 		c.EndedAt = now.UTC()
 	}

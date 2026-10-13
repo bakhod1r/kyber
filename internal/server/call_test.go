@@ -111,3 +111,44 @@ func TestCallSignaling(t *testing.T) {
 		}
 	}, server.WithICE([]string{"stun:stun.example.com:3478", "turn:turn.example.com:3478"}, "s3cret"))
 }
+
+// S60: present a doc or whiteboard to everyone in the call; the presenter steers where everyone looks.
+func TestPresentToAll(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "dev"})
+		url := "/api/v1/conversations/" + ch["id"].(string)
+		dev.do("POST", url+"/join", nil)
+		_, call := lead.do("POST", url+"/call", nil)
+		dev.do("POST", url+"/call", nil)
+		callURL := "/api/v1/calls/" + call["id"].(string)
+		devStream := dev.stream("")
+
+		code, b := lead.do("PUT", callURL+"/presentation", map[string]string{"kind": "whiteboard", "ref": "wb-1"})
+		expect(t, code, 200, b)
+		if p := b["presentation"].(map[string]any); p["kind"] != "whiteboard" || p["ref"] != "wb-1" {
+			t.Fatalf("presentation = %v", b)
+		}
+		if e := next(t, devStream, "call.updated"); !strings.Contains(e.data, `"ref":"wb-1"`) {
+			t.Fatalf("call.updated = %+v", e)
+		}
+		code, b = lead.do("PUT", callURL+"/presentation", map[string]string{"kind": "slides", "ref": "x"})
+		expect(t, code, 422, b)
+
+		code, b = lead.do("POST", callURL+"/presentation/follow", map[string]any{"x": 0.25, "y": 0.5, "zoom": 1})
+		expect(t, code, 204, b)
+		if e := next(t, devStream, "call.follow"); !strings.Contains(e.data, `"y":0.5`) {
+			t.Fatalf("follow = %+v", e)
+		}
+		code, b = dev.do("POST", callURL+"/presentation/follow", map[string]any{"x": 0, "y": 0, "zoom": 1})
+		expect(t, code, 403, b)
+		code, b = dev.do("DELETE", callURL+"/presentation", nil)
+		expect(t, code, 403, b)
+		code, b = lead.do("DELETE", callURL+"/presentation", nil)
+		expect(t, code, 200, b)
+		if b["presentation"] != nil {
+			t.Fatalf("stopped = %v", b)
+		}
+	})
+}

@@ -4,6 +4,7 @@ package realtime
 import (
 	"context"
 
+	"github.com/bakhod1r/kyber/internal/call/application"
 	"github.com/bakhod1r/kyber/internal/call/domain"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
@@ -30,4 +31,9 @@ func (n Notifier) Notify(ctx context.Context, to []string, c *domain.Call) {
 func (n Notifier) Relay(ctx context.Context, s domain.Signal) {
 	_ = n.hub.Publish(tenant.Workspace(ctx), []string{string(s.To)}, "call.signal", map[string]string{
 		"call_id": string(s.Call), "from": string(s.From), "kind": string(s.Kind), "data": s.Data})
+}
+
+// Follow sends call.follow (the presenter's view) to the given participants.
+func (n Notifier) Follow(ctx context.Context, to []string, c *domain.Call, v application.View) {
+	_ = n.hub.Publish(tenant.Workspace(ctx), to, "call.follow", map[string]any{"call_id": string(c.ID), "x": v.X, "y": v.Y, "zoom": v.Zoom})
 }

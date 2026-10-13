@@ -2,7 +2,23 @@
 // keeps the participants and relays signaling. Pure types and rules, no I/O.
 export type Media = { audio: boolean; video: boolean; screen: boolean };
 export type Participant = Media & { user_id: string; joined_at: string };
-export type Call = { id: string; conversation_id: string; started_by: string; started_at: string; live: boolean; participants: Participant[] };
+export type PresentKind = "doc" | "whiteboard";
+export type Presentation = { kind: PresentKind; ref: string; by: string };
+export type Call = {
+  id: string; conversation_id: string; started_by: string; started_at: string; live: boolean; participants: Participant[];
+  presentation?: Presentation | null;
+};
+/** Something that can be presented to everyone in a huddle. */
+export type Presentable = { kind: PresentKind; ref: string; title: string };
+/** Where the presenter is looking: scroll position as fractions of the scrollable size, and zoom. */
+export type FollowView = { call_id: string; x: number; y: number; zoom: number };
+
+/** Turns a scroll position into the fractions others can apply to a differently sized viewport. */
+export function toFraction(scroll: number, size: number, viewport: number): number {
+  const range = size - viewport;
+  return range <= 0 ? 0 : Math.min(1, Math.max(0, scroll / range));
+}
+export const fromFraction = (f: number, size: number, viewport: number) => Math.max(0, size - viewport) * f;
 export type SignalKind = "offer" | "answer" | "candidate";
 /** A relayed signal; data is ours (JSON of SignalData), opaque to the server. */
 export type Signal = { call_id: string; from: string; kind: SignalKind; data: string };

@@ -96,7 +96,12 @@ function Label({ e }: { e: Element }) {
   );
 }
 
-function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<string, string>; onClose: () => void }) {
+/** One whiteboard to draw on (also what a huddle shows when it is presented). */
+export function WhiteboardBoard(props: { id: string; me: string; names: Map<string, string>; onClose?: () => void }) {
+  return <Board {...props} />;
+}
+
+function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<string, string>; onClose?: () => void }) {
   const wb = useWhiteboard(id, me);
   const svg = useRef<SVGSVGElement>(null);
   const [tool, setTool] = useState<Tool>("select");
@@ -240,7 +245,7 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
           {sel && <button className="ghost" onClick={remove}>Delete</button>}
           <button className="ghost" onClick={() => void exportAs("svg")}>Export SVG</button>
           <button className="ghost" onClick={() => void exportAs("png")}>Export PNG</button>
-          <button className="ghost" aria-label="Close whiteboard" onClick={onClose}>✕</button>
+          {onClose && <button className="ghost" aria-label="Close whiteboard" onClick={onClose}>✕</button>}
         </div>
       </header>
       <svg ref={svg} role="img" aria-label="Canvas" viewBox={`0 0 ${W} ${H}`} className={`wb-canvas tool-${tool}`} xmlns="http://www.w3.org/2000/svg"

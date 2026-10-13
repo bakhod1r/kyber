@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Call, isPolite, me, opens, peersOf, presenter } from "./model";
+import { type Call, fromFraction, isPolite, me, opens, peersOf, presenter, toFraction } from "./model";
 
 const call: Call = {
   id: "k-1", conversation_id: "c-1", started_by: "a", started_at: "", live: true,
@@ -28,5 +28,13 @@ describe("call domain", () => {
 
   it("makes exactly one of two peers polite", () => {
     expect(isPolite("a", "b")).not.toBe(isPolite("b", "a"));
+  });
+});
+
+describe("follow the presenter", () => {
+  it("shares scroll positions as fractions", () => {
+    expect(toFraction(250, 1500, 1000)).toBe(0.5);
+    expect(toFraction(10, 500, 1000)).toBe(0); // nothing to scroll
+    expect(fromFraction(0.5, 3000, 1000)).toBe(1000);
   });
 });

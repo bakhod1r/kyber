@@ -96,3 +96,42 @@ func TestSignal(t *testing.T) {
 		}
 	}
 }
+
+func TestPresentation(t *testing.T) {
+	c := domain.Start("k-1", "w-1", "c-1", "u-a", t0)
+	_ = c.Join("u-b", t0)
+	if err := c.Present("u-x", domain.PresentDoc, "d-1"); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("outsider presents = %v", err)
+	}
+	for _, bad := range []struct{ kind, ref string }{{"slides", "x"}, {"doc", ""}, {"doc", strings.Repeat("x", 201)}} {
+		if err := c.Present("u-a", domain.PresentKind(bad.kind), bad.ref); !errors.Is(err, domain.ErrInvalidPresentation) {
+			t.Errorf("%v = %v", bad, err)
+		}
+	}
+	if err := c.Present("u-a", domain.PresentDoc, "d-1"); err != nil || c.Presentation == nil || c.Presentation.By != "u-a" {
+		t.Fatalf("present = %+v %v", c.Presentation, err)
+	}
+	// Someone else takes over (one presentation at a time).
+	_ = c.Present("u-b", domain.PresentWhiteboard, "b-1")
+	if c.Presentation.By != "u-b" || c.Presentation.Kind != domain.PresentWhiteboard {
+		t.Fatalf("takeover = %+v", c.Presentation)
+	}
+	if err := c.StopPresenting("u-a"); !errors.Is(err, domain.ErrNotPresenter) {
+		t.Fatalf("stop by someone else = %v", err)
+	}
+	if err := c.CanFollow("u-a"); !errors.Is(err, domain.ErrNotPresenter) {
+		t.Fatalf("follow by non-presenter = %v", err)
+	}
+	if err := c.CanFollow("u-b"); err != nil {
+		t.Fatal(err)
+	}
+	// The presenter leaving ends the presentation.
+	_ = c.Leave("u-b", t0)
+	if c.Presentation != nil {
+		t.Fatalf("after presenter left = %+v", c.Presentation)
+	}
+	_ = c.Present("u-a", domain.PresentDoc, "d-1")
+	if err := c.StopPresenting("u-a"); err != nil || c.Presentation != nil {
+		t.Fatalf("stop = %v %+v", err, c.Presentation)
+	}
+}

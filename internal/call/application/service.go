@@ -23,10 +23,15 @@ type Conversations interface {
 	Members(ctx context.Context, actor, conversation string) ([]string, error)
 }
 
-// Notifier tells the conversation's members' open tabs about the call's new state.
+// Notifier tells the conversation's members' open tabs about the call's new state, and the participants
+// where the presenter is looking (follow me; ephemeral).
 type Notifier interface {
 	Notify(ctx context.Context, to []string, c *domain.Call)
+	Follow(ctx context.Context, to []string, c *domain.Call, view View)
 }
+
+// View is the presenter's position in the presented file (fractions of its size, and zoom).
+type View struct{ X, Y, Zoom float64 }
 
 // Signals delivers WebRTC signaling to its one recipient (never stored).
 type Signals interface {
@@ -35,8 +40,9 @@ type Signals interface {
 
 type nobody struct{}
 
-func (nobody) Notify(context.Context, []string, *domain.Call) {}
-func (nobody) Relay(context.Context, domain.Signal)           {}
+func (nobody) Notify(context.Context, []string, *domain.Call)       {}
+func (nobody) Follow(context.Context, []string, *domain.Call, View) {}
+func (nobody) Relay(context.Context, domain.Signal)                 {}
 
 type Deps struct {
 	Calls         domain.Repository
@@ -165,4 +171,32 @@ func (s *Service) Leave(ctx context.Context, actor, id string) error {
 
 func (s *Service) SetMedia(ctx context.Context, actor, id string, m domain.Media) (*domain.Call, error) {
 	return s.change(ctx, actor, id, func(c *domain.Call) error { return c.SetMedia(domain.UserID(actor), m) })
+}
+
+// Present opens a doc or whiteboard for everyone in the call.
+func (s *Service) Present(ctx context.Context, actor, id string, kind domain.PresentKind, ref string) (*domain.Call, error) {
+	return s.change(ctx, actor, id, func(c *domain.Call) error { return c.Present(domain.UserID(actor), kind, ref) })
+}
+
+func (s *Service) StopPresenting(ctx context.Context, actor, id string) (*domain.Call, error) {
+	return s.change(ctx, actor, id, func(c *domain.Call) error { return c.StopPresenting(domain.UserID(actor)) })
+}
+
+// Follow tells the other participants where the presenter is looking.
+func (s *Service) Follow(ctx context.Context, actor, id string, v View) error {
+	c, _, err := s.load(ctx, actor, id)
+	if err != nil {
+		return err
+	}
+	if err := c.CanFollow(domain.UserID(actor)); err != nil {
+		return err
+	}
+	var to []string
+	for _, p := range c.Participants {
+		if string(p.User) != actor {
+			to = append(to, string(p.User))
+		}
+	}
+	s.d.Notifier.Follow(ctx, to, c, v)
+	return nil
 }
