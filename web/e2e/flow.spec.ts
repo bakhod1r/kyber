@@ -82,7 +82,7 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await sprint1.getByRole("button", { name: "Start sprint" }).click();
   await expect(sprint1.getByText("active")).toBeVisible();
   // The board now shows the active sprint.
-  await page.getByRole("link", { name: "Board" }).click();
+  await page.getByRole("link", { name: "Active sprints", exact: true }).click();
   await expect(page.getByText("Sprint 1")).toBeVisible();
   await expect(page.getByText("— Ship v1")).toBeVisible();
   const ip = page.getByRole("region", { name: "In Progress" });
@@ -94,7 +94,7 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await expect(page.getByRole("status")).toContainText("Sprint 1 completed: 1 done, 1 carried over to the backlog.");
   await expect(page.getByRole("region", { name: "Sprint 1" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Backlog" }).getByText("Write release notes")).toBeVisible();
-  await page.getByRole("link", { name: "Board" }).click();
+  await page.getByRole("link", { name: "Active sprints", exact: true }).click();
 
   // Inviting an unknown email surfaces the server error.
   await page.getByLabel("Invite by email").fill("nobody@example.com");

@@ -5,6 +5,7 @@ package acl
 import (
 	"context"
 	"errors"
+	"strings"
 
 	agiledomain "github.com/bakhod1r/kyber/internal/agile/domain"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
@@ -37,6 +38,7 @@ func (a Projects) Browsable(ctx context.Context, actor string) ([]string, error)
 
 type IssueSource interface {
 	List(ctx context.Context, actor, project string, q issueapp.ListQuery) ([]*issuedomain.Issue, error)
+	ProjectFields(ctx context.Context, project string) ([]*issuedomain.CustomField, error)
 	ProjectWorkflow(ctx context.Context, project string) (*issuedomain.Workflow, error)
 }
 
@@ -55,6 +57,10 @@ func (a Issues) Facts(ctx context.Context, actor, project string) ([]domain.Issu
 		return nil, err
 	}
 	wf, err := a.src.ProjectWorkflow(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	defs, err := a.src.ProjectFields(ctx, project)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +87,28 @@ func (a Issues) Facts(ctx context.Context, actor, project string) ([]domain.Issu
 			v := p.Float()
 			f.Points = &v
 		}
+		for _, d := range defs {
+			if v := is.Field(d.ID()); v != "" {
+				if f.Custom == nil {
+					f.Custom = map[string]string{}
+				}
+				f.Custom[strings.ToLower(d.Name())] = v
+			}
+		}
 		out = append(out, f)
+	}
+	return out, nil
+}
+
+// CustomFields names the project's custom fields for queries.
+func (a Issues) CustomFields(ctx context.Context, project string) (map[string]domain.CustomType, error) {
+	defs, err := a.src.ProjectFields(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]domain.CustomType{}
+	for _, d := range defs {
+		out[strings.ToLower(d.Name())] = domain.CustomType(d.Type())
 	}
 	return out, nil
 }

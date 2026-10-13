@@ -20,9 +20,13 @@ architecture test, Vitest, e2e ×3) → commit + push → short report.
 ## C. Features
 1. ✅ Worklog: log work, original/remaining estimate, time tracking in the issue, time statistics in the sprint report.
 2. ✅ JQL: lexer/parser in the domain, SQL in infrastructure, memory evaluator, search page, saved filters.
-3. Board settings UI: columns, status mapping, WIP limits.
-4. Custom fields: per-project definitions (text, number, date, select), values on issues, API/UI, JQL.
+3. ✅ Board settings UI: columns, status mapping, WIP limits.
+4. ✅ Custom fields: per-project definitions (text, number, date, select), values on issues, API/UI, JQL.
 5. Attachments: storage port; MinIO/S3 and local adapters; size limits, authorization, UI.
 6. S49: event envelope (workspace, project, actor, occurred_at, schema version) and a dead-letter queue.
 7. Real time (SSE): outbox relay → per-workspace stream filtered by visibility; UI invalidates queries.
 8. Admin panel (workspace users, projects, settings), MCP server (tools over the API), PostgreSQL RLS.
+
+## D. Jira project navigation (requested 2026-10-13)
+Tabs like Jira's: Summary, Timeline, Backlog, Active sprints, Reports, List, Forms, Goals, Docs — plus quick
+filters on the board and the list (and saved filters reused there).

@@ -69,3 +69,7 @@ func TestWorklogContract(t *testing.T) {
 		return memory.NewWorklogRepository(), is
 	})
 }
+
+func TestCustomFieldContract(t *testing.T) {
+	repotest.RunCustomFields(t, func(t *testing.T) domain.CustomFieldRepository { return memory.NewCustomFieldRepository() })
+}

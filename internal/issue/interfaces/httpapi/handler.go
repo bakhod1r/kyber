@@ -35,6 +35,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/worklogs", h.worklogs)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/worklogs", h.logWork)
 	mux.HandleFunc("DELETE /api/v1/worklogs/{id}", h.deleteWorklog)
+	mux.HandleFunc("GET /api/v1/projects/{key}/fields", h.customFields)
+	mux.HandleFunc("POST /api/v1/projects/{key}/fields", h.createCustomField)
+	mux.HandleFunc("PUT /api/v1/fields/{id}", h.editCustomField)
+	mux.HandleFunc("DELETE /api/v1/fields/{id}", h.deleteCustomField)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/watchers", h.watch)
 	mux.HandleFunc("DELETE /api/v1/issues/{issueKey}/watchers", h.unwatch)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/children", h.children)
@@ -46,30 +50,31 @@ func (h *Handler) Register(mux *http.ServeMux) {
 }
 
 type issueDTO struct {
-	ID          string   `json:"id"`
-	Key         string   `json:"key"`
-	Title       string   `json:"title"`
-	Type        string   `json:"type"`
-	Status      string   `json:"status"`
-	Description string   `json:"description"`
-	Priority    string   `json:"priority"`
-	AssigneeID  *string  `json:"assignee_id"`
-	SprintID    *string  `json:"sprint_id"`
-	ReporterID  *string  `json:"reporter_id"`
-	Estimate    *float64 `json:"estimate"`
-	Rank        string   `json:"rank"`
-	ParentKey   *string  `json:"parent_key"`
-	Security    string   `json:"security_level"`
-	Resolution  string   `json:"resolution"`
-	FixVersions []string `json:"fix_versions"`
-	Time        timeDTO  `json:"time_tracking"`
-	Version     int      `json:"version"`
+	ID          string            `json:"id"`
+	Key         string            `json:"key"`
+	Title       string            `json:"title"`
+	Type        string            `json:"type"`
+	Status      string            `json:"status"`
+	Description string            `json:"description"`
+	Priority    string            `json:"priority"`
+	AssigneeID  *string           `json:"assignee_id"`
+	SprintID    *string           `json:"sprint_id"`
+	ReporterID  *string           `json:"reporter_id"`
+	Estimate    *float64          `json:"estimate"`
+	Rank        string            `json:"rank"`
+	ParentKey   *string           `json:"parent_key"`
+	Security    string            `json:"security_level"`
+	Resolution  string            `json:"resolution"`
+	FixVersions []string          `json:"fix_versions"`
+	Time        timeDTO           `json:"time_tracking"`
+	Fields      map[string]string `json:"custom_fields"`
+	Version     int               `json:"version"`
 }
 
 func toDTO(is *domain.Issue) issueDTO {
 	d := issueDTO{ID: string(is.ID()), Key: is.Key().String(), Title: is.Title(), Type: string(is.Type()),
 		Status: string(is.Status()), Description: is.Description(), Priority: string(is.Priority()),
-		Rank: string(is.Rank()), Security: is.SecurityLevel(), Resolution: string(is.Resolution()), FixVersions: fixVersions(is), Time: timeOut(is.TimeTracking()), Version: is.Version()}
+		Rank: string(is.Rank()), Security: is.SecurityLevel(), Resolution: string(is.Resolution()), FixVersions: fixVersions(is), Time: timeOut(is.TimeTracking()), Fields: fieldsOut(is), Version: is.Version()}
 	if is.Parent() != "" {
 		k := is.ParentKey().String()
 		d.ParentKey = &k
@@ -103,8 +108,13 @@ func codeFor(err error) (string, bool) {
 		errors.Is(err, application.ErrInvalidSprint), errors.Is(err, application.ErrInvalidAnchor), errors.Is(err, domain.ErrInvalidEstimate),
 		errors.Is(err, domain.ErrInvalidWorkflow), errors.Is(err, domain.ErrUnknownStatus),
 		errors.Is(err, application.ErrInvalidSecurityLevel), errors.Is(err, domain.ErrInvalidResolution), errors.Is(err, application.ErrInvalidVersion),
-		errors.Is(err, domain.ErrInvalidDuration), errors.Is(err, domain.ErrInvalidWorklog):
+		errors.Is(err, domain.ErrInvalidDuration), errors.Is(err, domain.ErrInvalidWorklog),
+		errors.Is(err, domain.ErrInvalidCustomField), errors.Is(err, domain.ErrInvalidFieldValue):
 		return httpx.CodeValidation, true
+	case errors.Is(err, domain.ErrFieldNotFound):
+		return httpx.CodeFieldNotFound, true
+	case errors.Is(err, domain.ErrFieldConflict):
+		return httpx.CodeFieldConflict, true
 	case errors.Is(err, domain.ErrWorklogNotFound):
 		return httpx.CodeWorklogNotFound, true
 	case errors.Is(err, application.ErrProjectNotFound):
@@ -190,19 +200,20 @@ var errMissingVersion = errors.New("version is required")
 // edit accepts a partial update; "assignee_id": null unassigns, an absent key leaves it unchanged.
 func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Version     *int            `json:"version"`
-		Title       *string         `json:"title"`
-		Description *string         `json:"description"`
-		Priority    *string         `json:"priority"`
-		AssigneeID  json.RawMessage `json:"assignee_id"`
-		SprintID    json.RawMessage `json:"sprint_id"`
-		Estimate    json.RawMessage `json:"estimate"`
-		ParentKey   json.RawMessage `json:"parent_key"`
-		Security    *string         `json:"security_level"`
-		Resolution  *string         `json:"resolution"`
-		FixVersions *[]string       `json:"fix_versions"`
-		Original    *string         `json:"original_estimate"`
-		Remaining   *string         `json:"remaining_estimate"`
+		Version     *int              `json:"version"`
+		Title       *string           `json:"title"`
+		Description *string           `json:"description"`
+		Priority    *string           `json:"priority"`
+		AssigneeID  json.RawMessage   `json:"assignee_id"`
+		SprintID    json.RawMessage   `json:"sprint_id"`
+		Estimate    json.RawMessage   `json:"estimate"`
+		ParentKey   json.RawMessage   `json:"parent_key"`
+		Security    *string           `json:"security_level"`
+		Resolution  *string           `json:"resolution"`
+		FixVersions *[]string         `json:"fix_versions"`
+		Original    *string           `json:"original_estimate"`
+		Remaining   *string           `json:"remaining_estimate"`
+		Fields      map[string]string `json:"custom_fields"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
@@ -213,7 +224,7 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cmd := application.EditIssue{Version: *in.Version, Title: in.Title, Description: in.Description, Priority: in.Priority, Security: in.Security, Resolution: in.Resolution, FixVersions: in.FixVersions,
-		OriginalEstimate: in.Original, RemainingEstimate: in.Remaining}
+		OriginalEstimate: in.Original, RemainingEstimate: in.Remaining, Fields: in.Fields}
 	if in.AssigneeID != nil {
 		cmd.AssigneeSet = true
 		if string(in.AssigneeID) != "null" {

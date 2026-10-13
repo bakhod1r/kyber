@@ -23,5 +23,8 @@ export const agileGateway = {
     request<BoardView>("PUT", `/api/v1/boards/${seg(b.id)}`, {
       version: b.version, name: b.name, kind: b.kind, columns: b.columns, kanban_backlog: b.kanban_backlog ?? false, ...patch,
     }),
+  createBoard: (key: string, name: string, kind: BoardView["kind"]) =>
+    request<BoardView>("POST", `/api/v1/projects/${seg(key)}/boards`, { name, kind }),
+  deleteBoard: (id: string) => request<undefined>("DELETE", `/api/v1/boards/${seg(id)}`),
   boards: (key: string) => request<List<BoardView>>("GET", `/api/v1/projects/${seg(key)}/boards`).then((r) => r.items),
 };

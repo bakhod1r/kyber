@@ -22,7 +22,7 @@ test("a project admin customises the workflow and the board follows", async ({ p
   await page.getByRole("button", { name: "Save workflow" }).click();
   await expect(page.getByRole("status")).toHaveText("Workflow saved");
 
-  await page.getByRole("link", { name: "Board", exact: true }).click();
+  await page.getByRole("link", { name: "Active sprints", exact: true }).click();
   await page.getByLabel("New issue title").fill("Review me");
   await page.getByRole("button", { name: "Add issue" }).click();
   const review = page.getByRole("region", { name: "Code Review" });

@@ -174,6 +174,25 @@ func Run(t *testing.T, newRepo Factory) {
 		}
 	})
 
+	t.Run("custom field values persist", func(t *testing.T) {
+		repo, _ := newRepo(t)
+		is := mk(t, 1, "Fields")
+		tier, _ := domain.NewCustomField("f-tier", "KYB", "Tier", domain.FieldSelect, []string{"Gold"})
+		_ = is.SetField(tier, "gold")
+		if err := repo.Save(ctx, is, nil); err != nil {
+			t.Fatal(err)
+		}
+		got, _ := repo.ByKey(ctx, is.Key())
+		if got.Field("f-tier") != "Gold" {
+			t.Fatalf("fields = %v", got.Fields())
+		}
+		_ = got.SetField(tier, "")
+		_ = repo.Save(ctx, got, nil)
+		if again, _ := repo.ByKey(ctx, is.Key()); len(again.Fields()) != 0 {
+			t.Fatalf("cleared = %v", again.Fields())
+		}
+	})
+
 	t.Run("not found", func(t *testing.T) {
 		repo, _ := newRepo(t)
 		key, _ := domain.NewIssueKey("KYB", 42)

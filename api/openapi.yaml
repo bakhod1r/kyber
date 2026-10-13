@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.30.0
+  version: 0.31.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -946,6 +946,7 @@ paths:
                 fix_versions: { type: array, items: { type: string }, description: "Replaces the fix versions (unarchived versions of the project)." }
                 original_estimate: { type: string, description: "Jira-style duration (1w 2d 3h 30m; 1d = 8h, 1w = 5d); empty clears. While nothing is logged the remaining estimate follows it." }
                 remaining_estimate: { type: string, description: "Jira-style duration; empty sets zero." }
+                custom_fields: { type: object, additionalProperties: { type: string }, description: "Field id → value (number, YYYY-MM-DD date, one of a select field's options, or text); empty clears." }
                 security_level: { type: string, enum: ["", confidential] }
       responses:
         "200": { description: Updated issue, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
@@ -1603,6 +1604,60 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/fields:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listCustomFields
+      description: The project's custom fields, in creation order (anyone who can browse the project). JQL finds them by name.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/CustomField" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createCustomField
+      description: Project admins add a field (text, number, date or select with options). Names are unique and may not be built-in JQL fields.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CustomFieldInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CustomField" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/fields/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: editCustomField
+      description: Project admins rename a field or change a select field's options (at `version`); the type stays.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf: [{ $ref: "#/components/schemas/CustomFieldInput" }]
+              required: [version]
+              properties: { version: { type: integer } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/CustomField" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteCustomField
+      description: Project admins delete a field; its values are no longer shown or searched.
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/sprints/{id}/report:
     parameters: [{ $ref: "#/components/parameters/SprintID" }]
     get:
@@ -2012,6 +2067,23 @@ components:
     Resolution:
       type: string
       enum: [done, wont_do, duplicate, cannot_reproduce]
+    CustomField:
+      type: object
+      required: [id, project_key, name, type, options, version]
+      properties:
+        id: { type: string }
+        project_key: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [text, number, date, select] }
+        options: { type: array, items: { type: string } }
+        version: { type: integer }
+    CustomFieldInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 60 }
+        type: { type: string, enum: [text, number, date, select], description: "On create only." }
+        options: { type: array, items: { type: string, maxLength: 60 }, maxItems: 100 }
     SearchHit:
       type: object
       required: [key, project_key, title, type, status, status_name, status_category, priority, assignee_id, resolution, points]
@@ -2196,7 +2268,7 @@ components:
     Priority: { type: string, enum: [lowest, low, medium, high, highest] }
     Issue:
       type: object
-      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, security_level, resolution, fix_versions, time_tracking, version]
+      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, security_level, resolution, fix_versions, time_tracking, custom_fields, version]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -2214,6 +2286,7 @@ components:
         parent_key: { type: [string, "null"], description: "The epic of a story/task/bug, or the issue a sub-task belongs to." }
         fix_versions: { type: array, items: { type: string }, description: "Ids of the versions (releases) the issue is planned to ship in." }
         time_tracking: { $ref: "#/components/schemas/TimeTracking" }
+        custom_fields: { type: object, additionalProperties: { type: string }, description: "Custom field values by field id (show those of the project's current fields)." }
         resolution:
           description: How a resolved issue ended; "" while it is not in a Done status.
           type: string

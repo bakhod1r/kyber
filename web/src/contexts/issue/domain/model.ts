@@ -28,6 +28,7 @@ export type Issue = {
   resolution?: "" | Resolution;
   fix_versions?: string[];
   time_tracking?: TimeTracking;
+  custom_fields?: Record<string, string>;
 };
 export type Resolution = "done" | "wont_do" | "duplicate" | "cannot_reproduce";
 export const RESOLUTIONS: { id: Resolution; label: string }[] = [
@@ -49,6 +50,7 @@ export type IssuePatch = {
   fix_versions?: string[];
   original_estimate?: string;
   remaining_estimate?: string;
+  custom_fields?: Record<string, string>;
 };
 export type Comment = { id: string; author_id: string; author_name: string; body: string; created_at: string };
 export const STATUSES: { id: Status; label: string }[] = [
@@ -104,3 +106,20 @@ export type Worklog = {
   spent: string;
   comment: string;
 };
+
+export type CustomFieldType = "text" | "number" | "date" | "select";
+export type CustomField = { id: string; project_key: string; name: string; type: CustomFieldType; options: string[]; version: number };
+export type CustomFieldInput = { name: string; type?: CustomFieldType; options: string[] };
+export const CUSTOM_FIELD_TYPES: { id: CustomFieldType; label: string }[] = [
+  { id: "text", label: "Text" },
+  { id: "number", label: "Number" },
+  { id: "date", label: "Date" },
+  { id: "select", label: "Select list" },
+];
+/** Splits an options text box ("Gold, Silver" or one per line) into options. */
+export function parseOptions(text: string): string[] {
+  return text
+    .split(/[,\n]/)
+    .map((o) => o.trim())
+    .filter(Boolean);
+}

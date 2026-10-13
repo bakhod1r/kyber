@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { IssueChildren } from "./IssueChildren";
 import { IssueHistory } from "./IssueHistory";
 import { IssueLinks } from "./IssueLinks";
+import { IssueDetails } from "./IssueDetails";
 import { IssueTimeTracking } from "./IssueTimeTracking";
 import { IssueWatchers } from "./IssueWatchers";
 import { MentionTextarea } from "./MentionTextarea";
@@ -209,6 +210,7 @@ export function IssuePanel({
         )}
         {loaded && <IssueChildren issue={loaded} projectKey={projectKey} onOpen={onOpen} />}
         <IssueWatchers issueKey={issueKey} />
+        {loaded && <IssueDetails key={loaded.id} issue={loaded} projectKey={projectKey} />}
         {loaded && <IssueTimeTracking key={loaded.version} issue={loaded} />}
         <IssueLinks issueKey={issueKey} onOpen={onOpen} />
         {extensions}

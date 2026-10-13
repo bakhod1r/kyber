@@ -19,7 +19,7 @@ test("a project admin plans and releases a version", async ({ page }) => {
   await page.getByRole("button", { name: "Create version" }).click();
   await expect(page.getByRole("status")).toHaveText("1.0 created");
 
-  await page.getByRole("link", { name: "Board", exact: true }).click();
+  await page.getByRole("link", { name: "Active sprints", exact: true }).click();
   await page.getByLabel("New issue title").fill("Ship login");
   await page.getByRole("button", { name: "Add issue" }).click();
   await page.getByText("Ship login").click();

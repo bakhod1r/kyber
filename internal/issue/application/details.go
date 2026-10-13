@@ -28,6 +28,8 @@ type EditIssue struct {
 	// OriginalEstimate / RemainingEstimate are durations like "1d 4h" ("" clears); nil leaves them.
 	OriginalEstimate  *string
 	RemainingEstimate *string
+	// Fields sets custom field values (field id → value, "" clears).
+	Fields map[string]string
 }
 
 func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue) (*domain.Issue, error) {
@@ -111,6 +113,9 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 			ids[n] = domain.VersionID(v)
 		}
 		is.PlanForVersions(ids)
+	}
+	if err := s.setFields(ctx, is, cmd.Fields); err != nil {
+		return nil, err
 	}
 	if original != nil {
 		is.EstimateTime(*original)

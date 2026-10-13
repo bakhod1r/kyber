@@ -24,6 +24,8 @@ type (
 	// Issues returns what a query sees of the project's issues the actor may see (ACL to Issue Tracking).
 	Issues interface {
 		Facts(ctx context.Context, actor, project string) ([]domain.Issue, error)
+		// CustomFields names the project's custom fields (lower-case name → type).
+		CustomFields(ctx context.Context, project string) (map[string]domain.CustomType, error)
 	}
 	// Users finds users by email (ACL to Identity).
 	Users interface {
@@ -68,11 +70,23 @@ type Result struct {
 
 // Search runs JQL over every project the actor may browse; hidden issues never match.
 func (s *Service) Search(ctx context.Context, actor, jql string, limit int) (Result, error) {
-	q, err := domain.Parse(jql)
+	projects, err := s.d.Projects.Browsable(ctx, actor)
 	if err != nil {
 		return Result{}, err
 	}
-	projects, err := s.d.Projects.Browsable(ctx, actor)
+	custom := map[string]domain.CustomType{}
+	for _, p := range projects {
+		fields, err := s.d.Issues.CustomFields(ctx, p)
+		if err != nil {
+			return Result{}, err
+		}
+		for name, t := range fields {
+			if _, seen := custom[name]; !seen {
+				custom[name] = t
+			}
+		}
+	}
+	q, err := domain.ParseWith(jql, custom)
 	if err != nil {
 		return Result{}, err
 	}

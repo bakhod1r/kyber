@@ -31,7 +31,7 @@ export function IssueHistory({ issueKey, projectKey }: { issueKey: string; proje
       case "rank":
         return `${who} changed ${FIELD[e.field]}`;
     }
-    const label = FIELD[e.field] ?? e.field;
+    const label = FIELD[e.field] ?? e.field.replace(/^custom:/, "");
     if (e.from === "" && e.to === "") return `${who} changed ${label}`; // recovered history: values unknown
     return `${who} changed ${label}: ${value(e, e.from, e.from_name)} → ${value(e, e.to, e.to_name)}`;
   };

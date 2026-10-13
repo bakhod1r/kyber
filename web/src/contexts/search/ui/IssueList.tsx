@@ -1,0 +1,65 @@
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { projectQuery, searchUseCases } from "../application";
+import { type QuickFilterState, QuickFilters } from "./QuickFilters";
+
+const COLUMNS: { field: string; label: string; jql: string }[] = [
+  { field: "key", label: "Key", jql: "key" },
+  { field: "title", label: "Summary", jql: "summary" },
+  { field: "type", label: "Type", jql: "type" },
+  { field: "status", label: "Status", jql: "status" },
+  { field: "priority", label: "Priority", jql: "priority" },
+  { field: "points", label: "Points", jql: '"story points"' },
+];
+
+/** IssueList: Jira's List view — every issue of the project in a sortable table, with quick filters. */
+export function IssueList({ projectKey, onOpen }: { projectKey: string; onOpen?: (issueKey: string) => void }) {
+  const [filters, setFilters] = useState<QuickFilterState>({ quick: [], saved: "" });
+  const [sort, setSort] = useState<{ jql: string; desc: boolean }>({ jql: "key", desc: false });
+  const jql = projectQuery(projectKey, filters.quick, filters.saved, `${sort.jql}${sort.desc ? " DESC" : ""}`);
+  const result = useQuery({ queryKey: ["search", jql], queryFn: () => searchUseCases.search(jql) });
+  const sortBy = (col: string) => setSort((s) => ({ jql: col, desc: s.jql === col ? !s.desc : false }));
+  return (
+    <section className="issue-list" aria-label="Issue list">
+      <QuickFilters projectKey={projectKey} value={filters} onChange={setFilters} onKeys={noop} />
+      {result.isError && <p role="alert" className="error">{result.error.message}</p>}
+      {result.data && (
+        <>
+          <p className="muted">{result.data.total === 1 ? "1 issue" : `${result.data.total} issues`}</p>
+          <table className="versions-table">
+            <thead>
+              <tr>
+                {COLUMNS.map((c) => (
+                  <th key={c.field} scope="col" aria-sort={sort.jql === c.jql ? (sort.desc ? "descending" : "ascending") : "none"}>
+                    <button type="button" className="ghost" onClick={() => sortBy(c.jql)}>
+                      {c.label}
+                      {sort.jql === c.jql ? (sort.desc ? " ↓" : " ↑") : ""}
+                    </button>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {result.data.items.map((is) => (
+                <tr key={is.key}>
+                  <td>
+                    <button type="button" className="ghost key" onClick={() => onOpen?.(is.key)}>
+                      {is.key}
+                    </button>
+                  </td>
+                  <td>{is.title}</td>
+                  <td>{is.type}</td>
+                  <td>{is.status_name || is.status}</td>
+                  <td>{is.priority}</td>
+                  <td>{is.points ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </section>
+  );
+}
+
+function noop() {}

@@ -13,7 +13,7 @@ backends.
   - Messages: post (1–4000 chars), edit and delete my own, history newest-first with `before` cursor paging.
   - Unread: mark read; the conversation list shows `unread` per conversation.
   - AC: non-members get 404 for private channels and DMs; outsiders of the workspace see nothing; only the
-    author edits/deletes; deleted messages show as "deleted" in history. ✅ **Done:** migration 0039, API 0.27.0.
+    author edits/deletes; deleted messages show as "deleted" in history. ✅ **Done:** migration 0040, API 0.27.0.
 - **S51 Realtime stream** — `GET /api/v1/stream` (SSE), in-process Hub port, events `message.*`,
   `conversation.*`, typing (`POST /conversations/{id}/typing`, ephemeral), presence (online while a stream is open).
   AC: a member receives a posted message within 1 s; non-members never receive it; reconnect resumes.
@@ -26,7 +26,7 @@ backends.
   ✅ **Threads and reactions done** (replies stay out of channel history and unread, `reply_count`, toggle
   reactions, `message.reacted` on the stream; API 0.29.0).
   ✅ **Mentions done (S52b):** `chat.message_posted` goes through the outbox; Notify tells `@email`-mentioned people who
-  may read the conversation (inbox + email/Telegram copies, link to `/chat/{id}`); migration 0040, API 0.30.0.
+  may read the conversation (inbox + email/Telegram copies, link to `/chat/{id}`); migration 0041, API 0.31.0.
   Issue previews follow (S52c).
 - **S53 Chat UI** — sidebar (channels, DMs, unread badges), channel view with infinite scroll, composer with
   mentions, thread panel, reactions, typing line; TanStack Query + the stream.
