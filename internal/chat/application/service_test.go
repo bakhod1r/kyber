@@ -624,3 +624,39 @@ func TestChannelManagement(t *testing.T) {
 		t.Fatalf("admin removes admin = %v", err)
 	}
 }
+
+// S70: user groups of a workspace.
+func TestUserGroups(t *testing.T) {
+	repo := memory.NewRepository()
+	svc := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Groups: memory.NewGroups(),
+		Members: members{"lead": {"w1"}, "dev": {"w1"}, "qa": {"w1"}, "eve": {"w2"}}, NewID: func() string { return "g-1" }, Now: time.Now})
+	ctx := tenant.With(context.Background(), "w1")
+	if _, err := svc.CreateGroup(ctx, "lead", "backend", "Backend", []string{"dev", "eve"}); !errors.Is(err, app.ErrNotWorkspaceMember) {
+		t.Fatalf("outsider as member = %v", err)
+	}
+	g, err := svc.CreateGroup(ctx, "lead", "backend", "Backend", []string{"dev", "lead"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.UpdateGroup(ctx, "qa", string(g.ID), "backend", "Backend", []string{"dev", "qa"}); err != nil {
+		t.Fatalf("a workspace member edits = %v", err)
+	}
+	if ids, _ := svc.GroupMembers(ctx, "backend"); len(ids) != 2 || ids[1] != "qa" {
+		t.Fatalf("members = %v", ids)
+	}
+	if list, _ := svc.Groups(ctx, "dev"); len(list) != 1 {
+		t.Fatalf("groups = %+v", list)
+	}
+	if _, err := svc.Groups(ctx, "eve"); !errors.Is(err, app.ErrNotWorkspaceMember) {
+		t.Fatalf("outsider lists = %v", err)
+	}
+	if err := svc.DeleteGroup(ctx, "dev", string(g.ID)); !errors.Is(err, domain.ErrNotOwner) {
+		t.Fatalf("non-creator deletes = %v", err)
+	}
+	if err := svc.DeleteGroup(ctx, "lead", string(g.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if ids, _ := svc.GroupMembers(ctx, "backend"); len(ids) != 0 {
+		t.Fatalf("after delete = %v", ids)
+	}
+}

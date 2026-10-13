@@ -324,3 +324,38 @@ func TestRenderChatMention(t *testing.T) {
 		t.Fatalf("dm subject = %q", subject)
 	}
 }
+
+// groups is a fake GroupMentions: @handle → members.
+type groups map[string][]string
+
+func (g groups) Mentioned(_ context.Context, body string) ([]string, error) {
+	var out []string
+	for h, ids := range g {
+		if strings.Contains(body, "@"+h) {
+			out = append(out, ids...)
+		}
+	}
+	return out, nil
+}
+
+// S70: an @group mention notifies its members who may read the conversation, once each, never the author.
+func TestChatGroupMention(t *testing.T) {
+	ctx := tenant.With(context.Background(), tenant.Default)
+	s, _ := setup()
+	s = s.WithConversations(chats{"c-1": {name: "general", readers: []string{"carol", "dave"}}}).
+		WithGroupMentions(groups{"backend": {"carol", "dave", "eve"}})
+	m := msg(9, "chat.message_posted", `{"id":"m-1","conversation_id":"c-1","author_id":"carol","body":"@backend @dave@x.uz deploy?"}`)
+	m.Workspace = tenant.Default
+	if err := s.OnChatMessage(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	if items, _, _ := s.List(ctx, "dave", false); len(items) != 1 {
+		t.Fatalf("dave (in the group and mentioned by e-mail) = %+v", items)
+	}
+	if got := inbox(t, s, "eve"); got != "" {
+		t.Fatalf("eve cannot read the conversation: %s", got)
+	}
+	if got := inbox(t, s, "carol"); got != "" {
+		t.Fatalf("author: %s", got)
+	}
+}

@@ -67,6 +67,7 @@ type Deps struct {
 	Statuses      domain.Statuses          // optional: status and DND (S66)
 	Scheduled     domain.ScheduledMessages // optional: scheduled messages (S67)
 	Reminders     domain.Reminders         // optional: /remind me (S67)
+	Groups        domain.Groups            // optional: user groups (S70)
 	Members       Members
 	NewID         func() string
 	Now           func() time.Time
@@ -964,4 +965,110 @@ func (s *Service) RemoveMember(ctx context.Context, actor, id, user string) (*do
 		}
 		return c.Remove(domain.UserID(actor), domain.UserID(user))
 	})
+}
+
+// workspaceMember: only people of the request's workspace see or change its groups.
+func (s *Service) workspaceMember(ctx context.Context, actor string) (string, error) {
+	ws := tenant.Workspace(ctx)
+	ok, err := s.d.Members.IsMember(ctx, ws, actor)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", ErrNotWorkspaceMember
+	}
+	return ws, nil
+}
+
+func userIDs(us []string) []domain.UserID {
+	out := make([]domain.UserID, len(us))
+	for i, u := range us {
+		out[i] = domain.UserID(u)
+	}
+	return out
+}
+
+// CreateGroup: anyone in the workspace makes a group of people in it (S70).
+func (s *Service) CreateGroup(ctx context.Context, actor, handle, name string, people []string) (*domain.Group, error) {
+	ws, err := s.workspaceMember(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireMembers(ctx, ws, people); err != nil {
+		return nil, err
+	}
+	g, err := domain.NewGroup(domain.GroupID(s.d.NewID()), domain.WorkspaceID(ws), handle, name, userIDs(people), domain.UserID(actor), s.d.Now())
+	if err != nil {
+		return nil, err
+	}
+	return g, s.d.Groups.Save(ctx, g)
+}
+
+func (s *Service) group(ctx context.Context, actor, id string) (*domain.Group, error) {
+	ws, err := s.workspaceMember(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	g, err := s.d.Groups.ByID(ctx, domain.GroupID(id))
+	if err != nil {
+		return nil, err
+	}
+	if string(g.Workspace) != ws {
+		return nil, domain.ErrGroupNotFound
+	}
+	return g, nil
+}
+
+// UpdateGroup: anyone in the workspace renames a group or changes its members.
+func (s *Service) UpdateGroup(ctx context.Context, actor, id, handle, name string, people []string) (*domain.Group, error) {
+	g, err := s.group(ctx, actor, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireMembers(ctx, string(g.Workspace), people); err != nil {
+		return nil, err
+	}
+	if err := g.Change(handle, name, userIDs(people)); err != nil {
+		return nil, err
+	}
+	return g, s.d.Groups.Save(ctx, g)
+}
+
+// DeleteGroup: only whoever made the group.
+func (s *Service) DeleteGroup(ctx context.Context, actor, id string) error {
+	g, err := s.group(ctx, actor, id)
+	if err != nil {
+		return err
+	}
+	if string(g.CreatedBy) != actor {
+		return domain.ErrNotOwner
+	}
+	return s.d.Groups.Delete(ctx, g.ID)
+}
+
+func (s *Service) Groups(ctx context.Context, actor string) ([]*domain.Group, error) {
+	ws, err := s.workspaceMember(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	return s.d.Groups.In(ctx, domain.WorkspaceID(ws))
+}
+
+// GroupMembers are the people of the request's workspace group @handle (none when there is no such group).
+func (s *Service) GroupMembers(ctx context.Context, handle string) ([]string, error) {
+	if s.d.Groups == nil {
+		return nil, nil
+	}
+	g, err := s.d.Groups.ByHandle(ctx, domain.WorkspaceID(tenant.Workspace(ctx)), handle)
+	if errors.Is(err, domain.ErrGroupNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(g.Members))
+	for i, m := range g.Members {
+		out[i] = string(m)
+	}
+	return out, nil
 }

@@ -15,7 +15,7 @@ func TestMigrateIsIdempotent(t *testing.T) {
 		t.Fatalf("second migrate: %v", err)
 	}
 	var n int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 58 {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 59 {
 		t.Fatalf("applied = %d, %v", n, err)
 	}
 }

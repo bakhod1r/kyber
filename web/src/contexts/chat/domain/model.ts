@@ -49,6 +49,9 @@ export function seen(messages: Pick<Message, "id" | "author_id" | "created_at">[
   return receipts.some((r) => r.user_id !== me && Date.parse(r.read_at) >= Date.parse(mine.created_at)) ? mine.id : null;
 }
 
+/** A user group (S70): @handle notifies its members. */
+export type UserGroup = { id: string; handle: string; name: string; member_ids: string[]; created_by: string; created_at: string };
+
 /** A message I scheduled (S67). */
 export type ScheduledMessage = { id: string; conversation_id: string; body: string; send_at: string; created_at: string };
 
@@ -129,12 +132,13 @@ export type Segment = { kind: "text" | "mention" | "issue"; text: string };
 /** Splits a message body into plain text, @email mentions and issue keys (rendered highlighted). */
 export function splitMentions(body: string): Segment[] {
   const out: Segment[] = [];
-  const re = /(@[^\s@]+@[^\s@]+\.[A-Za-z]{2,})|\b([A-Z][A-Z0-9]{1,9}-[1-9][0-9]*)\b/g;
+  // e-mail mentions, issue keys, and @group handles (S70)
+  const re = /(@[^\s@]+@[^\s@]+\.[A-Za-z]{2,})|\b([A-Z][A-Z0-9]{1,9}-[1-9][0-9]*)\b|(?<![\w@.])(@[a-z0-9][a-z0-9-]{1,29})(?![\w@-])/g;
   let last = 0;
   for (const m of body.matchAll(re)) {
     const at = m.index ?? 0;
     if (at > last) out.push({ kind: "text", text: body.slice(last, at) });
-    out.push({ kind: m[1] ? "mention" : "issue", text: m[0] });
+    out.push({ kind: m[2] ? "issue" : "mention", text: m[0] });
     last = at + m[0].length;
   }
   if (last < body.length) out.push({ kind: "text", text: body.slice(last) });

@@ -61,8 +61,14 @@ type Quiet interface {
 	Quiet(ctx context.Context, user string) (bool, error)
 }
 
+// GroupMentions resolves the @group handles in a chat message to their members (S70).
+type GroupMentions interface {
+	Mentioned(ctx context.Context, body string) ([]string, error)
+}
+
 type Deps struct {
 	Conversations Conversations // optional: chat mentions
+	GroupMentions GroupMentions // optional: @group mentions in chat
 	Quiet         Quiet         // optional
 	Repo          domain.Repository
 	Deliveries    domain.DeliveryRepository // optional: email/Telegram copies of notifications
@@ -95,6 +101,11 @@ func NewService(d Deps) *Service {
 }
 
 // WithConversations enables notifications for mentions in chat.
+func (s *Service) WithGroupMentions(g GroupMentions) *Service {
+	s.d.GroupMentions = g
+	return s
+}
+
 func (s *Service) WithQuiet(q Quiet) *Service {
 	s.d.Quiet = q
 	return s
@@ -404,15 +415,30 @@ func (s *Service) OnChatMessage(ctx context.Context, m outbox.Message) error {
 	if s.d.Conversations == nil {
 		return nil
 	}
-	var actorName string
+	var people []string
 	for _, email := range domain.ParseMentions(e.Body) {
 		id, ok, err := s.d.Users.UserIDByEmail(ctx, email)
 		if err != nil {
 			return err
 		}
-		if !ok || id == e.Author {
+		if ok {
+			people = append(people, id)
+		}
+	}
+	if s.d.GroupMentions != nil {
+		ids, err := s.d.GroupMentions.Mentioned(ctx, e.Body)
+		if err != nil {
+			return err
+		}
+		people = append(people, ids...)
+	}
+	var actorName string
+	told := map[string]bool{}
+	for _, id := range people {
+		if id == e.Author || told[id] {
 			continue
 		}
+		told[id] = true
 		name, readable, err := s.d.Conversations.Readable(ctx, id, e.Conversation)
 		if err != nil {
 			return err

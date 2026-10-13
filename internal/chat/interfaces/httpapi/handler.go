@@ -50,6 +50,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/messages/{id}/save", h.unsave)
 	mux.HandleFunc("GET /api/v1/chat/saved", h.saved)
 	mux.HandleFunc("PUT /api/v1/me/status", h.setStatus)
+	mux.HandleFunc("GET /api/v1/groups", h.groups)
+	mux.HandleFunc("POST /api/v1/groups", h.createGroup)
+	mux.HandleFunc("PATCH /api/v1/groups/{id}", h.updateGroup)
+	mux.HandleFunc("DELETE /api/v1/groups/{id}", h.deleteGroup)
 	mux.HandleFunc("PATCH /api/v1/conversations/{id}", h.rename)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/archive", h.archive)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/unarchive", h.unarchive)
@@ -73,6 +77,10 @@ func codeFor(err error) (string, bool) {
 	switch {
 	case errors.Is(err, domain.ErrConversationNotFound):
 		return httpx.CodeConversationNotFound, true
+	case errors.Is(err, domain.ErrHandleTaken):
+		return httpx.CodeGroupHandleTaken, true
+	case errors.Is(err, domain.ErrGroupNotFound):
+		return httpx.CodeGroupNotFound, true
 	case errors.Is(err, domain.ErrScheduledNotFound):
 		return httpx.CodeScheduledNotFound, true
 	case errors.Is(err, domain.ErrMessageNotFound):
@@ -84,7 +92,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
-		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule):
+		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -789,4 +797,76 @@ func (h *Handler) removeAdmin(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
 	c, err := h.svc.RemoveMember(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), r.PathValue("user"))
 	h.managed(w, r, c, err)
+}
+
+type groupDTO struct {
+	ID        string    `json:"id"`
+	Handle    string    `json:"handle"`
+	Name      string    `json:"name"`
+	MemberIDs []string  `json:"member_ids"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func toGroup(g *domain.Group) groupDTO {
+	d := groupDTO{ID: string(g.ID), Handle: g.Handle, Name: g.Name, MemberIDs: []string{}, CreatedBy: string(g.CreatedBy), CreatedAt: g.CreatedAt}
+	for _, m := range g.Members {
+		d.MemberIDs = append(d.MemberIDs, string(m))
+	}
+	return d
+}
+
+type groupIn struct {
+	Handle    string   `json:"handle"`
+	Name      string   `json:"name"`
+	MemberIDs []string `json:"member_ids"`
+}
+
+func (h *Handler) groups(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.Groups(r.Context(), auth.Actor(r.Context()))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := make([]groupDTO, len(list))
+	for i, g := range list {
+		out[i] = toGroup(g)
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
+	var in groupIn
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	g, err := h.svc.CreateGroup(r.Context(), auth.Actor(r.Context()), in.Handle, in.Name, in.MemberIDs)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, toGroup(g))
+}
+
+func (h *Handler) updateGroup(w http.ResponseWriter, r *http.Request) {
+	var in groupIn
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	g, err := h.svc.UpdateGroup(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Handle, in.Name, in.MemberIDs)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toGroup(g))
+}
+
+func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.DeleteGroup(r.Context(), auth.Actor(r.Context()), r.PathValue("id")); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

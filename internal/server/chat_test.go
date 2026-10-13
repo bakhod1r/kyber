@@ -535,3 +535,40 @@ func TestChannelManagement(t *testing.T) {
 		}
 	})
 }
+
+// S70: user groups; @handle in a message notifies the group's members.
+func TestUserGroups(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		qa := anon.signedIn("qa@x.uz")
+		_, devMe := dev.do("GET", "/api/v1/me", nil)
+		_, qaMe := qa.do("GET", "/api/v1/me", nil)
+		code, g := lead.do("POST", "/api/v1/groups", map[string]any{"handle": "backend", "name": "Backend", "member_ids": []string{devMe["id"].(string)}})
+		expect(t, code, 201, g)
+		code, b := dev.do("POST", "/api/v1/groups", map[string]any{"handle": "backend", "member_ids": []string{}})
+		expect(t, code, 409, b)
+		code, b = dev.do("POST", "/api/v1/groups", map[string]any{"handle": "here", "member_ids": []string{}})
+		expect(t, code, 422, b)
+		code, b = qa.do("PATCH", "/api/v1/groups/"+g["id"].(string), map[string]any{"handle": "backend", "name": "Backend",
+			"member_ids": []string{devMe["id"].(string), qaMe["id"].(string)}})
+		expect(t, code, 200, b)
+		if _, l := dev.do("GET", "/api/v1/groups", nil); len(l["items"].([]any)) != 1 {
+			t.Fatalf("groups = %v", l)
+		}
+
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "general"})
+		dev.do("POST", "/api/v1/conversations/"+ch["id"].(string)+"/join", nil)
+		lead.do("POST", "/api/v1/conversations/"+ch["id"].(string)+"/messages", map[string]string{"body": "@backend please review"})
+		for _, c := range []*client{dev, qa} {
+			eventuallyJSON(t, c, "/api/v1/notifications", func(b map[string]any) bool { return len(b["items"].([]any)) == 1 })
+		}
+
+		code, b = dev.do("DELETE", "/api/v1/groups/"+g["id"].(string), nil)
+		expect(t, code, 403, b)
+		code, b = lead.do("DELETE", "/api/v1/groups/"+g["id"].(string), nil)
+		expect(t, code, 204, b)
+		code, b = lead.do("PATCH", "/api/v1/groups/"+g["id"].(string), map[string]any{"handle": "x2", "member_ids": []string{}})
+		expect(t, code, 404, b)
+	})
+}

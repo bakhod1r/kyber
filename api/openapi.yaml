@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.50.0
+  version: 0.51.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1085,6 +1085,44 @@ paths:
         - { name: user, in: path, required: true, schema: { type: string } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/groups:
+    get:
+      operationId: listGroups
+      description: The workspace's user groups (S70); mentioning @handle in chat notifies their members.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/UserGroup" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createGroup
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GroupInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/UserGroup" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/groups/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    patch:
+      operationId: updateGroup
+      description: Anyone in the workspace renames a group or changes its members.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GroupInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserGroup" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteGroup
+      description: Only whoever made the group.
+      responses:
+        "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -2903,6 +2941,23 @@ components:
         updated_by: { type: string }
         updated_at: { type: string, format: date-time }
         deleted: { type: boolean }
+    GroupInput:
+      type: object
+      required: [handle, member_ids]
+      properties:
+        handle: { type: string, description: "2–30 lower-case letters, digits or dashes" }
+        name: { type: string }
+        member_ids: { type: array, items: { type: string } }
+    UserGroup:
+      type: object
+      required: [id, handle, name, member_ids, created_by, created_at]
+      properties:
+        id: { type: string }
+        handle: { type: string }
+        name: { type: string }
+        member_ids: { type: array, items: { type: string } }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
     ScheduleInput:
       type: object
       required: [body, send_at]

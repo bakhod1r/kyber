@@ -38,8 +38,11 @@ Order: daily use first, then channel management, Jira integration, huddle extras
   **Done:** `PATCH /conversations/{id}`, `POST …/archive|unarchive`, `PUT/DELETE …/admins/{user}`,
   `DELETE …/members/{user}`, migration 0058; archived channels refuse every write (and scheduled messages to them
   are dropped); live `conversation.updated`; "⚙ Settings" panel. API 0.50.0.
-- **S70 User groups** — `@backend` style groups per workspace; mentioning a group notifies its members. AC: a
+- ✅ **S70 User groups** — `@backend` style groups per workspace; mentioning a group notifies its members. AC: a
   group mention only notifies members who may read the conversation.
+  **Done:** `GET/POST /groups`, `PATCH/DELETE /groups/{id}`, migration 0059 (RLS); Notify resolves `@handle`
+  through an ACL to Chat (once per person, never the author); "User groups" in Activity; @handles highlighted.
+  API 0.51.0.
 - **S71 Sidebar sections and notification levels** — my own sections (e.g. "Project", "Team") with drag to
   reorder; per conversation: all / mentions only / muted. AC: per user; muted conversations never notify.
 

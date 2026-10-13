@@ -75,4 +75,17 @@ test("activity shows mentions and unread conversations", async ({ browser }) => 
   await expect(scheduled).toContainText("release notes are ready");
   await scheduled.getByRole("button", { name: "Cancel" }).click();
   await expect(scheduled).toHaveCount(0);
+
+  // S70: Ali makes @reviewers with Bobur; a message to @reviewers reaches Bobur.
+  await a.getByRole("button", { name: "New group" }).click();
+  const form = a.getByRole("form", { name: "Group" });
+  await form.getByLabel("Handle").fill(`rev-${id}`);
+  await form.getByLabel("Bobur").check();
+  await form.getByRole("button", { name: "Save group" }).click();
+  await expect(a.getByRole("list", { name: "User groups" })).toContainText(`@rev-${id}`);
+  const before = (await bobur.call("GET", "/api/v1/notifications")).items.length;
+  await ali.call("POST", `/api/v1/conversations/${channel.id}/messages`, { body: `@rev-${id} take a look` });
+  await expect.poll(async () => (await bobur.call("GET", "/api/v1/notifications")).items.length).toBe(before + 1);
+  await a.goto(`/chat/${channel.id}`);
+  await expect(a.getByRole("log", { name: "Messages" }).locator(".chat-mention", { hasText: `@rev-${id}` })).toBeVisible();
 });

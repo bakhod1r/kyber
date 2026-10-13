@@ -248,3 +248,25 @@ func (q Quiet) Quiet(ctx context.Context, user string) (bool, error) {
 	}
 	return q.focus.Focusing(ctx, user)
 }
+
+// GroupMembers is what GroupMentions asks Chat: the people of a workspace group.
+type GroupMembers interface {
+	GroupMembers(ctx context.Context, handle string) ([]string, error)
+}
+
+// GroupMentions finds @group handles in a message (Chat's rules) and their members (S70).
+type GroupMentions struct{ chat GroupMembers }
+
+func NewGroupMentions(chat GroupMembers) GroupMentions { return GroupMentions{chat: chat} }
+
+func (g GroupMentions) Mentioned(ctx context.Context, body string) ([]string, error) {
+	var out []string
+	for _, h := range chatdomain.GroupMentions(body) {
+		ids, err := g.chat.GroupMembers(ctx, h)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ids...)
+	}
+	return out, nil
+}

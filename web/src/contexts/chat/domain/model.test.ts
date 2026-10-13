@@ -98,3 +98,11 @@ describe("seen (S68)", () => {
     expect(seen([...msgs, { id: "3", author_id: "dev", created_at: "2026-10-13T09:03:00.000Z" }], [{ user_id: "dev", read_at: "2026-10-13T09:04:00.000Z" }], "me")).toBeNull();
   });
 });
+
+describe("group mentions (S70)", () => {
+  it("highlights @handles but not e-mail addresses", () => {
+    expect(splitMentions("ping @backend and a@b.uz").map((x) => [x.kind, x.text])).toEqual([
+      ["text", "ping "], ["mention", "@backend"], ["text", " and a@b.uz"],
+    ]);
+  });
+});

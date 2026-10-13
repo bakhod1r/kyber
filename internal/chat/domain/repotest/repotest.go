@@ -486,3 +486,47 @@ func RunManagement(t *testing.T, r domain.Repository) {
 		t.Fatalf("taken name = %v", err)
 	}
 }
+
+// RunGroups checks user groups (S70).
+func RunGroups(t *testing.T, g domain.Groups) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	gid := func(n int) domain.GroupID { return domain.GroupID(fmt.Sprintf("77000000-0000-4000-8000-%012d", n)) }
+	be, _ := domain.NewGroup(gid(1), WS, "backend", "Backend", []domain.UserID{Dev, Lead}, Lead, t0)
+	qa, _ := domain.NewGroup(gid(2), WS, "qa", "QA", []domain.UserID{Other}, Lead, t0)
+	for _, x := range []*domain.Group{be, qa} {
+		if err := g.Save(ctx, x); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dup, _ := domain.NewGroup(gid(3), WS, "backend", "", nil, Dev, t0)
+	if err := g.Save(ctx, dup); !errors.Is(err, domain.ErrHandleTaken) {
+		t.Fatalf("taken handle = %v", err)
+	}
+	list, err := g.In(ctx, WS)
+	if err != nil || len(list) != 2 || list[0].Handle != "backend" || len(list[0].Members) != 2 || list[0].Members[0] != Lead || list[1].Name != "QA" {
+		t.Fatalf("In = %+v %v", list, err)
+	}
+	_ = be.Change("server", "Server team", []domain.UserID{Dev})
+	if err := g.Save(ctx, be); err != nil {
+		t.Fatal(err)
+	}
+	got, err := g.ByHandle(ctx, WS, "server")
+	if err != nil || got.ID != be.ID || len(got.Members) != 1 || got.CreatedBy != Lead || !got.CreatedAt.Equal(t0) {
+		t.Fatalf("ByHandle = %+v %v", got, err)
+	}
+	if _, err := g.ByHandle(ctx, WS, "backend"); !errors.Is(err, domain.ErrGroupNotFound) {
+		t.Fatalf("old handle = %v", err)
+	}
+	if _, err := g.ByHandle(ctx, "00000000-0000-4000-8000-000000000009", "server"); !errors.Is(err, domain.ErrGroupNotFound) {
+		t.Fatalf("other workspace = %v", err)
+	}
+	if err := g.Delete(ctx, qa.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []domain.GroupID{qa.ID, "nope"} {
+		if _, err := g.ByID(ctx, id); !errors.Is(err, domain.ErrGroupNotFound) {
+			t.Fatalf("ByID %s = %v", id, err)
+		}
+	}
+}

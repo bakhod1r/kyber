@@ -43,3 +43,5 @@ func TestReceiptsContract(t *testing.T) {
 func TestManagementContract(t *testing.T) {
 	repotest.RunManagement(t, postgres.NewRepository(dbtest.New(t)))
 }
+
+func TestGroupsContract(t *testing.T) { repotest.RunGroups(t, postgres.NewGroups(dbtest.New(t))) }

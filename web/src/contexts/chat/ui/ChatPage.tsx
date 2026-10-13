@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, canManage, type ChatEvent, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, type Message, parseRemind, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserStatus, useChatStream,
+  applyEvent, canManage, type ChatEvent, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, type Message, parseRemind, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
 } from "../application";
 
 const PAGE = 50;
@@ -97,7 +97,7 @@ export function ChatPage({ extras, activity }: { extras?: ConversationSlot; /** 
         <ConversationView key={id} id={id} conversation={current} title={current ? title(current) : ""} names={names} me={myId}
           typers={typers} onThread={setThread} extras={current?.member && myId ? extras?.(id, myId, names) : undefined} />
       ) : (
-        <Activity conversations={conversations.data ?? []} title={title} activity={activity} />
+        <Activity conversations={conversations.data ?? []} title={title} activity={activity} names={names} me={myId} />
       )}
       {thread && <ThreadPanel parent={thread} names={names} me={myId} onClose={() => setThread(null)} />}
     </div>
@@ -206,6 +206,67 @@ function ChannelSettings({ c, me, names }: { c: Conversation; me: string; names:
   );
 }
 
+/** User groups of the workspace (S70): make one, change its people, delete your own. */
+function Groups({ names, me }: { names: Map<string, string>; me: string }) {
+  const qc = useQueryClient();
+  const groups = useQuery({ queryKey: ["chat", "groups"], queryFn: chatUseCases.groups });
+  const [editing, setEditing] = useState<UserGroup | "new" | null>(null);
+  const [handle, setHandle] = useState("");
+  const [name, setName] = useState("");
+  const [people, setPeople] = useState<string[]>([]);
+  const done = () => {
+    setEditing(null);
+    void qc.invalidateQueries({ queryKey: ["chat", "groups"] });
+  };
+  const save = useMutation({
+    mutationFn: () => {
+      const g = { handle, name, member_ids: people };
+      return editing === "new" || !editing ? chatUseCases.createGroup(g) : chatUseCases.updateGroup(editing.id, g);
+    },
+    onSuccess: done,
+  });
+  const remove = useMutation({ mutationFn: (id: string) => chatUseCases.deleteGroup(id), onSuccess: done });
+  const open = (g: UserGroup | "new") => {
+    setEditing(g);
+    setHandle(g === "new" ? "" : g.handle);
+    setName(g === "new" ? "" : g.name);
+    setPeople(g === "new" ? [] : g.member_ids);
+  };
+  const who = (u: string) => (u === me ? "You" : (names.get(u) ?? "Someone"));
+  return (
+    <>
+      <h2>User groups</h2>
+      <ul aria-label="User groups">
+        {(groups.data ?? []).map((g) => (
+          <li key={g.id}>
+            <b>@{g.handle}</b> {g.name && <span className="muted">{g.name}</span>} · {g.member_ids.map(who).join(", ") || "nobody yet"}{" "}
+            <button className="ghost" onClick={() => open(g)}>Edit</button>
+            {g.created_by === me && <button className="ghost" onClick={() => remove.mutate(g.id)}>Delete</button>}
+          </li>
+        ))}
+      </ul>
+      <button className="ghost" onClick={() => open("new")}>New group</button>
+      {editing && (
+        <form className="chat-new" aria-label="Group" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
+          <label>Handle @<input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="backend" required /></label>
+          <label>Name <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Backend team" /></label>
+          <fieldset>
+            <legend>People</legend>
+            {[...new Set([me, ...names.keys()])].filter(Boolean).map((u) => (
+              <label key={u}>
+                <input type="checkbox" checked={people.includes(u)}
+                  onChange={(e) => setPeople((p) => (e.target.checked ? [...p, u] : p.filter((x) => x !== u)))} /> {who(u)}
+              </label>
+            ))}
+          </fieldset>
+          <button>Save group</button> <button type="button" className="ghost" onClick={() => setEditing(null)}>Cancel</button>
+          {save.error && <p role="alert" className="error">{save.error.message}</p>}
+        </form>
+      )}
+    </>
+  );
+}
+
 const savedKey = ["chat", "saved"];
 const scheduledKey = ["chat", "scheduled"];
 
@@ -281,7 +342,9 @@ function SavedList({ title }: { title: (conversationId: string) => string }) {
 }
 
 /** S64: where something waits for me — conversations with unread messages, and (from the shell) my mentions. */
-function Activity({ conversations, title, activity }: { conversations: Conversation[]; title: (c: Conversation) => string; activity?: ReactNode }) {
+function Activity({ conversations, title, activity, names, me }: {
+  conversations: Conversation[]; title: (c: Conversation) => string; activity?: ReactNode; names: Map<string, string>; me: string;
+}) {
   const unread = conversations.filter((c) => c.member && c.unread > 0);
   const titleOf = (id: string) => {
     const c = conversations.find((x) => x.id === id);
@@ -301,6 +364,7 @@ function Activity({ conversations, title, activity }: { conversations: Conversat
           ))}
         </ul>
       )}
+      <Groups names={names} me={me} />
     </section>
   );
 }
