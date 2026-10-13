@@ -4,6 +4,8 @@ export type Conversation = {
   member_ids: string[]; member: boolean; unread: number; created_at: string;
   /** S69: the owner (creator) and admins manage a channel; an archived one is read-only. */
   owner_id?: string; admin_ids?: string[]; archived?: boolean;
+  /** S73: the project whose news are posted here ("" when none). */
+  project_key?: string;
 };
 
 /** Whether u may rename, archive or remove people from the channel (S69). */
@@ -15,7 +17,7 @@ export type Message = {
   id: string; conversation_id: string; author_id: string; body: string; created_at: string; edited_at: string | null;
   deleted: boolean; thread_id: string | null; reply_count: number; reactions: Reaction[]; issues: IssuePreview[];
   /** System messages (a huddle started or ended); people's messages have none. */
-  kind?: "" | "huddle_started" | "huddle_ended" | "huddle_recording";
+  kind?: "" | "huddle_started" | "huddle_ended" | "huddle_recording" | "project_event";
   file?: { name: string; type: string; size: number; url: string } | null;
   pinned_by?: string | null;
   pinned_at?: string | null;

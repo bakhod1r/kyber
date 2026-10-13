@@ -603,3 +603,37 @@ func TestConversationPrefs(t *testing.T) {
 		}
 	})
 }
+
+// S73: a channel linked to a project gets its news; outsiders see the key, not the details.
+func TestProjectChannels(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		lead.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "kyb-news"})
+		id := ch["id"].(string)
+		dev.do("POST", "/api/v1/conversations/"+id+"/join", nil)
+		_, devCh := dev.do("POST", "/api/v1/channels", map[string]any{"name": "dev-room"})
+		code, b := dev.do("PUT", "/api/v1/conversations/"+devCh["id"].(string)+"/project", map[string]string{"project_key": "KYB"})
+		expect(t, code, 403, b)
+		code, b = lead.do("PUT", "/api/v1/conversations/"+id+"/project", map[string]string{"project_key": "KYB"})
+		expect(t, code, 200, b)
+		if b["project_key"] != "KYB" {
+			t.Fatalf("linked = %v", b)
+		}
+		lead.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "Secret roadmap", "type": "task"})
+		eventuallyJSON(t, lead, "/api/v1/conversations/"+id+"/messages", func(b map[string]any) bool {
+			items := b["items"].([]any)
+			if len(items) != 1 {
+				return false
+			}
+			m := items[0].(map[string]any)
+			return m["kind"] == "project_event" && m["body"] == "created KYB-1" && len(m["issues"].([]any)) == 1
+		})
+		_, page := dev.do("GET", "/api/v1/conversations/"+id+"/messages", nil)
+		m := page["items"].([]any)[0].(map[string]any)
+		if len(m["issues"].([]any)) != 0 || strings.Contains(m["body"].(string), "Secret") {
+			t.Fatalf("dev (not in KYB) sees details: %v", m)
+		}
+	})
+}

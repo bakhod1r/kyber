@@ -82,6 +82,17 @@ test("chat between two people arrives live", async ({ browser }) => {
   await b.goto(`/chat/${channel.id}`);
   await expect(b.getByRole("log", { name: "Messages" })).not.toContainText("Fix the flaky login test");
 
+  // S73: Ali links the channel to the project; a new issue shows up as project news.
+  await a.goto(`/chat/${channel.id}`);
+  await a.getByRole("button", { name: "⚙ Settings" }).click();
+  await a.getByLabel("Project news").selectOption(key);
+  await expect(a.getByLabel("Project news")).toHaveValue(key);
+  await ali.call("POST", `/api/v1/projects/${key}/issues`, { title: "Announce the release", type: "task" });
+  const news = a.getByRole("article", { name: /Project news/ });
+  await expect(news).toContainText(`created ${key}-3`);
+  await expect(news.getByRole("link", { name: `${key}-3 Announce the release` })).toBeVisible();
+  await a.getByRole("button", { name: "⚙ Settings" }).click(); // close
+
   // S69: the owner renames the channel, makes Bobur an admin; Bobur archives it and it turns read-only for both.
   await a.goto(`/chat/${channel.id}`);
   await a.getByRole("button", { name: "⚙ Settings" }).click();

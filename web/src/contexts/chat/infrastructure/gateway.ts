@@ -53,6 +53,7 @@ export const chatGateway = {
   deleteGroup: (id: string) => request<undefined>("DELETE", `/api/v1/groups/${seg(id)}`),
   prefs: () => request<List<ConversationPrefs>>("GET", "/api/v1/chat/prefs").then((r) => r.items),
   setPref: (id: string, level: Level, section: string) => request<ConversationPrefs>("PUT", `${conv(id)}/prefs`, { level, section }),
+  linkProject: (id: string, key: string) => request<Conversation>("PUT", `${conv(id)}/project`, { project_key: key }),
   search: (q: string) => request<List<Message>>("GET", `/api/v1/chat/search?q=${encodeURIComponent(q)}`).then((r) => r.items),
   /** Uploads a file as a message (raw body; the header satisfies the CSRF guard for cookie sessions). */
   upload: async (id: string, file: Blob, name: string): Promise<Message> => {

@@ -692,3 +692,56 @@ func TestConversationPrefs(t *testing.T) {
 		t.Fatal("dev did not mute")
 	}
 }
+
+// projects is a fake Projects port: who may browse which project.
+type projects map[string][]string
+
+func (p projects) CanBrowse(_ context.Context, user, key string) (bool, error) {
+	return slices.Contains(p[key], user), nil
+}
+
+// S73: a project's news land in the channels linked to it, once each.
+func TestProjectChannels(t *testing.T) {
+	repo := memory.NewRepository()
+	n := 0
+	ev := &events{}
+	svc := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Notifier: ev, Projects: projects{"KYB": {"lead"}},
+		Members: members{"lead": {"w1"}, "dev": {"w1"}}, NewID: func() string { n++; return fmt.Sprintf("id-%03d", n) }, Now: time.Now})
+	ctx := tenant.With(context.Background(), "w1")
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "kyb-news"})
+	other, _ := svc.CreateChannel(ctx, "dev", app.NewChannel{Name: "dev-stuff"})
+	if _, err := svc.LinkProject(ctx, "dev", string(other.ID), "KYB"); !errors.Is(err, app.ErrCannotBrowse) {
+		t.Fatalf("linking a project dev cannot browse = %v", err)
+	}
+	if _, err := svc.LinkProject(ctx, "lead", string(ch.ID), "KYB"); err != nil {
+		t.Fatal(err)
+	}
+	created := outbox.Message{ID: 7, Name: "issue.created", Workspace: "w1", Actor: "lead",
+		Payload: []byte(`{"key":"KYB-12","title":"secret title","reporter":"lead"}`)}
+	for range 2 { // redelivery posts once
+		if err := svc.OnProjectEvent(ctx, created); err != nil {
+			t.Fatal(err)
+		}
+	}
+	moved := outbox.Message{ID: 8, Name: "issue.transitioned", Workspace: "w1", Actor: "dev", Payload: []byte(`{"key":"KYB-12","to":"done"}`)}
+	sprint := outbox.Message{ID: 9, Name: "sprint.started", Workspace: "w1", Actor: "lead", Payload: []byte(`{"project":"KYB"}`)}
+	elsewhere := outbox.Message{ID: 10, Name: "issue.created", Workspace: "w1", Payload: []byte(`{"key":"ABC-1","reporter":"lead"}`)}
+	for _, m := range []outbox.Message{moved, sprint, elsewhere} {
+		if err := svc.OnProjectEvent(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h, _ := svc.History(ctx, "lead", string(ch.ID), "", 50)
+	if len(h) != 3 {
+		t.Fatalf("history = %+v", h)
+	}
+	bodies := []string{h[2].Body, h[1].Body, h[0].Body}
+	if bodies[0] != "created KYB-12" || bodies[1] != "moved KYB-12 to done" || bodies[2] != "started a sprint in KYB" || h[2].Kind != domain.KindProjectEvent {
+		t.Fatalf("bodies = %q", bodies)
+	}
+	for _, b := range bodies {
+		if strings.Contains(b, "secret") {
+			t.Fatalf("issue details leaked into the channel: %q", b)
+		}
+	}
+}

@@ -461,7 +461,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 		log.Warn("KYBER_FILES_DIR not set: chat files are kept in memory and lost on restart")
 		d.chatBlobs = blob.NewMemory()
 	}
-	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved, Statuses: d.statuses, Scheduled: d.scheduled, Reminders: d.reminders, Groups: d.userGroups, Prefs: d.chatPrefs,
+	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved, Statuses: d.statuses, Scheduled: d.scheduled, Reminders: d.reminders, Groups: d.userGroups, Prefs: d.chatPrefs, Projects: chatacl.NewProjects(projects),
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	chat.WithIssues(chatacl.NewIssues(issues))
 	callEvents := callrealtime.New(publish, func(c *calldomain.Call) any { return callhttp.ToDTO(c) })
@@ -492,6 +492,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 	relay.Handle("comment.added", notify.OnCommentAdded)
 	relay.Handle("chat.message_posted", notify.OnChatMessage)
 	relay.Handle("chat.reminder", notify.OnChatReminder)
+	for _, name := range []string{"issue.created", "issue.transitioned", "sprint.started", "sprint.completed"} {
+		relay.Handle(name, chat.OnProjectEvent) // project channels (S73)
+	}
 	relay.Handle("call.started", chat.OnCallEvent)
 	relay.Handle("call.ended", chat.OnCallEvent)
 	relay.Handle("issue.changed", notify.OnIssueChanged)

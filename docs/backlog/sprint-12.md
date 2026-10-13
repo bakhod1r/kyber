@@ -55,8 +55,11 @@ Order: daily use first, then channel management, Jira integration, huddle extras
   an ephemeral message only I see. AC: the same permissions as the issue API.
   **Done:** Chat parses the commands; the app shell runs them through the Issue/Project clients (the user's own
   permissions, no new endpoint) and the answer is a line only the author sees.
-- **S73 Project channels** — link a channel to a project; issue created, status changed, sprint started/completed
+- ✅ **S73 Project channels** — link a channel to a project; issue created, status changed, sprint started/completed
   are posted there by the system (outbox handlers). AC: only people who may browse the project see the details.
+  **Done:** `PUT /conversations/{id}/project` (owner/admins who may browse it), migration 0061, relay handlers post
+  `project_event` system messages once per event and channel; the body names issues by key only, details come from
+  the permission-filtered preview. "Project news" in channel settings. API 0.53.0.
 - **S74 Issue from a message** — "Create issue" in a message's menu: the message becomes the description with a
   link back; the issue key is shown on the message. AC: needs create permission in the chosen project.
 

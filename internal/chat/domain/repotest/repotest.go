@@ -485,6 +485,21 @@ func RunManagement(t *testing.T, r domain.Repository) {
 	if err := r.Update(ctx, b); !errors.Is(err, domain.ErrNameTaken) {
 		t.Fatalf("taken name = %v", err)
 	}
+	// S73: channels linked to a project.
+	b, _ = r.ByID(ctx, b.ID)
+	_ = b.LinkProject(Lead, "KYB")
+	if err := r.Update(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := r.ByID(ctx, b.ID); got.Project != "KYB" {
+		t.Fatalf("project = %q", got.Project)
+	}
+	if list, err := r.ByProject(ctx, WS, "KYB"); err != nil || len(list) != 1 || list[0].ID != b.ID {
+		t.Fatalf("by project = %+v %v", list, err)
+	}
+	if list, _ := r.ByProject(ctx, "00000000-0000-4000-8000-000000000009", "KYB"); len(list) != 0 {
+		t.Fatalf("other workspace = %+v", list)
+	}
 }
 
 // RunGroups checks user groups (S70).

@@ -175,6 +175,38 @@ function MyStatus({ me }: { me: string }) {
   );
 }
 
+/** S73: post a project's news (issues created and moved, sprints) into the channel. */
+function ProjectLink({ c, onChange }: { c: Conversation; onChange: () => void }) {
+  const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
+  const link = useMutation({ mutationFn: (key: string) => chatUseCases.linkProject(c.id, key), onSuccess: onChange });
+  return (
+    <label>
+      📋 Project news{" "}
+      <select aria-label="Project news" value={c.project_key ?? ""} disabled={c.archived} onChange={(e) => link.mutate(e.target.value)}>
+        <option value="">None</option>
+        {(projects.data ?? []).map((p) => <option key={p.key} value={p.key}>{p.key} — {p.name}</option>)}
+      </select>
+      {link.error && <span role="alert" className="error"> {link.error.message}</span>}
+    </label>
+  );
+}
+
+/** Issues named in a message, for readers who may browse them. */
+function IssuePreviews({ m }: { m: Message }) {
+  if (m.issues.length === 0) return null;
+  return (
+    <ul className="chat-issues">
+      {m.issues.map((p) => (
+        <li key={p.key}>
+          <Link to={`/projects/${p.key.split("-")[0]}?issue=${p.key}`} aria-label={`${p.key} ${p.title}`}>
+            <b>{p.key}</b> {p.title} <span className="muted">{p.status}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** Owner and admins: rename, archive, admins and members (S69). Everyone else sees who runs the channel. */
 function ChannelSettings({ c, me, names }: { c: Conversation; me: string; names: Map<string, string> }) {
   const qc = useQueryClient();
@@ -197,6 +229,8 @@ function ChannelSettings({ c, me, names }: { c: Conversation; me: string; names:
             : <button type="button" className="danger" onClick={() => act.mutate(() => chatUseCases.archive(c.id))}>Archive channel</button>}
         </form>
       )}
+      {manager && <ProjectLink c={c} onChange={() => void done()} />}
+      {!manager && c.project_key && <p className="muted">📋 Posts news of {c.project_key}</p>}
       <ul aria-label="Channel members">
         {c.member_ids.map((u) => (
           <li key={u}>
@@ -653,6 +687,14 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
   const pin = useMutation({ mutationFn: () => (m.pinned_by ? chatUseCases.unpin(m.id) : chatUseCases.pin(m.id)), onSuccess: onChange });
   const remove = useMutation({ mutationFn: () => chatUseCases.remove(m.id), onSuccess: () => onChange({ ...m, deleted: true, body: "", reactions: [], issues: [] }) });
   const mine = m.author_id === me && !m.kind;
+  if (m.kind === "project_event") {
+    return (
+      <article className="chat-message chat-system" aria-label={`Project news at ${time(m.created_at)}`}>
+        <p className="muted">📋 <Who id={m.author_id} names={names} /> {m.body} <time dateTime={m.created_at}>{time(m.created_at)}</time></p>
+        <IssuePreviews m={m} />
+      </article>
+    );
+  }
   if (m.kind) {
     return (
       <article className="chat-message chat-system" aria-label={`Huddle at ${time(m.created_at)}`}>
@@ -682,17 +724,7 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
         </p>
       )}
       {m.file && !m.deleted && <Attachment file={m.file} />}
-      {m.issues.length > 0 && (
-        <ul className="chat-issues">
-          {m.issues.map((p) => (
-            <li key={p.key}>
-              <Link to={`/projects/${p.key.split("-")[0]}?issue=${p.key}`} aria-label={`${p.key} ${p.title}`}>
-                <b>{p.key}</b> {p.title} <span className="muted">{p.status}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <IssuePreviews m={m} />
       {!m.deleted && (
         <div className="chat-actions">
           {m.reactions.map((r) => (

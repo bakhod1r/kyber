@@ -62,6 +62,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/conversations/{id}/admins/{user}", h.makeAdmin)
 	mux.HandleFunc("DELETE /api/v1/conversations/{id}/admins/{user}", h.removeAdmin)
 	mux.HandleFunc("DELETE /api/v1/conversations/{id}/members/{user}", h.removeMember)
+	mux.HandleFunc("PUT /api/v1/conversations/{id}/project", h.linkProject)
 	mux.HandleFunc("GET /api/v1/conversations/{id}/receipts", h.receipts)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/scheduled", h.schedule)
 	mux.HandleFunc("GET /api/v1/chat/scheduled", h.scheduledList)
@@ -90,11 +91,12 @@ func codeFor(err error) (string, bool) {
 	case errors.Is(err, domain.ErrNameTaken):
 		return httpx.CodeChannelNameTaken, true
 	case errors.Is(err, domain.ErrNotMember), errors.Is(err, domain.ErrNotAuthor), errors.Is(err, domain.ErrNotJoinable),
-		errors.Is(err, domain.ErrDeleted), errors.Is(err, domain.ErrNotManager), errors.Is(err, domain.ErrNotOwner), errors.Is(err, domain.ErrArchived):
+		errors.Is(err, domain.ErrDeleted), errors.Is(err, domain.ErrNotManager), errors.Is(err, domain.ErrNotOwner), errors.Is(err, domain.ErrArchived),
+		errors.Is(err, app.ErrCannotBrowse):
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
-		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle), errors.Is(err, domain.ErrInvalidPref):
+		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle), errors.Is(err, domain.ErrInvalidPref), errors.Is(err, domain.ErrInvalidProject):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -113,6 +115,7 @@ type conversationDTO struct {
 	Unread    int       `json:"unread"`
 	CreatedAt time.Time `json:"created_at"`
 	OwnerID   string    `json:"owner_id"`
+	Project   string    `json:"project_key"`
 	AdminIDs  []string  `json:"admin_ids"`
 	Archived  bool      `json:"archived"`
 }
@@ -120,7 +123,7 @@ type conversationDTO struct {
 func toConversation(v app.View, actor string) conversationDTO {
 	d := conversationDTO{ID: string(v.ID), Kind: string(v.Kind), Name: v.Name, Topic: v.Topic, Private: v.Private,
 		MemberIDs: make([]string, len(v.Members)), Member: v.IsMember(domain.UserID(actor)), Unread: v.Unread, CreatedAt: v.CreatedAt,
-		OwnerID: string(v.CreatedBy), AdminIDs: []string{}, Archived: v.Archived()}
+		OwnerID: string(v.CreatedBy), AdminIDs: []string{}, Archived: v.Archived(), Project: v.Project}
 	for i, m := range v.Members {
 		d.MemberIDs[i] = string(m)
 	}
@@ -912,4 +915,17 @@ func (h *Handler) prefs(w http.ResponseWriter, r *http.Request) {
 	}
 	slices.SortFunc(out, func(a, b prefDTO) int { return strings.Compare(a.ConversationID, b.ConversationID) })
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+// linkProject: {"project_key": "KYB"} posts the project's news here; "" unlinks (S73).
+func (h *Handler) linkProject(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Project string `json:"project_key"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	c, err := h.svc.LinkProject(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Project)
+	h.managed(w, r, c, err)
 }

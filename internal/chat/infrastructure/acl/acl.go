@@ -8,6 +8,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/chat/application"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
 	issuedomain "github.com/bakhod1r/kyber/internal/issue/domain"
+	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
 )
 
 type Membership interface {
@@ -53,4 +54,19 @@ func (i Issues) Preview(ctx context.Context, user, key string) (application.Issu
 		return application.IssuePreview{}, false, nil
 	}
 	return application.IssuePreview{Key: is.Key().String(), Title: is.Title(), Status: string(is.Status())}, true, nil
+}
+
+// ProjectReader is the Project context's authorized read.
+type ProjectReader interface {
+	Get(ctx context.Context, actor projectdomain.UserID, key string) (*projectdomain.Project, error)
+}
+
+// Projects: may someone browse a project (S73: linking a channel to it).
+type Projects struct{ src ProjectReader }
+
+func NewProjects(src ProjectReader) Projects { return Projects{src: src} }
+
+func (p Projects) CanBrowse(ctx context.Context, user, key string) (bool, error) {
+	_, err := p.src.Get(ctx, projectdomain.UserID(user), key)
+	return err == nil, nil
 }

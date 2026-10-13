@@ -59,4 +59,16 @@ func TestChannelManagement(t *testing.T) {
 	if err := dm.Rename("a", "x", ""); !errors.Is(err, domain.ErrNotJoinable) {
 		t.Fatalf("rename a DM = %v", err)
 	}
+	if err := c.LinkProject("dev", "KYB"); !errors.Is(err, domain.ErrNotManager) {
+		t.Fatalf("member links = %v", err)
+	}
+	if err := c.LinkProject("owner", "kyb"); err != nil || c.Project != "KYB" {
+		t.Fatalf("link = %v %q", err, c.Project)
+	}
+	if err := c.LinkProject("owner", "not a key"); !errors.Is(err, domain.ErrInvalidProject) {
+		t.Fatalf("bad key = %v", err)
+	}
+	if err := c.LinkProject("owner", ""); err != nil || c.Project != "" {
+		t.Fatalf("unlink = %v", err)
+	}
 }

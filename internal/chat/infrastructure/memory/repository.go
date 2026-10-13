@@ -140,9 +140,22 @@ func (r *Repository) Update(_ context.Context, c *domain.Conversation) error {
 			return domain.ErrNameTaken
 		}
 	}
-	cur.Name, cur.Topic, cur.Admins, cur.ArchivedAt = c.Name, c.Topic, slices.Clone(c.Admins), c.ArchivedAt
+	cur.Name, cur.Topic, cur.Admins, cur.ArchivedAt, cur.Project = c.Name, c.Topic, slices.Clone(c.Admins), c.ArchivedAt, c.Project
 	r.convs[c.ID] = cur
 	return nil
+}
+
+func (r *Repository) ByProject(_ context.Context, ws domain.WorkspaceID, key string) ([]*domain.Conversation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []*domain.Conversation{}
+	for _, c := range r.convs {
+		if c.Workspace == ws && key != "" && c.Project == key {
+			out = append(out, clone(c))
+		}
+	}
+	slices.SortFunc(out, func(a, b *domain.Conversation) int { return cmp.Compare(a.Name, b.Name) })
+	return out, nil
 }
 
 func (r *Repository) ReadCursors(_ context.Context, id domain.ConversationID) (map[domain.UserID]time.Time, error) {

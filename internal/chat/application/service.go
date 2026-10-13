@@ -21,6 +21,14 @@ import (
 
 var ErrQueryTooShort = errors.New("search for at least 2 characters")
 
+// Projects tells whether someone may browse a project (Project context).
+type Projects interface {
+	CanBrowse(ctx context.Context, user, key string) (bool, error)
+}
+
+// ErrCannotBrowse: a channel can only be linked to a project its manager may browse.
+var ErrCannotBrowse = errors.New("you cannot browse that project")
+
 var ErrNotWorkspaceMember = errors.New("everyone in a conversation must be a member of the workspace")
 
 const (
@@ -69,6 +77,7 @@ type Deps struct {
 	Reminders     domain.Reminders         // optional: /remind me (S67)
 	Groups        domain.Groups            // optional: user groups (S70)
 	Prefs         domain.Prefs             // optional: levels and sections (S71)
+	Projects      Projects                 // optional: project channels (S73)
 	Members       Members
 	NewID         func() string
 	Now           func() time.Time
@@ -1129,4 +1138,76 @@ func (s *Service) Muted(ctx context.Context, user, conv string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// LinkProject posts a project's news into the channel (S73); "" unlinks. Owner/admins who may browse it.
+func (s *Service) LinkProject(ctx context.Context, actor, id, key string) (*domain.Conversation, error) {
+	if key != "" {
+		if s.d.Projects == nil {
+			return nil, ErrCannotBrowse
+		}
+		ok, err := s.d.Projects.CanBrowse(ctx, actor, strings.ToUpper(key))
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, ErrCannotBrowse
+		}
+	}
+	return s.manageChannel(ctx, actor, id, func(c *domain.Conversation) error { return c.LinkProject(domain.UserID(actor), key) })
+}
+
+// OnProjectEvent posts issue.created, issue.transitioned, sprint.started and sprint.completed into the channels
+// linked to the project (once per event and channel). Issues are named by key only: readers who may browse them
+// see the title through the usual preview.
+func (s *Service) OnProjectEvent(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		Key      string `json:"key"`
+		To       string `json:"to"`
+		Project  string `json:"project"`
+		Reporter string `json:"reporter"`
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		return nil // a poison message must not block the relay
+	}
+	project, by, text := e.Project, m.Actor, ""
+	if e.Key != "" {
+		project = e.Key[:max(0, strings.LastIndex(e.Key, "-"))]
+	}
+	switch m.Name {
+	case "issue.created":
+		text = "created " + e.Key
+		if e.Reporter != "" {
+			by = e.Reporter
+		}
+	case "issue.transitioned":
+		text = "moved " + e.Key + " to " + e.To
+	case "sprint.started":
+		text = "started a sprint in " + project
+	case "sprint.completed":
+		text = "completed a sprint in " + project
+	default:
+		return nil
+	}
+	if project == "" {
+		return nil
+	}
+	channels, err := s.d.Conversations.ByProject(ctx, domain.WorkspaceID(m.Workspace), project)
+	if err != nil {
+		return err
+	}
+	for _, c := range channels {
+		if c.Archived() {
+			continue
+		}
+		ref := fmt.Sprintf("outbox:%d:%s", m.ID, c.ID)
+		msg := domain.NewSystemMessage(domain.MessageID(s.d.NewID()), c.ID, domain.UserID(by), domain.KindProjectEvent, ref, text, s.d.Now())
+		if err := s.d.Messages.Post(ctx, msg); errors.Is(err, domain.ErrDuplicateRef) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *msg})
+	}
+	return nil
 }

@@ -65,6 +65,8 @@ type Conversation struct {
 	// Channels (S69): the owner (CreatedBy) and these admins manage it; an archived channel is read-only.
 	Admins     []UserID
 	ArchivedAt time.Time
+	// Project is the key of the project whose news are posted here (S73); "" when not linked.
+	Project string
 }
 
 func NewChannel(id ConversationID, ws WorkspaceID, name, topic string, private bool, creator UserID, now time.Time) (*Conversation, error) {
@@ -242,6 +244,27 @@ func (c *Conversation) RemoveAdmin(by, u UserID) error {
 	return nil
 }
 
+var (
+	ErrInvalidProject = errors.New("a project key is 2–10 upper-case letters or digits, starting with a letter")
+	projectKey        = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
+)
+
+// LinkProject: a manager posts a project's news (issues created and moved, sprints) into the channel; "" unlinks.
+func (c *Conversation) LinkProject(by UserID, key string) error {
+	if err := c.manage(by); err != nil {
+		return err
+	}
+	if err := c.Writable(); err != nil {
+		return err
+	}
+	key = strings.ToUpper(strings.TrimSpace(key))
+	if key != "" && !projectKey.MatchString(key) {
+		return ErrInvalidProject
+	}
+	c.Project = key
+	return nil
+}
+
 // Remove: a manager takes someone out of the channel (never the owner).
 func (c *Conversation) Remove(by, u UserID) error {
 	if err := c.manage(by); err != nil {
@@ -287,6 +310,8 @@ const (
 	KindHuddleEnded   MessageKind = "huddle_ended"
 	// KindHuddleRecording: a recording of a huddle, uploaded by the one who recorded it (a video file).
 	KindHuddleRecording MessageKind = "huddle_recording"
+	// KindProjectEvent: news of the linked project (S73); the body names issues by key only.
+	KindProjectEvent MessageKind = "project_event"
 )
 
 // ErrDuplicateRef: a system message about this already exists (events may be delivered twice).
@@ -477,8 +502,10 @@ type Repository interface {
 	// Visible lists the workspace's public channels and every conversation u belongs to, by name then creation.
 	Visible(ctx context.Context, ws WorkspaceID, u UserID) ([]*Conversation, error)
 	MarkRead(ctx context.Context, id ConversationID, u UserID, at time.Time) error
-	// Update saves a channel's name, topic, admins and archived state (S69); ErrNameTaken for a used name.
+	// Update saves a channel's name, topic, admins, archived state (S69) and project (S73); ErrNameTaken.
 	Update(ctx context.Context, c *Conversation) error
+	// ByProject lists the workspace's channels linked to a project.
+	ByProject(ctx context.Context, ws WorkspaceID, key string) ([]*Conversation, error)
 	// ReadCursors are how far each member who has read the conversation has read it (S68).
 	ReadCursors(ctx context.Context, id ConversationID) (map[UserID]time.Time, error)
 	// Unread counts, per conversation u belongs to, live top-level messages by others newer than u's read cursor.

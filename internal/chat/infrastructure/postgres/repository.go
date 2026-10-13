@@ -22,13 +22,13 @@ func NewRepository(pool *pgxpool.Pool) *Repository { return &Repository{pool: po
 
 const convCols = `c.id, c.workspace_id, c.kind, c.name, c.topic, c.private, coalesce(c.dm_key, ''), c.created_by, c.created_at,
 	ARRAY(SELECT m.user_id::text FROM conversation_members m WHERE m.conversation_id = c.id ORDER BY m.user_id),
-	ARRAY(SELECT a::text FROM unnest(c.admin_ids) a ORDER BY 1), c.archived_at`
+	ARRAY(SELECT a::text FROM unnest(c.admin_ids) a ORDER BY 1), c.archived_at, c.project_key`
 
 func scanConv(row pgx.CollectableRow) (*domain.Conversation, error) {
 	var c domain.Conversation
 	var members, admins []string
 	var archived *time.Time
-	if err := row.Scan(&c.ID, &c.Workspace, &c.Kind, &c.Name, &c.Topic, &c.Private, &c.Key, &c.CreatedBy, &c.CreatedAt, &members, &admins, &archived); err != nil {
+	if err := row.Scan(&c.ID, &c.Workspace, &c.Kind, &c.Name, &c.Topic, &c.Private, &c.Key, &c.CreatedBy, &c.CreatedAt, &members, &admins, &archived, &c.Project); err != nil {
 		return nil, err
 	}
 	for _, a := range admins {
@@ -80,13 +80,25 @@ func (r *Repository) Update(ctx context.Context, c *domain.Conversation) error {
 	if c.Archived() {
 		archived = &c.ArchivedAt
 	}
-	_, err := r.pool.Exec(ctx, `UPDATE conversations SET name = $2, topic = $3, admin_ids = $4::uuid[], archived_at = $5 WHERE id = $1`,
-		string(c.ID), c.Name, c.Topic, admins, archived)
+	_, err := r.pool.Exec(ctx, `UPDATE conversations SET name = $2, topic = $3, admin_ids = $4::uuid[], archived_at = $5, project_key = $6 WHERE id = $1`,
+		string(c.ID), c.Name, c.Topic, admins, archived, c.Project)
 	var pg *pgconn.PgError
 	if errors.As(err, &pg) && pg.ConstraintName == "conversations_channel_name" {
 		return domain.ErrNameTaken
 	}
 	return err
+}
+
+func (r *Repository) ByProject(ctx context.Context, ws domain.WorkspaceID, key string) ([]*domain.Conversation, error) {
+	if !id.Valid(string(ws)) || key == "" {
+		return []*domain.Conversation{}, nil
+	}
+	rows, err := r.pool.Query(ctx, `SELECT `+convCols+` FROM conversations c WHERE c.workspace_id = $1 AND c.project_key = $2 ORDER BY c.name`,
+		string(ws), key)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, scanConv)
 }
 
 func (r *Repository) one(ctx context.Context, where string, args ...any) (*domain.Conversation, error) {
