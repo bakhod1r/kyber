@@ -512,3 +512,9 @@ a.user:hover { text-decoration: underline; }
 .meeting-list .badge-label { display: inline-block; padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-size: 0.85em; }
 .meeting-list .rsvp { display: inline-flex; gap: 4px; margin-left: 8px; }
 .meeting-list .rsvp button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+/* Pins and search (S54a) */
+.chat-pins { list-style: none; margin: 4px 0; padding: 8px; display: grid; gap: 4px; }
+.chat-sidebar [role="search"] input { width: 100%; margin-bottom: 8px; }
+.chat-results { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }
+.chat-results a { display: block; color: inherit; font-size: 0.9rem; }

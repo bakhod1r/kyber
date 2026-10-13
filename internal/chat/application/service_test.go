@@ -303,3 +303,43 @@ func TestHuddleSystemMessages(t *testing.T) {
 		}
 	}
 }
+
+func TestPinsAndSearch(t *testing.T) {
+	svc, ctx, ev := setupWithEvents(t)
+	pub, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "general"})
+	priv, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "secret", Private: true})
+	_ = svc.Join(ctx, "dev", string(pub.ID))
+	m, _ := svc.Post(ctx, "lead", string(pub.ID), "Release checklist v2")
+	_, _ = svc.Post(ctx, "lead", string(priv.ID), "release salaries")
+
+	if _, err := svc.Pin(ctx, "qa", string(m.ID)); !errors.Is(err, domain.ErrNotMember) {
+		t.Fatalf("pin without joining = %v", err)
+	}
+	pinned, err := svc.Pin(ctx, "dev", string(m.ID))
+	if err != nil || pinned.PinnedBy != "dev" {
+		t.Fatalf("pin = %+v %v", pinned, err)
+	}
+	if last := (*ev)[len(*ev)-1]; last != "message.pinned→[dev lead]" {
+		t.Fatalf("event = %s", last)
+	}
+	if pins, err := svc.Pins(ctx, "qa", string(pub.ID)); err != nil || len(pins) != 1 {
+		t.Fatalf("pins (public, read by a non-member) = %v %v", pins, err)
+	}
+	if _, err := svc.Unpin(ctx, "dev", string(m.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if pins, _ := svc.Pins(ctx, "dev", string(pub.ID)); len(pins) != 0 {
+		t.Fatalf("after unpin = %v", pins)
+	}
+
+	// Search covers what the reader may read: dev finds the public message, not the private channel's.
+	if found, err := svc.Search(ctx, "dev", "release"); err != nil || len(found) != 1 || found[0].ID != m.ID {
+		t.Fatalf("dev search = %v %v", found, err)
+	}
+	if found, _ := svc.Search(ctx, "lead", "release"); len(found) != 2 {
+		t.Fatalf("lead search = %v", found)
+	}
+	if _, err := svc.Search(ctx, "dev", " r "); !errors.Is(err, app.ErrQueryTooShort) {
+		t.Fatalf("short query = %v", err)
+	}
+}

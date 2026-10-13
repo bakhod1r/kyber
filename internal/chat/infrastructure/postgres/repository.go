@@ -144,7 +144,7 @@ func NewMessages(pool *pgxpool.Pool) *Messages { return &Messages{pool: pool} }
 const insertCols = `id, conversation_id, author_id, body, created_at, edited_at, deleted, thread_id, kind, ref`
 
 // msgCols reads a message (alias m) with its reply count and reactions ("emoji user,user" rows).
-const msgCols = `m.id, m.conversation_id, m.author_id, m.body, m.created_at, m.edited_at, m.deleted, coalesce(m.thread_id::text, ''), m.kind, m.ref,
+const msgCols = `m.id, m.conversation_id, m.author_id, m.body, m.created_at, m.edited_at, m.deleted, coalesce(m.thread_id::text, ''), m.kind, m.ref, coalesce(m.pinned_by::text, ''), m.pinned_at,
 	(SELECT count(*) FROM messages r WHERE r.thread_id = m.id AND NOT r.deleted),
 	ARRAY(SELECT x.emoji || ' ' || string_agg(x.user_id::text, ',' ORDER BY x.user_id) FROM message_reactions x
 		WHERE x.message_id = m.id GROUP BY x.emoji ORDER BY x.emoji)`
@@ -153,7 +153,8 @@ func scanMsg(row pgx.CollectableRow) (*domain.Message, error) {
 	var m domain.Message
 	var edited *time.Time
 	var reactions []string
-	if err := row.Scan(&m.ID, &m.Conversation, &m.Author, &m.Body, &m.CreatedAt, &edited, &m.Deleted, &m.Thread, &m.Kind, &m.Ref, &m.ReplyCount, &reactions); err != nil {
+	var pinnedAt *time.Time
+	if err := row.Scan(&m.ID, &m.Conversation, &m.Author, &m.Body, &m.CreatedAt, &edited, &m.Deleted, &m.Thread, &m.Kind, &m.Ref, &m.PinnedBy, &pinnedAt, &m.ReplyCount, &reactions); err != nil {
 		return nil, err
 	}
 	for _, r := range reactions {
@@ -165,6 +166,9 @@ func scanMsg(row pgx.CollectableRow) (*domain.Message, error) {
 		m.Reactions = append(m.Reactions, re)
 	}
 	m.CreatedAt = m.CreatedAt.UTC()
+	if pinnedAt != nil {
+		m.PinnedAt = pinnedAt.UTC()
+	}
 	if edited != nil {
 		m.EditedAt = edited.UTC()
 	}
@@ -199,8 +203,13 @@ func (s *Messages) Post(ctx context.Context, m *domain.Message) error {
 // Update rewrites the message and replaces its reactions.
 func (s *Messages) Update(ctx context.Context, m *domain.Message) error {
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		tag, err := tx.Exec(ctx, `UPDATE messages SET body = $2, edited_at = $3, deleted = $4 WHERE id = $1`,
-			string(m.ID), m.Body, editedAt(m), m.Deleted)
+		var pinnedBy *string
+		var pinnedAt *time.Time
+		if m.PinnedBy != "" {
+			pinnedBy, pinnedAt = (*string)(&m.PinnedBy), &m.PinnedAt
+		}
+		tag, err := tx.Exec(ctx, `UPDATE messages SET body = $2, edited_at = $3, deleted = $4, pinned_by = $5, pinned_at = $6 WHERE id = $1`,
+			string(m.ID), m.Body, editedAt(m), m.Deleted, pinnedBy, pinnedAt)
 		if err != nil {
 			return err
 		}
@@ -259,6 +268,39 @@ func (s *Messages) Replies(ctx context.Context, parent domain.MessageID) ([]*dom
 		return nil, nil
 	}
 	rows, err := s.pool.Query(ctx, `SELECT `+msgCols+` FROM messages m WHERE m.thread_id = $1 ORDER BY m.created_at, m.id`, string(parent))
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, scanMsg)
+}
+
+func (s *Messages) Pinned(ctx context.Context, conv domain.ConversationID) ([]*domain.Message, error) {
+	if !id.Valid(string(conv)) {
+		return nil, nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT `+msgCols+` FROM messages m WHERE m.conversation_id = $1 AND m.pinned_at IS NOT NULL
+		ORDER BY m.pinned_at DESC, m.id`, string(conv))
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, scanMsg)
+}
+
+// Search matches every word as a case-insensitive substring (strpos, so % and _ are plain characters).
+func (s *Messages) Search(ctx context.Context, convs []domain.ConversationID, query string, limit int) ([]*domain.Message, error) {
+	words := strings.Fields(strings.ToLower(query))
+	ids := make([]string, 0, len(convs))
+	for _, c := range convs {
+		if id.Valid(string(c)) {
+			ids = append(ids, string(c))
+		}
+	}
+	if len(words) == 0 || len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT `+msgCols+` FROM messages m WHERE m.conversation_id = ANY($1::uuid[]) AND NOT m.deleted
+		AND (SELECT bool_and(strpos(lower(m.body), w) > 0) FROM unnest($2::text[]) w)
+		ORDER BY m.created_at DESC, m.id DESC LIMIT $3`, ids, words, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -23,7 +23,8 @@ SaaS: everything runs on the operator's server.
 | Issue key preview (`KYB-12` unfurled, only if the reader may see it) | ✅ S52 | |
 | Web UI (sidebar, channel view, composer, threads) | ✅ S53 | |
 | Pins, search, file uploads (via attachment BlobStore) | S54 | |
-| **Huddles**: audio, video, screen share in a channel or DM | ✅ S55–S57 | recording, SFU |
+| **Huddles**: audio, video, screen share in a channel or DM | ✅ S55–S57 | SFU |
+| **Huddle recording** (client-side mix → WebM → BlobStore, consent banner) | S62 | server-side via SFU |
 | **Whiteboard** in a huddle (Zoom-style): draw shapes, arrows, sticky notes, text — e.g. an architecture diagram | ✅ S59 | templates, export to issue |
 | **Shared file** in a huddle: everyone opens the same doc/diagram, edits and comments on it live | ✅ S60 | version history |
 | Workflows, bots, apps, Slack Connect, statuses with emoji | — | out of scope |

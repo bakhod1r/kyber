@@ -26,11 +26,15 @@ export const chatGateway = {
   replies: (id: string) => request<List<Message>>("GET", `${msg(id)}/replies`).then((r) => r.items),
   reply: (id: string, body: string) => request<Message>("POST", `${msg(id)}/replies`, { body }),
   react: (id: string, emoji: string) => request<Message>("POST", `${msg(id)}/reactions`, { emoji }),
+  pin: (id: string) => request<Message>("POST", `${msg(id)}/pin`),
+  unpin: (id: string) => request<Message>("DELETE", `${msg(id)}/pin`),
+  pins: (id: string) => request<List<Message>>("GET", `${conv(id)}/pins`).then((r) => r.items),
+  search: (q: string) => request<List<Message>>("GET", `/api/v1/chat/search?q=${encodeURIComponent(q)}`).then((r) => r.items),
   presence: (userIds: string[]) =>
     request<{ online: string[] }>("GET", `/api/v1/presence?${userIds.map((u) => `user_id=${encodeURIComponent(u)}`).join("&")}`).then((r) => r.online),
 };
 
-const EVENTS = ["message.posted", "message.edited", "message.deleted", "message.reacted", "typing"] as const;
+const EVENTS = ["message.posted", "message.edited", "message.deleted", "message.reacted", "message.pinned", "typing"] as const;
 
 /** Chat events from the shared realtime stream. */
 export function openChatStream(onEvent: (e: ChatEvent) => void): () => void {

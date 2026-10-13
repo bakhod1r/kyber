@@ -8,6 +8,7 @@ type (
 	MessageEdited  struct{ Message Message }
 	MessageDeleted struct{ Message Message }
 	MessageReacted struct{ Message Message }
+	MessagePinned  struct{ Message Message } // pinned or unpinned
 	// Typing is ephemeral: never stored.
 	Typing struct {
 		Conversation ConversationID
@@ -19,6 +20,7 @@ func (MessagePosted) EventName() string  { return "message.posted" }
 func (MessageEdited) EventName() string  { return "message.edited" }
 func (MessageDeleted) EventName() string { return "message.deleted" }
 func (MessageReacted) EventName() string { return "message.reacted" }
+func (MessagePinned) EventName() string  { return "message.pinned" }
 func (Typing) EventName() string         { return "typing" }
 
 // MessageWritten is the published event (outbox) for a new message or reply: other contexts

@@ -155,6 +155,8 @@ type Message struct {
 	Reactions    []Reaction  // sorted by emoji
 	Kind         MessageKind // "" for people's messages
 	Ref          string      // system messages: what they are about (unique), e.g. "call:<id>:started"
+	PinnedBy     UserID      // empty unless pinned
+	PinnedAt     time.Time
 	events       []MessageWritten
 }
 
@@ -208,6 +210,19 @@ func NewMessage(id MessageID, conv ConversationID, author UserID, text string, n
 	m.written()
 	return m, nil
 }
+
+// Pin keeps the message at hand for the conversation (no-op when already pinned).
+func (m *Message) Pin(by UserID, now time.Time) error {
+	if m.Deleted {
+		return ErrDeleted
+	}
+	if m.PinnedBy == "" {
+		m.PinnedBy, m.PinnedAt = by, now.UTC()
+	}
+	return nil
+}
+
+func (m *Message) Unpin() { m.PinnedBy, m.PinnedAt = "", time.Time{} }
 
 // NewReply answers a top-level message in its thread.
 func NewReply(id MessageID, parent *Message, author UserID, text string, now time.Time) (*Message, error) {
@@ -279,6 +294,7 @@ func (m *Message) Delete(actor UserID, now time.Time) error {
 		return err
 	}
 	m.Body, m.Deleted, m.EditedAt, m.Reactions = "", true, now.UTC(), nil
+	m.Unpin()
 	return nil
 }
 
@@ -306,6 +322,11 @@ type Messages interface {
 	History(ctx context.Context, conv ConversationID, before MessageID, limit int) ([]*Message, error)
 	// Replies lists a thread, oldest first.
 	Replies(ctx context.Context, parent MessageID) ([]*Message, error)
+	// Pinned lists a conversation's pinned messages, most recently pinned first.
+	Pinned(ctx context.Context, conv ConversationID) ([]*Message, error)
+	// Search finds live messages whose body contains every word of query (case-insensitive) in the given
+	// conversations, newest first.
+	Search(ctx context.Context, convs []ConversationID, query string, limit int) ([]*Message, error)
 }
 
 // MaxPreviews caps the issues previewed for one message.

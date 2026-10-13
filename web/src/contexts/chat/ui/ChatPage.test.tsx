@@ -50,6 +50,9 @@ function routes() {
     "POST /api/v1/messages/m-2/replies": { status: 201, body: message("m-10", "ok", { thread_id: "m-2", author_id: "u-1" }) },
     "POST /api/v1/channels": { status: 201, body: { ...general, id: "c-4", name: "design", unread: 0 } },
     "POST /api/v1/dms": { status: 200, body: dm },
+    "POST /api/v1/messages/m-1/pin": { status: 200, body: message("m-1", "morning", { author_id: "u-1", pinned_by: "u-1", pinned_at: "2026-10-13T10:00:00Z" }) },
+    "GET /api/v1/conversations/c-1/pins": { status: 200, body: { items: [message("m-1", "morning", { author_id: "u-1", pinned_by: "u-1" })] } },
+    "GET /api/v1/chat/search?q=ready": { status: 200, body: { items: [message("m-2", "KYB-1 is ready")] } },
   });
 }
 
@@ -129,5 +132,25 @@ describe("Chat (S53)", () => {
     await user.click(await screen.findByRole("checkbox", { name: "Bobur" }));
     await user.click(screen.getByRole("button", { name: "Open" }));
     expect(calls.find((c) => c.key === "POST /api/v1/dms")?.body).toEqual({ user_ids: ["u-2"] });
+  });
+});
+
+describe("Chat pins and search (S54a)", () => {
+  it("pins a message, lists pins and searches", async () => {
+    const calls = routes();
+    const user = userEvent.setup();
+    renderChat();
+    const history = await screen.findByRole("log", { name: "Messages" });
+    const morning = (await within(history).findByText("morning")).closest("article")!;
+    await user.click(within(morning as HTMLElement).getByRole("button", { name: "Pin" }));
+    expect(calls.some((c) => c.key === "POST /api/v1/messages/m-1/pin")).toBe(true);
+    expect(await within(morning as HTMLElement).findByLabelText("pinned")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "📌 Pinned" }));
+    expect(await within(await screen.findByRole("list", { name: "Pinned messages" })).findByText(/morning/)).toBeInTheDocument();
+
+    await user.type(screen.getByRole("searchbox", { name: "Search messages" }), "ready{Enter}");
+    const results = await screen.findByRole("list", { name: "Search results" });
+    expect(await within(results).findByRole("link", { name: /# general · Bobur\s*KYB-1 is ready/ })).toHaveAttribute("href", "/chat/c-1");
   });
 });

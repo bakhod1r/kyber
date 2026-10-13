@@ -36,9 +36,12 @@ CREATE TABLE messages (
     -- System messages (e.g. a huddle started): their kind, and what they are about (unique).
     kind            text NOT NULL DEFAULT '' CHECK (kind IN ('', 'huddle_started', 'huddle_ended')),
     ref             text NOT NULL DEFAULT '',
+    pinned_by       uuid,
+    pinned_at       timestamptz,
     CHECK (deleted OR btrim(body) <> '')
 );
 CREATE INDEX messages_history ON messages (conversation_id, created_at DESC, id DESC) WHERE thread_id IS NULL;
+CREATE INDEX messages_pinned ON messages (conversation_id, pinned_at DESC) WHERE pinned_at IS NOT NULL;
 CREATE UNIQUE INDEX messages_ref ON messages (ref) WHERE ref <> '';
 CREATE INDEX messages_thread ON messages (thread_id, created_at) WHERE thread_id IS NOT NULL;
 

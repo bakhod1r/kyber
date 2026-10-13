@@ -34,6 +34,8 @@ backends.
   ✅ **Done:** `web/src/contexts/chat` (four layers), `/chat` and `/chat/:id`, live updates over `EventSource`,
   unit tests and an e2e test with two browsers (message, reaction and typing arrive live).
 - **S54 Pins, search, files** (P1) — pin messages, search in messages I can read, file attachments via BlobStore.
+  ✅ **S54a done:** pins (`message.pinned`), search across readable conversations (every word, case-insensitive);
+  API 0.41.0. **S54b next:** files in chat over a new `BlobStore` port (local disk, S3/MinIO adapter).
 
 ## Video calls (huddles)
 
@@ -63,6 +65,14 @@ backends.
   live changes and named cursors, SVG/PNG export; e2e with two browsers drawing together. Sticky note → issue: next.
 - **S60 Shared file in a call** — "present to all": everyone opens the same Markdown doc or whiteboard, edits it
   together and comments on a line/element; the presenter can follow-me (everyone scrolls with them).
+- **S62 Huddle recording** (requested 2026-10-13; needs S54b) — "Record" in a huddle: everyone sees a red
+  "● Recording by Ali" banner (consent; anyone may leave); the recorder's browser composes the participants'
+  video (grid, or the presented screen/file large) on a canvas and mixes all audio (Web Audio) into one
+  `MediaRecorder` WebM; on stop it uploads through BlobStore and the recording appears in the conversation as a
+  message with a player (who/when/duration), readable only by conversation members; retention setting and
+  delete by the recorder or an admin. Server-side recording through an SFU stays a later ADR. AC: recording state
+  in `call.updated`; only one recording at a time; a participant joining sees the banner; the file is never
+  served to non-members.
 - **S58 Ops** (P1) ✅ **Done:** realtime fan-out across replicas (NOTIFY + `realtime_spill` for large events,
   migration 0051), gauges `kyber_stream_connections` / `kyber_calls_active`, coturn in docker-compose
   (`--profile calls`) and `docs/ops/calls.md`. SFU ADR: later.

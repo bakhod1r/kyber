@@ -10,11 +10,13 @@ export type Message = {
   deleted: boolean; thread_id: string | null; reply_count: number; reactions: Reaction[]; issues: IssuePreview[];
   /** System messages (a huddle started or ended); people's messages have none. */
   kind?: "" | "huddle_started" | "huddle_ended";
+  pinned_by?: string | null;
+  pinned_at?: string | null;
 };
 
 /** Events on the realtime stream (GET /api/v1/stream). Stream messages carry no issue previews. */
 export type ChatEvent =
-  | { type: "message.posted" | "message.edited" | "message.deleted" | "message.reacted"; message: Omit<Message, "issues"> & { issues?: IssuePreview[] } }
+  | { type: "message.posted" | "message.edited" | "message.deleted" | "message.reacted" | "message.pinned"; message: Omit<Message, "issues"> & { issues?: IssuePreview[] } }
   | { type: "typing"; conversation_id: string; user_id: string };
 
 /** Applies a stream event to a conversation's newest-first, top-level history. */

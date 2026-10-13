@@ -199,3 +199,21 @@ func TestSystemMessage(t *testing.T) {
 		t.Fatalf("reply to system message = %v", err)
 	}
 }
+
+func TestPin(t *testing.T) {
+	m, _ := domain.NewMessage("m-1", "c-1", "u-a", "release checklist", t0)
+	if err := m.Pin("u-b", t0); err != nil || m.PinnedBy != "u-b" || !m.PinnedAt.Equal(t0) {
+		t.Fatalf("pin = %+v %v", m, err)
+	}
+	if err := m.Pin("u-c", t0.Add(time.Minute)); err != nil || m.PinnedBy != "u-b" {
+		t.Fatalf("pinning twice keeps the first pin: %+v %v", m, err)
+	}
+	m.Unpin()
+	if !m.PinnedAt.IsZero() || m.PinnedBy != "" {
+		t.Fatalf("unpin = %+v", m)
+	}
+	_ = m.Delete("u-a", t0)
+	if err := m.Pin("u-b", t0); !errors.Is(err, domain.ErrDeleted) {
+		t.Fatalf("pin deleted = %v", err)
+	}
+}

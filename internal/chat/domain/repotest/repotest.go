@@ -182,6 +182,46 @@ func Run(t *testing.T, r domain.Repository, msgs domain.Messages) {
 		t.Fatalf("after toggle off = %+v", got2.Reactions)
 	}
 
+	// Pins: stored with the message; listed most recently pinned first.
+	p1, _ := msgs.ByID(ctx, mid(1))
+	p2, _ := msgs.ByID(ctx, mid(2))
+	_ = p1.Pin(Dev, t0.Add(time.Hour))
+	_ = p2.Pin(Lead, t0.Add(2*time.Hour))
+	for _, m := range []*domain.Message{p1, p2} {
+		if err := msgs.Update(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pins, err := msgs.Pinned(ctx, general.ID)
+	if err != nil || len(pins) != 2 || pins[0].ID != p2.ID || pins[1].PinnedBy != Dev || !pins[1].PinnedAt.Equal(t0.Add(time.Hour)) {
+		t.Fatalf("pins = %+v %v", pins, err)
+	}
+	p2.Unpin()
+	_ = msgs.Update(ctx, p2)
+	if pins, _ := msgs.Pinned(ctx, general.ID); len(pins) != 1 {
+		t.Fatalf("after unpin = %+v", pins)
+	}
+
+	// Search: every word, any case, live messages of the given conversations only, newest first.
+	dmMsg, _ := domain.NewMessage(mid(30), dm.ID, Dev, "Deploy MSG to staging", t0.Add(3*time.Hour))
+	_ = msgs.Post(ctx, dmMsg)
+	found, err := msgs.Search(ctx, []domain.ConversationID{general.ID, dm.ID}, "msg", 10)
+	if err != nil || len(found) != 5 || found[0].ID != dmMsg.ID {
+		t.Fatalf("search msg = %v %v (msg 1, 2, msg three, 5 and the DM; msg 4 is deleted)", found, err)
+	}
+	if found, _ := msgs.Search(ctx, []domain.ConversationID{general.ID}, "staging", 10); len(found) != 0 {
+		t.Fatalf("other conversations leak: %v", found)
+	}
+	if found, _ := msgs.Search(ctx, []domain.ConversationID{general.ID, dm.ID}, "  DEPLOY   staging ", 10); len(found) != 1 {
+		t.Fatalf("all words = %v", found)
+	}
+	if found, _ := msgs.Search(ctx, []domain.ConversationID{general.ID}, "100%_", 10); len(found) != 0 {
+		t.Fatalf("wildcards are literal: %v", found)
+	}
+	if found, _ := msgs.Search(ctx, []domain.ConversationID{general.ID, dm.ID}, "msg", 2); len(found) != 2 {
+		t.Fatalf("limit = %v", found)
+	}
+
 	// System messages: stored with their kind and ref; the same ref only once.
 	sys := domain.NewSystemMessage(mid(20), general.ID, Lead, domain.KindHuddleStarted, "call:k-1:started", "started a huddle", t0.Add(time.Hour))
 	if err := msgs.Post(ctx, sys); err != nil {

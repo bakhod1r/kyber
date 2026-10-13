@@ -7,12 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/chat/domain"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
+
+var ErrQueryTooShort = errors.New("search for at least 2 characters")
 
 var ErrNotWorkspaceMember = errors.New("everyone in a conversation must be a member of the workspace")
 
@@ -434,4 +437,60 @@ func (s *Service) OnCallEvent(ctx context.Context, m outbox.Message) error {
 	}
 	s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *msg})
 	return nil
+}
+
+func (s *Service) pin(ctx context.Context, actor, id string, on bool) (*domain.Message, error) {
+	m, c, err := s.asMember(ctx, actor, id)
+	if err != nil {
+		return nil, err
+	}
+	if on {
+		if err := m.Pin(domain.UserID(actor), s.d.Now()); err != nil {
+			return nil, err
+		}
+	} else {
+		m.Unpin()
+	}
+	if err := s.d.Messages.Update(ctx, m); err != nil {
+		return nil, err
+	}
+	s.d.Notifier.Notify(ctx, c.Members, domain.MessagePinned{Message: *m})
+	return m, nil
+}
+
+// Pin keeps a message at hand for everyone in the conversation (members only).
+func (s *Service) Pin(ctx context.Context, actor, id string) (*domain.Message, error) {
+	return s.pin(ctx, actor, id, true)
+}
+
+func (s *Service) Unpin(ctx context.Context, actor, id string) (*domain.Message, error) {
+	return s.pin(ctx, actor, id, false)
+}
+
+// Pins lists a conversation's pinned messages, most recently pinned first.
+func (s *Service) Pins(ctx context.Context, actor, conv string) ([]*domain.Message, error) {
+	c, err := s.readable(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	return s.d.Messages.Pinned(ctx, c.ID)
+}
+
+// SearchLimit bounds search results.
+const SearchLimit = 50
+
+// Search finds messages containing every word of query in the conversations actor may read.
+func (s *Service) Search(ctx context.Context, actor, query string) ([]*domain.Message, error) {
+	if len([]rune(strings.TrimSpace(query))) < 2 {
+		return nil, ErrQueryTooShort
+	}
+	convs, err := s.d.Conversations.Visible(ctx, domain.WorkspaceID(tenant.Workspace(ctx)), domain.UserID(actor))
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]domain.ConversationID, len(convs))
+	for i, c := range convs {
+		ids[i] = c.ID
+	}
+	return s.d.Messages.Search(ctx, ids, query, SearchLimit)
 }

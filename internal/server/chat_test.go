@@ -200,3 +200,43 @@ func TestChatIssuePreviews(t *testing.T) {
 		}
 	})
 }
+
+// S54a: pinned messages and search across the conversations one may read.
+func TestChatPinsAndSearch(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		_, pub := lead.do("POST", "/api/v1/channels", map[string]any{"name": "general"})
+		_, priv := lead.do("POST", "/api/v1/channels", map[string]any{"name": "secret", "private": true})
+		pubURL := "/api/v1/conversations/" + pub["id"].(string)
+		dev.do("POST", pubURL+"/join", nil)
+		_, m := lead.do("POST", pubURL+"/messages", map[string]string{"body": "Release checklist v2"})
+		lead.do("POST", "/api/v1/conversations/"+priv["id"].(string)+"/messages", map[string]string{"body": "release salaries"})
+
+		code, p := dev.do("POST", "/api/v1/messages/"+m["id"].(string)+"/pin", nil)
+		expect(t, code, 200, p)
+		if p["pinned_by"] == nil || p["pinned_at"] == nil {
+			t.Fatalf("pinned = %v", p)
+		}
+		_, pins := lead.do("GET", pubURL+"/pins", nil)
+		if items := pins["items"].([]any); len(items) != 1 || items[0].(map[string]any)["body"] != "Release checklist v2" {
+			t.Fatalf("pins = %v", pins)
+		}
+		code, p = dev.do("DELETE", "/api/v1/messages/"+m["id"].(string)+"/pin", nil)
+		expect(t, code, 200, p)
+		if p["pinned_by"] != nil {
+			t.Fatalf("unpinned = %v", p)
+		}
+
+		_, found := dev.do("GET", "/api/v1/chat/search?q=RELEASE", nil)
+		if items := found["items"].([]any); len(items) != 1 || items[0].(map[string]any)["conversation_id"] != pub["id"] {
+			t.Fatalf("dev search = %v (the private channel stays private)", found)
+		}
+		_, found = lead.do("GET", "/api/v1/chat/search?q=release", nil)
+		if len(found["items"].([]any)) != 2 {
+			t.Fatalf("lead search = %v", found)
+		}
+		code, b := dev.do("GET", "/api/v1/chat/search?q=r", nil)
+		expect(t, code, 422, b)
+	})
+}

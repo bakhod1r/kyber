@@ -29,6 +29,8 @@ type message struct {
 	ThreadID       *string    `json:"thread_id"`
 	ReplyCount     int        `json:"reply_count"`
 	Kind           string     `json:"kind"`
+	PinnedBy       *string    `json:"pinned_by"`
+	PinnedAt       *time.Time `json:"pinned_at"`
 	Reactions      []reaction `json:"reactions"`
 }
 
@@ -46,6 +48,10 @@ func toMessage(m domain.Message) message {
 	if m.Thread != "" {
 		t := string(m.Thread)
 		d.ThreadID = &t
+	}
+	if m.PinnedBy != "" {
+		by, at := string(m.PinnedBy), m.PinnedAt
+		d.PinnedBy, d.PinnedAt = &by, &at
 	}
 	for _, r := range m.Reactions {
 		users := make([]string, len(r.Users))
@@ -67,6 +73,8 @@ func (n Notifier) Notify(ctx context.Context, to []domain.UserID, e domain.Event
 	case domain.MessageDeleted:
 		data = toMessage(e.Message)
 	case domain.MessageReacted:
+		data = toMessage(e.Message)
+	case domain.MessagePinned:
 		data = toMessage(e.Message)
 	case domain.Typing:
 		data = map[string]string{"conversation_id": string(e.Conversation), "user_id": string(e.User)}

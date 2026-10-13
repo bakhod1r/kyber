@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -246,5 +247,40 @@ func (s *Messages) Replies(_ context.Context, parent domain.MessageID) ([]*domai
 		}
 	}
 	slices.SortFunc(out, func(a, b *domain.Message) int { return newer(*b, *a) })
+	return out, nil
+}
+
+func (s *Messages) Pinned(_ context.Context, conv domain.ConversationID) ([]*domain.Message, error) {
+	s.r.mu.Lock()
+	defer s.r.mu.Unlock()
+	var out []*domain.Message
+	for _, m := range s.r.messages {
+		if m.Conversation == conv && m.PinnedBy != "" {
+			out = append(out, s.read(m))
+		}
+	}
+	slices.SortFunc(out, func(a, b *domain.Message) int { return b.PinnedAt.Compare(a.PinnedAt) })
+	return out, nil
+}
+
+func (s *Messages) Search(_ context.Context, convs []domain.ConversationID, query string, limit int) ([]*domain.Message, error) {
+	words := strings.Fields(strings.ToLower(query))
+	s.r.mu.Lock()
+	defer s.r.mu.Unlock()
+	var all []domain.Message
+	for _, m := range s.r.messages {
+		if m.Deleted || len(words) == 0 || !slices.Contains(convs, m.Conversation) {
+			continue
+		}
+		body := strings.ToLower(m.Body)
+		if !slices.ContainsFunc(words, func(w string) bool { return !strings.Contains(body, w) }) {
+			all = append(all, m)
+		}
+	}
+	slices.SortFunc(all, newer)
+	out := make([]*domain.Message, 0, min(limit, len(all)))
+	for i := 0; i < len(all) && i < limit; i++ {
+		out = append(out, s.read(all[i]))
+	}
 	return out, nil
 }

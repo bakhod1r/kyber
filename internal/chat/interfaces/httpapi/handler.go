@@ -38,6 +38,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/messages/{id}/replies", h.replies)
 	mux.HandleFunc("POST /api/v1/messages/{id}/replies", h.reply)
 	mux.HandleFunc("POST /api/v1/messages/{id}/reactions", h.react)
+	mux.HandleFunc("POST /api/v1/messages/{id}/pin", h.pin)
+	mux.HandleFunc("DELETE /api/v1/messages/{id}/pin", h.unpin)
+	mux.HandleFunc("GET /api/v1/conversations/{id}/pins", h.pins)
+	mux.HandleFunc("GET /api/v1/chat/search", h.search)
 }
 
 var errBadLimit = errors.New("limit must be a number from 1 to 200")
@@ -55,7 +59,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
-		errors.Is(err, domain.ErrInvalidEmoji):
+		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -95,6 +99,8 @@ type messageDTO struct {
 	ThreadID       *string    `json:"thread_id"`
 	ReplyCount     int        `json:"reply_count"`
 	Kind           string     `json:"kind"`
+	PinnedBy       *string    `json:"pinned_by"`
+	PinnedAt       *time.Time `json:"pinned_at"`
 	Reactions      []reaction `json:"reactions"`
 	Issues         []issueDTO `json:"issues"`
 }
@@ -119,6 +125,10 @@ func toMessage(m *domain.Message) messageDTO {
 	if m.Thread != "" {
 		t := string(m.Thread)
 		d.ThreadID = &t
+	}
+	if m.PinnedBy != "" {
+		by, at := string(m.PinnedBy), m.PinnedAt
+		d.PinnedBy, d.PinnedAt = &by, &at
 	}
 	for _, r := range m.Reactions {
 		users := make([]string, len(r.Users))
@@ -362,4 +372,41 @@ func (h *Handler) react(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.message(w, r, http.StatusOK, m)
+}
+
+func (h *Handler) pin(w http.ResponseWriter, r *http.Request) {
+	m, err := h.svc.Pin(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.message(w, r, http.StatusOK, m)
+}
+
+func (h *Handler) unpin(w http.ResponseWriter, r *http.Request) {
+	m, err := h.svc.Unpin(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.message(w, r, http.StatusOK, m)
+}
+
+func (h *Handler) pins(w http.ResponseWriter, r *http.Request) {
+	ms, err := h.svc.Pins(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.messages(w, r, ms)
+}
+
+// search: ?q=words (every word must appear; case-insensitive).
+func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
+	ms, err := h.svc.Search(r.Context(), auth.Actor(r.Context()), r.URL.Query().Get("q"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.messages(w, r, ms)
 }

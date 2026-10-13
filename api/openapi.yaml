@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.40.0
+  version: 0.41.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -487,7 +487,7 @@ paths:
       operationId: openStream
       description: |
         Server-Sent Events of this workspace for the caller (`message.posted`, `message.edited`,
-        `message.deleted`, `message.reacted`, `typing`, `call.updated`, `call.signal`, `call.follow`, `whiteboard.ops`, `whiteboard.cursor`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
+        `message.deleted`, `message.reacted`, `message.pinned`, `typing`, `call.updated`, `call.signal`, `call.follow`, `whiteboard.ops`, `whiteboard.cursor`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
         what was missed. Keeping the stream open marks the caller online.
       parameters:
         - { name: Last-Event-ID, in: header, schema: { type: string } }
@@ -824,6 +824,43 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/messages/{id}/pin:
+    post:
+      operationId: pinMessage
+      description: Pins a message for everyone in the conversation (members only); members hear `message.pinned`.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Pinned, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: unpinMessage
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Unpinned, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/pins:
+    get:
+      operationId: listPinnedMessages
+      description: The conversation's pinned messages, most recently pinned first.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/chat/search:
+    get:
+      operationId: searchMessages
+      description: Messages containing every word of q (case-insensitive, at least 2 characters) in the conversations the caller may read, newest first (at most 50).
+      parameters: [{ name: q, in: query, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/focus:
     get:
       operationId: currentFocus
@@ -2583,7 +2620,7 @@ components:
         created_at: { type: string, format: date-time }
     Message:
       type: object
-      required: [id, conversation_id, author_id, body, created_at, edited_at, deleted, thread_id, reply_count, reactions, issues, kind]
+      required: [id, conversation_id, author_id, body, created_at, edited_at, deleted, thread_id, reply_count, reactions, issues, kind, pinned_by, pinned_at]
       properties:
         id: { type: string }
         conversation_id: { type: string }
@@ -2595,6 +2632,8 @@ components:
         thread_id: { oneOf: [{ type: string }, { type: "null" }], description: The parent message of a reply }
         reply_count: { type: integer }
         kind: { type: string, enum: ["", huddle_started, huddle_ended], description: "Empty for people's messages; system messages cannot be edited." }
+        pinned_by: { oneOf: [{ type: string }, { type: "null" }] }
+        pinned_at: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
         issues:
           description: Issues written by key in the body (at most 5) that the caller may browse. Not sent on the stream.
           type: array
