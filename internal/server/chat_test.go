@@ -181,6 +181,12 @@ func TestChatMentions(t *testing.T) {
 		if _, own := lead.do("GET", "/api/v1/notifications", nil); len(own["items"].([]any)) != 0 {
 			t.Fatalf("author told about own mention: %v", own)
 		}
+		// S64: reading the conversation reads its mentions.
+		code, b := qa.do("POST", "/api/v1/notifications/read-all?conversation_id="+pub["id"].(string), nil)
+		expect(t, code, 204, b)
+		if _, after := qa.do("GET", "/api/v1/notifications", nil); after["unread"] != float64(0) {
+			t.Fatalf("after reading #general = %v", after)
+		}
 	})
 }
 

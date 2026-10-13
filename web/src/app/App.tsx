@@ -8,6 +8,7 @@ import { LandingPage } from "./LandingPage";
 import { MeetingsPage } from "../contexts/calendar/ui/MeetingsPage";
 import { ChatPage, type ConversationSlot } from "../contexts/chat/ui/ChatPage";
 import { ConversationExtras } from "./ConversationExtras";
+import { ChatMentions } from "../contexts/notify/ui/ChatMentions";
 
 /** Huddle and whiteboards of the open conversation, composed into the chat. */
 const extras: ConversationSlot = (conversationId, me, names) => (
@@ -78,8 +79,8 @@ export function AppRoutes() {
       <Route path="/projects/:key/releases" element={<RequireUser><ProjectPage view="releases" /></RequireUser>} />
       <Route path="/projects/:key/permissions" element={<RequireUser><ProjectPage view="permissions" /></RequireUser>} />
       <Route path="/projects/:key/notifications" element={<RequireUser><ProjectPage view="notifications" /></RequireUser>} />
-      <Route path="/chat" element={<RequireUser><ChatPage extras={extras} /></RequireUser>} />
-      <Route path="/chat/:id" element={<RequireUser><ChatPage extras={extras} /></RequireUser>} />
+      <Route path="/chat" element={<RequireUser><ChatPage extras={extras} activity={<ChatMentions />} /></RequireUser>} />
+      <Route path="/chat/:id" element={<RequireUser><ChatPage extras={extras} activity={<ChatMentions />} /></RequireUser>} />
       <Route path="/meetings" element={<RequireUser><MeetingsPage /></RequireUser>} />
       <Route path="/search" element={<RequireUser><SearchPage /></RequireUser>} />
       <Route path="/settings" element={<RequireUser><SettingsPage /></RequireUser>} />

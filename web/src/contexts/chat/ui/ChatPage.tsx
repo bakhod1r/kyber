@@ -29,7 +29,7 @@ function usePeople() {
 export type ConversationSlot = (conversationId: string, me: string, names: Map<string, string>) => ReactNode;
 
 /** Team chat (S53, ADR-0009): channels and DMs on the left, the open conversation and its threads on the right. */
-export function ChatPage({ extras }: { extras?: ConversationSlot }) {
+export function ChatPage({ extras, activity }: { extras?: ConversationSlot; /** Other contexts' activity (mentions), shown on the Activity view. */ activity?: ReactNode }) {
   const { id } = useParams();
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: identityUseCases.me });
@@ -69,10 +69,29 @@ export function ChatPage({ extras }: { extras?: ConversationSlot }) {
         <ConversationView key={id} id={id} conversation={current} title={current ? title(current) : ""} names={names} me={myId}
           typers={typers} onThread={setThread} extras={current?.member && myId ? extras?.(id, myId, names) : undefined} />
       ) : (
-        <section className="chat-empty muted">Pick a channel or start a direct message.</section>
+        <Activity conversations={conversations.data ?? []} title={title} activity={activity} />
       )}
       {thread && <ThreadPanel parent={thread} names={names} me={myId} onClose={() => setThread(null)} />}
     </div>
+  );
+}
+
+/** S64: where something waits for me — conversations with unread messages, and (from the shell) my mentions. */
+function Activity({ conversations, title, activity }: { conversations: Conversation[]; title: (c: Conversation) => string; activity?: ReactNode }) {
+  const unread = conversations.filter((c) => c.member && c.unread > 0);
+  return (
+    <section className="chat-activity" aria-label="Activity">
+      <h1>Activity</h1>
+      {activity}
+      <h2>Unread</h2>
+      {unread.length === 0 ? <p className="muted">You are all caught up.</p> : (
+        <ul aria-label="Unread conversations">
+          {unread.map((c) => (
+            <li key={c.id}><Link to={`/chat/${c.id}`}>{title(c)}</Link> <span className="badge" aria-label={`${c.unread} unread`}>{c.unread}</span></li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -130,6 +149,7 @@ function Sidebar({ conversations, current, title, names, me }: {
           ))}
         </ul>
       )}
+      <Link to="/chat" className={`chat-activity-link ${current ? "" : "active"}`} aria-current={current ? undefined : "page"}>🔔 Activity</Link>
       <h2>Channels</h2>
       <ul>{conversations.filter((c) => c.kind === "channel").map(item)}</ul>
       <h2>Direct messages</h2>

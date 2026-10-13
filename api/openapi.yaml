@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.44.0
+  version: 0.45.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -2570,6 +2570,9 @@ paths:
   /api/v1/notifications/read-all:
     post:
       operationId: markAllNotificationsRead
+      description: Marks every notification read, or with conversation_id only the chat mentions in that conversation.
+      parameters:
+        - { name: conversation_id, in: query, schema: { type: string } }
       responses:
         "204": { description: All marked as read. }
         "401": { $ref: "#/components/responses/Error" }

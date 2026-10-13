@@ -143,4 +143,6 @@ type Repository interface {
 	// MarkRead fails with ErrNotificationNotFound unless id belongs to the inbox.
 	MarkRead(ctx context.Context, in Inbox, id NotificationID, at time.Time) error
 	MarkAllRead(ctx context.Context, in Inbox, at time.Time) error
+	// MarkConversationRead reads the inbox's chat mentions in one conversation.
+	MarkConversationRead(ctx context.Context, in Inbox, conversation string, at time.Time) error
 }

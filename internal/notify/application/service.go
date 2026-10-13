@@ -369,6 +369,11 @@ func (s *Service) MarkRead(ctx context.Context, user, id string) error {
 	return s.d.Repo.MarkRead(ctx, inbox(ctx, user), domain.NotificationID(id), s.d.Now())
 }
 
+// MarkConversationRead reads the user's chat mentions in a conversation (they opened it).
+func (s *Service) MarkConversationRead(ctx context.Context, user, conversation string) error {
+	return s.d.Repo.MarkConversationRead(ctx, inbox(ctx, user), conversation, s.d.Now())
+}
+
 func (s *Service) MarkAllRead(ctx context.Context, user string) error {
 	return s.d.Repo.MarkAllRead(ctx, inbox(ctx, user), s.d.Now())
 }

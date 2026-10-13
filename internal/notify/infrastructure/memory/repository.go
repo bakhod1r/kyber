@@ -87,3 +87,14 @@ func (r *Repository) MarkAllRead(_ context.Context, in domain.Inbox, at time.Tim
 	}
 	return nil
 }
+
+func (r *Repository) MarkConversationRead(_ context.Context, in domain.Inbox, conversation string, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.all {
+		if in.Holds(r.all[i]) && r.all[i].ConversationID == conversation && conversation != "" && !r.all[i].Read() {
+			r.all[i].ReadAt = at
+		}
+	}
+	return nil
+}

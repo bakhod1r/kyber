@@ -84,3 +84,13 @@ func (r *Repository) MarkAllRead(ctx context.Context, in domain.Inbox, at time.T
 		string(in.User), at, in.Workspace)
 	return err
 }
+
+func (r *Repository) MarkConversationRead(ctx context.Context, in domain.Inbox, conversation string, at time.Time) error {
+	if !valid(in) || conversation == "" {
+		return nil
+	}
+	_, err := r.pool.Exec(ctx, `UPDATE notifications SET read_at = $2
+		WHERE recipient_id = $1 AND workspace_id = $3 AND conversation_id = $4 AND read_at IS NULL`,
+		string(in.User), at, in.Workspace, conversation)
+	return err
+}

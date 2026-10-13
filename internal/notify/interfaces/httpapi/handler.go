@@ -168,7 +168,11 @@ func (h *Handler) read(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) readAll(w http.ResponseWriter, r *http.Request) {
-	if err := h.svc.MarkAllRead(r.Context(), auth.Actor(r.Context())); err != nil {
+	read := func() error { return h.svc.MarkAllRead(r.Context(), auth.Actor(r.Context())) }
+	if conv := r.URL.Query().Get("conversation_id"); conv != "" {
+		read = func() error { return h.svc.MarkConversationRead(r.Context(), auth.Actor(r.Context()), conv) }
+	}
+	if err := read(); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}

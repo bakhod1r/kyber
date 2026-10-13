@@ -6,6 +6,9 @@ export const notifyGateway = {
   notifications: () => request<Inbox>("GET", "/api/v1/notifications"),
   markNotificationRead: (id: string) => request<undefined>("POST", `/api/v1/notifications/${seg(id)}/read`),
   markAllNotificationsRead: () => request<undefined>("POST", "/api/v1/notifications/read-all"),
+  /** Reads my chat mentions in one conversation (I opened it). */
+  markConversationRead: (conversationId: string) =>
+    request<undefined>("POST", `/api/v1/notifications/read-all?conversation_id=${encodeURIComponent(conversationId)}`),
   notificationSettings: () => request<NotificationSettings>("GET", "/api/v1/me/notification-settings"),
   setNotificationSettings: (patch: Partial<Pick<NotificationSettings, "email" | "telegram">>) =>
     request<NotificationSettings>("PUT", "/api/v1/me/notification-settings", patch),

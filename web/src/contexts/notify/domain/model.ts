@@ -7,6 +7,9 @@ export type Notification = {
   issue_title: string;
   /** The announced project ("" for issue notifications and workspace announcements). */
   project_key?: string;
+  /** Set for a mention in chat (issue_key empty); conversation_name is the channel ("" for a DM). */
+  conversation_id?: string;
+  conversation_name?: string;
   actor_name: string;
   excerpt: string;
   read: boolean;

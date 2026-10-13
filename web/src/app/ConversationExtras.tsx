@@ -1,6 +1,8 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { type Presentable, type Presentation } from "../contexts/call/application";
 import { Huddle } from "../contexts/call/ui/Huddle";
+import { notifyUseCases } from "../contexts/notify/application";
 import { docsUseCases } from "../contexts/docs/application";
 import { DocPage } from "../contexts/docs/ui/DocPage";
 import { projectUseCases } from "../contexts/project/application";
@@ -12,6 +14,11 @@ import { WhiteboardBoard, Whiteboards } from "../contexts/whiteboard/ui/Whiteboa
  * this conversation's whiteboards and the docs of my projects to everyone (S60).
  */
 export function ConversationExtras({ conversationId, me, names }: { conversationId: string; me: string; names: Map<string, string> }) {
+  const qc = useQueryClient();
+  // Opening the conversation reads my mentions in it (S64).
+  useEffect(() => {
+    void notifyUseCases.markConversationRead(conversationId).then(() => qc.invalidateQueries({ queryKey: ["notifications"] }), () => {});
+  }, [conversationId, qc]);
   const boards = useQuery({ queryKey: ["whiteboards", conversationId], queryFn: () => whiteboardUseCases.list(conversationId) });
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
   const docs = useQueries({ queries: (projects.data ?? []).map((p) => ({ queryKey: ["docs", p.key], queryFn: () => docsUseCases.pages(p.key) })) });
