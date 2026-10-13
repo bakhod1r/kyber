@@ -18,10 +18,18 @@ import (
 
 type fakes struct {
 	issues  map[string]app.IssueInfo
-	members map[string]bool // "project/user"
-	cleared map[string]bool // users who see confidential issues
+	members map[string]bool     // "project/user"
+	cleared map[string]bool     // users who see confidential issues
+	watch   map[string][]string // issue key → watchers
 	emails  map[string]string
 	names   map[string]string
+}
+
+func (f *fakes) Watchers(_ context.Context, key string) ([]string, error) {
+	if key == "BROKEN-1" {
+		return nil, errors.New("db down")
+	}
+	return f.watch[key], nil
 }
 
 func (f *fakes) Lookup(_ context.Context, key string) (app.IssueInfo, error) {
@@ -55,13 +63,14 @@ func setup() (*app.Service, *memory.Repository) {
 			"KYB-9": {Project: "KYB", Title: "Salaries", Reporter: "alice", Assignee: "bob", Confidential: true}},
 		members: map[string]bool{"KYB/alice": true, "KYB/bob": true, "KYB/carol": true, "KYB/dave": true},
 		cleared: map[string]bool{"alice": true, "bob": true},
+		watch:   map[string][]string{"KYB-1": {"dave", "erin"}},
 		emails:  map[string]string{"dave@x.uz": "dave", "eve@x.uz": "eve", "carol@x.uz": "carol"},
 		names:   map[string]string{"alice": "Alice", "bob": "Bob", "carol": "Carol"},
 	}
 	repo := memory.NewRepository()
 	n := 0
 	return app.NewService(app.Deps{
-		Repo: repo, Issues: f, Members: f, Workspaces: f, Users: f,
+		Repo: repo, Issues: f, Members: f, Workspaces: f, Users: f, Lookups: lookups{},
 		NewID: func() string { n++; return fmt.Sprintf("n-%02d", n) },
 		Now:   func() time.Time { return time.Date(2026, 4, 1, 10, n, 0, 0, time.UTC) },
 	}), repo
@@ -218,5 +227,41 @@ func TestConfidentialIssueNotifiesOnlyThoseWhoSeeIt(t *testing.T) {
 	}
 	if got := inbox(t, s, "dave"); got != "" {
 		t.Fatalf("mentioned member without clearance notified: %s", got)
+	}
+}
+
+// Watchers hear about comments and status changes; outsiders among them are skipped.
+func TestWatchersAreNotified(t *testing.T) {
+	ctx := context.Background()
+	s, _ := setup()
+	if err := s.OnCommentAdded(ctx, msg(8, "comment.added", `{"issue_key":"KYB-1","author":"carol","body":"done?"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if got := inbox(t, s, "dave"); got != "commented:KYB-1:Carol" {
+		t.Fatalf("watcher = %s", got)
+	}
+	if got := inbox(t, s, "erin"); got != "" {
+		t.Fatalf("non-member watcher notified: %s", got)
+	}
+	body := `{"id":"i","key":"KYB-1","by":"alice","items":[{"field":"title","from":"a","to":"b"},{"field":"status","from":"todo","to":"done"}]}`
+	if err := s.OnIssueChanged(ctx, msg(9, "issue.changed", body)); err != nil {
+		t.Fatal(err)
+	}
+	items, _, _ := s.List(ctx, "dave", false)
+	if len(items) != 2 || items[0].Kind != domain.KindTransitioned || items[0].Excerpt != "To Do → Done" {
+		t.Fatalf("dave = %+v", items)
+	}
+	if got := inbox(t, s, "alice"); got != "commented:KYB-1:Carol" {
+		t.Fatalf("the actor was told about their own change: %s", got)
+	}
+	if got := inbox(t, s, "bob"); got != "commented:KYB-1:Carol,transitioned:KYB-1:Alice" {
+		t.Fatalf("assignee = %s", got)
+	}
+	// Other changes, unknown issues and bad payloads are ignored.
+	for _, p := range []string{`{"key":"KYB-1","by":"alice","items":[{"field":"title","from":"a","to":"b"}]}`,
+		`{"key":"GONE-1","by":"alice","items":[{"field":"status","from":"todo","to":"done"}]}`, `garbage`} {
+		if err := s.OnIssueChanged(ctx, msg(10, "issue.changed", p)); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
 	}
 }

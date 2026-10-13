@@ -158,3 +158,27 @@ func TestLinkContract(t *testing.T) {
 		return postgres.NewLinkRepository(pool), is, outboxReader(t, pool)
 	})
 }
+
+func TestWatcherContract(t *testing.T) {
+	repotest.RunWatchers(t, func(t *testing.T) (domain.WatcherRepository, [2]*domain.Issue) {
+		pool := dbtest.New(t)
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, name, password_hash) VALUES ($1, 'a@x.uz', 'A', 'h'), ($2, 'w@x.uz', 'W', 'h')`,
+			repotest.Assignee, repotest.Watcher); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO projects (id, key, name, workspace_id) VALUES ('10000000-0000-4000-8000-000000000001','KYB','Kyber','00000000-0000-4000-8000-000000000001')`); err != nil {
+			t.Fatal(err)
+		}
+		issues := postgres.NewRepository(pool)
+		var is [2]*domain.Issue
+		for n := range 2 {
+			key, _ := domain.NewIssueKey("KYB", n+1)
+			is[n], _ = domain.NewIssue(domain.IssueID(fmt.Sprintf("00000000-0000-4000-8000-00000000000%d", n+1)), key, "t", domain.TypeTask, repotest.Assignee, domain.DefaultWorkflow())
+			if err := issues.Save(ctx, is[n], nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return postgres.NewWatcherRepository(pool), is
+	})
+}

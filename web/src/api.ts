@@ -49,7 +49,7 @@ export type Sprint = {
   started_at: string | null;
   completed_at: string | null;
 };
-export type NotificationKind = "assigned" | "commented" | "mentioned";
+export type NotificationKind = "assigned" | "commented" | "mentioned" | "transitioned";
 export type Notification = {
   id: string;
   kind: NotificationKind;
@@ -341,6 +341,10 @@ export const api = {
   deleteVersion: (id: string, moveTo = "") =>
     request<undefined>("DELETE", `/api/v1/versions/${seg(id)}${moveTo ? `?move_to=${seg(moveTo)}` : ""}`),
   releaseNotes: (id: string) => requestText(`/api/v1/versions/${seg(id)}/release-notes`),
+  watchers: (issueKey: string) =>
+    request<{ watching: boolean; items: { user_id: string; name: string }[] }>("GET", `/api/v1/issues/${seg(issueKey)}/watchers`),
+  watch: (issueKey: string) => request<undefined>("POST", `/api/v1/issues/${seg(issueKey)}/watchers`),
+  unwatch: (issueKey: string) => request<undefined>("DELETE", `/api/v1/issues/${seg(issueKey)}/watchers`),
   permissions: (key: string) => request<PermissionScheme>("GET", `/api/v1/projects/${seg(key)}/permissions`),
   setPermissions: (key: string, permissions: PermissionGrants[]) =>
     request<PermissionScheme>("PUT", `/api/v1/projects/${seg(key)}/permissions`, { permissions }),

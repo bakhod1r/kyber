@@ -21,6 +21,8 @@ const (
 	KindAssigned  Kind = "assigned"
 	KindCommented Kind = "commented"
 	KindMentioned Kind = "mentioned"
+	// KindTransitioned: the issue's status changed (told to its reporter, assignee and watchers).
+	KindTransitioned Kind = "transitioned"
 )
 
 // Notification is one message to one recipient about one event. SourceEvent (the
@@ -49,12 +51,12 @@ func AssignmentRecipients(to, by UserID) []UserID {
 	return []UserID{to}
 }
 
-// CommentRecipients: reporter and assignee are told about the comment, mentioned
+// CommentRecipients: reporter, assignee and watchers are told about the comment, mentioned
 // users that they were mentioned (which wins); the author is never notified.
 // Membership of mentioned users is checked by the application layer.
-func CommentRecipients(author, reporter, assignee UserID, mentioned []UserID) map[UserID]Kind {
+func CommentRecipients(author, reporter, assignee UserID, watchers, mentioned []UserID) map[UserID]Kind {
 	out := map[UserID]Kind{}
-	for _, u := range []UserID{reporter, assignee} {
+	for _, u := range append([]UserID{reporter, assignee}, watchers...) {
 		if u != "" {
 			out[u] = KindCommented
 		}
@@ -65,6 +67,19 @@ func CommentRecipients(author, reporter, assignee UserID, mentioned []UserID) ma
 		}
 	}
 	delete(out, author)
+	return out
+}
+
+// TransitionRecipients: reporter, assignee and watchers hear about a status change; never the
+// person who made it.
+func TransitionRecipients(actor, reporter, assignee UserID, watchers []UserID) map[UserID]Kind {
+	out := map[UserID]Kind{}
+	for _, u := range append([]UserID{reporter, assignee}, watchers...) {
+		if u != "" {
+			out[u] = KindTransitioned
+		}
+	}
+	delete(out, actor)
 	return out
 }
 

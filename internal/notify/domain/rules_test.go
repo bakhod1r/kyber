@@ -27,22 +27,24 @@ func TestCommentRecipients(t *testing.T) {
 	tests := []struct {
 		name                       string
 		author, reporter, assignee domain.UserID
-		mentioned                  []domain.UserID
+		watchers, mentioned        []domain.UserID
 		want                       map[domain.UserID]domain.Kind
 	}{
-		{"reporter and assignee", "carol", "alice", "bob", nil,
+		{"reporter and assignee", "carol", "alice", "bob", nil, nil,
 			map[domain.UserID]domain.Kind{"alice": domain.KindCommented, "bob": domain.KindCommented}},
-		{"author never notified", "alice", "alice", "bob", []domain.UserID{"alice"},
+		{"author never notified", "alice", "alice", "bob", nil, []domain.UserID{"alice"},
 			map[domain.UserID]domain.Kind{"bob": domain.KindCommented}},
-		{"mention wins over commented", "carol", "alice", "bob", []domain.UserID{"bob", "dave"},
+		{"mention wins over commented", "carol", "alice", "bob", nil, []domain.UserID{"bob", "dave"},
 			map[domain.UserID]domain.Kind{"alice": domain.KindCommented, "bob": domain.KindMentioned, "dave": domain.KindMentioned}},
-		{"reporter is assignee: one notification", "carol", "alice", "alice", nil,
+		{"reporter is assignee: one notification", "carol", "alice", "alice", nil, nil,
 			map[domain.UserID]domain.Kind{"alice": domain.KindCommented}},
-		{"legacy issue without reporter", "carol", "", "", []domain.UserID{"dave", "dave"},
+		{"watchers hear, the author does not; a mention wins", "carol", "alice", "", []domain.UserID{"erin", "carol", "dave"}, []domain.UserID{"dave"},
+			map[domain.UserID]domain.Kind{"alice": domain.KindCommented, "erin": domain.KindCommented, "dave": domain.KindMentioned}},
+		{"legacy issue without reporter", "carol", "", "", nil, []domain.UserID{"dave", "dave"},
 			map[domain.UserID]domain.Kind{"dave": domain.KindMentioned}},
 	}
 	for _, tt := range tests {
-		got := domain.CommentRecipients(tt.author, tt.reporter, tt.assignee, tt.mentioned)
+		got := domain.CommentRecipients(tt.author, tt.reporter, tt.assignee, tt.watchers, tt.mentioned)
 		if !reflect.DeepEqual(got, tt.want) {
 			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
 		}
@@ -64,5 +66,13 @@ func TestParseMentions(t *testing.T) {
 		if got := domain.ParseMentions(tt.body); !reflect.DeepEqual(got, tt.want) {
 			t.Errorf("ParseMentions(%q) = %v, want %v", tt.body, got, tt.want)
 		}
+	}
+}
+
+func TestTransitionRecipients(t *testing.T) {
+	got := domain.TransitionRecipients("bob", "alice", "bob", []domain.UserID{"erin", "alice", ""})
+	want := map[domain.UserID]domain.Kind{"alice": domain.KindTransitioned, "erin": domain.KindTransitioned}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v", got)
 	}
 }

@@ -31,6 +31,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/comments", h.comments)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/comments", h.addComment)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/history", h.history)
+	mux.HandleFunc("GET /api/v1/issues/{issueKey}/watchers", h.watchers)
+	mux.HandleFunc("POST /api/v1/issues/{issueKey}/watchers", h.watch)
+	mux.HandleFunc("DELETE /api/v1/issues/{issueKey}/watchers", h.unwatch)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/children", h.children)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/links", h.links)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/links", h.link)
@@ -328,4 +331,38 @@ func fixVersions(is *domain.Issue) []string {
 		out = append(out, string(v))
 	}
 	return out
+}
+
+type watcherDTO struct {
+	UserID string `json:"user_id"`
+	Name   string `json:"name"`
+}
+
+func (h *Handler) watchers(w http.ResponseWriter, r *http.Request) {
+	list, watching, err := h.svc.Watchers(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey"))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	out := make([]watcherDTO, 0, len(list))
+	for _, x := range list {
+		out = append(out, watcherDTO{UserID: x.ID, Name: x.Name})
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"watching": watching, "items": out})
+}
+
+func (h *Handler) watch(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.Watch(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey")); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) unwatch(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.Unwatch(r.Context(), auth.Actor(r.Context()), r.PathValue("issueKey")); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

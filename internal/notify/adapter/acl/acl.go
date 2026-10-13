@@ -18,6 +18,7 @@ import (
 
 type IssuePeeker interface {
 	Peek(ctx context.Context, key string) (*issuedomain.Issue, error)
+	WatchersOf(ctx context.Context, key string) ([]string, error)
 }
 
 type Issues struct{ peek IssuePeeker }
@@ -34,6 +35,14 @@ func (a Issues) Lookup(ctx context.Context, key string) (app.IssueInfo, error) {
 	}
 	return app.IssueInfo{Project: is.Key().Project(), Title: is.Title(),
 		Reporter: string(is.Reporter()), Assignee: string(is.Assignee()), Confidential: is.SecurityLevel() != ""}, nil
+}
+
+func (a Issues) Watchers(ctx context.Context, key string) ([]string, error) {
+	ids, err := a.peek.WatchersOf(ctx, key)
+	if errors.Is(err, issuedomain.ErrIssueNotFound) || errors.Is(err, issueapp.ErrInvalidKey) {
+		return nil, nil
+	}
+	return ids, err
 }
 
 type Authorizer interface {

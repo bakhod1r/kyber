@@ -26,6 +26,8 @@ type IssueInfo struct {
 type (
 	Issues interface {
 		Lookup(ctx context.Context, issueKey string) (IssueInfo, error)
+		// Watchers lists the users watching the issue.
+		Watchers(ctx context.Context, issueKey string) ([]string, error)
 	}
 	Members interface {
 		// CanSee reports whether the user may still browse the issue (membership and security level).
@@ -115,8 +117,60 @@ func (s *Service) OnCommentAdded(ctx context.Context, m outbox.Message) error {
 			mentioned = append(mentioned, domain.UserID(id))
 		}
 	}
-	recipients := domain.CommentRecipients(domain.UserID(e.Author), domain.UserID(info.Reporter), domain.UserID(info.Assignee), mentioned)
+	watchers, err := s.watchers(ctx, e.IssueKey)
+	if err != nil {
+		return err
+	}
+	recipients := domain.CommentRecipients(domain.UserID(e.Author), domain.UserID(info.Reporter), domain.UserID(info.Assignee), watchers, mentioned)
 	return s.deliverTo(ctx, m.ID, e.IssueKey, info, e.Author, excerpt(e.Body), recipients)
+}
+
+func (s *Service) watchers(ctx context.Context, issueKey string) ([]domain.UserID, error) {
+	ids, err := s.d.Issues.Watchers(ctx, issueKey)
+	out := make([]domain.UserID, len(ids))
+	for i, id := range ids {
+		out[i] = domain.UserID(id)
+	}
+	return out, err
+}
+
+// OnIssueChanged tells the reporter, assignee and watchers about status changes (issue.changed).
+func (s *Service) OnIssueChanged(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		Key, By string
+		Items   []fieldChange
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "err", err)
+		return nil
+	}
+	for _, it := range e.Items {
+		if it.Field != "status" {
+			continue
+		}
+		info, err := s.d.Issues.Lookup(ctx, e.Key)
+		if errors.Is(err, ErrIssueGone) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		watchers, err := s.watchers(ctx, e.Key)
+		if err != nil {
+			return err
+		}
+		from, err := s.d.Lookups.StatusName(ctx, info.Project, it.From)
+		if err != nil {
+			return err
+		}
+		to, err := s.d.Lookups.StatusName(ctx, info.Project, it.To)
+		if err != nil {
+			return err
+		}
+		recipients := domain.TransitionRecipients(domain.UserID(e.By), domain.UserID(info.Reporter), domain.UserID(info.Assignee), watchers)
+		return s.deliverTo(ctx, m.ID, e.Key, info, e.By, from+" → "+to, recipients)
+	}
+	return nil
 }
 
 func (s *Service) deliver(ctx context.Context, event int64, issueKey, actor, text string, recipients map[domain.UserID]domain.Kind) error {

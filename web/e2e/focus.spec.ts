@@ -35,7 +35,7 @@ test("meetings block Pomodoro; the timer runs and stops", async ({ page }) => {
   await expect(timer).toContainText(/2[45]:\d\d/);
   await page.getByRole("button", { name: "Pause" }).click();
   await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
-  await page.getByRole("button", { name: "Stop" }).click();
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(timer).toHaveCount(0);
   await expect(page.getByRole("list", { name: "Focus history" })).toContainText("stopped");
 });

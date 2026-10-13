@@ -47,3 +47,14 @@ func TestLinkContract(t *testing.T) {
 		return memory.NewLinkRepository(r), is, r.OutboxNames
 	})
 }
+
+func TestWatcherContract(t *testing.T) {
+	repotest.RunWatchers(t, func(t *testing.T) (domain.WatcherRepository, [2]*domain.Issue) {
+		var is [2]*domain.Issue
+		for n := range 2 {
+			key, _ := domain.NewIssueKey("KYB", n+1)
+			is[n], _ = domain.NewIssue(domain.IssueID(fmt.Sprintf("00000000-0000-4000-8000-00000000000%d", n+1)), key, "t", domain.TypeTask, repotest.Assignee, domain.DefaultWorkflow())
+		}
+		return memory.NewWatcherRepository(), is
+	})
+}

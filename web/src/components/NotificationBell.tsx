@@ -7,6 +7,7 @@ const VERB: Record<Notification["kind"], string> = {
   assigned: "assigned you",
   commented: "commented on",
   mentioned: "mentioned you on",
+  transitioned: "changed the status of",
 };
 
 export function NotificationBell() {

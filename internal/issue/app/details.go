@@ -115,7 +115,13 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 			return nil, err
 		}
 	}
-	return is, s.save(ctx, actor, is)
+	if err := s.save(ctx, actor, is); err != nil {
+		return nil, err
+	}
+	if cmd.AssigneeSet && cmd.Assignee != "" {
+		return is, s.autoWatch(ctx, is.ID(), domain.UserID(cmd.Assignee)) // the assignee watches, as in Jira
+	}
+	return is, nil
 }
 
 // CommentView is a comment plus its author's display name.
@@ -134,7 +140,10 @@ func (s *Service) AddComment(ctx context.Context, actor, rawKey, body string) (*
 	if err != nil {
 		return nil, err
 	}
-	return c, s.comments.Add(ctx, c, c.PullEvents())
+	if err := s.comments.Add(ctx, c, c.PullEvents()); err != nil {
+		return nil, err
+	}
+	return c, s.autoWatch(ctx, is.ID(), domain.UserID(actor)) // commenters watch, as in Jira
 }
 
 func (s *Service) Comments(ctx context.Context, actor, rawKey string) ([]CommentView, error) {

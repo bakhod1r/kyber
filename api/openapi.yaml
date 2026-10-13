@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.25.0
+  version: 0.26.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -809,6 +809,43 @@ paths:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/issues/{issueKey}/watchers:
+    parameters: [{ $ref: "#/components/parameters/IssueKey" }]
+    get:
+      operationId: issueWatchers
+      description: People watching the issue (the reporter, assignees and commenters start watching), and whether the caller is one.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [watching, items]
+                properties:
+                  watching: { type: boolean }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [user_id, name]
+                      properties: { user_id: { type: string }, name: { type: string } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: watchIssue
+      description: The caller starts watching the issue; watchers hear about its comments and status changes.
+      responses:
+        "204": { description: Watching }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: unwatchIssue
+      description: The caller stops watching the issue.
+      responses:
+        "204": { description: Not watching }
+        "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/history:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
@@ -1795,7 +1832,7 @@ components:
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [assigned, commented, mentioned] }
+        kind: { type: string, enum: [assigned, commented, mentioned, transitioned], description: "transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To)." }
         issue_key: { type: string }
         issue_title: { type: string }
         actor_name: { type: string }

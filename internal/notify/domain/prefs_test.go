@@ -21,9 +21,10 @@ func TestPrefs(t *testing.T) {
 func TestRender(t *testing.T) {
 	n := domain.Notification{IssueKey: "KYB-12", IssueTitle: "Login", ActorName: "Aziza", Excerpt: "Looks good"}
 	cases := map[domain.Kind][2]string{
-		domain.KindAssigned:  {"[KYB-12] Aziza assigned you: Login", "Aziza assigned you KYB-12 «Login»."},
-		domain.KindMentioned: {"[KYB-12] Aziza mentioned you: Login", "Looks good"},
-		domain.KindCommented: {"[KYB-12] Aziza commented: Login", "Looks good"},
+		domain.KindAssigned:     {"[KYB-12] Aziza assigned you: Login", "Aziza assigned you KYB-12 «Login»."},
+		domain.KindMentioned:    {"[KYB-12] Aziza mentioned you: Login", "Looks good"},
+		domain.KindCommented:    {"[KYB-12] Aziza commented: Login", "Looks good"},
+		domain.KindTransitioned: {"[KYB-12] Aziza changed the status: Login", "Aziza moved KYB-12 «Login»: Looks good."},
 	}
 	for kind, want := range cases {
 		n.Kind = kind

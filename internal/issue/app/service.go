@@ -70,6 +70,7 @@ type Service struct {
 	workflows domain.WorkflowRepository
 	history   domain.HistoryRepository
 	links     domain.LinkRepository
+	watchers  domain.WatcherRepository
 	levels    []string
 	newID     func() string
 	now       func() time.Time
@@ -87,6 +88,7 @@ type Deps struct {
 	Workflows domain.WorkflowRepository
 	History   domain.HistoryRepository
 	Links     domain.LinkRepository
+	Watchers  domain.WatcherRepository // optional: without it nobody watches issues
 	// SecurityLevels are the issue security levels that can be set (ids, see the Access context).
 	SecurityLevels []string
 	NewID          func() string
@@ -96,7 +98,7 @@ type Deps struct {
 func NewService(d Deps) *Service {
 	return &Service{issues: d.Issues, comments: d.Comments, keys: d.Keys, access: d.Access,
 		directory: d.Directory, sprints: d.Sprints, workflow: d.Workflow,
-		workflows: d.Workflows, history: d.History, links: d.Links, levels: d.SecurityLevels, newID: d.NewID, now: d.Now}
+		workflows: d.Workflows, history: d.History, links: d.Links, watchers: d.Watchers, levels: d.SecurityLevels, newID: d.NewID, now: d.Now}
 }
 
 type CreateIssue struct {
@@ -144,7 +146,10 @@ func (s *Service) Create(ctx context.Context, actor string, cmd CreateIssue) (*d
 		return nil, err
 	}
 	is.Rerank(domain.RankBetween(last, "")) // new issues go to the bottom of the backlog
-	return is, s.save(ctx, actor, is)
+	if err := s.save(ctx, actor, is); err != nil {
+		return nil, err
+	}
+	return is, s.autoWatch(ctx, is.ID(), domain.UserID(actor)) // the reporter watches, as in Jira
 }
 
 func (s *Service) Get(ctx context.Context, actor, rawKey string) (*domain.Issue, error) {
