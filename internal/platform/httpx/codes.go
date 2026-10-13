@@ -61,6 +61,12 @@ const (
 	CodeFilterConflict       = "FILTER_CONFLICT"
 	CodeFieldNotFound        = "FIELD_NOT_FOUND"
 	CodeFieldConflict        = "FIELD_CONFLICT"
+	CodeGoalNotFound         = "GOAL_NOT_FOUND"
+	CodeGoalConflict         = "GOAL_CONFLICT"
+	CodePageNotFound         = "PAGE_NOT_FOUND"
+	CodePageConflict         = "PAGE_CONFLICT"
+	CodeFormNotFound         = "FORM_NOT_FOUND"
+	CodeFormConflict         = "FORM_CONFLICT"
 	CodeNotificationNotFound = "NOTIFICATION_NOT_FOUND"
 	CodeImportTooLarge       = "IMPORT_TOO_LARGE"
 	CodeImportInvalidFile    = "IMPORT_INVALID_FILE"
@@ -132,6 +138,12 @@ var codes = []code{
 	{CodeFilterConflict, "6092", 409, "Someone else changed this filter. Reload and try again.", "Filtrni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Фильтр изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeFieldNotFound, "6093", 404, "Custom field not found.", "Maxsus maydon topilmadi.", "Пользовательское поле не найдено.", errorx.CategoryBusiness},
 	{CodeFieldConflict, "6094", 409, "Another field has this name, or someone else changed it. Reload and try again.", "Bu nomli maydon bor yoki uni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Поле с таким именем уже есть или его изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
+	{CodeGoalNotFound, "6095", 404, "Goal not found.", "Maqsad topilmadi.", "Цель не найдена.", errorx.CategoryBusiness},
+	{CodeGoalConflict, "6096", 409, "Someone else changed this goal. Reload and try again.", "Maqsadni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Цель изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
+	{CodePageNotFound, "6085", 404, "Page not found.", "Sahifa topilmadi.", "Страница не найдена.", errorx.CategoryBusiness},
+	{CodePageConflict, "6086", 409, "Someone else changed this page. Reload and try again.", "Sahifani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Страницу изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
+	{CodeFormNotFound, "6087", 404, "Form not found.", "Forma topilmadi.", "Форма не найдена.", errorx.CategoryBusiness},
+	{CodeFormConflict, "6088", 409, "Someone else changed this form. Reload and try again.", "Formani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Форму изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeLastBoard, "6026", 409, "A project must keep at least one board.", "Loyihada kamida bitta board qolishi kerak.", "В проекте должна остаться хотя бы одна доска.", errorx.CategoryBusiness},
 	{CodeNotificationNotFound, "6040", 404, "Notification not found.", "Bildirishnoma topilmadi.", "Уведомление не найдено.", errorx.CategoryBusiness},
 	{CodeImportTooLarge, "6050", 413, "The file is too large to import (10 MB max).", "Fayl import uchun juda katta (ko'pi bilan 10 MB).", "Файл слишком большой для импорта (не более 10 МБ).", errorx.CategoryValidation},

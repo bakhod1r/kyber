@@ -1,4 +1,4 @@
-// call: domain model — huddles (ADR-0006). Media flows browser to browser over a WebRTC mesh; the server
+// call: domain model — huddles (ADR-0007). Media flows browser to browser over a WebRTC mesh; the server
 // keeps the participants and relays signaling. Pure types and rules, no I/O.
 export type Media = { audio: boolean; video: boolean; screen: boolean };
 export type Participant = Media & { user_id: string; joined_at: string };

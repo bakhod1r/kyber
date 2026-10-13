@@ -1,4 +1,4 @@
-// Package domain is the Call context (ADR-0006): huddles — live audio/video calls with screen
+// Package domain is the Call context (ADR-0007): huddles — live audio/video calls with screen
 // sharing in a chat conversation. Media flows browser to browser (WebRTC mesh); the server
 // keeps who is in the call and relays signaling. At most MaxParticipants people per call, one
 // live call per conversation, and the call ends when the last participant leaves.

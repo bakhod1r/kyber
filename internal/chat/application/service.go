@@ -1,4 +1,4 @@
-// Package app holds the Chat context use cases (ADR-0006): channels, DMs and messages of the
+// Package app holds the Chat context use cases (ADR-0007): channels, DMs and messages of the
 // request's workspace. Conversations a user may not read look missing (404), never forbidden.
 package application
 

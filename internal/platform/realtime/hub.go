@@ -1,4 +1,4 @@
-// Package realtime fans events out to the browser tabs of users (ADR-0006): a Hub of
+// Package realtime fans events out to the browser tabs of users (ADR-0007): a Hub of
 // subscriptions per workspace and user, served as Server-Sent Events. Recent events stay in a
 // ring so a reconnecting tab resumes from its Last-Event-ID. The Hub is in-process; across
 // replicas a LISTEN/NOTIFY or Redis feed calls Publish on every node.

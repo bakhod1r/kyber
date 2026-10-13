@@ -28,7 +28,7 @@ function usePeople() {
 /** A slot the app shell fills with another context's UI (the huddle of the open conversation). */
 export type HuddleSlot = (conversationId: string, me: string, names: Map<string, string>) => ReactNode;
 
-/** Team chat (S53, ADR-0006): channels and DMs on the left, the open conversation and its threads on the right. */
+/** Team chat (S53, ADR-0007): channels and DMs on the left, the open conversation and its threads on the right. */
 export function ChatPage({ huddle }: { huddle?: HuddleSlot }) {
   const { id } = useParams();
   const qc = useQueryClient();

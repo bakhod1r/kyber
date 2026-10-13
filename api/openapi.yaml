@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.34.0
+  version: 0.35.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1700,6 +1700,216 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/goals:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listGoals
+      description: The project's goals by target date (none last), each with the progress of its JQL over the issues the caller may see.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Goal" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createGoal
+      description: Project members add a goal; it starts on track and the caller owns it.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GoalInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Goal" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/goals/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: updateGoal
+      description: Project members change a goal loaded at `version` and report its status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf: [{ $ref: "#/components/schemas/GoalInput" }]
+              required: [version, status]
+              properties:
+                version: { type: integer }
+                status: { $ref: "#/components/schemas/GoalStatus" }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Goal" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteGoal
+      description: Project members delete a goal.
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/docs:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listPages
+      description: The project's Markdown pages by title (anyone who can browse the project).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Page" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createPage
+      description: Project members write a page; it is revision 1 of its history.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PageInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/docs/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: getPage
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      operationId: revisePage
+      description: Project members save a new title and body over the page loaded at `version`; an unchanged save records no revision.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf: [{ $ref: "#/components/schemas/PageInput" }]
+              required: [version]
+              properties: { version: { type: integer } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deletePage
+      description: Project members delete a page with its history.
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/docs/{id}/history:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: pageHistory
+      description: The page's revisions, newest first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/PageRevision" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/forms:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listForms
+      description: The project's intake forms by name (anyone who can browse the project).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Form" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createForm
+      description: Project admins design a form; it creates stories, tasks or bugs.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FormInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Form" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/forms/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: getForm
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Form" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      operationId: redesignForm
+      description: Project admins change a form loaded at `version`; question ids follow the new order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf: [{ $ref: "#/components/schemas/FormInput" }]
+              required: [version]
+              properties: { version: { type: integer } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Form" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteForm
+      description: Project admins delete a form; issues it created stay.
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/forms/{id}/submissions:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: submitForm
+      description: Project members fill in a form; the summary becomes the new issue's title and the answers its description.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [summary]
+              properties:
+                summary: { type: string, minLength: 1, maxLength: 255 }
+                answers: { type: object, additionalProperties: { type: string }, description: Question id → answer. }
+      responses:
+        "201":
+          description: The issue was created
+          content: { application/json: { schema: { type: object, required: [issue_key], properties: { issue_key: { type: string } } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/fields:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -2219,6 +2429,83 @@ components:
         assignee_id: { type: [string, "null"] }
         resolution: { type: string }
         points: { type: [number, "null"] }
+    FormQuestion:
+      type: object
+      required: [label, required, long]
+      properties:
+        id: { type: string, description: "q1, q2, … in display order (set by the server)." }
+        label: { type: string, minLength: 1, maxLength: 120 }
+        required: { type: boolean }
+        long: { type: boolean, description: A multi-line answer. }
+    FormInput:
+      type: object
+      required: [name, issue_type]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        intro: { type: string, maxLength: 2000 }
+        issue_type: { type: string, enum: [story, task, bug] }
+        questions: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/FormQuestion" } }
+    Form:
+      type: object
+      required: [id, project_key, name, intro, issue_type, questions, version]
+      properties:
+        id: { type: string }
+        project_key: { type: string }
+        name: { type: string }
+        intro: { type: string }
+        issue_type: { type: string, enum: [story, task, bug] }
+        questions: { type: array, items: { $ref: "#/components/schemas/FormQuestion" } }
+        version: { type: integer }
+    PageInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        body: { type: string, maxLength: 100000, description: Markdown. }
+    Page:
+      type: object
+      required: [id, project_key, title, body, author_id, updated_by, updated_at, version]
+      properties:
+        id: { type: string }
+        project_key: { type: string }
+        title: { type: string }
+        body: { type: string }
+        author_id: { type: string }
+        updated_by: { type: string }
+        updated_at: { type: string, format: date-time }
+        version: { type: integer, description: Number of the latest revision. }
+    PageRevision:
+      type: object
+      required: [number, title, body, by, at]
+      properties:
+        number: { type: integer }
+        title: { type: string }
+        body: { type: string }
+        by: { type: string }
+        at: { type: string, format: date-time }
+    GoalStatus: { type: string, enum: [on_track, at_risk, off_track, done] }
+    GoalInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        target_date: { type: string, description: "YYYY-MM-DD; empty = no target date." }
+        jql: { type: string, maxLength: 2000, description: "Issues of the project that measure the goal (no ORDER BY); empty = none." }
+    Goal:
+      type: object
+      required: [id, project_key, owner_id, name, target_date, jql, status, done, total, percent, version]
+      properties:
+        id: { type: string }
+        project_key: { type: string }
+        owner_id: { type: string }
+        name: { type: string }
+        target_date: { type: [string, "null"], format: date }
+        jql: { type: string }
+        status: { $ref: "#/components/schemas/GoalStatus" }
+        done: { type: integer, description: Issues the query finds in a Done status. }
+        total: { type: integer, description: Issues the query finds (that the caller may see). }
+        percent: { type: integer }
+        version: { type: integer }
     Filter:
       type: object
       required: [id, owner_id, name, jql, shared, version, mine]
