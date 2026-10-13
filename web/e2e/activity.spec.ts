@@ -33,4 +33,15 @@ test("activity shows mentions and unread conversations", async ({ browser }) => 
   await b.getByRole("link", { name: "🔔 Activity" }).click();
   await expect(b.getByText("You are all caught up.")).toBeVisible();
   await expect.poll(async () => (await bobur.call("GET", "/api/v1/notifications")).unread).toBe(0);
+
+  // S65: save it for later with a reminder; it shows under Saved, and can be removed.
+  await b.goto(`/chat/${channel.id}`);
+  await b.getByLabel("Save for later").selectOption({ label: "Remind me: in 1 hour" });
+  await expect(b.getByRole("button", { name: "🔖 Saved" })).toBeVisible();
+  await b.getByRole("link", { name: "🔔 Activity" }).click();
+  const saved = b.getByRole("list", { name: "Saved messages" });
+  await expect(saved).toContainText("can you check the deploy?");
+  await expect(saved).toContainText("⏰");
+  await saved.getByRole("button", { name: "Remove" }).click();
+  await expect(b.getByText("Nothing saved.")).toBeVisible();
 });

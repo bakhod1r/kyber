@@ -15,6 +15,23 @@ export type Message = {
   pinned_at?: string | null;
 };
 
+/** A message I saved for later (S65). */
+export type SavedItem = { message: Message; saved_at: string; remind_at: string | null; reminded: boolean };
+
+/** When "Save for later" can remind me, from now: in 20 minutes, 1 hour, 3 hours, or tomorrow at 9:00. */
+export function remindPresets(now: Date): { label: string; at: Date }[] {
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  tomorrow.setHours(9, 0, 0, 0);
+  const plus = (min: number) => new Date(now.getTime() + min * 60_000);
+  return [
+    { label: "In 20 minutes", at: plus(20) },
+    { label: "In 1 hour", at: plus(60) },
+    { label: "In 3 hours", at: plus(180) },
+    { label: "Tomorrow at 9:00", at: tomorrow },
+  ];
+}
+
 /** Events on the realtime stream (GET /api/v1/stream). Stream messages carry no issue previews. */
 export type ChatEvent =
   | { type: "message.posted" | "message.edited" | "message.deleted" | "message.reacted" | "message.pinned"; message: Omit<Message, "issues"> & { issues?: IssuePreview[] } }

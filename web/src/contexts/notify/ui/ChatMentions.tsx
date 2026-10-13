@@ -5,7 +5,7 @@ import { notifyUseCases } from "../application";
 /** My mentions in chat, unread first (S64); opening one opens its conversation. */
 export function ChatMentions() {
   const inbox = useQuery({ queryKey: ["notifications"], queryFn: notifyUseCases.notifications, refetchInterval: 10_000 });
-  const mentions = (inbox.data?.items ?? []).filter((n) => n.conversation_id);
+  const mentions = (inbox.data?.items ?? []).filter((n) => n.conversation_id && n.kind === "mentioned");
   const sorted = [...mentions.filter((n) => !n.read), ...mentions.filter((n) => n.read)];
   return (
     <>

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.45.0
+  version: 0.46.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -896,6 +896,52 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/messages/{id}/save:
+    put:
+      operationId: saveMessage
+      description: Saves a message for later (S65), optionally with a reminder time in the future; saving again replaces it.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { remind_at: { type: [string, "null"], format: date-time } } } } }
+      responses:
+        "200":
+          description: Saved
+          content: { application/json: { schema: { type: object, required: [saved_at, remind_at], properties: { saved_at: { type: string, format: date-time }, remind_at: { type: [string, "null"], format: date-time } } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: unsaveMessage
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Forgotten }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/chat/saved:
+    get:
+      operationId: listSavedMessages
+      description: My saved messages (still readable), most recently saved first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [message, saved_at, remind_at, reminded]
+                      properties:
+                        message: { $ref: "#/components/schemas/Message" }
+                        saved_at: { type: string, format: date-time }
+                        remind_at: { type: [string, "null"], format: date-time }
+                        reminded: { type: boolean }
+        "401": { $ref: "#/components/responses/Error" }
   /api/v1/messages/{id}/pin:
     post:
       operationId: pinMessage
@@ -3292,7 +3338,7 @@ components:
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [assigned, commented, mentioned, transitioned, announcement, meeting], description: "meeting: a meeting you are invited to was scheduled or cancelled, or starts soon (excerpt: when). transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To). announcement: news to a project (project_key) or the workspace (project_key empty); issue_key is empty and issue_title holds its title." }
+        kind: { type: string, enum: [assigned, commented, mentioned, transitioned, announcement, meeting, reminder], description: "reminder: a saved chat message's reminder (conversation_id, excerpt). meeting: a meeting you are invited to was scheduled or cancelled, or starts soon (excerpt: when). transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To). announcement: news to a project (project_key) or the workspace (project_key empty); issue_key is empty and issue_title holds its title." }
         issue_key: { type: string }
         issue_title: { type: string }
         project_key: { type: string, description: The announced project; empty for issue notifications and workspace announcements. }

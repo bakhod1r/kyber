@@ -18,3 +18,13 @@ func TestContract(t *testing.T) {
 	}
 	repotest.Run(t, postgres.NewRepository(pool), postgres.NewMessages(pool))
 }
+
+func TestSavedContract(t *testing.T) {
+	pool := dbtest.New(t)
+	for _, u := range []string{repotest.Lead, repotest.Dev, repotest.Other} {
+		if _, err := pool.Exec(context.Background(), `INSERT INTO users (id, email, name, password_hash) VALUES ($1, $2, 'U', '')`, u, u+"@x.uz"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repotest.RunSaved(t, postgres.NewRepository(pool), postgres.NewMessages(pool), postgres.NewSaved(pool))
+}

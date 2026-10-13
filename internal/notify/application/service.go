@@ -427,3 +427,33 @@ func (s *Service) OnChatMessage(ctx context.Context, m outbox.Message) error {
 	}
 	return nil
 }
+
+// OnChatReminder tells the user about a saved message whose reminder is due (chat.reminder), if they may
+// still read its conversation.
+func (s *Service) OnChatReminder(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		User         string `json:"user_id"`
+		Conversation string `json:"conversation_id"`
+		Excerpt      string `json:"excerpt"`
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "err", err)
+		return nil
+	}
+	if s.d.Conversations == nil {
+		return nil
+	}
+	name, readable, err := s.d.Conversations.Readable(ctx, e.User, e.Conversation)
+	if err != nil || !readable {
+		return err
+	}
+	n := domain.Notification{
+		ID: domain.NotificationID(s.d.NewID()), Recipient: domain.UserID(e.User), Workspace: tenant.Workspace(ctx),
+		Kind: domain.KindReminder, ConversationID: e.Conversation, ConversationName: name, Excerpt: e.Excerpt,
+		SourceEvent: m.ID, CreatedAt: s.d.Now(),
+	}
+	if err := s.d.Repo.Add(ctx, n); err != nil {
+		return err
+	}
+	return s.enqueue(ctx, n, "")
+}

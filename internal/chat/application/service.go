@@ -62,6 +62,7 @@ type Deps struct {
 	Notifier      Notifier // optional
 	Conversations domain.Repository
 	Messages      domain.Messages
+	Saved         domain.SavedMessages // optional: save for later (S65)
 	Members       Members
 	NewID         func() string
 	Now           func() time.Time
@@ -586,4 +587,81 @@ func (s *Service) Download(ctx context.Context, actor, id string) (domain.File, 
 		return domain.File{}, nil, domain.ErrMessageNotFound
 	}
 	return *m.File, r, nil
+}
+
+// SavedItem is a save with its message.
+type SavedItem struct {
+	Saved   *domain.Saved
+	Message *domain.Message
+}
+
+// readableMessage is a message in a conversation actor may read.
+func (s *Service) readableMessage(ctx context.Context, actor, id string) (*domain.Message, error) {
+	m, err := s.d.Messages.ByID(ctx, domain.MessageID(id))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.readable(ctx, actor, string(m.Conversation)); err != nil {
+		return nil, domain.ErrMessageNotFound
+	}
+	return m, nil
+}
+
+// SaveMessage saves a message for later (S65); a non-zero remindAt (in the future) reminds the actor then.
+func (s *Service) SaveMessage(ctx context.Context, actor, id string, remindAt time.Time) (*domain.Saved, error) {
+	m, err := s.readableMessage(ctx, actor, id)
+	if err != nil {
+		return nil, err
+	}
+	now := s.d.Now()
+	if !remindAt.IsZero() && !remindAt.After(now) {
+		return nil, domain.ErrInvalidReminder
+	}
+	sv := domain.Save(domain.WorkspaceID(tenant.Workspace(ctx)), domain.UserID(actor), *m, remindAt.UTC(), now)
+	return sv, s.d.Saved.Put(ctx, sv)
+}
+
+func (s *Service) Unsave(ctx context.Context, actor, id string) error {
+	return s.d.Saved.Remove(ctx, domain.WorkspaceID(tenant.Workspace(ctx)), domain.UserID(actor), domain.MessageID(id))
+}
+
+// SavedFor lists the actor's saves whose messages they may still read, most recently saved first.
+func (s *Service) SavedFor(ctx context.Context, actor string) ([]SavedItem, error) {
+	list, err := s.d.Saved.For(ctx, domain.WorkspaceID(tenant.Workspace(ctx)), domain.UserID(actor))
+	if err != nil {
+		return nil, err
+	}
+	out := []SavedItem{}
+	for _, sv := range list {
+		if m, err := s.readableMessage(ctx, actor, string(sv.Message)); err == nil {
+			out = append(out, SavedItem{Saved: sv, Message: m})
+		}
+	}
+	return out, nil
+}
+
+// RemindDue sends the due reminders of every workspace (once each, across replicas).
+func (s *Service) RemindDue(ctx context.Context) (int, error) {
+	if s.d.Saved == nil {
+		return 0, nil
+	}
+	now := s.d.Now()
+	due, err := s.d.Saved.Due(ctx, now)
+	if err != nil {
+		return 0, err
+	}
+	sent := 0
+	for _, sv := range due {
+		if !sv.Remind(now) {
+			continue
+		}
+		switch err := s.d.Saved.MarkReminded(tenant.With(ctx, string(sv.Workspace)), sv); {
+		case errors.Is(err, domain.ErrAlreadyReminded):
+		case err != nil:
+			return sent, err
+		default:
+			sent++
+		}
+	}
+	return sent, nil
 }

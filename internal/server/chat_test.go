@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/bakhod1r/kyber/internal/server"
 )
 
 // S50 Chat core: channels, DMs, messages, unread; private conversations look missing to outsiders.
@@ -337,4 +339,43 @@ func TestChatFiles(t *testing.T) {
 		res.Body.Close()
 		expect(t, res.StatusCode, 404, nil)
 	})
+}
+
+// S65: save a message for later; its reminder arrives as a notification at its time.
+func TestSavedForLater(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "general"})
+		conv := ch["id"].(string)
+		dev.do("POST", "/api/v1/conversations/"+conv+"/join", nil)
+		_, m := lead.do("POST", "/api/v1/conversations/"+conv+"/messages", map[string]string{"body": "check the deploy plan"})
+		mid := m["id"].(string)
+
+		code, b := dev.do("PUT", "/api/v1/messages/"+mid+"/save", map[string]any{"remind_at": time.Now().Add(-time.Minute).Format(time.RFC3339)})
+		expect(t, code, 422, b)
+		code, b = dev.do("PUT", "/api/v1/messages/"+mid+"/save", map[string]any{"remind_at": time.Now().Add(1500 * time.Millisecond).Format(time.RFC3339Nano)})
+		expect(t, code, 200, b)
+		_, list := dev.do("GET", "/api/v1/chat/saved", nil)
+		items := list["items"].([]any)
+		if len(items) != 1 || items[0].(map[string]any)["message"].(map[string]any)["body"] != "check the deploy plan" {
+			t.Fatalf("saved = %v", list)
+		}
+		if _, other := lead.do("GET", "/api/v1/chat/saved", nil); len(other["items"].([]any)) != 0 {
+			t.Fatalf("lead's saved = %v", other)
+		}
+		eventuallyJSON(t, dev, "/api/v1/notifications", func(b map[string]any) bool {
+			for _, n := range b["items"].([]any) {
+				if n := n.(map[string]any); n["kind"] == "reminder" && n["conversation_id"] == conv && n["excerpt"] == "check the deploy plan" {
+					return true
+				}
+			}
+			return false
+		})
+		code, b = dev.do("DELETE", "/api/v1/messages/"+mid+"/save", nil)
+		expect(t, code, 204, b)
+		if _, after := dev.do("GET", "/api/v1/chat/saved", nil); len(after["items"].([]any)) != 0 {
+			t.Fatalf("after unsave = %v", after)
+		}
+	}, server.WithReminderEvery(100*time.Millisecond))
 }

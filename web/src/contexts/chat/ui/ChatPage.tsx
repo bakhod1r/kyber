@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, type ChatEvent, chatUseCases, type Conversation, conversationTitle, fileSize, MAX_FILE, type Message, splitMentions, useChatStream,
+  applyEvent, type ChatEvent, chatUseCases, type Conversation, conversationTitle, fileSize, MAX_FILE, type Message, remindPresets, type SavedItem, splitMentions, useChatStream,
 } from "../application";
 
 const PAGE = 50;
@@ -76,6 +76,55 @@ export function ChatPage({ extras, activity }: { extras?: ConversationSlot; /** 
   );
 }
 
+const savedKey = ["chat", "saved"];
+
+/** S65: save a message for later, optionally with a reminder; saved ones can be forgotten again. */
+function SaveMenu({ m }: { m: Message }) {
+  const qc = useQueryClient();
+  const saved = useQuery({ queryKey: savedKey, queryFn: chatUseCases.saved });
+  const mine = saved.data?.find((x) => x.message.id === m.id);
+  const done = () => qc.invalidateQueries({ queryKey: savedKey });
+  const save = useMutation({ mutationFn: (at: Date | null) => chatUseCases.save(m.id, at), onSuccess: done });
+  const unsave = useMutation({ mutationFn: () => chatUseCases.unsave(m.id), onSuccess: done });
+  if (mine) return <button className="ghost" aria-pressed onClick={() => unsave.mutate()} title="Saved — click to remove">🔖 Saved</button>;
+  const presets = remindPresets(new Date());
+  return (
+    <select className="ghost chat-save" aria-label="Save for later" value="" onChange={(e) => {
+      const v = e.target.value;
+      if (v) save.mutate(v === "none" ? null : presets[Number(v)]!.at);
+    }}>
+      <option value="">🔖 Save</option>
+      <option value="none">Save for later</option>
+      {presets.map((p, i) => <option key={p.label} value={i}>Remind me: {p.label.toLowerCase()}</option>)}
+    </select>
+  );
+}
+
+/** My saved messages, most recently saved first (S65). */
+function SavedList({ title }: { title: (conversationId: string) => string }) {
+  const qc = useQueryClient();
+  const saved = useQuery({ queryKey: savedKey, queryFn: chatUseCases.saved });
+  const unsave = useMutation({ mutationFn: (id: string) => chatUseCases.unsave(id), onSuccess: () => qc.invalidateQueries({ queryKey: savedKey }) });
+  const items: SavedItem[] = saved.data ?? [];
+  return (
+    <>
+      <h2>Saved for later</h2>
+      {items.length === 0 ? <p className="muted">Nothing saved. Use 🔖 on a message.</p> : (
+        <ul aria-label="Saved messages">
+          {items.map((x) => (
+            <li key={x.message.id}>
+              <Link to={`/chat/${x.message.conversation_id}`}>{title(x.message.conversation_id) || "Conversation"}</Link>{" "}
+              {x.remind_at && <span className="muted">{x.reminded ? "⏰ reminded" : `⏰ ${new Date(x.remind_at).toLocaleString()}`}</span>}
+              <p>{x.message.deleted ? <i className="muted">deleted</i> : x.message.body}</p>
+              <button className="ghost" onClick={() => unsave.mutate(x.message.id)}>Remove</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
 /** S64: where something waits for me — conversations with unread messages, and (from the shell) my mentions. */
 function Activity({ conversations, title, activity }: { conversations: Conversation[]; title: (c: Conversation) => string; activity?: ReactNode }) {
   const unread = conversations.filter((c) => c.member && c.unread > 0);
@@ -83,6 +132,7 @@ function Activity({ conversations, title, activity }: { conversations: Conversat
     <section className="chat-activity" aria-label="Activity">
       <h1>Activity</h1>
       {activity}
+      <SavedList title={(id) => { const c = conversations.find((x) => x.id === id); return c ? title(c) : ""; }} />
       <h2>Unread</h2>
       {unread.length === 0 ? <p className="muted">You are all caught up.</p> : (
         <ul aria-label="Unread conversations">
@@ -341,6 +391,7 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
             </button>
           )}
           {canAct && <button className="ghost" onClick={() => pin.mutate()}>{m.pinned_by ? "Unpin" : "Pin"}</button>}
+          <SaveMenu m={m} />
           {mine && canAct && <button className="ghost" onClick={() => setEditing(true)}>Edit</button>}
           {mine && canAct && <button className="ghost" onClick={() => remove.mutate()}>Delete</button>}
         </div>

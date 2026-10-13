@@ -5,6 +5,10 @@ import "fmt"
 // Render writes the email subject and the message text (email body and Telegram message) for a
 // notification; link opens the issue (or the conversation) in Kyber.
 func Render(n Notification, link string) (subject, text string) {
+	if n.Kind == KindReminder {
+		subject = "Reminder: " + n.Excerpt
+		return subject, "⏰ Reminder about a saved message:\n\n" + n.Excerpt + "\n\n" + link
+	}
 	if n.ConversationID != "" {
 		where := "a direct message"
 		if n.ConversationName != "" {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, conversationTitle, fileSize, type Message, splitMentions } from "./model";
+import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions } from "./model";
 
 const msg = (id: string, body: string, extra: Partial<Message> = {}): Message => ({
   id, conversation_id: "c-1", author_id: "u-1", body, created_at: "2026-10-13T09:00:00Z", edited_at: null, deleted: false,
@@ -49,5 +49,15 @@ describe("chat domain", () => {
 describe("files", () => {
   it("formats sizes", () => {
     expect([fileSize(900), fileSize(340 * 1024), fileSize(1.25 * 1024 * 1024)]).toEqual(["900 B", "340 KB", "1.3 MB"]);
+  });
+});
+
+describe("save for later (S65)", () => {
+  it("offers reminders later today and tomorrow morning", () => {
+    const now = new Date(2026, 9, 13, 22, 30);
+    const p = remindPresets(now);
+    expect(p.map((x) => x.label)).toEqual(["In 20 minutes", "In 1 hour", "In 3 hours", "Tomorrow at 9:00"]);
+    expect(p[0]!.at.getTime() - now.getTime()).toBe(20 * 60_000);
+    expect([p[3]!.at.getDate(), p[3]!.at.getHours(), p[3]!.at.getMinutes()]).toEqual([14, 9, 0]);
   });
 });

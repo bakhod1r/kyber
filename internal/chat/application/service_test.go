@@ -395,3 +395,57 @@ func TestFiles(t *testing.T) {
 type zeros struct{}
 
 func (zeros) Read(p []byte) (int, error) { clear(p); return len(p), nil }
+
+// S65: save for later, with a reminder sent once by the background job.
+func TestSavedForLater(t *testing.T) {
+	repo := memory.NewRepository()
+	saved := memory.NewSaved(repo)
+	n := 0
+	c := &clock{t: time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)}
+	svc := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Saved: saved, Members: members{"lead": {"w1"}, "dev": {"w1"}, "eve": {"w1"}},
+		NewID: func() string { n++; return fmt.Sprintf("id-%03d", n) }, Now: c.now})
+	ctx := tenant.With(context.Background(), "w1")
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "general"})
+	secret, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "secret", Private: true})
+	m, _ := svc.Post(ctx, "lead", string(ch.ID), "check the deploy")
+	hidden, _ := svc.Post(ctx, "lead", string(secret.ID), "psst")
+
+	if _, err := svc.SaveMessage(ctx, "dev", string(hidden.ID), time.Time{}); !errors.Is(err, domain.ErrMessageNotFound) {
+		t.Fatalf("saving an unreadable message = %v", err)
+	}
+	if _, err := svc.SaveMessage(ctx, "dev", string(m.ID), c.t.Add(-time.Minute)); !errors.Is(err, domain.ErrInvalidReminder) {
+		t.Fatalf("reminder in the past = %v", err)
+	}
+	if _, err := svc.SaveMessage(ctx, "dev", string(m.ID), c.t.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	list, err := svc.SavedFor(ctx, "dev")
+	if err != nil || len(list) != 1 || list[0].Message.Body != "check the deploy" || list[0].Saved.RemindAt.IsZero() {
+		t.Fatalf("saved = %+v %v", list, err)
+	}
+	if l, _ := svc.SavedFor(ctx, "eve"); len(l) != 0 {
+		t.Fatalf("eve's saves = %+v", l)
+	}
+
+	if sent, _ := svc.RemindDue(context.Background()); sent != 0 {
+		t.Fatalf("reminded early: %d", sent)
+	}
+	c.t = c.t.Add(time.Hour)
+	if sent, err := svc.RemindDue(context.Background()); sent != 1 || err != nil {
+		t.Fatalf("due reminders = %d %v", sent, err)
+	}
+	if sent, _ := svc.RemindDue(context.Background()); sent != 0 {
+		t.Fatalf("reminded twice: %d", sent)
+	}
+	out, meta := saved.Outbox(), saved.OutboxMeta()
+	if len(out) != 1 || out[0].User != "dev" || out[0].Message != m.ID || meta[0].Workspace != "w1" {
+		t.Fatalf("outbox = %+v %+v", out, meta)
+	}
+
+	if err := svc.Unsave(ctx, "dev", string(m.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := svc.SavedFor(ctx, "dev"); len(l) != 0 {
+		t.Fatalf("after unsave = %+v", l)
+	}
+}

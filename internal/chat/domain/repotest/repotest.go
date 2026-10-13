@@ -264,3 +264,74 @@ func Run(t *testing.T, r domain.Repository, msgs domain.Messages) {
 		}
 	}
 }
+
+// RunSaved checks saved messages (S65) over the same store as r and msgs (users as for Run).
+func RunSaved(t *testing.T, r domain.Repository, msgs domain.Messages, saved domain.SavedMessages) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	ch, _ := domain.NewChannel(cid(50), WS, "saved", "", false, Lead, t0)
+	if err := r.Create(ctx, ch); err != nil {
+		t.Fatal(err)
+	}
+	var posted []*domain.Message
+	for i := 1; i <= 3; i++ {
+		m, _ := domain.NewMessage(mid(50+i), ch.ID, Lead, fmt.Sprintf("message %d to remember", i), t0.Add(time.Duration(i)*time.Minute))
+		if err := msgs.Post(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+		posted = append(posted, m)
+	}
+	put := func(s *domain.Saved) {
+		t.Helper()
+		if err := saved.Put(ctx, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put(domain.Save(WS, Dev, *posted[0], time.Time{}, t0))
+	put(domain.Save(WS, Dev, *posted[1], t0.Add(time.Hour), t0.Add(time.Minute)))
+	put(domain.Save(WS, Lead, *posted[2], t0.Add(time.Hour), t0))
+	list, err := saved.For(ctx, WS, Dev)
+	if err != nil || len(list) != 2 || list[0].Message != posted[1].ID || list[1].Message != posted[0].ID || !list[0].RemindAt.Equal(t0.Add(time.Hour)) ||
+		list[0].Conversation != ch.ID || !list[1].RemindAt.IsZero() {
+		t.Fatalf("Dev's saves = %+v %v (most recent first)", list, err)
+	}
+
+	due, err := saved.Due(ctx, t0.Add(time.Hour))
+	if err != nil || len(due) != 2 {
+		t.Fatalf("due = %+v %v", due, err)
+	}
+	for _, s := range due {
+		if !s.Remind(t0.Add(time.Hour)) {
+			t.Fatalf("not due: %+v", s)
+		}
+		if ev := s.PullEvents(); ev[0].Excerpt != fmt.Sprintf("message %d to remember", map[domain.MessageID]int{posted[1].ID: 2, posted[2].ID: 3}[s.Message]) {
+			t.Fatalf("excerpt = %+v", ev)
+		}
+	}
+	again, _ := saved.Due(ctx, t0.Add(time.Hour))
+	again[0].Remind(t0.Add(time.Hour))
+	if err := saved.MarkReminded(ctx, again[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := saved.MarkReminded(ctx, again[0]); !errors.Is(err, domain.ErrAlreadyReminded) {
+		t.Fatalf("second mark = %v", err)
+	}
+	if left, _ := saved.Due(ctx, t0.Add(time.Hour)); len(left) != 1 {
+		t.Fatalf("due after one reminder = %+v", left)
+	}
+
+	// Saving again sets a new reminder; removing forgets the save.
+	put(domain.Save(WS, again[0].User, *posted[map[domain.MessageID]int{posted[1].ID: 1, posted[2].ID: 2}[again[0].Message]], t0.Add(3*time.Hour), t0.Add(2*time.Hour)))
+	if d, _ := saved.Due(ctx, t0.Add(3*time.Hour)); len(d) != 2 {
+		t.Fatalf("due after saving again = %+v", d)
+	}
+	if err := saved.Remove(ctx, WS, Dev, posted[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := saved.For(ctx, WS, Dev); len(l) != 1 {
+		t.Fatalf("after remove = %+v", l)
+	}
+	if l, _ := saved.For(ctx, WS, Other); len(l) != 0 {
+		t.Fatalf("Other's saves = %+v", l)
+	}
+}

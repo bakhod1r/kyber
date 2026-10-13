@@ -6,11 +6,14 @@ Order: daily use first, then channel management, Jira integration, huddle extras
 
 ## 1. Daily use
 
-- ✅ **S64 Activity: unreads and mentions** — `GET /chat/activity`: my mentions (newest first, with conversation)
-  and conversations with unread messages; UI "Activity" view in the chat sidebar. AC: only conversations I may
-  read; a mention disappears from "unread" once its conversation is read.
-- **S65 Saved for later** — save a message, optionally with a reminder time; `GET /chat/saved`; the reminder
+- ✅ **S64 Activity: unreads and mentions** — "🔔 Activity" in the chat sidebar: my chat mentions (unread first,
+  from the Notify inbox) and conversations with unread messages. Opening a conversation reads my mentions in it
+  (`POST /notifications/read-all?conversation_id=`).
+- ✅ **S65 Saved for later** — save a message, optionally with a reminder time; `GET /chat/saved`; the reminder
   arrives as a notification at its time. AC: per user; a deleted message shows as deleted; unsave.
+  **Done:** `PUT/DELETE /messages/{id}/save`, migration 0055 (RLS), `chat.reminder` outbox event → Notify kind
+  `reminder`, background job (once across replicas); 🔖 menu on messages and "Saved for later" in Activity, API 0.46.0.
+  Also fixed: chat notifications in the bell now open the conversation.
 - **S66 Status and Do Not Disturb** — status emoji + text with optional expiry; DND until a time; while a
   Pomodoro is running I am in DND automatically. Others see status next to my name. AC: chat notifications are
   held during DND (still listed in Activity); status expires by itself.

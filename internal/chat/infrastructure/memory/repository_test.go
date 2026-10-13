@@ -11,3 +11,8 @@ func TestContract(t *testing.T) {
 	r := memory.NewRepository()
 	repotest.Run(t, r, r.Messages())
 }
+
+func TestSavedContract(t *testing.T) {
+	r := memory.NewRepository()
+	repotest.RunSaved(t, r, r.Messages(), memory.NewSaved(r))
+}

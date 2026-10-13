@@ -45,6 +45,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/messages/{id}/pin", h.unpin)
 	mux.HandleFunc("GET /api/v1/conversations/{id}/pins", h.pins)
 	mux.HandleFunc("GET /api/v1/chat/search", h.search)
+	mux.HandleFunc("PUT /api/v1/messages/{id}/save", h.save)
+	mux.HandleFunc("DELETE /api/v1/messages/{id}/save", h.unsave)
+	mux.HandleFunc("GET /api/v1/chat/saved", h.saved)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/files", h.upload)
 	mux.HandleFunc("GET /api/v1/messages/{id}/file", h.download)
 }
@@ -64,7 +67,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
-		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile):
+		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -477,4 +480,70 @@ func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
 	hd.Set("Cache-Control", "private, max-age=3600")
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, body)
+}
+
+type savedDTO struct {
+	Message  messageDTO `json:"message"`
+	SavedAt  time.Time  `json:"saved_at"`
+	RemindAt *time.Time `json:"remind_at"`
+	Reminded bool       `json:"reminded"`
+}
+
+func toSaved(sv *domain.Saved, m messageDTO) savedDTO {
+	d := savedDTO{Message: m, SavedAt: sv.SavedAt, Reminded: sv.Reminded}
+	if !sv.RemindAt.IsZero() {
+		d.RemindAt = &sv.RemindAt
+	}
+	return d
+}
+
+// save: {"remind_at": optional RFC 3339 time in the future}.
+func (h *Handler) save(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		RemindAt *time.Time `json:"remind_at"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var at time.Time
+	if in.RemindAt != nil {
+		at = *in.RemindAt
+	}
+	sv, err := h.svc.SaveMessage(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), at)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"saved_at": sv.SavedAt, "remind_at": in.RemindAt})
+}
+
+func (h *Handler) unsave(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.Unsave(r.Context(), auth.Actor(r.Context()), r.PathValue("id")); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) saved(w http.ResponseWriter, r *http.Request) {
+	items, err := h.svc.SavedFor(r.Context(), auth.Actor(r.Context()))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	ms := make([]*domain.Message, len(items))
+	for i, it := range items {
+		ms[i] = it.Message
+	}
+	rendered, err := h.render(r, ms...)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := make([]savedDTO, len(items))
+	for i, it := range items {
+		out[i] = toSaved(it.Saved, rendered[i])
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
 }

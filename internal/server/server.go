@@ -214,6 +214,7 @@ type deps struct {
 	focusSessions focusdomain.Repository
 	conversations chatdomain.Repository
 	messages      chatdomain.Messages
+	saved         chatdomain.SavedMessages
 	calls         calldomain.Repository
 	whiteboards   wbdomain.Repository
 	chatBlobs     blob.Store // chat files; memory unless WithFilesDir
@@ -308,6 +309,7 @@ func WithRedis(rdb redis.UniversalClient) Option { return func(d *deps) { d.redi
 func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	ids := identitymemory.NewRepository()
 	chatRepo := chatmemory.NewRepository()
+	savedRepo := chatmemory.NewSaved(chatRepo)
 	callRepo := callmemory.NewRepository()
 	issueRepo := issuememory.NewRepository()
 	sprintRepo := agilememory.NewRepository()
@@ -322,8 +324,8 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
-		conversations: chatRepo, messages: chatRepo.Messages(), calls: callRepo, whiteboards: wbmemory.NewRepository(),
-		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
+		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, calls: callRepo, whiteboards: wbmemory.NewRepository(),
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
@@ -370,7 +372,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
-		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool),
+		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
@@ -453,7 +455,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 		log.Warn("KYBER_FILES_DIR not set: chat files are kept in memory and lost on restart")
 		d.chatBlobs = blob.NewMemory()
 	}
-	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages,
+	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved,
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	chat.WithIssues(chatacl.NewIssues(issues))
 	callEvents := callrealtime.New(publish, func(c *calldomain.Call) any { return callhttp.ToDTO(c) })
@@ -480,6 +482,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	}
 	relay.Handle("comment.added", notify.OnCommentAdded)
 	relay.Handle("chat.message_posted", notify.OnChatMessage)
+	relay.Handle("chat.reminder", notify.OnChatReminder)
 	relay.Handle("call.started", chat.OnCallEvent)
 	relay.Handle("call.ended", chat.OnCallEvent)
 	relay.Handle("issue.changed", notify.OnIssueChanged)
@@ -507,7 +510,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	}
 	go relay.Run(d.ctx, d.relayEvery)
 	go dispatch(d.ctx, log, notify, d.senders(), d.dispatchEvery)
-	go remindMeetings(d.ctx, log, calendar, d.reminderEvery)
+	go remindMeetings(d.ctx, log, calendar.RemindDue, d.reminderEvery)
+	go remindMeetings(d.ctx, log, chat.RemindDue, d.reminderEvery) // saved messages (S65)
 	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
@@ -705,8 +709,9 @@ func (d deps) senders() map[notifydomain.Channel]notifyapp.Sender {
 }
 
 // dispatch sends due email/Telegram deliveries until ctx ends.
-// remindMeetings sends due meeting reminders until ctx ends (once per meeting, across replicas).
-func remindMeetings(ctx context.Context, log *slog.Logger, calendar *calendarapp.Service, every time.Duration) {
+// remindMeetings sends due reminders (meetings, saved messages) with remindDue until ctx ends (once each, across
+// replicas).
+func remindMeetings(ctx context.Context, log *slog.Logger, remindDue func(context.Context) (int, error), every time.Duration) {
 	if every == 0 {
 		every = 30 * time.Second
 	}
@@ -717,8 +722,8 @@ func remindMeetings(ctx context.Context, log *slog.Logger, calendar *calendarapp
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if _, err := calendar.RemindDue(ctx); err != nil {
-				log.WarnContext(ctx, "meeting reminders: will retry", "err", err)
+			if _, err := remindDue(ctx); err != nil {
+				log.WarnContext(ctx, "reminders: will retry", "err", err)
 			}
 		}
 	}
