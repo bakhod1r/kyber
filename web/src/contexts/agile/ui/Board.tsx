@@ -12,7 +12,16 @@ export function initials(name: string): string {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "")).toUpperCase() || "?";
 }
 
-export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (issueKey: string) => void }) {
+export function Board({
+  projectKey,
+  onOpen,
+  visibleKeys,
+}: {
+  projectKey: string;
+  onOpen?: (issueKey: string) => void;
+  /** Quick filters (composed by the app): only these issues show; null shows all. */
+  visibleKeys?: Set<string> | null;
+}) {
   const qc = useQueryClient();
   // With an active sprint the board shows only that sprint (Scrum); otherwise every issue (Kanban).
   const sprints = useQuery({ queryKey: ["sprints", projectKey], queryFn: () => agileUseCases.sprints(projectKey) });
@@ -34,7 +43,7 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
   // Kanban backlog (S48): the first column's issues wait in a list below instead of on the board.
   const kanbanBacklog = !active && !!board?.kanban_backlog && columns.length > 1;
   const boardColumns = kanbanBacklog ? columns.slice(1) : columns;
-  const waiting = kanbanBacklog ? (issues.data ?? []).filter((i) => columns[0]?.statuses.includes(i.status)) : [];
+  const waiting = kanbanBacklog ? (issues.data ?? []).filter((i) => columns[0]?.statuses.includes(i.status) && (!visibleKeys || visibleKeys.has(i.key))) : [];
   const selectTo = columns[1]?.statuses[0];
   const byId = new Map<string, Member>((members.data ?? []).map((m) => [m.user_id, m]));
   const [error, setError] = useState<string | null>(null);
@@ -118,7 +127,7 @@ export function Board({ projectKey, onOpen }: { projectKey: string; onOpen?: (is
       )}
       <div className="board">
         {boardColumns.map((col) => {
-          const cards = issues.data.filter((i) => col.statuses.includes(i.status));
+          const cards = issues.data.filter((i) => col.statuses.includes(i.status) && (!visibleKeys || visibleKeys.has(i.key)));
           const wip = col.max > 0 && cards.length > col.max ? " wip-over" : col.min > 0 && cards.length < col.min ? " wip-under" : "";
           return (
             <section

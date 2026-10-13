@@ -387,3 +387,6 @@ a.user:hover { text-decoration: underline; }
 @media (max-width: 720px) { .search-grid { grid-template-columns: 1fr; } }
 .columns-editor { list-style: none; padding: 0; margin: 0 0 0.5rem; display: grid; gap: 0.35rem; }
 .columns-editor .narrow input { width: 4.5rem; }
+.settings-tabs { font-size: 0.85rem; opacity: 0.85; }
+.quick-filters { margin-bottom: 0.5rem; flex-wrap: wrap; }
+.quick-filters [aria-pressed="true"] { outline: 2px solid currentColor; }

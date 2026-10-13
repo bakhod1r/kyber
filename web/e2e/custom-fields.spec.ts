@@ -22,7 +22,7 @@ test("custom fields on issues and in JQL", async ({ page }) => {
   await admin.getByRole("button", { name: "Add field" }).click();
   await expect(admin.getByLabel("Name of Tier")).toBeVisible();
 
-  await page.getByRole("link", { name: "Board", exact: true }).click();
+  await page.getByRole("link", { name: "Active sprints", exact: true }).click();
   await page.getByLabel("New issue title").fill("Big deal");
   await page.getByRole("button", { name: "Add issue" }).click();
   await page.getByText("Big deal").click();

@@ -29,7 +29,7 @@ test("a project admin configures the board", async ({ page }) => {
   await settings.getByRole("button", { name: "Save board" }).click();
   await expect(settings.getByRole("status")).toHaveText("Board saved");
 
-  await page.getByRole("link", { name: "Board", exact: true }).click();
+  await page.getByRole("link", { name: "Active sprints", exact: true }).click();
   const ready = page.getByRole("region", { name: "Ready" });
   await expect(ready.getByText("Ship it")).toBeVisible();
   await expect(ready).toContainText("1 / 1");
