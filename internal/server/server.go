@@ -40,6 +40,12 @@ import (
 	calendarpg "github.com/bakhod1r/kyber/internal/calendar/adapter/postgres"
 	calendarapp "github.com/bakhod1r/kyber/internal/calendar/app"
 	calendardomain "github.com/bakhod1r/kyber/internal/calendar/domain"
+	chatacl "github.com/bakhod1r/kyber/internal/chat/adapter/acl"
+	chathttp "github.com/bakhod1r/kyber/internal/chat/adapter/httpapi"
+	chatmemory "github.com/bakhod1r/kyber/internal/chat/adapter/memory"
+	chatpg "github.com/bakhod1r/kyber/internal/chat/adapter/postgres"
+	chatapp "github.com/bakhod1r/kyber/internal/chat/app"
+	chatdomain "github.com/bakhod1r/kyber/internal/chat/domain"
 	focusacl "github.com/bakhod1r/kyber/internal/focus/adapter/acl"
 	focushttp "github.com/bakhod1r/kyber/internal/focus/adapter/httpapi"
 	focusmemory "github.com/bakhod1r/kyber/internal/focus/adapter/memory"
@@ -135,6 +141,8 @@ type deps struct {
 	workspaces    workspacedomain.Repository
 	meetings      calendardomain.Repository
 	focusSessions focusdomain.Repository
+	conversations chatdomain.Repository
+	messages      chatdomain.Messages
 	baseDomain    string // "" = single-tenant (ADR-0004)
 	outbox        outbox.Store
 	ctx           context.Context // lifetime of background work (outbox relay)
@@ -177,6 +185,7 @@ func WithRedis(rdb redis.UniversalClient) Option { return func(d *deps) { d.redi
 // NewInMemory builds the API on in-memory adapters (dev mode and tests).
 func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	ids := identitymemory.NewRepository()
+	chatRepo := chatmemory.NewRepository()
 	issueRepo := issuememory.NewRepository()
 	sprintRepo := agilememory.NewRepository()
 	d := deps{
@@ -187,6 +196,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
+		conversations: chatRepo, messages: chatRepo.Messages(),
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
@@ -234,6 +244,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool),
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
+		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
@@ -296,6 +307,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	calendar := calendarapp.NewService(d.meetings, calendaracl.NewMembers(workspaces, d.users), id.New, time.Now)
 	focus := focusapp.NewService(focusapp.Deps{Sessions: d.focusSessions, Calendar: focusacl.NewCalendar(calendar),
 		Issues: focusacl.NewIssues(issues, projectcompat.NewGate(projects, access, accessdomain.AssignableUser)), NewID: id.New, Clock: systemClock{}})
+	chat := chatapp.NewService(chatapp.Deps{Conversations: d.conversations, Messages: d.messages,
+		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	relay := outbox.NewRelay(d.outbox, log)
 	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated", "issue.imported"} {
 		relay.Handle(name, insights.OnIssueEvent)
@@ -353,6 +366,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	tenancy.Register(api)
 	calendarhttp.New(calendar, log, time.Now).Register(api)
 	focushttp.New(focus, log, time.Now).Register(api)
+	chathttp.New(chat, log).Register(api)
 	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
 		auditacl.NewOwners(agile, d.boards, d.links), log)
 	audit.Register(api)

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.26.0
+  version: 0.27.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -278,6 +278,147 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses:
         "204": { description: Cancelled }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations:
+    get:
+      operationId: listConversations
+      description: Public channels of this workspace and every channel or DM the caller belongs to, with unread counts.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Conversation" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/channels:
+    post:
+      operationId: createChannel
+      description: Creates a channel (name `[a-z0-9_-]{1,80}`, unique per workspace); the creator joins it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties: { name: { type: string }, topic: { type: string }, private: { type: boolean } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/dms:
+    post:
+      operationId: openDM
+      description: Opens the direct message between the caller and 1–7 workspace members (the same people get the same DM).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [user_ids], properties: { user_ids: { type: array, items: { type: string } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}:
+    get:
+      operationId: getConversation
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/join:
+    post:
+      operationId: joinConversation
+      description: Joins a public channel.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Joined }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/leave:
+    post:
+      operationId: leaveConversation
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Left }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/members:
+    post:
+      operationId: inviteToConversation
+      description: A member adds a workspace member to a channel (the only way into a private one).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [user_id], properties: { user_id: { type: string } } }
+      responses:
+        "204": { description: Invited }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/read:
+    post:
+      operationId: markConversationRead
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Marked read }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/messages:
+    get:
+      operationId: listMessages
+      description: History, newest first. Page with `before` (a message id of this conversation).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: before, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: postMessage
+      description: Posts a message (1–4000 characters); only members post — join a public channel first.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { $ref: "#/components/requestBodies/MessageBody" }
+      responses:
+        "201": { description: Posted, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/messages/{id}:
+    patch:
+      operationId: editMessage
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { $ref: "#/components/requestBodies/MessageBody" }
+      responses:
+        "200": { description: Edited, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteMessage
+      description: The author deletes a message; it stays in history as deleted.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -1497,7 +1638,37 @@ components:
             type: object
             required: [status]
             properties: { status: { type: string, enum: [ok, unavailable] } }
+  requestBodies:
+    MessageBody:
+      required: true
+      content:
+        application/json:
+          schema: { type: object, required: [body], properties: { body: { type: string } } }
   schemas:
+    Conversation:
+      type: object
+      required: [id, kind, name, topic, private, member_ids, member, unread, created_at]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [channel, dm] }
+        name: { type: string, description: Empty for DMs }
+        topic: { type: string }
+        private: { type: boolean }
+        member_ids: { type: array, items: { type: string } }
+        member: { type: boolean, description: Whether the caller belongs to it }
+        unread: { type: integer }
+        created_at: { type: string, format: date-time }
+    Message:
+      type: object
+      required: [id, conversation_id, author_id, body, created_at, edited_at, deleted]
+      properties:
+        id: { type: string }
+        conversation_id: { type: string }
+        author_id: { type: string }
+        body: { type: string, description: Empty once deleted }
+        created_at: { type: string, format: date-time }
+        edited_at: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+        deleted: { type: boolean }
     Meeting:
       type: object
       additionalProperties: false

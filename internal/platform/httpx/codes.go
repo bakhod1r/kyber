@@ -21,6 +21,10 @@ const (
 	CodeFocusState           = "FOCUS_STATE"
 	CodeMeetingNotFound      = "MEETING_NOT_FOUND"
 	CodeMeetingForbidden     = "MEETING_FORBIDDEN"
+	CodeConversationNotFound = "CONVERSATION_NOT_FOUND"
+	CodeMessageNotFound      = "MESSAGE_NOT_FOUND"
+	CodeChannelNameTaken     = "CHANNEL_NAME_TAKEN"
+	CodeChatForbidden        = "CHAT_FORBIDDEN"
 	CodeWorkspaceSlugTaken   = "WORKSPACE_SLUG_TAKEN"
 	CodeOTPPending           = "AUTH_OTP_PENDING"
 	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
@@ -82,6 +86,10 @@ var codes = []code{
 	{CodeFocusState, "6073", 409, "The focus session cannot do that now.", "Fokus seansi hozir buni qila olmaydi.", "Фокус-сессия сейчас не может этого сделать.", errorx.CategoryBusiness},
 	{CodeMeetingNotFound, "6074", 404, "Meeting not found.", "Uchrashuv topilmadi.", "Встреча не найдена.", errorx.CategoryBusiness},
 	{CodeMeetingForbidden, "6075", 403, "Only the organizer can cancel this meeting.", "Uchrashuvni faqat tashkilotchi bekor qila oladi.", "Отменить встречу может только организатор.", errorx.CategorySecurity},
+	{CodeConversationNotFound, "6090", 404, "Conversation not found.", "Suhbat topilmadi.", "Беседа не найдена.", errorx.CategoryBusiness},
+	{CodeMessageNotFound, "6091", 404, "Message not found.", "Xabar topilmadi.", "Сообщение не найдено.", errorx.CategoryBusiness},
+	{CodeChannelNameTaken, "6092", 409, "A channel with this name already exists.", "Bu nomli kanal allaqachon bor.", "Канал с таким названием уже существует.", errorx.CategoryBusiness},
+	{CodeChatForbidden, "6093", 403, "You cannot do that in this conversation.", "Bu suhbatda buni qila olmaysiz.", "В этой беседе так сделать нельзя.", errorx.CategorySecurity},
 	{CodeProjectNotFound, "6002", 404, "Project not found.", "Loyiha topilmadi.", "Проект не найден.", errorx.CategoryBusiness},
 	{CodeProjectKeyTaken, "6003", 409, "This project key is already taken.", "Bu loyiha kaliti band.", "Этот ключ проекта уже занят.", errorx.CategoryBusiness},
 	{CodeForbidden, "6004", 403, "Your project role does not allow this.", "Loyihadagi rolingiz bunga ruxsat bermaydi.", "Ваша роль в проекте не позволяет это сделать.", errorx.CategorySecurity},
