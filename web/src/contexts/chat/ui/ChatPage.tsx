@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, type ChatEvent, chatUseCases, type Conversation, conversationTitle, type Message, splitMentions, useChatStream,
+  applyEvent, type ChatEvent, chatUseCases, type Conversation, conversationTitle, fileSize, MAX_FILE, type Message, splitMentions, useChatStream,
 } from "../application";
 
 const PAGE = 50;
@@ -186,6 +186,13 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
     mutationFn: (body: string) => chatUseCases.post(id, body),
     onSuccess: (m) => qc.setQueryData<Message[]>(historyKey(id), (list) => applyEvent(list ?? [], id, { type: "message.posted", message: m })),
   });
+  const upload = useMutation({
+    mutationFn: (f: File) => {
+      if (f.size > MAX_FILE) throw new Error(`${f.name} is larger than 25 MB`);
+      return chatUseCases.upload(id, f, f.name);
+    },
+    onSuccess: (m) => qc.setQueryData<Message[]>(historyKey(id), (list) => applyEvent(list ?? [], id, { type: "message.posted", message: m })),
+  });
   const replace = (m: Message) => {
     qc.setQueryData<Message[]>(historyKey(id), (list) => list?.map((x) => (x.id === m.id ? m : x)));
     setOlder((list) => list.map((x) => (x.id === m.id ? m : x)));
@@ -221,11 +228,23 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
       </div>
       <p className="chat-typing muted" aria-live="polite">{typers.length > 0 ? `${typers.join(", ")} ${typers.length === 1 ? "is" : "are"} typing…` : " "}</p>
       {member ? (
-        <Composer label={`Message ${title}`} onSend={(b) => post.mutate(b)} onTyping={() => void chatUseCases.typing(id).catch(() => {})} />
+        <div className="chat-compose-row">
+          <label className="ghost chat-attach" title="Attach a file (25 MB at most)">
+            📎
+            <input type="file" hidden aria-label="Attach a file" onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) upload.mutate(f);
+            }} />
+          </label>
+          <Composer label={`Message ${title}`} onSend={(b) => post.mutate(b)} onTyping={() => void chatUseCases.typing(id).catch(() => {})} />
+        </div>
       ) : (
         <button onClick={() => join.mutate()}>Join {title}</button>
       )}
       {post.error && <p role="alert" className="error">{post.error.message}</p>}
+      {upload.isPending && <p className="muted">Uploading…</p>}
+      {upload.error && <p role="alert" className="error">{upload.error.message}</p>}
     </section>
   );
 }
@@ -271,6 +290,7 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
           {splitMentions(m.body).map((s, i) => (s.kind === "text" ? <span key={i}>{s.text}</span> : <span key={i} className={`chat-${s.kind}`}>{s.text}</span>))}
         </p>
       )}
+      {m.file && !m.deleted && <Attachment file={m.file} />}
       {m.issues.length > 0 && (
         <ul className="chat-issues">
           {m.issues.map((p) => (
@@ -305,6 +325,16 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
       )}
     </article>
   );
+}
+
+function Attachment({ file }: { file: NonNullable<Message["file"]> }) {
+  const label = `${file.name} (${fileSize(file.size)})`;
+  if (file.type.startsWith("image/") && file.type !== "image/svg+xml") {
+    return <a href={file.url} target="_blank" rel="noreferrer"><img className="chat-image" src={file.url} alt={file.name} /></a>;
+  }
+  if (file.type.startsWith("video/")) return <video className="chat-video" src={file.url} controls aria-label={label} />;
+  if (file.type.startsWith("audio/")) return <audio src={file.url} controls aria-label={label} />;
+  return <a className="chat-file" href={file.url} download={file.name}>📎 {label}</a>;
 }
 
 function ThreadPanel({ parent, names, me, onClose }: { parent: string; names: Map<string, string>; me: string; onClose: () => void }) {

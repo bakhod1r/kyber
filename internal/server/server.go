@@ -124,6 +124,7 @@ import (
 	notifypg "github.com/bakhod1r/kyber/internal/notify/infrastructure/postgres"
 	"github.com/bakhod1r/kyber/internal/notify/infrastructure/telegramsend"
 	notifyhttp "github.com/bakhod1r/kyber/internal/notify/interfaces/httpapi"
+	"github.com/bakhod1r/kyber/internal/platform/blob"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 	"github.com/bakhod1r/kyber/internal/platform/id"
 	"github.com/bakhod1r/kyber/internal/platform/live"
@@ -206,7 +207,8 @@ type deps struct {
 	messages      chatdomain.Messages
 	calls         calldomain.Repository
 	whiteboards   wbdomain.Repository
-	baseDomain    string // "" = single-tenant (ADR-0004)
+	blobs         blob.Store // chat files; memory unless WithFilesDir
+	baseDomain    string     // "" = single-tenant (ADR-0004)
 	ice           ice.Config
 	outbox        outbox.Store
 	livePool      *pgxpool.Pool   // set: hints cross replicas through NOTIFY
@@ -273,6 +275,15 @@ func WithBaseDomain(domain string) Option { return func(d *deps) { d.baseDomain 
 // (coturn use-auth-secret).
 func WithICE(urls []string, turnSecret string) Option {
 	return func(d *deps) { d.ice = ice.Config{URLs: urls, Secret: turnSecret} }
+}
+
+// WithFilesDir keeps chat files on disk under dir (default: in memory, lost on restart).
+func WithFilesDir(dir string) Option {
+	return func(d *deps) {
+		if s, err := blob.NewDisk(dir); err == nil {
+			d.blobs = s
+		}
+	}
 }
 
 // Option configures optional infrastructure.
@@ -426,7 +437,11 @@ func build(log *slog.Logger, d deps) http.Handler {
 		go fanout.Listen(d.liveCtx())
 		publish = fanout
 	}
-	chat := chatapp.NewService(chatapp.Deps{Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages,
+	if d.blobs == nil {
+		log.Warn("KYBER_FILES_DIR not set: chat files are kept in memory and lost on restart")
+		d.blobs = blob.NewMemory()
+	}
+	chat := chatapp.NewService(chatapp.Deps{Blobs: d.blobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages,
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	chat.WithIssues(chatacl.NewIssues(issues))
 	callEvents := callrealtime.New(publish, func(c *calldomain.Call) any { return callhttp.ToDTO(c) })

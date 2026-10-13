@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, conversationTitle, type Message, splitMentions } from "./model";
+import { applyEvent, conversationTitle, fileSize, type Message, splitMentions } from "./model";
 
 const msg = (id: string, body: string, extra: Partial<Message> = {}): Message => ({
   id, conversation_id: "c-1", author_id: "u-1", body, created_at: "2026-10-13T09:00:00Z", edited_at: null, deleted: false,
@@ -43,5 +43,11 @@ describe("chat domain", () => {
       { kind: "text", text: "ping " }, { kind: "mention", text: "@a@x.uz" }, { kind: "text", text: " about " },
       { kind: "issue", text: "KYB-12" }, { kind: "text", text: " now" },
     ]);
+  });
+});
+
+describe("files", () => {
+  it("formats sizes", () => {
+    expect([fileSize(900), fileSize(340 * 1024), fileSize(1.25 * 1024 * 1024)]).toEqual(["900 B", "340 KB", "1.3 MB"]);
   });
 });

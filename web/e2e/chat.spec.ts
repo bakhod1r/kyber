@@ -41,4 +41,11 @@ test("chat between two people arrives live", async ({ browser }) => {
   await b.goto(`/chat/${channel.id}`); // after a reload the REST history carries the issue preview
   await expect(b.getByRole("link", { name: `${key}-1 Login page` })).toBeVisible();
   await expect.poll(async () => ((await bobur.call("GET", "/api/v1/notifications")).items as unknown[]).length).toBe(1);
+
+  // A picture from Ali shows up for Bobur, served only to members.
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  await a.getByLabel("Attach a file").setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: png });
+  const img = b.getByRole("img", { name: "dot.png" });
+  await expect(img).toBeVisible();
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(1);
 });

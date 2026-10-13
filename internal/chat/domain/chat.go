@@ -155,6 +155,7 @@ type Message struct {
 	Reactions    []Reaction  // sorted by emoji
 	Kind         MessageKind // "" for people's messages
 	Ref          string      // system messages: what they are about (unique), e.g. "call:<id>:started"
+	File         *File       // an attached file, if any
 	PinnedBy     UserID      // empty unless pinned
 	PinnedAt     time.Time
 	events       []MessageWritten
@@ -208,6 +209,35 @@ func NewMessage(id MessageID, conv ConversationID, author UserID, text string, n
 	}
 	m := &Message{ID: id, Conversation: conv, Author: author, Body: b, CreatedAt: now.UTC()}
 	m.written()
+	return m, nil
+}
+
+// MaxFile bounds one attachment (bytes).
+const MaxFile = 25 << 20
+
+var ErrInvalidFile = errors.New("a file has a name and 1 byte to 25 MB")
+
+// File is an attachment; its bytes live in the blob store under the message's id.
+type File struct {
+	Name string
+	Type string // detected by the server, never taken from the client
+	Size int64
+}
+
+// NewFileMessage posts a file; the message body is its name (searchable).
+func NewFileMessage(id MessageID, conv ConversationID, author UserID, f File, now time.Time) (*Message, error) {
+	f.Name = strings.TrimSpace(f.Name)
+	if i := strings.LastIndexAny(f.Name, `/\`); i >= 0 {
+		f.Name = f.Name[i+1:]
+	}
+	if f.Name == "" || utf8.RuneCountInString(f.Name) > 255 || f.Size <= 0 || f.Size > MaxFile {
+		return nil, ErrInvalidFile
+	}
+	m, err := NewMessage(id, conv, author, f.Name, now)
+	if err != nil {
+		return nil, err
+	}
+	m.File = &f
 	return m, nil
 }
 
@@ -293,7 +323,7 @@ func (m *Message) Delete(actor UserID, now time.Time) error {
 	if err := m.change(actor); err != nil {
 		return err
 	}
-	m.Body, m.Deleted, m.EditedAt, m.Reactions = "", true, now.UTC(), nil
+	m.Body, m.Deleted, m.EditedAt, m.Reactions, m.File = "", true, now.UTC(), nil, nil
 	m.Unpin()
 	return nil
 }

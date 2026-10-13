@@ -1,6 +1,11 @@
 package server_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -238,5 +243,92 @@ func TestChatPinsAndSearch(t *testing.T) {
 		}
 		code, b := dev.do("GET", "/api/v1/chat/search?q=r", nil)
 		expect(t, code, 422, b)
+	})
+}
+
+// upload sends raw bytes as a file (POST /conversations/{id}/files) with the upload header; cookie, when set,
+// authenticates instead of the client's token.
+func (c *client) upload(conv, name string, body []byte, header bool, cookie *http.Cookie) (int, map[string]any) {
+	c.t.Helper()
+	req, _ := http.NewRequest("POST", c.srv.URL+"/api/v1/conversations/"+conv+"/files?name="+url.QueryEscape(name), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/octet-stream")
+	if header {
+		req.Header.Set("X-Kyber-Upload", "1")
+	}
+	if cookie != nil {
+		req.AddCookie(cookie)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	spec.check(c.t, req, res)
+	defer res.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	return res.StatusCode, out
+}
+
+// S54b: files in chat — stored in the blob store, served only to readers, with safe headers.
+func TestChatFiles(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "design", "private": true})
+		conv := ch["id"].(string)
+		png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{7}, 200)...)
+
+		code, m := lead.upload(conv, "../mock up.png", png, true, nil)
+		expect(t, code, 201, m)
+		f := m["file"].(map[string]any)
+		if f["name"] != "mock up.png" || f["type"] != "image/png" || f["size"] != float64(len(png)) || m["body"] != "mock up.png" {
+			t.Fatalf("file message = %v", m)
+		}
+		res := lead.raw("GET", f["url"].(string), nil, nil)
+		got, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != 200 || !bytes.Equal(got, png) || res.Header.Get("Content-Type") != "image/png" ||
+			res.Header.Get("X-Content-Type-Options") != "nosniff" || !strings.HasPrefix(res.Header.Get("Content-Disposition"), "inline") ||
+			!strings.Contains(res.Header.Get("Content-Security-Policy"), "sandbox") {
+			t.Fatalf("download = %d %v", res.StatusCode, res.Header)
+		}
+		res = dev.raw("GET", f["url"].(string), nil, nil)
+		res.Body.Close()
+		expect(t, res.StatusCode, 404, nil)
+		code, b := dev.upload(conv, "x.txt", []byte("x"), true, nil)
+		expect(t, code, 404, b)
+
+		// An HTML file is downloaded, never rendered in Kyber's origin.
+		code, h := lead.upload(conv, "page.html", []byte("<html><script>alert(1)</script></html>"), true, nil)
+		expect(t, code, 201, h)
+		res = lead.raw("GET", h["file"].(map[string]any)["url"].(string), nil, nil)
+		res.Body.Close()
+		if !strings.HasPrefix(res.Header.Get("Content-Disposition"), "attachment") {
+			t.Fatalf("html disposition = %v", res.Header)
+		}
+
+		// Cookie sessions must send the upload header (CSRF: it forces a CORS preflight cross-site).
+		res = anon.raw("POST", "/api/v1/auth/login", map[string]string{"email": "lead@x.uz", "password": "long enough pw"}, nil)
+		res.Body.Close()
+		var ck *http.Cookie
+		for _, x := range res.Cookies() {
+			if x.Name == "kyber_session" {
+				ck = x
+			}
+		}
+		code, b = lead.upload(conv, "a.txt", []byte("hello"), false, ck)
+		expect(t, code, 403, b)
+		code, b = lead.upload(conv, "a.txt", []byte("hello"), true, ck)
+		expect(t, code, 201, b)
+
+		code, b = lead.upload(conv, "big.bin", bytes.Repeat([]byte{1}, 25<<20+1), true, nil)
+		expect(t, code, 422, b)
+		code, b = lead.do("DELETE", "/api/v1/messages/"+m["id"].(string), nil)
+		expect(t, code, 204, b)
+		res = lead.raw("GET", f["url"].(string), nil, nil)
+		res.Body.Close()
+		expect(t, res.StatusCode, 404, nil)
 	})
 }

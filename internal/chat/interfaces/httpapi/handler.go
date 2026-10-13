@@ -3,9 +3,12 @@ package httpapi
 
 import (
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	app "github.com/bakhod1r/kyber/internal/chat/application"
@@ -42,6 +45,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/messages/{id}/pin", h.unpin)
 	mux.HandleFunc("GET /api/v1/conversations/{id}/pins", h.pins)
 	mux.HandleFunc("GET /api/v1/chat/search", h.search)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/files", h.upload)
+	mux.HandleFunc("GET /api/v1/messages/{id}/file", h.download)
 }
 
 var errBadLimit = errors.New("limit must be a number from 1 to 200")
@@ -59,7 +64,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
-		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort):
+		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -99,6 +104,7 @@ type messageDTO struct {
 	ThreadID       *string    `json:"thread_id"`
 	ReplyCount     int        `json:"reply_count"`
 	Kind           string     `json:"kind"`
+	File           *fileDTO   `json:"file"`
 	PinnedBy       *string    `json:"pinned_by"`
 	PinnedAt       *time.Time `json:"pinned_at"`
 	Reactions      []reaction `json:"reactions"`
@@ -109,6 +115,13 @@ type issueDTO struct {
 	Key    string `json:"key"`
 	Title  string `json:"title"`
 	Status string `json:"status"`
+}
+
+type fileDTO struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+	Size int64  `json:"size"`
+	URL  string `json:"url"`
 }
 
 type reaction struct {
@@ -125,6 +138,9 @@ func toMessage(m *domain.Message) messageDTO {
 	if m.Thread != "" {
 		t := string(m.Thread)
 		d.ThreadID = &t
+	}
+	if f := m.File; f != nil {
+		d.File = &fileDTO{Name: f.Name, Type: f.Type, Size: f.Size, URL: "/api/v1/messages/" + string(m.ID) + "/file"}
 	}
 	if m.PinnedBy != "" {
 		by, at := string(m.PinnedBy), m.PinnedAt
@@ -409,4 +425,52 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.messages(w, r, ms)
+}
+
+// upload: the request body is the file (≤ 25 MB), ?name= its name.
+func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
+	body := http.MaxBytesReader(w, r.Body, domain.MaxFile+1)
+	m, err := h.svc.Upload(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), r.URL.Query().Get("name"), body)
+	var tooBig *http.MaxBytesError
+	if errors.As(err, &tooBig) {
+		err = domain.ErrInvalidFile
+	}
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.message(w, r, http.StatusCreated, m)
+}
+
+// inline types are shown in the browser; everything else (HTML, SVG, scripts…) is only downloaded.
+func inline(typ string) bool {
+	switch {
+	case typ == "image/svg+xml":
+		return false
+	case strings.HasPrefix(typ, "image/"), strings.HasPrefix(typ, "video/"), strings.HasPrefix(typ, "audio/"), typ == "application/pdf":
+		return true
+	}
+	return false
+}
+
+func (h *Handler) download(w http.ResponseWriter, r *http.Request) {
+	f, body, err := h.svc.Download(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	defer body.Close()
+	disposition := "attachment"
+	if inline(f.Type) {
+		disposition = "inline"
+	}
+	hd := w.Header()
+	hd.Set("Content-Type", f.Type)
+	hd.Set("Content-Length", strconv.FormatInt(f.Size, 10))
+	hd.Set("Content-Disposition", disposition+"; filename*=UTF-8''"+url.PathEscape(f.Name))
+	hd.Set("X-Content-Type-Options", "nosniff")
+	hd.Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self'; media-src 'self'")
+	hd.Set("Cache-Control", "private, max-age=3600")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, body)
 }

@@ -29,9 +29,17 @@ type message struct {
 	ThreadID       *string    `json:"thread_id"`
 	ReplyCount     int        `json:"reply_count"`
 	Kind           string     `json:"kind"`
+	File           *fileDTO   `json:"file"`
 	PinnedBy       *string    `json:"pinned_by"`
 	PinnedAt       *time.Time `json:"pinned_at"`
 	Reactions      []reaction `json:"reactions"`
+}
+
+type fileDTO struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+	Size int64  `json:"size"`
+	URL  string `json:"url"`
 }
 
 type reaction struct {
@@ -48,6 +56,9 @@ func toMessage(m domain.Message) message {
 	if m.Thread != "" {
 		t := string(m.Thread)
 		d.ThreadID = &t
+	}
+	if f := m.File; f != nil {
+		d.File = &fileDTO{Name: f.Name, Type: f.Type, Size: f.Size, URL: "/api/v1/messages/" + string(m.ID) + "/file"}
 	}
 	if m.PinnedBy != "" {
 		by, at := string(m.PinnedBy), m.PinnedAt

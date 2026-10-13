@@ -39,6 +39,8 @@ type Config struct {
 	// Calls (WebRTC): comma-separated stun:/turn:/turns: URLs, and coturn's static-auth-secret for TURN.
 	ICEServers string `env:"KYBER_ICE_SERVERS"`
 	TURNSecret string `env:"KYBER_TURN_SECRET"`
+	// FilesDir keeps chat files and huddle recordings on disk (back it up with the database).
+	FilesDir string `env:"KYBER_FILES_DIR"`
 }
 
 func Load() (*Config, error) {

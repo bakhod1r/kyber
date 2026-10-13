@@ -3,10 +3,13 @@
 package application
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -46,7 +49,15 @@ type Issues interface {
 	Preview(ctx context.Context, user, key string) (IssuePreview, bool, error)
 }
 
+// Blobs stores attachments' bytes (platform/blob) under the message id.
+type Blobs interface {
+	Put(ctx context.Context, key string, r io.Reader) error
+	Open(ctx context.Context, key string) (io.ReadCloser, error)
+	Delete(ctx context.Context, key string) error
+}
+
 type Deps struct {
+	Blobs         Blobs    // optional: files
 	Issues        Issues   // optional: issue previews
 	Notifier      Notifier // optional
 	Conversations domain.Repository
@@ -256,11 +267,15 @@ func (s *Service) Delete(ctx context.Context, actor, id string) error {
 	if err != nil {
 		return err
 	}
+	hadFile := m.File != nil
 	if err := m.Delete(domain.UserID(actor), s.d.Now()); err != nil {
 		return err
 	}
 	if err := s.d.Messages.Update(ctx, m); err != nil {
 		return err
+	}
+	if hadFile && s.d.Blobs != nil {
+		_ = s.d.Blobs.Delete(ctx, string(m.ID)) // the message no longer points at it either way
 	}
 	s.tell(ctx, m, domain.MessageDeleted{Message: *m})
 	return nil
@@ -493,4 +508,65 @@ func (s *Service) Search(ctx context.Context, actor, query string) ([]*domain.Me
 		ids[i] = c.ID
 	}
 	return s.d.Messages.Search(ctx, ids, query, SearchLimit)
+}
+
+type counter struct {
+	r io.Reader
+	n int64
+}
+
+func (c *counter) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// Upload stores a file and posts it to the conversation (members only). Its type is detected from the
+// content, never taken from the client; files over MaxFile are refused and leave nothing behind.
+func (s *Service) Upload(ctx context.Context, actor, conv, name string, body io.Reader) (*domain.Message, error) {
+	if s.d.Blobs == nil {
+		return nil, domain.ErrInvalidFile
+	}
+	c, err := s.readable(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	if !c.IsMember(domain.UserID(actor)) {
+		return nil, domain.ErrNotMember
+	}
+	br := bufio.NewReaderSize(body, 512)
+	head, _ := br.Peek(512)
+	typ, _, _ := strings.Cut(http.DetectContentType(head), ";")
+	id := domain.MessageID(s.d.NewID())
+	cr := &counter{r: io.LimitReader(br, domain.MaxFile+1)}
+	if err := s.d.Blobs.Put(ctx, string(id), cr); err != nil {
+		return nil, err
+	}
+	now := s.d.Now()
+	m, err := domain.NewFileMessage(id, c.ID, domain.UserID(actor), domain.File{Name: name, Type: typ, Size: cr.n}, now)
+	if err == nil {
+		err = s.d.Messages.Post(ctx, m)
+	}
+	if err != nil {
+		_ = s.d.Blobs.Delete(ctx, string(id))
+		return nil, err
+	}
+	s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *m})
+	return m, s.d.Conversations.MarkRead(ctx, c.ID, domain.UserID(actor), now)
+}
+
+// Download opens a message's file for someone who may read the conversation.
+func (s *Service) Download(ctx context.Context, actor, id string) (domain.File, io.ReadCloser, error) {
+	m, err := s.message(ctx, actor, id)
+	if err != nil {
+		return domain.File{}, nil, err
+	}
+	if m.File == nil || s.d.Blobs == nil {
+		return domain.File{}, nil, domain.ErrMessageNotFound
+	}
+	r, err := s.d.Blobs.Open(ctx, string(m.ID))
+	if err != nil {
+		return domain.File{}, nil, domain.ErrMessageNotFound
+	}
+	return *m.File, r, nil
 }

@@ -36,6 +36,10 @@ CREATE TABLE messages (
     -- System messages (e.g. a huddle started): their kind, and what they are about (unique).
     kind            text NOT NULL DEFAULT '' CHECK (kind IN ('', 'huddle_started', 'huddle_ended')),
     ref             text NOT NULL DEFAULT '',
+    -- S54b: an attached file (its bytes are in the blob store under the message id)
+    file_name       text,
+    file_type       text,
+    file_size       bigint CHECK (file_size BETWEEN 1 AND 26214400),
     pinned_by       uuid,
     pinned_at       timestamptz,
     CHECK (deleted OR btrim(body) <> '')

@@ -141,10 +141,10 @@ type Messages struct{ pool *pgxpool.Pool }
 
 func NewMessages(pool *pgxpool.Pool) *Messages { return &Messages{pool: pool} }
 
-const insertCols = `id, conversation_id, author_id, body, created_at, edited_at, deleted, thread_id, kind, ref`
+const insertCols = `id, conversation_id, author_id, body, created_at, edited_at, deleted, thread_id, kind, ref, file_name, file_type, file_size`
 
 // msgCols reads a message (alias m) with its reply count and reactions ("emoji user,user" rows).
-const msgCols = `m.id, m.conversation_id, m.author_id, m.body, m.created_at, m.edited_at, m.deleted, coalesce(m.thread_id::text, ''), m.kind, m.ref, coalesce(m.pinned_by::text, ''), m.pinned_at,
+const msgCols = `m.id, m.conversation_id, m.author_id, m.body, m.created_at, m.edited_at, m.deleted, coalesce(m.thread_id::text, ''), m.kind, m.ref, coalesce(m.pinned_by::text, ''), m.pinned_at, m.file_name, m.file_type, m.file_size,
 	(SELECT count(*) FROM messages r WHERE r.thread_id = m.id AND NOT r.deleted),
 	ARRAY(SELECT x.emoji || ' ' || string_agg(x.user_id::text, ',' ORDER BY x.user_id) FROM message_reactions x
 		WHERE x.message_id = m.id GROUP BY x.emoji ORDER BY x.emoji)`
@@ -154,7 +154,9 @@ func scanMsg(row pgx.CollectableRow) (*domain.Message, error) {
 	var edited *time.Time
 	var reactions []string
 	var pinnedAt *time.Time
-	if err := row.Scan(&m.ID, &m.Conversation, &m.Author, &m.Body, &m.CreatedAt, &edited, &m.Deleted, &m.Thread, &m.Kind, &m.Ref, &m.PinnedBy, &pinnedAt, &m.ReplyCount, &reactions); err != nil {
+	var fileName, fileType *string
+	var fileSize *int64
+	if err := row.Scan(&m.ID, &m.Conversation, &m.Author, &m.Body, &m.CreatedAt, &edited, &m.Deleted, &m.Thread, &m.Kind, &m.Ref, &m.PinnedBy, &pinnedAt, &fileName, &fileType, &fileSize, &m.ReplyCount, &reactions); err != nil {
 		return nil, err
 	}
 	for _, r := range reactions {
@@ -168,6 +170,9 @@ func scanMsg(row pgx.CollectableRow) (*domain.Message, error) {
 	m.CreatedAt = m.CreatedAt.UTC()
 	if pinnedAt != nil {
 		m.PinnedAt = pinnedAt.UTC()
+	}
+	if fileName != nil && fileType != nil && fileSize != nil {
+		m.File = &domain.File{Name: *fileName, Type: *fileType, Size: *fileSize}
 	}
 	if edited != nil {
 		m.EditedAt = edited.UTC()
@@ -188,8 +193,9 @@ func (s *Messages) Post(ctx context.Context, m *domain.Message) error {
 		thread = (*string)(&m.Thread)
 	}
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `INSERT INTO messages (`+insertCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-			string(m.ID), string(m.Conversation), string(m.Author), m.Body, m.CreatedAt, editedAt(m), m.Deleted, thread, string(m.Kind), m.Ref); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO messages (`+insertCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+			string(m.ID), string(m.Conversation), string(m.Author), m.Body, m.CreatedAt, editedAt(m), m.Deleted, thread, string(m.Kind), m.Ref,
+			fileName(m), fileType(m), fileSize(m)); err != nil {
 			var pg *pgconn.PgError
 			if errors.As(err, &pg) && pg.ConstraintName == "messages_ref" {
 				return domain.ErrDuplicateRef
@@ -208,8 +214,9 @@ func (s *Messages) Update(ctx context.Context, m *domain.Message) error {
 		if m.PinnedBy != "" {
 			pinnedBy, pinnedAt = (*string)(&m.PinnedBy), &m.PinnedAt
 		}
-		tag, err := tx.Exec(ctx, `UPDATE messages SET body = $2, edited_at = $3, deleted = $4, pinned_by = $5, pinned_at = $6 WHERE id = $1`,
-			string(m.ID), m.Body, editedAt(m), m.Deleted, pinnedBy, pinnedAt)
+		tag, err := tx.Exec(ctx, `UPDATE messages SET body = $2, edited_at = $3, deleted = $4, pinned_by = $5, pinned_at = $6,
+			file_name = $7, file_type = $8, file_size = $9 WHERE id = $1`,
+			string(m.ID), m.Body, editedAt(m), m.Deleted, pinnedBy, pinnedAt, fileName(m), fileType(m), fileSize(m))
 		if err != nil {
 			return err
 		}
@@ -305,4 +312,25 @@ func (s *Messages) Search(ctx context.Context, convs []domain.ConversationID, qu
 		return nil, err
 	}
 	return pgx.CollectRows(rows, scanMsg)
+}
+
+func fileName(m *domain.Message) *string {
+	if m.File == nil {
+		return nil
+	}
+	return &m.File.Name
+}
+
+func fileType(m *domain.Message) *string {
+	if m.File == nil {
+		return nil
+	}
+	return &m.File.Type
+}
+
+func fileSize(m *domain.Message) *int64 {
+	if m.File == nil {
+		return nil
+	}
+	return &m.File.Size
 }

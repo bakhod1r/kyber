@@ -222,6 +222,23 @@ func Run(t *testing.T, r domain.Repository, msgs domain.Messages) {
 		t.Fatalf("limit = %v", found)
 	}
 
+	// Files: the attachment's name, type and size come back; deleting the message drops them.
+	fm, _ := domain.NewFileMessage(mid(40), general.ID, Dev, domain.File{Name: "spec.pdf", Type: "application/pdf", Size: 1234}, t0.Add(4*time.Hour))
+	if err := msgs.Post(ctx, fm); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := msgs.ByID(ctx, fm.ID); got.File == nil || *got.File != (domain.File{Name: "spec.pdf", Type: "application/pdf", Size: 1234}) {
+		t.Fatalf("file = %+v", got.File)
+	}
+	if got, _ := msgs.ByID(ctx, mid(1)); got.File != nil {
+		t.Fatalf("plain message has a file: %+v", got.File)
+	}
+	_ = fm.Delete(Dev, t0.Add(5*time.Hour))
+	_ = msgs.Update(ctx, fm)
+	if got, _ := msgs.ByID(ctx, fm.ID); got.File != nil {
+		t.Fatalf("deleted message keeps its file: %+v", got.File)
+	}
+
 	// System messages: stored with their kind and ref; the same ref only once.
 	sys := domain.NewSystemMessage(mid(20), general.ID, Lead, domain.KindHuddleStarted, "call:k-1:started", "started a huddle", t0.Add(time.Hour))
 	if err := msgs.Post(ctx, sys); err != nil {

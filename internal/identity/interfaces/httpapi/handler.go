@@ -149,9 +149,10 @@ func UserFrom(ctx context.Context) *domain.User {
 func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, fromCookie := tokenFrom(r)
-		if fromCookie && !safeMethod(r.Method) && !isJSON(r) {
-			// CSRF guard: browsers cannot send cross-site JSON without a CORS preflight.
-			msg := "cookie-authenticated writes require Content-Type: application/json"
+		if fromCookie && !safeMethod(r.Method) && !isJSON(r) && r.Header.Get("X-Kyber-Upload") != "1" {
+			// CSRF guard: browsers cannot send cross-site JSON, or a custom header (file uploads), without a
+			// CORS preflight.
+			msg := "cookie-authenticated writes require Content-Type: application/json (or X-Kyber-Upload: 1 for files)"
 			httpx.Problem(w, r, errorx.New(httpx.CodeCSRF, msg).WithDetails(msg))
 			return
 		}

@@ -217,3 +217,23 @@ func TestPin(t *testing.T) {
 		t.Fatalf("pin deleted = %v", err)
 	}
 }
+
+func TestFileMessage(t *testing.T) {
+	m, err := domain.NewFileMessage("m-1", "c-1", "u-a", domain.File{Name: " ../../etc/Design v2.pdf ", Type: "application/pdf", Size: 1200}, t0)
+	if err != nil || m.File == nil || m.File.Name != "Design v2.pdf" || m.Body != "Design v2.pdf" || len(m.PullEvents()) != 1 {
+		t.Fatalf("file message = %+v %v (the name loses any path)", m, err)
+	}
+	for name, f := range map[string]domain.File{
+		"empty":     {Name: "a.txt", Type: "text/plain", Size: 0},
+		"too large": {Name: "a.bin", Type: "application/octet-stream", Size: domain.MaxFile + 1},
+		"no name":   {Name: "  ", Type: "text/plain", Size: 1},
+	} {
+		if _, err := domain.NewFileMessage("m", "c", "u", f, t0); !errors.Is(err, domain.ErrInvalidFile) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+	_ = m.Delete("u-a", t0)
+	if m.File != nil {
+		t.Fatalf("deleted message keeps its file: %+v", m.File)
+	}
+}

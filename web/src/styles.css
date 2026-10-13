@@ -518,3 +518,12 @@ a.user:hover { text-decoration: underline; }
 .chat-sidebar [role="search"] input { width: 100%; margin-bottom: 8px; }
 .chat-results { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 6px; }
 .chat-results a { display: block; color: inherit; font-size: 0.9rem; }
+
+/* Files (S54b) */
+.chat-compose-row { display: flex; gap: 8px; align-items: flex-start; }
+.chat-compose-row .chat-composer { flex: 1; }
+.chat-attach { cursor: pointer; font-size: 1.3rem; padding: 6px; }
+.chat-image { max-width: min(360px, 100%); max-height: 260px; border-radius: 8px; display: block; margin: 4px 0; }
+.chat-video { max-width: min(480px, 100%); border-radius: 8px; display: block; margin: 4px 0; }
+.chat-file { display: inline-block; margin: 4px 0; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }

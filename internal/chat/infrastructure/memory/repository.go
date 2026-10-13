@@ -155,6 +155,10 @@ func (r *Repository) Messages() *Messages { return &Messages{r} }
 type Messages struct{ r *Repository }
 
 func cloneMsg(m domain.Message) domain.Message {
+	if m.File != nil {
+		f := *m.File
+		m.File = &f
+	}
 	m.Reactions = slices.Clone(m.Reactions)
 	for i := range m.Reactions {
 		m.Reactions[i].Users = slices.Clone(m.Reactions[i].Users)

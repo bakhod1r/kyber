@@ -10,6 +10,7 @@ export type Message = {
   deleted: boolean; thread_id: string | null; reply_count: number; reactions: Reaction[]; issues: IssuePreview[];
   /** System messages (a huddle started or ended); people's messages have none. */
   kind?: "" | "huddle_started" | "huddle_ended";
+  file?: { name: string; type: string; size: number; url: string } | null;
   pinned_by?: string | null;
   pinned_at?: string | null;
 };
@@ -55,3 +56,12 @@ export function splitMentions(body: string): Segment[] {
   if (last < body.length) out.push({ kind: "text", text: body.slice(last) });
   return out;
 }
+
+/** 1.2 MB, 340 KB… */
+export function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+export const MAX_FILE = 25 * 1024 * 1024;

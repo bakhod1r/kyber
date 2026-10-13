@@ -1,5 +1,5 @@
 // chat: HTTP gateway to the chat API and the realtime stream (infrastructure).
-import { request, seg, type List } from "../../../shared/http";
+import { ApiError, isProblem, request, seg, type List } from "../../../shared/http";
 import { onConnect, subscribe } from "../../../shared/stream";
 
 export { onConnect };
@@ -30,6 +30,15 @@ export const chatGateway = {
   unpin: (id: string) => request<Message>("DELETE", `${msg(id)}/pin`),
   pins: (id: string) => request<List<Message>>("GET", `${conv(id)}/pins`).then((r) => r.items),
   search: (q: string) => request<List<Message>>("GET", `/api/v1/chat/search?q=${encodeURIComponent(q)}`).then((r) => r.items),
+  /** Uploads a file as a message (raw body; the header satisfies the CSRF guard for cookie sessions). */
+  upload: async (id: string, file: Blob, name: string): Promise<Message> => {
+    const res = await fetch(`${conv(id)}/files?name=${encodeURIComponent(name)}`, {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream", "X-Kyber-Upload": "1" }, body: file,
+    });
+    const data: unknown = await res.json().catch(() => undefined);
+    if (!res.ok) throw new ApiError(res.status, isProblem(data) ? data.detail || data.title : `upload failed (${res.status})`, isProblem(data) ? data.code : "");
+    return data as Message;
+  },
   presence: (userIds: string[]) =>
     request<{ online: string[] }>("GET", `/api/v1/presence?${userIds.map((u) => `user_id=${encodeURIComponent(u)}`).join("&")}`).then((r) => r.online),
 };

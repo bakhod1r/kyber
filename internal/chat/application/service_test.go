@@ -1,16 +1,20 @@
 package application_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	app "github.com/bakhod1r/kyber/internal/chat/application"
 	"github.com/bakhod1r/kyber/internal/chat/domain"
 	"github.com/bakhod1r/kyber/internal/chat/infrastructure/memory"
+	"github.com/bakhod1r/kyber/internal/platform/blob"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
@@ -343,3 +347,51 @@ func TestPinsAndSearch(t *testing.T) {
 		t.Fatalf("short query = %v", err)
 	}
 }
+
+func TestFiles(t *testing.T) {
+	repo := memory.NewRepository()
+	blobs := blob.NewMemory()
+	n := 0
+	svc := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Members: members{"lead": {"w1"}, "dev": {"w1"}, "qa": {"w1"}},
+		Blobs: blobs, NewID: func() string { n++; return fmt.Sprintf("id-%03d", n) }, Now: time.Now})
+	ctx := tenant.With(context.Background(), "w1")
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "dev", Private: true})
+
+	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{0}, 100)...)
+	m, err := svc.Upload(ctx, "lead", string(ch.ID), "shot.png", bytes.NewReader(png))
+	if err != nil || m.File == nil || m.File.Type != "image/png" || m.File.Size != int64(len(png)) {
+		t.Fatalf("upload = %+v %+v %v (type sniffed, size counted)", m, m.File, err)
+	}
+	f, r, err := svc.Download(ctx, "lead", string(m.ID))
+	if err != nil || f.Name != "shot.png" {
+		t.Fatalf("download = %+v %v", f, err)
+	}
+	got, _ := io.ReadAll(r)
+	r.Close()
+	if !bytes.Equal(got, png) {
+		t.Fatal("bytes differ")
+	}
+	if _, _, err := svc.Download(ctx, "qa", string(m.ID)); !errors.Is(err, domain.ErrMessageNotFound) {
+		t.Fatalf("outsider download = %v", err)
+	}
+	if _, err := svc.Upload(ctx, "qa", string(ch.ID), "x.txt", strings.NewReader("x")); !errors.Is(err, domain.ErrConversationNotFound) {
+		t.Fatalf("outsider upload = %v", err)
+	}
+	big := io.LimitReader(zeros{}, domain.MaxFile+1)
+	if _, err := svc.Upload(ctx, "lead", string(ch.ID), "big.bin", big); !errors.Is(err, domain.ErrInvalidFile) {
+		t.Fatalf("too large = %v", err)
+	}
+	if _, err := blobs.Open(ctx, "id-004"); !errors.Is(err, blob.ErrNotFound) {
+		t.Fatalf("a refused upload leaves no blob: %v", err)
+	}
+	if err := svc.Delete(ctx, "lead", string(m.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := blobs.Open(ctx, string(m.ID)); !errors.Is(err, blob.ErrNotFound) {
+		t.Fatalf("deleting the message deletes the file: %v", err)
+	}
+}
+
+type zeros struct{}
+
+func (zeros) Read(p []byte) (int, error) { clear(p); return len(p), nil }

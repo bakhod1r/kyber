@@ -41,7 +41,9 @@ function routes() {
       message("m-2", "KYB-1 is ready @ali@x.uz", { issues: [{ key: "KYB-1", title: "Login page", status: "done" }], reply_count: 1,
         reactions: [{ emoji: "🎉", user_ids: ["u-2"] }] }),
       message("m-1", "morning", { author_id: "u-1" }),
-      message("m-0", "started a huddle", { kind: "huddle_started" })] } },
+      message("m-0", "started a huddle", { kind: "huddle_started" }),
+      message("m-f", "spec.pdf", { file: { name: "spec.pdf", type: "application/pdf", size: 2048, url: "/api/v1/messages/m-f/file" } }),
+      message("m-i", "shot.png", { file: { name: "shot.png", type: "image/png", size: 99, url: "/api/v1/messages/m-i/file" } })] } },
     "POST /api/v1/conversations/c-1/read": { status: 204 },
     "POST /api/v1/conversations/c-1/typing": { status: 204 },
     "POST /api/v1/conversations/c-1/messages": { status: 201, body: message("m-3", "ship it", { author_id: "u-1" }) },
@@ -85,6 +87,8 @@ describe("Chat (S53)", () => {
     expect(within(history).getByRole("button", { name: "1 reply" })).toBeInTheDocument();
     expect(await screen.findByText("All hands")).toBeInTheDocument();
     expect(within(history).getByRole("article", { name: /Huddle at/ })).toHaveTextContent("Bobur started a huddle");
+    expect(within(history).getByRole("link", { name: "📎 spec.pdf (2 KB)" })).toHaveAttribute("href", "/api/v1/messages/m-f/file");
+    expect(within(history).getByRole("img", { name: "shot.png" })).toHaveAttribute("src", "/api/v1/messages/m-i/file");
     expect(calls.some((c) => c.key === "POST /api/v1/conversations/c-1/read")).toBe(true);
   });
 
@@ -132,6 +136,28 @@ describe("Chat (S53)", () => {
     await user.click(await screen.findByRole("checkbox", { name: "Bobur" }));
     await user.click(screen.getByRole("button", { name: "Open" }));
     expect(calls.find((c) => c.key === "POST /api/v1/dms")?.body).toEqual({ user_ids: ["u-2"] });
+  });
+});
+
+describe("Chat files (S54b)", () => {
+  it("uploads a file with the upload header and shows it", async () => {
+    const calls = routes();
+    const uploads: { headers: Headers }[] = [];
+    const base = globalThis.fetch;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/files?name=")) {
+        uploads.push({ headers: new Headers(init?.headers) });
+        return new Response(JSON.stringify(message("m-u", "notes.txt", { author_id: "u-1", file: { name: "notes.txt", type: "text/plain", size: 5, url: "/api/v1/messages/m-u/file" } })), { status: 201 });
+      }
+      return base(input, init);
+    });
+    const user = userEvent.setup();
+    renderChat();
+    await screen.findByText("morning");
+    await user.upload(screen.getByLabelText("Attach a file"), new File(["hello"], "notes.txt", { type: "text/plain" }));
+    expect(await screen.findByRole("link", { name: "📎 notes.txt (5 B)" })).toBeInTheDocument();
+    expect(uploads[0]?.headers.get("X-Kyber-Upload")).toBe("1");
+    expect(calls.length).toBeGreaterThan(0);
   });
 });
 

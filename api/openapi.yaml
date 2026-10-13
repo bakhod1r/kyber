@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.41.0
+  version: 0.42.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -861,6 +861,36 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/files:
+    post:
+      operationId: uploadFile
+      description: |
+        Posts a file (the request body, at most 25 MB) to the conversation (members only). Its type is detected
+        from the content. Cookie sessions must send `X-Kyber-Upload: 1` (CSRF guard).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: X-Kyber-Upload, in: header, schema: { type: string, enum: ["1"] } }
+      requestBody:
+        required: true
+        content: { application/octet-stream: { schema: { type: string, format: binary } } }
+      responses:
+        "201": { description: Posted, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/messages/{id}/file:
+    get:
+      operationId: downloadFile
+      description: |
+        The message's file, for people who may read the conversation. Images, video, audio and PDF are shown
+        inline; everything else is downloaded. Served with nosniff and a sandboxing CSP.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: The file, content: { "*/*": { schema: { type: string, format: binary } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/focus:
     get:
       operationId: currentFocus
@@ -2620,7 +2650,7 @@ components:
         created_at: { type: string, format: date-time }
     Message:
       type: object
-      required: [id, conversation_id, author_id, body, created_at, edited_at, deleted, thread_id, reply_count, reactions, issues, kind, pinned_by, pinned_at]
+      required: [id, conversation_id, author_id, body, created_at, edited_at, deleted, thread_id, reply_count, reactions, issues, kind, file, pinned_by, pinned_at]
       properties:
         id: { type: string }
         conversation_id: { type: string }
@@ -2632,6 +2662,11 @@ components:
         thread_id: { oneOf: [{ type: string }, { type: "null" }], description: The parent message of a reply }
         reply_count: { type: integer }
         kind: { type: string, enum: ["", huddle_started, huddle_ended], description: "Empty for people's messages; system messages cannot be edited." }
+        file:
+          description: An attached file; download it from url (members of the conversation only).
+          oneOf:
+            - { type: "null" }
+            - { type: object, required: [name, type, size, url], properties: { name: { type: string }, type: { type: string }, size: { type: integer }, url: { type: string } } }
         pinned_by: { oneOf: [{ type: string }, { type: "null" }] }
         pinned_at: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
         issues:

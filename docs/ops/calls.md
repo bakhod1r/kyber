@@ -50,6 +50,13 @@ the streams of the replica that answers — a known limit.
 The reverse proxy must not buffer `text/event-stream` responses (`/api/v1/stream`, `/api/v1/events`): Kyber
 sends `X-Accel-Buffering: no` for nginx; keep read timeouts above the 25-second heartbeat.
 
+## Files
+
+Chat files (and, later, huddle recordings) are kept under `KYBER_FILES_DIR` (one file per message id, two
+levels deep). Back the directory up together with the database. Without it, files live in memory and vanish on
+restart (fine for a demo). With several replicas, put the directory on shared storage — or wait for the S3
+adapter.
+
 ## Metrics
 
 `GET /metrics` adds:
