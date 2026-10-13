@@ -33,3 +33,5 @@
 ./internal/announcement/application
 ./internal/announcement/infrastructure/memory
 ./internal/announcement/infrastructure/acl
+./internal/admin/application
+./internal/admin/infrastructure/acl

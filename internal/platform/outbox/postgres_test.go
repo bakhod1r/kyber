@@ -107,11 +107,21 @@ func TestPostgresStoreEnvelopeAndDeadLetters(t *testing.T) {
 	if n, _ := relay.ProcessOnce(ctx); n != 0 || len(got) != 3 {
 		t.Fatalf("dead letter redelivered: n=%d", n)
 	}
-	if err := store.Retry(ctx, dead[0].ID); err != nil {
+	ws := dead[0].Workspace
+	if mine, err := store.DeadLettersOf(ctx, ws, 10); err != nil || len(mine) != 1 {
+		t.Fatalf("workspace dead letters = %v %v", mine, err)
+	}
+	if other, _ := store.DeadLettersOf(ctx, "00000000-0000-4000-8000-0000000000ff", 10); len(other) != 0 {
+		t.Fatalf("other workspace sees %v", other)
+	}
+	if err := store.RetryOf(ctx, "00000000-0000-4000-8000-0000000000ff", dead[0].ID); !errors.Is(err, outbox.ErrNotDead) {
+		t.Fatalf("other workspace retries: %v", err)
+	}
+	if err := store.RetryOf(ctx, ws, dead[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Retry(ctx, dead[0].ID); !errors.Is(err, outbox.ErrNotDead) {
-		t.Fatalf("retry twice: %v", err)
+		t.Fatalf("already retried: %v", err)
 	}
 	fixed := outbox.NewRelay(store, quiet())
 	fixed.Handle("poison", func(_ context.Context, m outbox.Message) error {

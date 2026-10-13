@@ -70,3 +70,20 @@ func TestDefaultWorkspace(t *testing.T) {
 		t.Fatal("single-tenant installs live in the default workspace")
 	}
 }
+
+func TestChangeRole(t *testing.T) {
+	w, _ := domain.NewWorkspace("w-1", "acme", "Acme", "u-1")
+	if err := w.ChangeRole("u-2", domain.RoleAdmin); !errors.Is(err, domain.ErrNotMember) {
+		t.Fatalf("non-member: %v", err)
+	}
+	_ = w.AddMember("u-2", domain.RoleMember)
+	if err := w.ChangeRole("u-2", domain.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := w.RoleOf("u-2"); r != domain.RoleAdmin {
+		t.Fatalf("role = %s", r)
+	}
+	if err := w.ChangeRole("u-1", domain.RoleMember); !errors.Is(err, domain.ErrLastOwner) {
+		t.Fatalf("last owner: %v", err)
+	}
+}

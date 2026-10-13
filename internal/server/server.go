@@ -21,6 +21,9 @@ import (
 	accesspg "github.com/bakhod1r/kyber/internal/access/infrastructure/postgres"
 	"github.com/bakhod1r/kyber/internal/access/infrastructure/projectcompat"
 	accesshttp "github.com/bakhod1r/kyber/internal/access/interfaces/httpapi"
+	adminapp "github.com/bakhod1r/kyber/internal/admin/application"
+	adminacl "github.com/bakhod1r/kyber/internal/admin/infrastructure/acl"
+	adminhttp "github.com/bakhod1r/kyber/internal/admin/interfaces/httpapi"
 	agileapp "github.com/bakhod1r/kyber/internal/agile/application"
 	agiledomain "github.com/bakhod1r/kyber/internal/agile/domain"
 	agileissueacl "github.com/bakhod1r/kyber/internal/agile/infrastructure/issueacl"
@@ -460,6 +463,12 @@ func build(log *slog.Logger, d deps) http.Handler {
 	insightshttp.New(insights, log).Register(api)
 	importerhttp.New(importer, log).Register(api)
 	tenancy.Register(api)
+	if dead, ok := d.outbox.(adminacl.Store); ok {
+		adminhttp.New(adminapp.NewService(adminapp.Deps{
+			Gate: adminacl.NewGate(workspaces, d.siteAdmin), Directory: adminacl.NewDirectory(workspaces, projects, d.users, d.siteAdmin),
+			Projects: adminacl.NewProjects(projects), DeadLetters: adminacl.NewDeadLetters(dead),
+		}), log).Register(api)
+	}
 	api.Handle("GET /api/v1/events", hub.Handler(func(ctx context.Context, user, project string) bool {
 		return projects.Authorize(ctx, projectdomain.UserID(user), project, projectdomain.PermRead) == nil
 	}, 25*time.Second))

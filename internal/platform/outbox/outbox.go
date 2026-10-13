@@ -234,6 +234,27 @@ func (s *MemoryStore) DeadLetters() []Message {
 	return slices.Clone(s.dead)
 }
 
+// DeadLettersOf lists one workspace's parked messages, oldest first.
+func (s *MemoryStore) DeadLettersOf(_ context.Context, workspace string, limit int) ([]Message, error) {
+	var out []Message
+	for _, m := range s.DeadLetters() {
+		if m.Workspace == workspace && len(out) < limit {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+// RetryOf retries a dead letter of the workspace; ErrNotDead for any other message.
+func (s *MemoryStore) RetryOf(_ context.Context, workspace string, id int64) error {
+	for _, m := range s.DeadLetters() {
+		if m.ID == id && m.Workspace == workspace {
+			return s.Retry(id)
+		}
+	}
+	return ErrNotDead
+}
+
 // Retry puts a dead letter back at the head of the queue with its attempts reset.
 func (s *MemoryStore) Retry(id int64) error {
 	s.mu.Lock()

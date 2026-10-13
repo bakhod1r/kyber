@@ -1,14 +1,16 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { identityUseCases, type User } from "../contexts/identity/application";
 import { FocusTimer } from "../contexts/focus/ui/Focus";
 import { NotificationBell } from "../contexts/notify/ui/NotificationBell";
 import { useLive } from "../shared/live";
+import { adminUseCases } from "../contexts/admin/application";
 
 export function Layout({ user, children }: { user: User; children: ReactNode }) {
   const qc = useQueryClient();
   useLive();
+  const admin = useQuery({ queryKey: ["admin", "access"], queryFn: adminUseCases.access, retry: false });
   const navigate = useNavigate();
   const logout = useMutation({
     mutationFn: identityUseCases.logout,
@@ -30,6 +32,11 @@ export function Layout({ user, children }: { user: User; children: ReactNode }) 
         <Link to="/meetings" className="nav-link">
           Time table
         </Link>
+        {admin.data && (
+          <Link to="/admin" className="nav-link">
+            Admin
+          </Link>
+        )}
         <span className="spacer" />
         <FocusTimer />
         <NotificationBell />

@@ -115,3 +115,37 @@ func TestMemberIDs(t *testing.T) {
 		t.Fatalf("missing: %v", err)
 	}
 }
+
+func TestMembersAndRoles(t *testing.T) {
+	ctx := context.Background()
+	s := setup()
+	w, _ := s.Create(ctx, "u-1", "acme", "Acme")
+	ws := string(w.ID())
+	_ = s.Join(ctx, ws, "u-2")
+	if err := s.ChangeRole(ctx, ws, "u-2", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	ms, err := s.Members(ctx, ws)
+	if err != nil || len(ms) != 2 || ms[1].UserID != "u-2" || ms[1].Role != domain.RoleAdmin {
+		t.Fatalf("members = %+v %v", ms, err)
+	}
+	for _, tc := range []struct {
+		ws, user, role string
+		want           error
+	}{
+		{ws, "u-1", "member", domain.ErrLastOwner},
+		{ws, "u-9", "member", domain.ErrNotMember},
+		{ws, "u-2", "boss", domain.ErrInvalidRole},
+		{"missing", "u-2", "member", domain.ErrWorkspaceNotFound},
+	} {
+		if err := s.ChangeRole(ctx, tc.ws, tc.user, tc.role); !errors.Is(err, tc.want) {
+			t.Errorf("%+v: %v", tc, err)
+		}
+	}
+	if ms, err := s.Members(ctx, string(domain.DefaultID)); err != nil || ms != nil {
+		t.Fatalf("default = %v %v", ms, err)
+	}
+	if _, err := s.Members(ctx, "missing"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+}

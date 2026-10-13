@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.36.0
+  version: 0.37.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -234,6 +234,81 @@ paths:
         "200": { description: Current user, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
         "401": { $ref: "#/components/responses/Error" }
 
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/access:
+    get:
+      operationId: adminAccess
+      description: Whether the caller administers this workspace (owners/admins; KYBER_ADMIN_EMAILS in single-tenant mode).
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, required: [admin], properties: { admin: { type: boolean } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/members:
+    get:
+      operationId: adminMembers
+      description: The workspace's people and roles (single-tenant mode - everyone in a project).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/AdminMember" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/members/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: adminChangeRole
+      description: Changes a member's workspace role; the last owner stays. Not available in single-tenant mode (409).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [role], properties: { role: { type: string, enum: [owner, admin, member] } } } } }
+      responses:
+        "204": { description: Changed }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/projects:
+    get:
+      operationId: adminProjects
+      description: Every project of the workspace with its member count.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/AdminProject" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/dead-letters:
+    get:
+      operationId: adminDeadLetters
+      description: The workspace's events whose handlers kept failing (ADR-0007), oldest first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/DeadLetter" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/dead-letters/{id}/retry:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: adminRetryDeadLetter
+      description: Queues a dead letter again once its handler is fixed.
+      responses:
+        "204": { description: Queued }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/meetings:
     get:
@@ -2224,6 +2299,28 @@ components:
         body: { type: string }
         by: { type: string }
         at: { type: string, format: date-time }
+    AdminMember:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [owner, admin, member] }
+    AdminProject:
+      type: object
+      required: [key, name, members]
+      properties: { key: { type: string }, name: { type: string }, members: { type: integer } }
+    DeadLetter:
+      type: object
+      required: [id, event, actor_id, at, attempts, last_error]
+      properties:
+        id: { type: integer }
+        event: { type: string }
+        actor_id: { type: string }
+        at: { type: string, format: date-time }
+        attempts: { type: integer }
+        last_error: { type: string }
     Announcement:
       type: object
       required: [id, project_key, title, body, author_id, created_at]

@@ -89,3 +89,26 @@ func (s *PostgresStore) Retry(ctx context.Context, id int64) error {
 	}
 	return nil
 }
+
+// DeadLettersOf lists one workspace's parked messages, oldest first (its administrators' view).
+func (s *PostgresStore) DeadLettersOf(ctx context.Context, workspace string, limit int) ([]Message, error) {
+	rows, err := s.pool.Query(ctx, `SELECT `+columns+` FROM outbox WHERE dead_at IS NOT NULL AND workspace_id::text = $1
+		ORDER BY id LIMIT $2`, workspace, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, scanMessage)
+}
+
+// RetryOf retries a dead letter of the workspace; ErrNotDead for any other message.
+func (s *PostgresStore) RetryOf(ctx context.Context, workspace string, id int64) error {
+	tag, err := s.pool.Exec(ctx, `UPDATE outbox SET dead_at = NULL, attempts = 0, last_error = ''
+		WHERE id = $1 AND dead_at IS NOT NULL AND workspace_id::text = $2`, id, workspace)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotDead
+	}
+	return nil
+}

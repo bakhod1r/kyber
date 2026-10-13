@@ -60,6 +60,11 @@ const (
 	CodePageConflict         = "PAGE_CONFLICT"
 	CodeFormNotFound         = "FORM_NOT_FOUND"
 	CodeFormConflict         = "FORM_CONFLICT"
+	CodeAdminForbidden       = "ADMIN_FORBIDDEN"
+	CodeLastOwner            = "LAST_OWNER"
+	CodeSingleTenantRoles    = "SINGLE_TENANT_ROLES"
+	CodeMemberNotFound       = "MEMBER_NOT_FOUND"
+	CodeDeadLetterNotFound   = "DEAD_LETTER_NOT_FOUND"
 	CodeNotificationNotFound = "NOTIFICATION_NOT_FOUND"
 	CodeImportTooLarge       = "IMPORT_TOO_LARGE"
 	CodeImportInvalidFile    = "IMPORT_INVALID_FILE"
@@ -130,6 +135,11 @@ var codes = []code{
 	{CodePageConflict, "6086", 409, "Someone else changed this page. Reload and try again.", "Sahifani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Страницу изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeFormNotFound, "6087", 404, "Form not found.", "Forma topilmadi.", "Форма не найдена.", errorx.CategoryBusiness},
 	{CodeFormConflict, "6088", 409, "Someone else changed this form. Reload and try again.", "Formani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Форму изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
+	{CodeAdminForbidden, "6041", 403, "Only workspace administrators can do this.", "Buni faqat workspace administratorlari qila oladi.", "Это доступно только администраторам рабочего пространства.", errorx.CategorySecurity},
+	{CodeLastOwner, "6042", 409, "A workspace must keep at least one owner.", "Workspace'da kamida bitta egasi qolishi kerak.", "В рабочем пространстве должен остаться хотя бы один владелец.", errorx.CategoryBusiness},
+	{CodeSingleTenantRoles, "6043", 409, "Roles in this installation are set with KYBER_ADMIN_EMAILS.", "Bu o'rnatishda rollar KYBER_ADMIN_EMAILS orqali belgilanadi.", "В этой установке роли задаются через KYBER_ADMIN_EMAILS.", errorx.CategoryBusiness},
+	{CodeMemberNotFound, "6044", 404, "This person is not a member of the workspace.", "Bu kishi workspace a'zosi emas.", "Этот человек не состоит в рабочем пространстве.", errorx.CategoryBusiness},
+	{CodeDeadLetterNotFound, "6045", 404, "No such stuck event.", "Bunday to'xtab qolgan hodisa yo'q.", "Такого зависшего события нет.", errorx.CategoryBusiness},
 	{CodeLastBoard, "6026", 409, "A project must keep at least one board.", "Loyihada kamida bitta board qolishi kerak.", "В проекте должна остаться хотя бы одна доска.", errorx.CategoryBusiness},
 	{CodeNotificationNotFound, "6040", 404, "Notification not found.", "Bildirishnoma topilmadi.", "Уведомление не найдено.", errorx.CategoryBusiness},
 	{CodeImportTooLarge, "6050", 413, "The file is too large to import (10 MB max).", "Fayl import uchun juda katta (ko'pi bilan 10 MB).", "Файл слишком большой для импорта (не более 10 МБ).", errorx.CategoryValidation},

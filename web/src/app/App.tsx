@@ -6,6 +6,7 @@ import { Layout } from "./Layout";
 import { AuthPage } from "../contexts/identity/ui/AuthPage";
 import { LandingPage } from "./LandingPage";
 import { MeetingsPage } from "../contexts/calendar/ui/MeetingsPage";
+import { AdminPage } from "../contexts/admin/ui/AdminPage";
 import { Announcements } from "../contexts/announcement/ui/Announcements";
 import { ProjectPage } from "./ProjectPage";
 import { SettingsPage } from "../contexts/notify/ui/SettingsPage";
@@ -51,6 +52,7 @@ export function AppRoutes() {
       <Route path="/login" element={<AuthPage mode="login" />} />
       <Route path="/signup" element={<AuthPage mode="signup" />} />
       <Route path="/" element={<Home />} />
+      <Route path="/admin" element={<RequireUser><AdminPage /></RequireUser>} />
       <Route path="/projects/:key" element={<RequireUser><ProjectPage /></RequireUser>} />
       <Route path="/projects/:key/backlog" element={<RequireUser><ProjectPage view="backlog" /></RequireUser>} />
       <Route path="/projects/:key/reports" element={<RequireUser><ProjectPage view="reports" /></RequireUser>} />
