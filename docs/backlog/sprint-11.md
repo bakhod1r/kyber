@@ -34,4 +34,10 @@ backends.
   short-lived TURN credentials (`KYBER_ICE_SERVERS`, `KYBER_TURN_SECRET`).
 - **S57 Huddle UI** — WebRTC mesh: camera, microphone, screen share (`getDisplayMedia`) with mute/camera/share
   toggles, participant grid, active-speaker highlight, device picker, join from channel header.
+- **S59 Whiteboard (Zoom-style drawing)** — open a whiteboard in a huddle or channel; draw rectangles, ellipses,
+  arrows, lines, freehand, text and sticky notes (e.g. an architecture diagram); everyone sees changes and
+  cursors live; undo/redo; export PNG/SVG; sticky note → issue. AC: only conversation members open or edit it;
+  two people moving the same shape end in one consistent state; it is kept after the call ends.
+- **S60 Shared file in a call** — "present to all": everyone opens the same Markdown doc or whiteboard, edits it
+  together and comments on a line/element; the presenter can follow-me (everyone scrolls with them).
 - **S58 Ops** (P1) — coturn example in docker-compose/Helm docs, call metrics (`kyber_calls_active`), SFU ADR.

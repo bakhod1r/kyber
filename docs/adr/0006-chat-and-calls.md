@@ -24,6 +24,8 @@ SaaS: everything runs on the operator's server.
 | Web UI (sidebar, channel view, composer, threads) | ✅ S53 | |
 | Pins, search, file uploads (via attachment BlobStore) | S54 | |
 | **Huddles**: audio, video, screen share in a channel or DM | ✅ S55–S57 | recording, SFU |
+| **Whiteboard** in a huddle (Zoom-style): draw shapes, arrows, sticky notes, text — e.g. an architecture diagram | ✅ S59 | templates, export to issue |
+| **Shared file** in a huddle: everyone opens the same doc/diagram, edits and comments on it live | ✅ S60 | version history |
 | Workflows, bots, apps, Slack Connect, statuses with emoji | — | out of scope |
 
 ## Decision
@@ -55,6 +57,16 @@ SaaS: everything runs on the operator's server.
    `0037_chat`, `0038_calls`. Signaling messages are never stored.
 6. **Events.** Chat writes `message.posted` (and edited/deleted) to the outbox in the same transaction; Notify
    consumes it for mentions; the realtime Hub is fed from the app layer after commit.
+
+7. **Whiteboard and shared files (S59–S60).** A `Board` (whiteboard) aggregate in the Call context, also
+   attachable to a channel so it outlives the call. The canvas is a list of elements (`rect`, `ellipse`,
+   `arrow`, `line`, `freehand`, `text`, `sticky`, `image`) with id, position, style and a per-element version.
+   Edits are small operations (`add`, `move`, `update`, `delete`) sent by POST and fanned out over the stream;
+   conflicts resolve last-writer-wins per element (version check), which is enough for whiteboards and needs no
+   CRDT library. Live cursors and "who is drawing" are ephemeral stream events. A shared file is a Markdown
+   document or a whiteboard opened by everyone in the call ("present to all"), with comments anchored to a
+   line or element. Export: PNG/SVG, and "create issue from sticky note". Frontend draws on an HTML canvas
+   (no external SaaS).
 
 ## Consequences
 - No new Go dependency for v1; the frontend uses only browser APIs (`EventSource`, `RTCPeerConnection`).
