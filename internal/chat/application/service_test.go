@@ -240,3 +240,37 @@ func TestThreadsAndReactions(t *testing.T) {
 		t.Fatalf("events = %v", *ev)
 	}
 }
+
+// issues is a fake Issue Tracking port: key → preview and who may see it.
+type issues map[string]struct {
+	app.IssuePreview
+	viewers []string
+}
+
+func (f issues) Preview(_ context.Context, user, key string) (app.IssuePreview, bool, error) {
+	i, ok := f[key]
+	if !ok || !slices.Contains(i.viewers, user) {
+		return app.IssuePreview{}, false, nil
+	}
+	return i.IssuePreview, true, nil
+}
+
+func TestIssuePreviews(t *testing.T) {
+	svc, ctx := setup(t)
+	svc.WithIssues(issues{
+		"KYB-1": {app.IssuePreview{Key: "KYB-1", Title: "Login", Status: "In Progress"}, []string{"lead", "dev"}},
+		"HR-2":  {app.IssuePreview{Key: "HR-2", Title: "Salaries", Status: "To Do"}, []string{"lead"}},
+	})
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "dev"})
+	m1, _ := svc.Post(ctx, "lead", string(ch.ID), "KYB-1 and HR-2 are blocked")
+	m2, _ := svc.Post(ctx, "lead", string(ch.ID), "no issues here, and NOPE-9")
+	msgs := []*domain.Message{m1, m2}
+
+	dev, err := svc.Previews(ctx, "dev", msgs)
+	if err != nil || len(dev[m1.ID]) != 1 || dev[m1.ID][0].Title != "Login" || len(dev[m2.ID]) != 0 {
+		t.Fatalf("dev previews = %v %v (HR-2 hidden)", dev, err)
+	}
+	if lead, _ := svc.Previews(ctx, "lead", msgs); len(lead[m1.ID]) != 2 || lead[m1.ID][1].Status != "To Do" {
+		t.Fatalf("lead previews = %v", lead)
+	}
+}

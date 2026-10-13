@@ -27,7 +27,8 @@ backends.
   reactions, `message.reacted` on the stream; API 0.29.0).
   ✅ **Mentions done (S52b):** `chat.message_posted` goes through the outbox; Notify tells `@email`-mentioned people who
   may read the conversation (inbox + email/Telegram copies, link to `/chat/{id}`); migration 0041, API 0.31.0.
-  Issue previews follow (S52c).
+  ✅ **Issue previews done (S52c):** up to 5 keys per message, resolved per reader through Issue Tracking's
+  authorized read (hidden issues are not previewed); `issues` on every REST message.
 - **S53 Chat UI** — sidebar (channels, DMs, unread badges), channel view with infinite scroll, composer with
   mentions, thread panel, reactions, typing line; TanStack Query + the stream.
 - **S54 Pins, search, files** (P1) — pin messages, search in messages I can read, file attachments via BlobStore.

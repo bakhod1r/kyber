@@ -178,3 +178,25 @@ func TestChatMentions(t *testing.T) {
 		}
 	})
 }
+
+// S52c: issue keys in a message come back as previews, only for readers who may browse the issue.
+func TestChatIssuePreviews(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		lead.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		lead.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "Login page", "type": "task"})
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "general"})
+		url := "/api/v1/conversations/" + ch["id"].(string) + "/messages"
+		code, m := lead.do("POST", url, map[string]string{"body": "KYB-1 is ready, KYB-99 is not"})
+		expect(t, code, 201, m)
+		if ps := m["issues"].([]any); len(ps) != 1 || ps[0].(map[string]any)["title"] != "Login page" || ps[0].(map[string]any)["key"] != "KYB-1" ||
+			ps[0].(map[string]any)["status"] == "" {
+			t.Fatalf("lead preview = %v", m)
+		}
+		_, page := dev.do("GET", url, nil)
+		if ps := page["items"].([]any)[0].(map[string]any)["issues"].([]any); len(ps) != 0 {
+			t.Fatalf("dev is not in KYB, yet sees %v", ps)
+		}
+	})
+}

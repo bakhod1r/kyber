@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 
+	"github.com/bakhod1r/kyber/internal/chat/application"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
+	issuedomain "github.com/bakhod1r/kyber/internal/issue/domain"
 )
 
 type Membership interface {
@@ -32,4 +34,23 @@ func (m Members) IsMember(ctx context.Context, workspace, user string) (bool, er
 		return false, err
 	}
 	return m.ws.IsMember(ctx, workspace, user)
+}
+
+// IssueReader is Issue Tracking's authorized read (browse permission and security level).
+type IssueReader interface {
+	Get(ctx context.Context, actor, rawKey string) (*issuedomain.Issue, error)
+}
+
+// Issues previews issues for chat readers; anything the reader may not browse (or that does not
+// exist) is simply not previewed.
+type Issues struct{ src IssueReader }
+
+func NewIssues(src IssueReader) Issues { return Issues{src: src} }
+
+func (i Issues) Preview(ctx context.Context, user, key string) (application.IssuePreview, bool, error) {
+	is, err := i.src.Get(ctx, user, key)
+	if err != nil {
+		return application.IssuePreview{}, false, nil
+	}
+	return application.IssuePreview{Key: is.Key().String(), Title: is.Title(), Status: string(is.Status())}, true, nil
 }

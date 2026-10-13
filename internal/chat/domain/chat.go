@@ -289,3 +289,20 @@ type Messages interface {
 	// Replies lists a thread, oldest first.
 	Replies(ctx context.Context, parent MessageID) ([]*Message, error)
 }
+
+// MaxPreviews caps the issues previewed for one message.
+const MaxPreviews = 5
+
+// issueKey: a project key (2–10 upper-case letters/digits, starting with a letter) and a number from 1.
+var issueKey = regexp.MustCompile(`(?:^|[^A-Za-z0-9_-])([A-Z][A-Z0-9]{1,9}-[1-9][0-9]{0,8})\b`)
+
+// IssueKeys lists the distinct issue keys written in a message body, in order.
+func IssueKeys(body string) []string {
+	var out []string
+	for _, m := range issueKey.FindAllStringSubmatch(body, -1) {
+		if !slices.Contains(out, m[1]) && len(out) < MaxPreviews {
+			out = append(out, m[1])
+		}
+	}
+	return out
+}

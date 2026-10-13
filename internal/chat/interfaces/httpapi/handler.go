@@ -95,6 +95,13 @@ type messageDTO struct {
 	ThreadID       *string    `json:"thread_id"`
 	ReplyCount     int        `json:"reply_count"`
 	Reactions      []reaction `json:"reactions"`
+	Issues         []issueDTO `json:"issues"`
+}
+
+type issueDTO struct {
+	Key    string `json:"key"`
+	Title  string `json:"title"`
+	Status string `json:"status"`
 }
 
 type reaction struct {
@@ -235,15 +242,42 @@ func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	h.messages(w, ms)
+	h.messages(w, r, ms)
 }
 
-func (h *Handler) messages(w http.ResponseWriter, ms []*domain.Message) {
+// render turns messages into DTOs with the issue previews the caller may see.
+func (h *Handler) render(r *http.Request, ms ...*domain.Message) ([]messageDTO, error) {
+	previews, err := h.svc.Previews(r.Context(), auth.Actor(r.Context()), ms)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]messageDTO, len(ms))
 	for i, m := range ms {
 		out[i] = toMessage(m)
+		out[i].Issues = []issueDTO{}
+		for _, p := range previews[m.ID] {
+			out[i].Issues = append(out[i].Issues, issueDTO{Key: p.Key, Title: p.Title, Status: p.Status})
+		}
+	}
+	return out, nil
+}
+
+func (h *Handler) messages(w http.ResponseWriter, r *http.Request, ms []*domain.Message) {
+	out, err := h.render(r, ms...)
+	if err != nil {
+		h.fail(w, r, err)
+		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+func (h *Handler) message(w http.ResponseWriter, r *http.Request, status int, m *domain.Message) {
+	out, err := h.render(r, m)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, status, out[0])
 }
 
 func decodeBody(r *http.Request) (string, error) {
@@ -265,7 +299,7 @@ func (h *Handler) post(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusCreated, toMessage(m))
+	h.message(w, r, http.StatusCreated, m)
 }
 
 func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
@@ -279,7 +313,7 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toMessage(m))
+	h.message(w, r, http.StatusOK, m)
 }
 
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
@@ -296,7 +330,7 @@ func (h *Handler) replies(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	h.messages(w, ms)
+	h.messages(w, r, ms)
 }
 
 func (h *Handler) reply(w http.ResponseWriter, r *http.Request) {
@@ -310,7 +344,7 @@ func (h *Handler) reply(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusCreated, toMessage(m))
+	h.message(w, r, http.StatusCreated, m)
 }
 
 func (h *Handler) react(w http.ResponseWriter, r *http.Request) {
@@ -326,5 +360,5 @@ func (h *Handler) react(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, toMessage(m))
+	h.message(w, r, http.StatusOK, m)
 }

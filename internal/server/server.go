@@ -325,6 +325,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	hub := realtime.NewHub(1024)
 	chat := chatapp.NewService(chatapp.Deps{Notifier: chatrealtime.New(hub), Conversations: d.conversations, Messages: d.messages,
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
+	chat.WithIssues(chatacl.NewIssues(issues))
 	notify.WithConversations(notifyacl.NewConversations(chat))
 	relay := outbox.NewRelay(d.outbox, log)
 	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated", "issue.imported"} {

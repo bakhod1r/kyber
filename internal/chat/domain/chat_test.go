@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -166,5 +167,19 @@ func TestPostedEvent(t *testing.T) {
 	}
 	if ev := r.PullEvents(); len(ev) != 1 || ev[0].Thread != "m-1" {
 		t.Fatalf("reply events = %+v", ev)
+	}
+}
+
+func TestIssueKeys(t *testing.T) {
+	got := domain.IssueKeys("see KYB-12, kyb-3 and (OPS-7). KYB-12 again; mail a-1@x.uz; KYB-0 X-1 ABCDEFGHIJK-2")
+	if fmt.Sprint(got) != "[KYB-12 OPS-7]" {
+		t.Fatalf("keys = %v", got)
+	}
+	var many []string
+	for i := 1; i <= 20; i++ {
+		many = append(many, fmt.Sprintf("KYB-%d", i))
+	}
+	if len(domain.IssueKeys(strings.Join(many, " "))) != domain.MaxPreviews {
+		t.Fatal("previews are capped")
 	}
 }

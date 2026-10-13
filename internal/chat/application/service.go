@@ -32,7 +32,16 @@ type nobody struct{}
 
 func (nobody) Notify(context.Context, []domain.UserID, domain.Event) {}
 
+// IssuePreview is an issue mentioned by key in a message, as the reader may see it.
+type IssuePreview struct{ Key, Title, Status string }
+
+// Issues is the port to Issue Tracking: the preview of an issue if user may browse it.
+type Issues interface {
+	Preview(ctx context.Context, user, key string) (IssuePreview, bool, error)
+}
+
 type Deps struct {
+	Issues        Issues   // optional: issue previews
 	Notifier      Notifier // optional
 	Conversations domain.Repository
 	Messages      domain.Messages
@@ -354,4 +363,40 @@ func (s *Service) React(ctx context.Context, actor, id, emoji string) (*domain.M
 	}
 	s.d.Notifier.Notify(ctx, c.Members, domain.MessageReacted{Message: *m})
 	return m, nil
+}
+
+// WithIssues enables issue previews.
+func (s *Service) WithIssues(i Issues) *Service {
+	s.d.Issues = i
+	return s
+}
+
+// Previews resolves the issue keys written in messages to the issues actor may browse.
+func (s *Service) Previews(ctx context.Context, actor string, msgs []*domain.Message) (map[domain.MessageID][]IssuePreview, error) {
+	out := map[domain.MessageID][]IssuePreview{}
+	if s.d.Issues == nil {
+		return out, nil
+	}
+	type seen struct {
+		p  IssuePreview
+		ok bool
+	}
+	cache := map[string]seen{}
+	for _, m := range msgs {
+		for _, key := range domain.IssueKeys(m.Body) {
+			c, done := cache[key]
+			if !done {
+				p, ok, err := s.d.Issues.Preview(ctx, actor, key)
+				if err != nil {
+					return nil, err
+				}
+				c = seen{p, ok}
+				cache[key] = c
+			}
+			if c.ok {
+				out[m.ID] = append(out[m.ID], c.p)
+			}
+		}
+	}
+	return out, nil
 }
