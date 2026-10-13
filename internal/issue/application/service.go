@@ -71,6 +71,7 @@ type Service struct {
 	history   domain.HistoryRepository
 	links     domain.LinkRepository
 	watchers  domain.WatcherRepository
+	worklogs  domain.WorklogRepository
 	levels    []string
 	newID     func() string
 	now       func() time.Time
@@ -89,6 +90,7 @@ type Deps struct {
 	History   domain.HistoryRepository
 	Links     domain.LinkRepository
 	Watchers  domain.WatcherRepository // optional: without it nobody watches issues
+	Worklogs  domain.WorklogRepository // optional: the worklog list (projection)
 	// SecurityLevels are the issue security levels that can be set (ids, see the Access context).
 	SecurityLevels []string
 	NewID          func() string
@@ -98,7 +100,7 @@ type Deps struct {
 func NewService(d Deps) *Service {
 	return &Service{issues: d.Issues, comments: d.Comments, keys: d.Keys, access: d.Access,
 		directory: d.Directory, sprints: d.Sprints, workflow: d.Workflow,
-		workflows: d.Workflows, history: d.History, links: d.Links, watchers: d.Watchers, levels: d.SecurityLevels, newID: d.NewID, now: d.Now}
+		workflows: d.Workflows, history: d.History, links: d.Links, watchers: d.Watchers, worklogs: d.Worklogs, levels: d.SecurityLevels, newID: d.NewID, now: d.Now}
 }
 
 type CreateIssue struct {

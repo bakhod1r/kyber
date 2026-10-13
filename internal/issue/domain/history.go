@@ -29,7 +29,7 @@ func (IssueChanged) EventName() string { return "issue.changed" }
 func (i *Issue) Snapshot() Snapshot {
 	return Snapshot{ID: i.id, Key: i.key, Title: i.title, Type: i.typ, Status: i.status, Description: i.description,
 		Priority: i.priority, Assignee: i.assignee, Reporter: i.reporter, Estimate: i.estimate, Rank: i.rank, Sprint: i.sprint,
-		Parent: i.parent, ParentKey: i.parentKey, Security: i.security, Resolution: i.resolution, FixVersions: slices.Clone(i.fixVersions), Version: i.version}
+		Parent: i.parent, ParentKey: i.parentKey, Security: i.security, Resolution: i.resolution, FixVersions: slices.Clone(i.fixVersions), Time: i.time, Version: i.version}
 }
 
 func (i *Issue) markBaseline() {
@@ -70,6 +70,9 @@ func (i *Issue) Changelog(by UserID) (IssueChanged, bool) {
 	add("security", b.Security, a.Security)
 	add("resolution", string(b.Resolution), string(a.Resolution))
 	add("fix_versions", joinVersions(b.FixVersions), joinVersions(a.FixVersions))
+	add("original_estimate", durationOrEmpty(b.Time.Original), durationOrEmpty(a.Time.Original))
+	add("remaining_estimate", durationOrEmpty(b.Time.Remaining), durationOrEmpty(a.Time.Remaining))
+	add("time_spent", durationOrEmpty(b.Time.Spent), durationOrEmpty(a.Time.Spent))
 	if len(items) == 0 {
 		return IssueChanged{}, false
 	}
@@ -109,3 +112,10 @@ func (i *Issue) SecurityLevel() string { return i.security }
 
 // Classify restricts who can see the issue; the application checks the level exists.
 func (i *Issue) Classify(level string) { i.security = level }
+
+func durationOrEmpty(s Seconds) string {
+	if s == 0 {
+		return ""
+	}
+	return s.String()
+}

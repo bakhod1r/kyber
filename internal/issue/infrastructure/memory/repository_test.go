@@ -58,3 +58,14 @@ func TestWatcherContract(t *testing.T) {
 		return memory.NewWatcherRepository(), is
 	})
 }
+
+func TestWorklogContract(t *testing.T) {
+	repotest.RunWorklogs(t, func(t *testing.T) (domain.WorklogRepository, [2]*domain.Issue) {
+		var is [2]*domain.Issue
+		for n := range 2 {
+			key, _ := domain.NewIssueKey("KYB", n+1)
+			is[n], _ = domain.NewIssue(domain.IssueID(fmt.Sprintf("00000000-0000-4000-8000-00000000000%d", n+1)), key, "t", domain.TypeTask, repotest.Assignee, domain.DefaultWorkflow())
+		}
+		return memory.NewWorklogRepository(), is
+	})
+}

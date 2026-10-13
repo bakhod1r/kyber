@@ -15,3 +15,6 @@
 ./internal/access/application
 ./internal/access/infrastructure/projectcompat
 ./internal/access/infrastructure/memory
+./internal/search/domain
+./internal/search/application
+./internal/search/infrastructure/memory

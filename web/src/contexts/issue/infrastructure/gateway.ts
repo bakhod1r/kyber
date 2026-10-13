@@ -1,6 +1,6 @@
 // issue: HTTP gateway to the issue API (infrastructure).
 import { request, seg, type List } from "../../../shared/http";
-import type { Comment, HistoryEntry, Issue, IssueLink, IssuePatch, IssueType, LinkType, Status, Workflow } from "../domain/model";
+import type { Comment, HistoryEntry, Issue, IssueLink, IssuePatch, IssueType, LinkType, Status, Workflow, Worklog } from "../domain/model";
 
 export const issueGateway = {
   /** Issues in backlog rank order; `sprint` filters to a sprint id or "backlog". */
@@ -16,6 +16,10 @@ export const issueGateway = {
   unlink: (id: string) => request<undefined>("DELETE", `/api/v1/links/${seg(id)}`),
   children: (issueKey: string) =>
     request<{ items: Issue[]; total: number; done: number; points: number; done_points: number }>("GET", `/api/v1/issues/${seg(issueKey)}/children`),
+  worklogs: (issueKey: string) => request<List<Worklog>>("GET", `/api/v1/issues/${seg(issueKey)}/worklogs`).then((r) => r.items),
+  logWork: (issueKey: string, spent: string, comment: string) =>
+    request<Worklog>("POST", `/api/v1/issues/${seg(issueKey)}/worklogs`, { spent, comment }),
+  deleteWorklog: (id: string) => request<undefined>("DELETE", `/api/v1/worklogs/${seg(id)}`),
   watchers: (issueKey: string) =>
     request<{ watching: boolean; items: { user_id: string; name: string }[] }>("GET", `/api/v1/issues/${seg(issueKey)}/watchers`),
   watch: (issueKey: string) => request<undefined>("POST", `/api/v1/issues/${seg(issueKey)}/watchers`),

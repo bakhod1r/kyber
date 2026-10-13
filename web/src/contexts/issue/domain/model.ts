@@ -27,6 +27,7 @@ export type Issue = {
   /** How a resolved issue ended; "" while it is not in a Done status. */
   resolution?: "" | Resolution;
   fix_versions?: string[];
+  time_tracking?: TimeTracking;
 };
 export type Resolution = "done" | "wont_do" | "duplicate" | "cannot_reproduce";
 export const RESOLUTIONS: { id: Resolution; label: string }[] = [
@@ -46,6 +47,8 @@ export type IssuePatch = {
   security_level?: "" | "confidential";
   resolution?: Resolution;
   fix_versions?: string[];
+  original_estimate?: string;
+  remaining_estimate?: string;
 };
 export type Comment = { id: string; author_id: string; author_name: string; body: string; created_at: string };
 export const STATUSES: { id: Status; label: string }[] = [
@@ -81,3 +84,23 @@ export const DEFAULT_WORKFLOW: Workflow = {
 
 export const ISSUE_TYPES: IssueType[] = ["task", "story", "bug", "epic", "subtask"];
 export const PRIORITIES: Priority[] = ["highest", "high", "medium", "low", "lowest"];
+
+/** Time tracking in seconds and as Jira-style text ("1d 4h"; 1d = 8h, 1w = 5d). */
+export type TimeTracking = {
+  original_seconds: number;
+  remaining_seconds: number;
+  spent_seconds: number;
+  original: string;
+  remaining: string;
+  spent: string;
+};
+export type Worklog = {
+  id: string;
+  issue_key: string;
+  author_id: string;
+  author_name: string;
+  started: string;
+  seconds: number;
+  spent: string;
+  comment: string;
+};

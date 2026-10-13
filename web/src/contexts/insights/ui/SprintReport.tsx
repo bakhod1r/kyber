@@ -43,6 +43,9 @@ export function SprintReport({ projectKey }: { projectKey: string }) {
             <StatTile label="Committed" value={`${fmt(r.committed_points)} pts`} hint={`${r.committed_issues} issues at the start`} />
             <StatTile label="Added after start" value={`${fmt(r.added_points)} pts`} hint={`${r.added_issues} issues`} />
             <StatTile label="Completed" value={`${fmt(r.completed_points)} pts`} hint={`${r.completed.length} issues`} />
+            {(r.time_original_seconds ?? 0) + (r.time_spent_seconds ?? 0) > 0 && (
+              <StatTile label="Time logged" value={hours(r.time_spent_seconds ?? 0)} hint={`estimate ${hours(r.time_original_seconds ?? 0)}, remaining ${hours(r.time_remaining_seconds ?? 0)}`} />
+            )}
           </div>
           <IssueList title="Completed issues" items={r.completed} />
           <IssueList title={r.sprint.state === "closed" ? "Not completed (carried over)" : "Not completed yet"} items={r.not_completed} />
@@ -76,3 +79,5 @@ function IssueList({ title, items }: { title: string; items: SprintReportIssue[]
     </div>
   );
 }
+
+const hours = (seconds: number) => `${fmt(Math.round((seconds / 3600) * 10) / 10)}h`;

@@ -206,3 +206,8 @@ func (s *Service) CanFix(ctx context.Context, project, id string) error {
 	}
 	return nil
 }
+
+// AllVersions lists a project's versions without authorization (read models in other contexts).
+func (s *Service) AllVersions(ctx context.Context, project string) ([]*domain.Version, error) {
+	return s.d.Versions.VersionsOf(ctx, project)
+}

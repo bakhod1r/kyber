@@ -52,6 +52,10 @@ const (
 	CodeVersionConflict      = "VERSION_CONFLICT"
 	CodeVersionState         = "VERSION_STATE"
 	CodeVersionNameTaken     = "VERSION_NAME_TAKEN"
+	CodeWorklogNotFound      = "WORKLOG_NOT_FOUND"
+	CodeInvalidJQL           = "SEARCH_INVALID_JQL"
+	CodeFilterNotFound       = "FILTER_NOT_FOUND"
+	CodeFilterConflict       = "FILTER_CONFLICT"
 	CodeNotificationNotFound = "NOTIFICATION_NOT_FOUND"
 	CodeImportTooLarge       = "IMPORT_TOO_LARGE"
 	CodeImportInvalidFile    = "IMPORT_INVALID_FILE"
@@ -86,10 +90,10 @@ var codes = []code{
 	{CodeFocusState, "6073", 409, "The focus session cannot do that now.", "Fokus seansi hozir buni qila olmaydi.", "Фокус-сессия сейчас не может этого сделать.", errorx.CategoryBusiness},
 	{CodeMeetingNotFound, "6074", 404, "Meeting not found.", "Uchrashuv topilmadi.", "Встреча не найдена.", errorx.CategoryBusiness},
 	{CodeMeetingForbidden, "6075", 403, "Only the organizer can cancel this meeting.", "Uchrashuvni faqat tashkilotchi bekor qila oladi.", "Отменить встречу может только организатор.", errorx.CategorySecurity},
-	{CodeConversationNotFound, "6090", 404, "Conversation not found.", "Suhbat topilmadi.", "Беседа не найдена.", errorx.CategoryBusiness},
-	{CodeMessageNotFound, "6091", 404, "Message not found.", "Xabar topilmadi.", "Сообщение не найдено.", errorx.CategoryBusiness},
-	{CodeChannelNameTaken, "6092", 409, "A channel with this name already exists.", "Bu nomli kanal allaqachon bor.", "Канал с таким названием уже существует.", errorx.CategoryBusiness},
-	{CodeChatForbidden, "6093", 403, "You cannot do that in this conversation.", "Bu suhbatda buni qila olmaysiz.", "В этой беседе так сделать нельзя.", errorx.CategorySecurity},
+	{CodeConversationNotFound, "6100", 404, "Conversation not found.", "Suhbat topilmadi.", "Беседа не найдена.", errorx.CategoryBusiness},
+	{CodeMessageNotFound, "6101", 404, "Message not found.", "Xabar topilmadi.", "Сообщение не найдено.", errorx.CategoryBusiness},
+	{CodeChannelNameTaken, "6102", 409, "A channel with this name already exists.", "Bu nomli kanal allaqachon bor.", "Канал с таким названием уже существует.", errorx.CategoryBusiness},
+	{CodeChatForbidden, "6103", 403, "You cannot do that in this conversation.", "Bu suhbatda buni qila olmaysiz.", "В этой беседе так сделать нельзя.", errorx.CategorySecurity},
 	{CodeProjectNotFound, "6002", 404, "Project not found.", "Loyiha topilmadi.", "Проект не найден.", errorx.CategoryBusiness},
 	{CodeProjectKeyTaken, "6003", 409, "This project key is already taken.", "Bu loyiha kaliti band.", "Этот ключ проекта уже занят.", errorx.CategoryBusiness},
 	{CodeForbidden, "6004", 403, "Your project role does not allow this.", "Loyihadagi rolingiz bunga ruxsat bermaydi.", "Ваша роль в проекте не позволяет это сделать.", errorx.CategorySecurity},
@@ -114,6 +118,10 @@ var codes = []code{
 	{CodeVersionConflict, "6081", 409, "Someone else changed this version. Reload and try again.", "Versiyani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Версию изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeVersionState, "6082", 409, "The version is not in a state that allows this.", "Versiya holati bunga ruxsat bermaydi.", "Текущее состояние версии этого не допускает.", errorx.CategoryBusiness},
 	{CodeVersionNameTaken, "6083", 409, "This project already has a version with that name.", "Loyihada bu nomli versiya allaqachon bor.", "В проекте уже есть версия с таким названием.", errorx.CategoryBusiness},
+	{CodeWorklogNotFound, "6084", 404, "Worklog not found.", "Vaqt yozuvi topilmadi.", "Запись о работе не найдена.", errorx.CategoryBusiness},
+	{CodeInvalidJQL, "6090", 422, "The query is not valid JQL.", "So'rov JQL qoidalariga mos emas.", "Запрос не является корректным JQL.", errorx.CategoryValidation},
+	{CodeFilterNotFound, "6091", 404, "Filter not found.", "Filtr topilmadi.", "Фильтр не найден.", errorx.CategoryBusiness},
+	{CodeFilterConflict, "6092", 409, "Someone else changed this filter. Reload and try again.", "Filtrni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Фильтр изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeLastBoard, "6026", 409, "A project must keep at least one board.", "Loyihada kamida bitta board qolishi kerak.", "В проекте должна остаться хотя бы одна доска.", errorx.CategoryBusiness},
 	{CodeNotificationNotFound, "6040", 404, "Notification not found.", "Bildirishnoma topilmadi.", "Уведомление не найдено.", errorx.CategoryBusiness},
 	{CodeImportTooLarge, "6050", 413, "The file is too large to import (10 MB max).", "Fayl import uchun juda katta (ko'pi bilan 10 MB).", "Файл слишком большой для импорта (не более 10 МБ).", errorx.CategoryValidation},

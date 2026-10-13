@@ -41,6 +41,9 @@ func TestS47SprintReport(t *testing.T) {
 		c.do("POST", "/api/v1/sprints/"+sid+"/start", nil)
 		time.Sleep(30 * time.Millisecond)
 		c.do("POST", "/api/v1/issues/KYB-1/transitions", map[string]string{"to": "done"})
+		_, k2 := c.do("GET", "/api/v1/issues/KYB-2", nil)
+		c.do("PATCH", "/api/v1/issues/KYB-2", map[string]any{"version": k2["version"], "original_estimate": "2h"})
+		c.do("POST", "/api/v1/issues/KYB-2/worklogs", map[string]string{"spent": "30m"})
 		plan("KYB-4", sid) // added after the start
 		plan("KYB-3", "")  // removed
 
@@ -75,6 +78,14 @@ func TestS47SprintReport(t *testing.T) {
 		if rep["committed_points"] != float64(10) || rep["committed_issues"] != float64(3) || rep["added_points"] != float64(8) ||
 			rep["completed_points"] != float64(3) || rep["sprint"].(map[string]any)["state"] != "closed" {
 			t.Fatalf("totals = %v", rep)
+		}
+
+		if rep["time_original_seconds"] != float64(7200) || rep["time_spent_seconds"] != float64(1800) || rep["time_remaining_seconds"] != float64(5400) {
+			t.Fatalf("time totals = %v / %v / %v", rep["time_original_seconds"], rep["time_spent_seconds"], rep["time_remaining_seconds"])
+		}
+
+		if rep["time_original_seconds"] != float64(7200) || rep["time_spent_seconds"] != float64(1800) || rep["time_remaining_seconds"] != float64(5400) {
+			t.Fatalf("time totals = %v / %v / %v", rep["time_original_seconds"], rep["time_spent_seconds"], rep["time_remaining_seconds"])
 		}
 
 		// A confidential issue is left out for those who may not see it.

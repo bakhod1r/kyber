@@ -206,7 +206,8 @@ func (h *Handler) sprintReport(w http.ResponseWriter, r *http.Request) {
 			"started_at": timePtr(sp.Start), "ends_at": timePtr(sp.End), "completed_at": timePtr(sp.Completed)},
 		"committed_points": domain.Tenths(t.CommittedPoints), "committed_issues": t.CommittedIssues,
 		"added_points": domain.Tenths(t.AddedPoints), "added_issues": t.AddedIssues,
-		"completed_points": domain.Tenths(t.CompletedPoints),
-		"completed":        sprintIssues(rep.Completed), "not_completed": sprintIssues(rep.NotCompleted), "removed": sprintIssues(rep.Removed),
+		"completed_points":      domain.Tenths(t.CompletedPoints),
+		"time_original_seconds": rep.OriginalSeconds, "time_spent_seconds": rep.SpentSeconds, "time_remaining_seconds": rep.RemainingSeconds,
+		"completed": sprintIssues(rep.Completed), "not_completed": sprintIssues(rep.NotCompleted), "removed": sprintIssues(rep.Removed),
 	})
 }

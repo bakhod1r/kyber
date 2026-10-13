@@ -3,7 +3,7 @@ import { issueUseCases, DEFAULT_WORKFLOW, type HistoryEntry, RESOLUTIONS } from 
 
 const FIELD: Record<string, string> = {
   title: "Summary", description: "Description", type: "Type", status: "Status", priority: "Priority",
-  assignee: "Assignee", estimate: "Story points", sprint: "Sprint", rank: "Rank", resolution: "Resolution",
+  assignee: "Assignee", estimate: "Story points", sprint: "Sprint", rank: "Rank", resolution: "Resolution", original_estimate: "Original estimate", remaining_estimate: "Remaining estimate", time_spent: "Time spent", fix_versions: "Fix versions",
   security: "Security level", parent: "Parent",
 };
 

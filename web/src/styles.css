@@ -381,3 +381,7 @@ a.user:hover { text-decoration: underline; }
 .releases { overflow-x: auto; }
 .release-notes pre { white-space: pre-wrap; background: var(--surface-2, #f6f7f9); padding: 0.75rem; border-radius: 6px; }
 .fix-versions { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; border: 0; padding: 0; margin: 0; }
+.search-grid { display: grid; grid-template-columns: minmax(200px, 260px) 1fr; gap: 1rem; align-items: start; }
+.search-page .grow { flex: 1; }
+.search-page .grow input { width: 100%; }
+@media (max-width: 720px) { .search-grid { grid-template-columns: 1fr; } }

@@ -25,6 +25,9 @@ type EditIssue struct {
 	Security    *string   // security level ("" = visible to everyone who can browse); nil leaves it unchanged
 	Resolution  *string   // a resolved issue's resolution; nil leaves it unchanged
 	FixVersions *[]string // replaces the fix versions; nil leaves them unchanged
+	// OriginalEstimate / RemainingEstimate are durations like "1d 4h" ("" clears); nil leaves them.
+	OriginalEstimate  *string
+	RemainingEstimate *string
 }
 
 func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue) (*domain.Issue, error) {
@@ -53,6 +56,14 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 		if err := s.sprints.CanHold(ctx, is.Key().Project(), cmd.Sprint); err != nil {
 			return nil, err
 		}
+	}
+	original, err := optionalDuration(cmd.OriginalEstimate)
+	if err != nil {
+		return nil, err
+	}
+	remaining, err := optionalDuration(cmd.RemainingEstimate)
+	if err != nil {
+		return nil, err
 	}
 	if cmd.FixVersions != nil {
 		for _, v := range *cmd.FixVersions {
@@ -100,6 +111,12 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 			ids[n] = domain.VersionID(v)
 		}
 		is.PlanForVersions(ids)
+	}
+	if original != nil {
+		is.EstimateTime(*original)
+	}
+	if remaining != nil {
+		is.EstimateRemaining(*remaining)
 	}
 	if cmd.Resolution != nil && *cmd.Resolution != string(is.Resolution()) {
 		if err := is.ChangeResolution(domain.Resolution(*cmd.Resolution)); err != nil {
@@ -164,4 +181,19 @@ func (s *Service) Comments(ctx context.Context, actor, rawKey string) ([]Comment
 // DisplayName exposes the directory's name lookup to adapters.
 func (s *Service) DisplayName(ctx context.Context, user string) (string, error) {
 	return s.directory.DisplayName(ctx, user)
+}
+
+func optionalDuration(s *string) (*domain.Seconds, error) {
+	if s == nil {
+		return nil, nil
+	}
+	var d domain.Seconds
+	if *s != "" {
+		v, err := domain.ParseDuration(*s)
+		if err != nil {
+			return nil, err
+		}
+		d = v
+	}
+	return &d, nil
 }

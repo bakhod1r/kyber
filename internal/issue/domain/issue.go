@@ -108,6 +108,7 @@ type Issue struct {
 	security    string
 	resolution  Resolution
 	fixVersions []VersionID
+	time        TimeTracking
 	baseline    *Snapshot // state when loaded or last saved; nil for a new issue
 	description string
 	priority    Priority
@@ -149,6 +150,7 @@ type Snapshot struct {
 	Security    string   // issue security level ("" = visible to everyone who can browse the project)
 	Resolution  Resolution
 	FixVersions []VersionID
+	Time        TimeTracking
 	Version     int
 }
 
@@ -159,7 +161,7 @@ func Rehydrate(s Snapshot) *Issue {
 	}
 	is := &Issue{id: s.ID, key: s.Key, title: s.Title, typ: s.Type, status: s.Status,
 		description: s.Description, priority: s.Priority, assignee: s.Assignee, reporter: s.Reporter, estimate: s.Estimate, rank: s.Rank, sprint: s.Sprint,
-		parent: s.Parent, parentKey: s.ParentKey, security: s.Security, resolution: s.Resolution, version: s.Version}
+		parent: s.Parent, parentKey: s.ParentKey, security: s.Security, resolution: s.Resolution, time: s.Time, version: s.Version}
 	is.PlanForVersions(s.FixVersions)
 	is.markBaseline()
 	return is

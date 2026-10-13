@@ -22,6 +22,9 @@ export function Layout({ user, children }: { user: User; children: ReactNode }) 
           <img src="/logo.svg" alt="" width={28} height={28} />
           Kyber
         </Link>
+        <Link to="/search" className="nav-link">
+          Search
+        </Link>
         <Link to="/meetings" className="nav-link">
           Time table
         </Link>

@@ -24,6 +24,9 @@ export type SprintReport = {
   added_points: number;
   added_issues: number;
   completed_points: number;
+  time_original_seconds?: number;
+  time_spent_seconds?: number;
+  time_remaining_seconds?: number;
   completed: SprintReportIssue[];
   not_completed: SprintReportIssue[];
   removed: SprintReportIssue[];
