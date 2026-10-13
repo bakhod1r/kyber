@@ -88,4 +88,19 @@ test("activity shows mentions and unread conversations", async ({ browser }) => 
   await expect.poll(async () => (await bobur.call("GET", "/api/v1/notifications")).items.length).toBe(before + 1);
   await a.goto(`/chat/${channel.id}`);
   await expect(a.getByRole("log", { name: "Messages" }).locator(".chat-mention", { hasText: `@rev-${id}` })).toBeVisible();
+
+  // S71: Bobur moves the channel to his own "Later" section and mutes it.
+  await b.goto(`/chat/${channel.id}`);
+  const opts = b.getByLabel(`Options for # act-${id}`);
+  await opts.selectOption({ label: "New section…" });
+  await b.getByLabel("Section name").fill("Later");
+  await b.getByLabel("Section name").press("Enter");
+  const later = b.getByRole("region", { name: "Later" });
+  await expect(later).toContainText(`# act-${id}`);
+  await b.getByLabel(`Options for # act-${id}`).selectOption({ label: "🔕 Mute" });
+  await expect(later.getByLabel("Muted")).toBeVisible();
+  const n = (await bobur.call("GET", "/api/v1/notifications")).items.length;
+  await ali.call("POST", `/api/v1/conversations/${channel.id}/messages`, { body: `@${bobur.email} are you there?` });
+  await b.waitForTimeout(1500);
+  expect((await bobur.call("GET", "/api/v1/notifications")).items.length).toBe(n); // muted
 });

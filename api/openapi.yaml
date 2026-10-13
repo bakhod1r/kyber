@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.51.0
+  version: 0.52.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1126,6 +1126,28 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/prefs:
+    put:
+      operationId: setConversationPrefs
+      description: |
+        My settings for a conversation (S71): level all (a notification for every message), mentions (default) or
+        muted (nothing), and my sidebar section ("" for the default lists).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { level: { type: string, enum: [all, mentions, muted] }, section: { type: string, maxLength: 40 } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ConversationPrefs" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/chat/prefs:
+    get:
+      operationId: listConversationPrefs
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ConversationPrefs" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
   /api/v1/chat/saved:
     get:
       operationId: listSavedMessages
@@ -2941,6 +2963,13 @@ components:
         updated_by: { type: string }
         updated_at: { type: string, format: date-time }
         deleted: { type: boolean }
+    ConversationPrefs:
+      type: object
+      required: [conversation_id, level, section]
+      properties:
+        conversation_id: { type: string }
+        level: { type: string, enum: [all, mentions, muted] }
+        section: { type: string }
     GroupInput:
       type: object
       required: [handle, member_ids]
@@ -3589,7 +3618,7 @@ components:
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [assigned, commented, mentioned, transitioned, announcement, meeting, reminder], description: "reminder: a saved chat message's reminder (conversation_id, excerpt). meeting: a meeting you are invited to was scheduled or cancelled, or starts soon (excerpt: when). transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To). announcement: news to a project (project_key) or the workspace (project_key empty); issue_key is empty and issue_title holds its title." }
+        kind: { type: string, enum: [assigned, commented, mentioned, transitioned, announcement, meeting, reminder, message], description: "message: a message in a conversation you follow (level all; conversation_id, excerpt). reminder: a saved chat message's reminder (conversation_id, excerpt). meeting: a meeting you are invited to was scheduled or cancelled, or starts soon (excerpt: when). transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To). announcement: news to a project (project_key) or the workspace (project_key empty); issue_key is empty and issue_title holds its title." }
         issue_key: { type: string }
         issue_title: { type: string }
         project_key: { type: string, description: The announced project; empty for issue notifications and workspace announcements. }

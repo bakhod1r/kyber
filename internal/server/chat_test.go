@@ -572,3 +572,34 @@ func TestUserGroups(t *testing.T) {
 		expect(t, code, 404, b)
 	})
 }
+
+// S71: notification levels and sidebar sections per person.
+func TestConversationPrefs(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		qa := anon.signedIn("qa@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "general"})
+		id := ch["id"].(string)
+		dev.do("POST", "/api/v1/conversations/"+id+"/join", nil)
+		qa.do("POST", "/api/v1/conversations/"+id+"/join", nil)
+		code, b := dev.do("PUT", "/api/v1/conversations/"+id+"/prefs", map[string]any{"level": "all", "section": "Work"})
+		expect(t, code, 200, b)
+		code, b = qa.do("PUT", "/api/v1/conversations/"+id+"/prefs", map[string]any{"level": "muted"})
+		expect(t, code, 200, b)
+		code, b = qa.do("PUT", "/api/v1/conversations/"+id+"/prefs", map[string]any{"level": "loud"})
+		expect(t, code, 422, b)
+		if _, l := dev.do("GET", "/api/v1/chat/prefs", nil); len(l["items"].([]any)) != 1 || l["items"].([]any)[0].(map[string]any)["section"] != "Work" {
+			t.Fatalf("dev's prefs = %v", l)
+		}
+		lead.do("POST", "/api/v1/conversations/"+id+"/messages", map[string]string{"body": "deploying now @qa@x.uz"})
+		eventuallyJSON(t, dev, "/api/v1/notifications", func(b map[string]any) bool {
+			items := b["items"].([]any)
+			return len(items) == 1 && items[0].(map[string]any)["kind"] == "message"
+		})
+		time.Sleep(300 * time.Millisecond)
+		if _, n := qa.do("GET", "/api/v1/notifications", nil); len(n["items"].([]any)) != 0 {
+			t.Fatalf("muted qa notified: %v", n)
+		}
+	})
+}

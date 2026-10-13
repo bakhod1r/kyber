@@ -660,3 +660,35 @@ func TestUserGroups(t *testing.T) {
 		t.Fatalf("after delete = %v", ids)
 	}
 }
+
+// S71: per-person level and section; Notify asks who follows everything and who muted.
+func TestConversationPrefs(t *testing.T) {
+	repo := memory.NewRepository()
+	svc := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Prefs: memory.NewPrefs(),
+		Members: members{"lead": {"w1"}, "dev": {"w1"}, "qa": {"w1"}}, NewID: func() string { return "c-1" }, Now: time.Now})
+	ctx := tenant.With(context.Background(), "w1")
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "general"})
+	id := string(ch.ID)
+	_ = svc.Join(ctx, "dev", id)
+	if _, err := svc.SetPref(ctx, "dev", id, domain.LevelAll, "Work"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.SetPref(ctx, "qa", id, domain.LevelAll, ""); err != nil {
+		t.Fatal(err) // qa reads the public channel without joining; following needs membership (checked below)
+	}
+	if _, err := svc.SetPref(ctx, "lead", id, domain.LevelMuted, ""); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := svc.PrefsFor(ctx, "dev"); len(p) != 1 || p[0].Section != "Work" {
+		t.Fatalf("dev's prefs = %+v", p)
+	}
+	if f, _ := svc.Followers(ctx, id); len(f) != 1 || f[0] != "dev" {
+		t.Fatalf("followers = %v (members with level all)", f)
+	}
+	if m, _ := svc.Muted(ctx, "lead", id); !m {
+		t.Fatal("lead muted it")
+	}
+	if m, _ := svc.Muted(ctx, "dev", id); m {
+		t.Fatal("dev did not mute")
+	}
+}

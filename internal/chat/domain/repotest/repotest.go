@@ -530,3 +530,43 @@ func RunGroups(t *testing.T, g domain.Groups) {
 		}
 	}
 }
+
+// RunPrefs checks conversation settings (S71) over the store of r.
+func RunPrefs(t *testing.T, r domain.Repository, prefs domain.Prefs) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	a, _ := domain.NewChannel(cid(90), WS, "pa", "", false, Lead, t0)
+	b, _ := domain.NewChannel(cid(91), WS, "pb", "", false, Lead, t0)
+	for _, c := range []*domain.Conversation{a, b} {
+		if err := r.Create(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put := func(u domain.UserID, c domain.ConversationID, l domain.Level, s string) {
+		t.Helper()
+		p, _ := domain.NewPref(WS, u, c, l, s)
+		if err := prefs.Put(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put(Lead, a.ID, domain.LevelMuted, "Later")
+	put(Lead, b.ID, domain.LevelAll, "")
+	put(Dev, a.ID, domain.LevelAll, "Work")
+	put(Lead, a.ID, domain.LevelMuted, "Archive") // replaces
+	mine, err := prefs.Mine(ctx, WS, Lead)
+	if err != nil || len(mine) != 2 {
+		t.Fatalf("mine = %+v %v", mine, err)
+	}
+	for _, p := range mine {
+		if p.Conversation == a.ID && (p.Level != domain.LevelMuted || p.Section != "Archive") {
+			t.Fatalf("a = %+v", p)
+		}
+	}
+	of, err := prefs.Of(ctx, a.ID)
+	if err != nil || len(of) != 2 {
+		t.Fatalf("of = %+v %v", of, err)
+	}
+	if l, _ := prefs.Mine(ctx, "00000000-0000-4000-8000-000000000009", Lead); len(l) != 0 {
+		t.Fatalf("other workspace = %+v", l)
+	}
+}

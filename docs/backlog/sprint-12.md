@@ -43,8 +43,11 @@ Order: daily use first, then channel management, Jira integration, huddle extras
   **Done:** `GET/POST /groups`, `PATCH/DELETE /groups/{id}`, migration 0059 (RLS); Notify resolves `@handle`
   through an ACL to Chat (once per person, never the author); "User groups" in Activity; @handles highlighted.
   API 0.51.0.
-- **S71 Sidebar sections and notification levels** — my own sections (e.g. "Project", "Team") with drag to
+- ✅ **S71 Sidebar sections and notification levels** — my own sections (e.g. "Project", "Team") with drag to
   reorder; per conversation: all / mentions only / muted. AC: per user; muted conversations never notify.
+  **Done:** `PUT /conversations/{id}/prefs`, `GET /chat/prefs`, migration 0060 (RLS, notification kind `message`);
+  Notify skips muted, tells followers (level all) every message once; sidebar sections (sorted by name — drag to
+  reorder left for later), ⋯ menu per conversation. API 0.52.0.
 
 ## 3. Jira integration
 

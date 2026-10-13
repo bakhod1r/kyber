@@ -66,8 +66,15 @@ type GroupMentions interface {
 	Mentioned(ctx context.Context, body string) ([]string, error)
 }
 
+// ChatPrefs are people's settings for conversations (S71): muted ones never notify; followers hear every message.
+type ChatPrefs interface {
+	Muted(ctx context.Context, user, conversation string) (bool, error)
+	Followers(ctx context.Context, conversation string) ([]string, error)
+}
+
 type Deps struct {
 	Conversations Conversations // optional: chat mentions
+	ChatPrefs     ChatPrefs     // optional
 	GroupMentions GroupMentions // optional: @group mentions in chat
 	Quiet         Quiet         // optional
 	Repo          domain.Repository
@@ -103,6 +110,11 @@ func NewService(d Deps) *Service {
 // WithConversations enables notifications for mentions in chat.
 func (s *Service) WithGroupMentions(g GroupMentions) *Service {
 	s.d.GroupMentions = g
+	return s
+}
+
+func (s *Service) WithChatPrefs(p ChatPrefs) *Service {
+	s.d.ChatPrefs = p
 	return s
 }
 
@@ -432,45 +444,63 @@ func (s *Service) OnChatMessage(ctx context.Context, m outbox.Message) error {
 		}
 		people = append(people, ids...)
 	}
-	var actorName string
-	told := map[string]bool{}
-	for _, id := range people {
-		if id == e.Author || told[id] {
-			continue
+	told := map[string]bool{e.Author: true}
+	tell := func(id string, kind domain.Kind) error {
+		if told[id] {
+			return nil
 		}
 		told[id] = true
-		name, readable, err := s.d.Conversations.Readable(ctx, id, e.Conversation)
-		if err != nil {
-			return err
-		}
-		if !readable {
-			continue
-		}
-		if actorName == "" {
-			if actorName, err = s.d.Users.DisplayName(ctx, e.Author); err != nil {
+		if s.d.ChatPrefs != nil {
+			if muted, err := s.d.ChatPrefs.Muted(ctx, id, e.Conversation); err != nil || muted {
 				return err
 			}
 		}
-		n := domain.Notification{
-			ID: domain.NotificationID(s.d.NewID()), Recipient: domain.UserID(id), Workspace: tenant.Workspace(ctx),
-			Kind: domain.KindMentioned, ConversationID: e.Conversation, ConversationName: name, ActorName: actorName,
-			Excerpt: excerpt(e.Body), SourceEvent: m.ID, CreatedAt: s.d.Now(),
-		}
-		if err := s.d.Repo.Add(ctx, n); err != nil {
-			return err
-		}
-		if s.d.Quiet != nil {
-			if quiet, err := s.d.Quiet.Quiet(ctx, id); err != nil {
-				return err
-			} else if quiet {
-				continue
-			}
-		}
-		if err := s.enqueue(ctx, n, ""); err != nil {
+		return s.tellChat(ctx, m, id, kind, e.Conversation, e.Author, e.Body)
+	}
+	for _, id := range people {
+		if err := tell(id, domain.KindMentioned); err != nil {
 			return err
 		}
 	}
+	if s.d.ChatPrefs != nil { // S71: people who follow every message of the conversation
+		followers, err := s.d.ChatPrefs.Followers(ctx, e.Conversation)
+		if err != nil {
+			return err
+		}
+		for _, id := range followers {
+			if err := tell(id, domain.KindMessage); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
+}
+
+// tellChat adds a chat notification for id if they may read the conversation, and copies it to email and
+// Telegram unless they do not want to be disturbed now.
+func (s *Service) tellChat(ctx context.Context, m outbox.Message, id string, kind domain.Kind, conv, author, body string) error {
+	name, readable, err := s.d.Conversations.Readable(ctx, id, conv)
+	if err != nil || !readable {
+		return err
+	}
+	actorName, err := s.d.Users.DisplayName(ctx, author)
+	if err != nil {
+		return err
+	}
+	n := domain.Notification{
+		ID: domain.NotificationID(s.d.NewID()), Recipient: domain.UserID(id), Workspace: tenant.Workspace(ctx),
+		Kind: kind, ConversationID: conv, ConversationName: name, ActorName: actorName,
+		Excerpt: excerpt(body), SourceEvent: m.ID, CreatedAt: s.d.Now(),
+	}
+	if err := s.d.Repo.Add(ctx, n); err != nil {
+		return err
+	}
+	if s.d.Quiet != nil {
+		if quiet, err := s.d.Quiet.Quiet(ctx, id); err != nil || quiet {
+			return err
+		}
+	}
+	return s.enqueue(ctx, n, "")
 }
 
 // OnChatReminder tells the user about a saved message whose reminder is due (chat.reminder), if they may

@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, canManage, type ChatEvent, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, type Message, parseRemind, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
+  applyEvent, canManage, type ChatEvent, type ConversationPrefs, type Level, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, type Message, parseRemind, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
 } from "../application";
 
 const PAGE = 50;
@@ -392,16 +392,50 @@ function Sidebar({ conversations, current, title, names, me }: {
   };
   const statuses = useContext(Statuses);
   const peer = (c: Conversation) => (c.kind === "dm" && c.member_ids.length === 2 ? statuses.get(c.member_ids.find((u) => u !== me) ?? "") : undefined);
-  const item = (c: Conversation) => (
-    <li key={c.id}>
-      <Link to={`/chat/${c.id}`} className={`${c.id === current ? "active" : ""} ${c.unread > 0 ? "unread" : ""}`} aria-current={c.id === current ? "page" : undefined}>
-        {title(c)}
-        {peer(c)?.emoji && <span title={peer(c)?.text}> {peer(c)?.emoji}</span>}
-        {peer(c)?.dnd && <span aria-label="Do not disturb"> 🌙</span>}
-        {c.unread > 0 && <span className="badge" aria-label={`${c.unread} unread`}>{c.unread}</span>}
-      </Link>
-    </li>
-  );
+  const prefs = useQuery({ queryKey: ["chat", "prefs"], queryFn: chatUseCases.prefs });
+  const prefOf = (id: string): ConversationPrefs => prefs.data?.find((p) => p.conversation_id === id) ?? { conversation_id: id, level: "mentions", section: "" };
+  const setPref = useMutation({
+    mutationFn: ({ id, level, section }: { id: string; level: Level; section: string }) => chatUseCases.setPref(id, level, section),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["chat", "prefs"] }),
+  });
+  const [naming, setNaming] = useState<string | null>(null); // conversation getting a new section
+  const [sectionName, setSectionName] = useState("");
+  const known = [...new Set((prefs.data ?? []).map((p) => p.section).filter(Boolean))].sort();
+  const item = (c: Conversation) => {
+    const p = prefOf(c.id);
+    const muted = p.level === "muted";
+    return (
+      <li key={c.id} className={muted ? "muted-conv" : ""}>
+        <Link to={`/chat/${c.id}`} className={`${c.id === current ? "active" : ""} ${c.unread > 0 && !muted ? "unread" : ""}`} aria-current={c.id === current ? "page" : undefined}>
+          {title(c)}
+          {peer(c)?.emoji && <span title={peer(c)?.text}> {peer(c)?.emoji}</span>}
+          {peer(c)?.dnd && <span aria-label="Do not disturb"> 🌙</span>}
+          {muted && <span aria-label="Muted"> 🔕</span>}
+          {p.level === "all" && <span aria-label="All messages"> 🔔</span>}
+          {c.unread > 0 && !muted && <span className="badge" aria-label={`${c.unread} unread`}>{c.unread}</span>}
+        </Link>
+        <select className="ghost conv-options" aria-label={`Options for ${title(c)}`} value="" onChange={(e) => {
+          const v = e.target.value;
+          if (v.startsWith("level:")) setPref.mutate({ id: c.id, level: v.slice(6) as Level, section: p.section });
+          else if (v === "section:new") { setNaming(c.id); setSectionName(""); }
+          else if (v.startsWith("section:")) setPref.mutate({ id: c.id, level: p.level, section: v.slice(8) });
+        }}>
+          <option value="">⋯</option>
+          <option value="level:all">🔔 Every message</option>
+          <option value="level:mentions">@ Mentions only</option>
+          <option value="level:muted">🔕 Mute</option>
+          {known.filter((k) => k !== p.section).map((k) => <option key={k} value={`section:${k}`}>Move to {k}</option>)}
+          {p.section && <option value="section:">Move back</option>}
+          <option value="section:new">New section…</option>
+        </select>
+        {naming === c.id && (
+          <form onSubmit={(e) => { e.preventDefault(); setPref.mutate({ id: c.id, level: p.level, section: sectionName }); setNaming(null); }}>
+            <input aria-label="Section name" value={sectionName} onChange={(e) => setSectionName(e.target.value)} maxLength={40} autoFocus />
+          </form>
+        )}
+      </li>
+    );
+  };
   const error = create.error ?? openDM.error;
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
@@ -429,10 +463,12 @@ function Sidebar({ conversations, current, title, names, me }: {
         </ul>
       )}
       <Link to="/chat" className={`chat-activity-link ${current ? "" : "active"}`} aria-current={current ? undefined : "page"}>🔔 Activity</Link>
-      <h2>Channels</h2>
-      <ul>{conversations.filter((c) => c.kind === "channel").map(item)}</ul>
-      <h2>Direct messages</h2>
-      <ul>{conversations.filter((c) => c.kind === "dm").map(item)}</ul>
+      {sections(conversations, prefs.data ?? []).map((sec) => (
+        <section key={sec.title} aria-label={sec.title}>
+          <h2>{sec.title}</h2>
+          <ul>{sec.items.map(item)}</ul>
+        </section>
+      ))}
       <div className="row">
         <button className="ghost" onClick={() => setForm(form === "channel" ? null : "channel")}>New channel</button>
         <button className="ghost" onClick={() => setForm(form === "dm" ? null : "dm")}>New message</button>

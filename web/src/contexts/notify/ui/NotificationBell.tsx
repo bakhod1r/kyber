@@ -11,6 +11,7 @@ const VERB: Record<Notification["kind"], string> = {
   announcement: "announced",
   meeting: "📅",
   reminder: "⏰ Reminder",
+  message: "wrote",
 };
 const where = (n: Notification) => (n.conversation_name ? `#${n.conversation_name}` : "a direct message");
 

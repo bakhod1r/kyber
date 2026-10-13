@@ -15,6 +15,9 @@ func Render(n Notification, link string) (subject, text string) {
 			where = "#" + n.ConversationName
 		}
 		subject = fmt.Sprintf("%s mentioned you in %s", n.ActorName, where)
+		if n.Kind == KindMessage {
+			subject = fmt.Sprintf("%s wrote in %s", n.ActorName, where)
+		}
 		return subject, subject + ":\n\n" + n.Excerpt + "\n\n" + link
 	}
 	switch n.Kind {

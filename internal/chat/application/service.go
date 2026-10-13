@@ -68,6 +68,7 @@ type Deps struct {
 	Scheduled     domain.ScheduledMessages // optional: scheduled messages (S67)
 	Reminders     domain.Reminders         // optional: /remind me (S67)
 	Groups        domain.Groups            // optional: user groups (S70)
+	Prefs         domain.Prefs             // optional: levels and sections (S71)
 	Members       Members
 	NewID         func() string
 	Now           func() time.Time
@@ -1071,4 +1072,61 @@ func (s *Service) GroupMembers(ctx context.Context, handle string) ([]string, er
 		out[i] = string(m)
 	}
 	return out, nil
+}
+
+// SetPref sets the actor's notification level and sidebar section for a conversation they may read (S71).
+func (s *Service) SetPref(ctx context.Context, actor, conv string, level domain.Level, section string) (*domain.Pref, error) {
+	c, err := s.readable(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	p, err := domain.NewPref(c.Workspace, domain.UserID(actor), c.ID, level, section)
+	if err != nil {
+		return nil, err
+	}
+	return p, s.d.Prefs.Put(ctx, p)
+}
+
+func (s *Service) PrefsFor(ctx context.Context, actor string) ([]*domain.Pref, error) {
+	return s.d.Prefs.Mine(ctx, domain.WorkspaceID(tenant.Workspace(ctx)), domain.UserID(actor))
+}
+
+// Followers are the members of a conversation who want every message.
+func (s *Service) Followers(ctx context.Context, conv string) ([]string, error) {
+	if s.d.Prefs == nil {
+		return nil, nil
+	}
+	c, err := s.d.Conversations.ByID(ctx, domain.ConversationID(conv))
+	if err != nil {
+		return nil, err
+	}
+	prefs, err := s.d.Prefs.Of(ctx, c.ID)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, p := range prefs {
+		if p.Level == domain.LevelAll && c.IsMember(p.User) {
+			out = append(out, string(p.User))
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// Muted reports whether user muted the conversation.
+func (s *Service) Muted(ctx context.Context, user, conv string) (bool, error) {
+	if s.d.Prefs == nil {
+		return false, nil
+	}
+	prefs, err := s.d.Prefs.Of(ctx, domain.ConversationID(conv))
+	if err != nil {
+		return false, err
+	}
+	for _, p := range prefs {
+		if string(p.User) == user {
+			return p.Level == domain.LevelMuted, nil
+		}
+	}
+	return false, nil
 }

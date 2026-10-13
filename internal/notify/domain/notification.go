@@ -29,6 +29,8 @@ const (
 	KindMeeting Kind = "meeting"
 	// KindReminder: a chat message I saved for later, at the time I asked (ConversationID set).
 	KindReminder Kind = "reminder"
+	// KindMessage: a message in a conversation someone follows (level "all", S71).
+	KindMessage Kind = "message"
 )
 
 // Notification is one message to one recipient about one event. SourceEvent (the

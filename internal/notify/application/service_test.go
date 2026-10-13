@@ -359,3 +359,38 @@ func TestChatGroupMention(t *testing.T) {
 		t.Fatalf("author: %s", got)
 	}
 }
+
+// prefs is a fake ChatPrefs.
+type prefs struct {
+	muted     map[string]bool
+	followers []string
+}
+
+func (p prefs) Muted(_ context.Context, user, _ string) (bool, error) { return p.muted[user], nil }
+func (p prefs) Followers(context.Context, string) ([]string, error)   { return p.followers, nil }
+
+// S71: muted conversations never notify; followers get every message (once, even when also mentioned).
+func TestChatLevels(t *testing.T) {
+	ctx := tenant.With(context.Background(), tenant.Default)
+	s, _ := setup()
+	s = s.WithConversations(chats{"c-1": {name: "general", readers: []string{"carol", "dave", "erin", "frank"}}}).
+		WithChatPrefs(prefs{muted: map[string]bool{"dave": true}, followers: []string{"erin", "frank", "carol"}})
+	s = s.WithGroupMentions(groups{"team": {"dave", "frank"}})
+	m := msg(10, "chat.message_posted", `{"id":"m-1","conversation_id":"c-1","author_id":"carol","body":"@team ship it"}`)
+	m.Workspace = tenant.Default
+	if err := s.OnChatMessage(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	if got := inbox(t, s, "dave"); got != "" {
+		t.Fatalf("muted: %s", got)
+	}
+	if items, _, _ := s.List(ctx, "frank", false); len(items) != 1 || items[0].Kind != domain.KindMentioned {
+		t.Fatalf("frank (mentioned and following) = %+v", items)
+	}
+	if items, _, _ := s.List(ctx, "erin", false); len(items) != 1 || items[0].Kind != domain.KindMessage {
+		t.Fatalf("erin (following) = %+v", items)
+	}
+	if got := inbox(t, s, "carol"); got != "" {
+		t.Fatalf("author: %s", got)
+	}
+}

@@ -51,6 +51,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/chat/saved", h.saved)
 	mux.HandleFunc("PUT /api/v1/me/status", h.setStatus)
 	mux.HandleFunc("GET /api/v1/groups", h.groups)
+	mux.HandleFunc("PUT /api/v1/conversations/{id}/prefs", h.setPref)
+	mux.HandleFunc("GET /api/v1/chat/prefs", h.prefs)
 	mux.HandleFunc("POST /api/v1/groups", h.createGroup)
 	mux.HandleFunc("PATCH /api/v1/groups/{id}", h.updateGroup)
 	mux.HandleFunc("DELETE /api/v1/groups/{id}", h.deleteGroup)
@@ -92,7 +94,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
-		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle):
+		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle), errors.Is(err, domain.ErrInvalidPref):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -869,4 +871,45 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type prefDTO struct {
+	ConversationID string `json:"conversation_id"`
+	Level          string `json:"level"`
+	Section        string `json:"section"`
+}
+
+func toPref(p *domain.Pref) prefDTO {
+	return prefDTO{ConversationID: string(p.Conversation), Level: string(p.Level), Section: p.Section}
+}
+
+func (h *Handler) setPref(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Level   string `json:"level"`
+		Section string `json:"section"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	p, err := h.svc.SetPref(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), domain.Level(in.Level), in.Section)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toPref(p))
+}
+
+func (h *Handler) prefs(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.PrefsFor(r.Context(), auth.Actor(r.Context()))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := make([]prefDTO, len(list))
+	for i, p := range list {
+		out[i] = toPref(p)
+	}
+	slices.SortFunc(out, func(a, b prefDTO) int { return strings.Compare(a.ConversationID, b.ConversationID) })
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
 }

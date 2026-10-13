@@ -45,3 +45,8 @@ func TestManagementContract(t *testing.T) {
 }
 
 func TestGroupsContract(t *testing.T) { repotest.RunGroups(t, postgres.NewGroups(dbtest.New(t))) }
+
+func TestPrefsContract(t *testing.T) {
+	pool := dbtest.New(t)
+	repotest.RunPrefs(t, postgres.NewRepository(pool), postgres.NewPrefs(pool))
+}

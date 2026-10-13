@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter, parseRemind, seen } from "./model";
+import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter, parseRemind, seen, sections, type Conversation, parseCommand } from "./model";
 
 const msg = (id: string, body: string, extra: Partial<Message> = {}): Message => ({
   id, conversation_id: "c-1", author_id: "u-1", body, created_at: "2026-10-13T09:00:00Z", edited_at: null, deleted: false,
@@ -104,5 +104,26 @@ describe("group mentions (S70)", () => {
     expect(splitMentions("ping @backend and a@b.uz").map((x) => [x.kind, x.text])).toEqual([
       ["text", "ping "], ["mention", "@backend"], ["text", " and a@b.uz"],
     ]);
+  });
+});
+
+describe("sidebar sections (S71)", () => {
+  const c = (id: string, kind: "channel" | "dm"): Conversation => ({ id, kind, name: id, topic: "", private: false, member_ids: [], member: true, unread: 0, created_at: "" });
+  it("puts my sections first, then channels and DMs", () => {
+    const got = sections([c("a", "channel"), c("b", "channel"), c("d", "dm"), c("e", "dm")],
+      [{ conversation_id: "b", level: "mentions", section: "Work" }, { conversation_id: "e", level: "muted", section: "Archive" }]);
+    expect(got.map((s) => [s.title, s.items.map((x) => x.id)])).toEqual([["Archive", ["e"]], ["Work", ["b"]], ["Channels", ["a"]], ["Direct messages", ["d"]]]);
+  });
+});
+
+describe("slash commands (S72)", () => {
+  it("reads /issue, /assign and /status", () => {
+    expect(parseCommand("/issue kyb Login page is slow")).toEqual({ name: "issue", project: "KYB", title: "Login page is slow" });
+    expect(parseCommand("/assign kyb-12 @me")).toEqual({ name: "assign", issue: "KYB-12", to: "me" });
+    expect(parseCommand("/assign KYB-12 @Dev@x.uz")).toEqual({ name: "assign", issue: "KYB-12", to: "dev@x.uz" });
+    expect(parseCommand("/status KYB-12 In Progress")).toEqual({ name: "status", issue: "KYB-12", status: "In Progress" });
+  });
+  it("is null otherwise", () => {
+    for (const s of ["/issue", "/issue KYB", "/assign KYB @me", "/status KYB-0 Done", "hello /issue KYB x"]) expect(parseCommand(s)).toBeNull();
   });
 });

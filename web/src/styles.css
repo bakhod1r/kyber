@@ -549,3 +549,7 @@ label.button { cursor: pointer; }
 .chat-archived { background: var(--surface-2, #f1f5f9); padding: 6px 10px; border-radius: 6px; }
 .chat-settings { margin: 8px 0; }
 .chat-settings ul { list-style: none; padding: 0; }
+.muted-conv a { opacity: .55; }
+.chat-sidebar li { display: flex; align-items: center; gap: 4px; }
+.chat-sidebar li > a { flex: 1; }
+.conv-options { width: 2.2em; padding: 0; border: none; background: transparent; }

@@ -49,6 +49,42 @@ export function seen(messages: Pick<Message, "id" | "author_id" | "created_at">[
   return receipts.some((r) => r.user_id !== me && Date.parse(r.read_at) >= Date.parse(mine.created_at)) ? mine.id : null;
 }
 
+/** A slash command for issues (S72), run by the app shell with the user's own permissions. */
+export type SlashCommand =
+  | { name: "issue"; project: string; title: string }
+  | { name: "assign"; issue: string; to: string } // "me" or an e-mail
+  | { name: "status"; issue: string; status: string };
+
+export const COMMAND_HELP = "Commands: /issue KEY title · /assign KEY-1 @me|@email · /status KEY-1 Status name · /remind me in 20 minutes …";
+
+/** Reads /issue, /assign and /status; null for anything else (or a malformed one: show COMMAND_HELP). */
+export function parseCommand(input: string): SlashCommand | null {
+  const t = input.trim();
+  let m = /^\/issue\s+([A-Za-z][A-Za-z0-9]{1,9})\s+(.+)$/s.exec(t);
+  if (m) return { name: "issue", project: m[1]!.toUpperCase(), title: m[2]!.trim() };
+  m = /^\/assign\s+([A-Za-z][A-Za-z0-9]{1,9}-[1-9][0-9]*)\s+@?(\S+)$/.exec(t);
+  if (m) return { name: "assign", issue: m[1]!.toUpperCase(), to: m[2]!.toLowerCase() };
+  m = /^\/status\s+([A-Za-z][A-Za-z0-9]{1,9}-[1-9][0-9]*)\s+(.+)$/.exec(t);
+  if (m) return { name: "status", issue: m[1]!.toUpperCase(), status: m[2]!.trim() };
+  return null;
+}
+
+/** My settings for a conversation (S71). */
+export type Level = "all" | "mentions" | "muted";
+export type ConversationPrefs = { conversation_id: string; level: Level; section: string };
+
+/** Sidebar sections (S71): my named sections (sorted), then the default Channels and Direct messages lists. */
+export function sections(convs: Conversation[], prefs: ConversationPrefs[]): { title: string; items: Conversation[] }[] {
+  const sectionOf = new Map(prefs.map((p) => [p.conversation_id, p.section]));
+  const named = [...new Set(prefs.map((p) => p.section).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const rest = convs.filter((c) => !sectionOf.get(c.id));
+  return [
+    ...named.map((title) => ({ title, items: convs.filter((c) => sectionOf.get(c.id) === title) })).filter((s) => s.items.length > 0),
+    { title: "Channels", items: rest.filter((c) => c.kind === "channel") },
+    { title: "Direct messages", items: rest.filter((c) => c.kind === "dm") },
+  ];
+}
+
 /** A user group (S70): @handle notifies its members. */
 export type UserGroup = { id: string; handle: string; name: string; member_ids: string[]; created_by: string; created_at: string };
 

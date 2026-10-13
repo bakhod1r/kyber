@@ -1,5 +1,5 @@
 // notify: domain model (types and pure rules) — no I/O.
-export type NotificationKind = "assigned" | "commented" | "mentioned" | "transitioned" | "announcement" | "meeting" | "reminder";
+export type NotificationKind = "assigned" | "commented" | "mentioned" | "transitioned" | "announcement" | "meeting" | "reminder" | "message";
 export type Notification = {
   id: string;
   kind: NotificationKind;
