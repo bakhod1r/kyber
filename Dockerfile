@@ -11,10 +11,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/kyber ./cmd/kyber
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/kyber ./cmd/kyber && mkdir -p /out/data/attachments
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/kyber /kyber
+# Uploaded files (mount a volume here); owned by the runtime user so a fresh volume is writable.
+COPY --from=build --chown=nonroot:nonroot /out/data /data
+ENV KYBER_ATTACHMENTS_DIR=/data/attachments
 EXPOSE 8080
 USER nonroot:nonroot
 ENTRYPOINT ["/kyber"]

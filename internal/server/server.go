@@ -4,6 +4,13 @@ package server
 import (
 	"context"
 	"fmt"
+	attapp "github.com/bakhod1r/kyber/internal/attachment/application"
+	attdomain "github.com/bakhod1r/kyber/internal/attachment/domain"
+	attacl "github.com/bakhod1r/kyber/internal/attachment/infrastructure/acl"
+	"github.com/bakhod1r/kyber/internal/attachment/infrastructure/blobfs"
+	attmemory "github.com/bakhod1r/kyber/internal/attachment/infrastructure/memory"
+	attpg "github.com/bakhod1r/kyber/internal/attachment/infrastructure/postgres"
+	atthttp "github.com/bakhod1r/kyber/internal/attachment/interfaces/httpapi"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -151,6 +158,8 @@ type deps struct {
 	filters       searchdomain.FilterRepository
 	goals         goaldomain.Repository
 	pages         docsdomain.Repository
+	attachments   attdomain.Repository
+	blobs         attapp.Blobs
 	forms         formdomain.Repository
 	announcements anndomain.Repository
 	siteAdmins    map[string]bool // lower-case emails administering the default workspace
@@ -209,6 +218,9 @@ func WithTelegramBot(bot *telegram.Bot, wait time.Duration) Option {
 func WithMailer(m notifyapp.Sender) Option { return func(d *deps) { d.mailer = m } }
 
 // WithPublicURL is the base of links in emails and Telegram messages.
+// WithAttachmentsDir stores uploaded files under dir (default: in memory).
+func WithAttachmentsDir(dir string) Option { return func(d *deps) { d.blobs = blobfs.New(dir) } }
+
 func WithPublicURL(u string) Option { return func(d *deps) { d.publicURL = u } }
 
 // WithDispatchEvery sets how often email/Telegram deliveries are sent (default 5 s).
@@ -258,7 +270,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), worklogs: issuememory.NewWorklogRepository(), fields: issuememory.NewCustomFieldRepository(),
-		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: docsmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
+		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: docsmemory.NewRepository(), attachments: attmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
@@ -305,7 +317,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), worklogs: issuepg.NewWorklogRepository(pool), fields: issuepg.NewCustomFieldRepository(pool),
-		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
+		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), attachments: attpg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
@@ -455,6 +467,11 @@ func build(log *slog.Logger, d deps) http.Handler {
 	searchhttp.New(search, log).Register(api)
 	goalhttp.New(goals, log).Register(api)
 	docshttp.New(pages, log).Register(api)
+	if d.blobs == nil {
+		d.blobs = attmemory.NewBlobs()
+	}
+	atthttp.New(attapp.NewService(attapp.Deps{Issues: attacl.NewIssues(issues), Attachments: d.attachments, Blobs: d.blobs,
+		NewID: id.New, Now: time.Now}), log).Register(api)
 	annhttp.New(annapp.NewService(annapp.Deps{Access: annacl.NewAccess(projects, workspaces, d.siteAdmin), Announcements: d.announcements,
 		NewID: id.New, Now: time.Now}), log).Register(api)
 	formhttp.New(forms, log).Register(api)

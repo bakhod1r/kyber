@@ -149,9 +149,10 @@ func UserFrom(ctx context.Context) *domain.User {
 func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, fromCookie := tokenFrom(r)
-		if fromCookie && !safeMethod(r.Method) && !isJSON(r) {
-			// CSRF guard: browsers cannot send cross-site JSON without a CORS preflight.
-			msg := "cookie-authenticated writes require Content-Type: application/json"
+		if fromCookie && !safeMethod(r.Method) && !isJSON(r) && r.Header.Get(RequestHeader) == "" {
+			// CSRF guard: browsers cannot send cross-site JSON, or a custom header (file
+			// uploads are multipart), without a CORS preflight.
+			msg := "cookie-authenticated writes require Content-Type: application/json or the " + RequestHeader + " header"
 			httpx.Problem(w, r, errorx.New(httpx.CodeCSRF, msg).WithDetails(msg))
 			return
 		}
@@ -168,6 +169,9 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(auth.WithActor(ctx, string(u.ID()))))
 	})
 }
+
+// RequestHeader marks a same-origin non-JSON write (a multipart upload) from the web app.
+const RequestHeader = "X-Kyber-Request"
 
 // tokenFrom prefers the Bearer header; fromCookie reports a cookie-sourced token.
 func tokenFrom(r *http.Request) (token string, fromCookie bool) {

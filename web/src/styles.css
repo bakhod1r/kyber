@@ -444,3 +444,9 @@ a.user:hover { text-decoration: underline; }
 .meeting-list .badge-label { display: inline-block; padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-size: 0.85em; }
 .meeting-list .rsvp { display: inline-flex; gap: 4px; margin-left: 8px; }
 .meeting-list .rsvp button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+/* Attachments (C5) */
+.attachments h4 { margin: 0; }
+.attachment-list { list-style: none; padding: 0; margin: 0.5rem 0 0; display: grid; gap: 0.25rem; }
+.attachment-thumb { width: 2.5rem; height: 2.5rem; object-fit: cover; border-radius: 4px; }
+label.button { cursor: pointer; }

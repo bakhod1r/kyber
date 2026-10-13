@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.38.0
+  version: 0.39.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -234,6 +234,58 @@ paths:
         "200": { description: Current user, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
         "401": { $ref: "#/components/responses/Error" }
 
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/issues/{key}/attachments:
+    parameters: [{ name: key, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: listAttachments
+      description: The issue's files, oldest first (needs browse on the issue).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Attachment" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: uploadAttachment
+      description: Attach a file (multipart field "file", at most 25 MiB; needs edit on the issue). The name is reduced to a safe base name.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { $ref: "#/components/schemas/Attachment" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/attachments/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: downloadAttachment
+      description: >-
+        The file. Images and PDFs render inline unless ?download is given; every other type is served as an attachment
+        with nosniff and a sandboxing Content-Security-Policy.
+      parameters: [{ name: download, in: query, required: false, schema: { type: string }, allowEmptyValue: true }]
+      responses:
+        "200":
+          description: File contents
+          content: { "*/*": { schema: { type: string, format: binary } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteAttachment
+      description: Remove a file (its uploader, or a project administrator).
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/mcp:
     post:
@@ -2316,6 +2368,20 @@ components:
         body: { type: string }
         by: { type: string }
         at: { type: string, format: date-time }
+    Attachment:
+      type: object
+      required: [id, issue_key, name, content_type, size, sha256, uploaded_by, uploaded_at, inline, url]
+      properties:
+        id: { type: string }
+        issue_key: { type: string }
+        name: { type: string }
+        content_type: { type: string }
+        size: { type: integer }
+        sha256: { type: string }
+        uploaded_by: { type: string }
+        uploaded_at: { type: string, format: date-time }
+        inline: { type: boolean, description: "Browsers may show it in place (images, PDF)" }
+        url: { type: string }
     AdminMember:
       type: object
       required: [id, name, email, role]

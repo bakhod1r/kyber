@@ -25,6 +25,10 @@ export async function request<T>(method: string, path: string, body?: unknown): 
     headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  return decode<T>(res);
+}
+
+async function decode<T>(res: Response): Promise<T> {
   const text = await res.text();
   const data: unknown = text ? JSON.parse(text) : undefined;
   if (!res.ok) {
@@ -32,6 +36,15 @@ export async function request<T>(method: string, path: string, body?: unknown): 
     throw new ApiError(res.status, `request failed (${res.status})`);
   }
   return data as T;
+}
+
+/** upload posts a file as multipart field "file". The custom header is the CSRF proof the server
+ * asks of non-JSON cookie writes (browsers cannot send it cross-site without a preflight). */
+export async function upload<T>(path: string, file: File): Promise<T> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(path, { method: "POST", credentials: "same-origin", headers: { "X-Kyber-Request": "1" }, body: form });
+  return decode<T>(res);
 }
 
 /** requestText fetches a text body (release notes are Markdown). */

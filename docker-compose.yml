@@ -23,6 +23,7 @@ services:
       KYBER_REDIS_URL: redis://redis:6379/0 # optional: shares the login limiter across replicas
       KYBER_COOKIE_SECURE: "false" # set to true behind HTTPS
     ports: ["8080:8080"]
+    volumes: ["attachments:/data/attachments"] # uploaded files; back up with the database
     depends_on:
       postgres:
         condition: service_healthy
@@ -30,3 +31,4 @@ services:
         condition: service_healthy
 volumes:
   pgdata:
+  attachments:
