@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.28.0
+  version: 0.29.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -372,7 +372,7 @@ paths:
       operationId: openStream
       description: |
         Server-Sent Events of this workspace for the caller (`message.posted`, `message.edited`,
-        `message.deleted`, `typing`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
+        `message.deleted`, `message.reacted`, `typing`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
         what was missed. Keeping the stream open marks the caller online.
       parameters:
         - { name: Last-Event-ID, in: header, schema: { type: string } }
@@ -429,6 +429,44 @@ paths:
       requestBody: { $ref: "#/components/requestBodies/MessageBody" }
       responses:
         "201": { description: Posted, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/messages/{id}/replies:
+    get:
+      operationId: listReplies
+      description: The thread of a top-level message, oldest first.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: replyToMessage
+      description: Replies in the thread of a top-level message (members only).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { $ref: "#/components/requestBodies/MessageBody" }
+      responses:
+        "201": { description: Posted, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/messages/{id}/reactions:
+    post:
+      operationId: toggleReaction
+      description: Toggles the caller's emoji reaction (members only).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [emoji], properties: { emoji: { type: string } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
@@ -1816,7 +1854,7 @@ components:
         created_at: { type: string, format: date-time }
     Message:
       type: object
-      required: [id, conversation_id, author_id, body, created_at, edited_at, deleted]
+      required: [id, conversation_id, author_id, body, created_at, edited_at, deleted, thread_id, reply_count, reactions]
       properties:
         id: { type: string }
         conversation_id: { type: string }
@@ -1825,6 +1863,11 @@ components:
         created_at: { type: string, format: date-time }
         edited_at: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
         deleted: { type: boolean }
+        thread_id: { oneOf: [{ type: string }, { type: "null" }], description: The parent message of a reply }
+        reply_count: { type: integer }
+        reactions:
+          type: array
+          items: { type: object, required: [emoji, user_ids], properties: { emoji: { type: string }, user_ids: { type: array, items: { type: string } } } }
     Meeting:
       type: object
       additionalProperties: false

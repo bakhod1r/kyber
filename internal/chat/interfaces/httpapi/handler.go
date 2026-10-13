@@ -35,6 +35,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/conversations/{id}/messages", h.post)
 	mux.HandleFunc("PATCH /api/v1/messages/{id}", h.edit)
 	mux.HandleFunc("DELETE /api/v1/messages/{id}", h.delete)
+	mux.HandleFunc("GET /api/v1/messages/{id}/replies", h.replies)
+	mux.HandleFunc("POST /api/v1/messages/{id}/replies", h.reply)
+	mux.HandleFunc("POST /api/v1/messages/{id}/reactions", h.react)
 }
 
 var errBadLimit = errors.New("limit must be a number from 1 to 200")
@@ -51,7 +54,8 @@ func codeFor(err error) (string, bool) {
 		errors.Is(err, domain.ErrDeleted):
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
-		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit):
+		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
+		errors.Is(err, domain.ErrInvalidEmoji):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -88,13 +92,32 @@ type messageDTO struct {
 	CreatedAt      time.Time  `json:"created_at"`
 	EditedAt       *time.Time `json:"edited_at"`
 	Deleted        bool       `json:"deleted"`
+	ThreadID       *string    `json:"thread_id"`
+	ReplyCount     int        `json:"reply_count"`
+	Reactions      []reaction `json:"reactions"`
+}
+
+type reaction struct {
+	Emoji   string   `json:"emoji"`
+	UserIDs []string `json:"user_ids"`
 }
 
 func toMessage(m *domain.Message) messageDTO {
 	d := messageDTO{ID: string(m.ID), ConversationID: string(m.Conversation), AuthorID: string(m.Author), Body: m.Body,
-		CreatedAt: m.CreatedAt, Deleted: m.Deleted}
+		CreatedAt: m.CreatedAt, Deleted: m.Deleted, ReplyCount: m.ReplyCount, Reactions: []reaction{}}
 	if !m.EditedAt.IsZero() {
 		d.EditedAt = &m.EditedAt
+	}
+	if m.Thread != "" {
+		t := string(m.Thread)
+		d.ThreadID = &t
+	}
+	for _, r := range m.Reactions {
+		users := make([]string, len(r.Users))
+		for i, u := range r.Users {
+			users[i] = string(u)
+		}
+		d.Reactions = append(d.Reactions, reaction{Emoji: r.Emoji, UserIDs: users})
 	}
 	return d
 }
@@ -212,6 +235,10 @@ func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
+	h.messages(w, ms)
+}
+
+func (h *Handler) messages(w http.ResponseWriter, ms []*domain.Message) {
 	out := make([]messageDTO, len(ms))
 	for i, m := range ms {
 		out[i] = toMessage(m)
@@ -261,4 +288,43 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) typing(w http.ResponseWriter, r *http.Request) {
 	h.noContent(w, r, func() error { return h.svc.Typing(r.Context(), auth.Actor(r.Context()), r.PathValue("id")) })
+}
+
+func (h *Handler) replies(w http.ResponseWriter, r *http.Request) {
+	ms, err := h.svc.Replies(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.messages(w, ms)
+}
+
+func (h *Handler) reply(w http.ResponseWriter, r *http.Request) {
+	body, err := decodeBody(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	m, err := h.svc.Reply(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), body)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, toMessage(m))
+}
+
+func (h *Handler) react(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Emoji string `json:"emoji"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	m, err := h.svc.React(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Emoji)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toMessage(m))
 }

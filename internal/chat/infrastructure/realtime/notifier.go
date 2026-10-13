@@ -26,13 +26,32 @@ type message struct {
 	CreatedAt      time.Time  `json:"created_at"`
 	EditedAt       *time.Time `json:"edited_at"`
 	Deleted        bool       `json:"deleted"`
+	ThreadID       *string    `json:"thread_id"`
+	ReplyCount     int        `json:"reply_count"`
+	Reactions      []reaction `json:"reactions"`
+}
+
+type reaction struct {
+	Emoji   string   `json:"emoji"`
+	UserIDs []string `json:"user_ids"`
 }
 
 func toMessage(m domain.Message) message {
 	d := message{ID: string(m.ID), ConversationID: string(m.Conversation), AuthorID: string(m.Author), Body: m.Body,
-		CreatedAt: m.CreatedAt, Deleted: m.Deleted}
+		CreatedAt: m.CreatedAt, Deleted: m.Deleted, ReplyCount: m.ReplyCount, Reactions: []reaction{}}
 	if !m.EditedAt.IsZero() {
 		d.EditedAt = &m.EditedAt
+	}
+	if m.Thread != "" {
+		t := string(m.Thread)
+		d.ThreadID = &t
+	}
+	for _, r := range m.Reactions {
+		users := make([]string, len(r.Users))
+		for i, u := range r.Users {
+			users[i] = string(u)
+		}
+		d.Reactions = append(d.Reactions, reaction{Emoji: r.Emoji, UserIDs: users})
 	}
 	return d
 }
@@ -45,6 +64,8 @@ func (n Notifier) Notify(ctx context.Context, to []domain.UserID, e domain.Event
 	case domain.MessageEdited:
 		data = toMessage(e.Message)
 	case domain.MessageDeleted:
+		data = toMessage(e.Message)
+	case domain.MessageReacted:
 		data = toMessage(e.Message)
 	case domain.Typing:
 		data = map[string]string{"conversation_id": string(e.Conversation), "user_id": string(e.User)}

@@ -125,7 +125,7 @@ func (r *Repository) Unread(_ context.Context, u domain.UserID) (map[domain.Conv
 	out := map[domain.ConversationID]int{}
 	for _, m := range r.messages {
 		c := r.convs[m.Conversation]
-		if c.IsMember(u) && m.Author != u && !m.Deleted && m.CreatedAt.After(r.readAt[member{c.ID, u}]) {
+		if c.IsMember(u) && m.Thread == "" && m.Author != u && !m.Deleted && m.CreatedAt.After(r.readAt[member{c.ID, u}]) {
 			out[c.ID]++
 		}
 	}
@@ -137,13 +137,33 @@ func (r *Repository) Messages() *Messages { return &Messages{r} }
 
 type Messages struct{ r *Repository }
 
+func cloneMsg(m domain.Message) domain.Message {
+	m.Reactions = slices.Clone(m.Reactions)
+	for i := range m.Reactions {
+		m.Reactions[i].Users = slices.Clone(m.Reactions[i].Users)
+	}
+	return m
+}
+
+// read returns a copy with its reply count (caller holds the lock).
+func (s *Messages) read(m domain.Message) *domain.Message {
+	c := cloneMsg(m)
+	c.ReplyCount = 0
+	for _, o := range s.r.messages {
+		if o.Thread == m.ID && m.Thread == "" && !o.Deleted {
+			c.ReplyCount++
+		}
+	}
+	return &c
+}
+
 func (s *Messages) Post(_ context.Context, m *domain.Message) error {
 	s.r.mu.Lock()
 	defer s.r.mu.Unlock()
 	if _, ok := s.r.convs[m.Conversation]; !ok {
 		return domain.ErrConversationNotFound
 	}
-	s.r.messages[m.ID] = *m
+	s.r.messages[m.ID] = cloneMsg(*m)
 	return nil
 }
 
@@ -153,7 +173,7 @@ func (s *Messages) Update(_ context.Context, m *domain.Message) error {
 	if _, ok := s.r.messages[m.ID]; !ok {
 		return domain.ErrMessageNotFound
 	}
-	s.r.messages[m.ID] = *m
+	s.r.messages[m.ID] = cloneMsg(*m)
 	return nil
 }
 
@@ -164,7 +184,7 @@ func (s *Messages) ByID(_ context.Context, id domain.MessageID) (*domain.Message
 	if !ok {
 		return nil, domain.ErrMessageNotFound
 	}
-	return &m, nil
+	return s.read(m), nil
 }
 
 func newer(a, b domain.Message) int {
@@ -177,14 +197,27 @@ func (s *Messages) History(_ context.Context, conv domain.ConversationID, before
 	cursor, hasCursor := s.r.messages[before]
 	var all []domain.Message
 	for _, m := range s.r.messages {
-		if m.Conversation == conv && (!hasCursor || newer(cursor, m) < 0) {
+		if m.Conversation == conv && m.Thread == "" && (!hasCursor || newer(cursor, m) < 0) {
 			all = append(all, m)
 		}
 	}
 	slices.SortFunc(all, newer)
 	out := make([]*domain.Message, 0, min(limit, len(all)))
 	for i := 0; i < len(all) && i < limit; i++ {
-		out = append(out, &all[i])
+		out = append(out, s.read(all[i]))
 	}
+	return out, nil
+}
+
+func (s *Messages) Replies(_ context.Context, parent domain.MessageID) ([]*domain.Message, error) {
+	s.r.mu.Lock()
+	defer s.r.mu.Unlock()
+	var out []*domain.Message
+	for _, m := range s.r.messages {
+		if m.Thread == parent {
+			out = append(out, s.read(m))
+		}
+	}
+	slices.SortFunc(out, func(a, b *domain.Message) int { return newer(*b, *a) })
 	return out, nil
 }

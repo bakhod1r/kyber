@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -193,5 +194,49 @@ func TestRealtimeEvents(t *testing.T) {
 	want := []string{"message.posted→[dev lead]", "message.edited→[dev lead]", "message.deleted→[dev lead]", "typing→[lead]"}
 	if fmt.Sprint(*ev) != fmt.Sprint(want) {
 		t.Fatalf("events = %v, want %v", *ev, want)
+	}
+}
+
+func TestThreadsAndReactions(t *testing.T) {
+	svc, ctx, ev := setupWithEvents(t)
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "dev"})
+	_ = svc.Join(ctx, "dev", string(ch.ID))
+	parent, _ := svc.Post(ctx, "lead", string(ch.ID), "release today?")
+	other, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "other"})
+	foreign, _ := svc.Post(ctx, "lead", string(other.ID), "elsewhere")
+
+	r, err := svc.Reply(ctx, "dev", string(parent.ID), "yes")
+	if err != nil || r.Thread != parent.ID {
+		t.Fatalf("reply = %+v %v", r, err)
+	}
+	if _, err := svc.Reply(ctx, "dev", string(r.ID), "nested"); !errors.Is(err, domain.ErrNestedThread) {
+		t.Fatalf("nested = %v", err)
+	}
+	if _, err := svc.Reply(ctx, "dev", string(foreign.ID), "not a member"); !errors.Is(err, domain.ErrNotMember) {
+		t.Fatalf("reply without membership = %v", err)
+	}
+	thread, err := svc.Replies(ctx, "qa", string(parent.ID))
+	if err != nil || len(thread) != 1 {
+		t.Fatalf("replies = %v %v", thread, err)
+	}
+	if top, _ := svc.History(ctx, "dev", string(ch.ID), "", 0); len(top) != 1 || top[0].ReplyCount != 1 {
+		t.Fatalf("history = %+v", top)
+	}
+
+	m, err := svc.React(ctx, "dev", string(parent.ID), "🎉")
+	if err != nil || len(m.Reactions) != 1 {
+		t.Fatalf("react = %+v %v", m, err)
+	}
+	if _, err := svc.React(ctx, "qa", string(parent.ID), "🎉"); !errors.Is(err, domain.ErrNotMember) {
+		t.Fatalf("react without joining = %v", err)
+	}
+	if m, _ := svc.React(ctx, "dev", string(parent.ID), "🎉"); len(m.Reactions) != 0 {
+		t.Fatalf("toggle off = %+v", m.Reactions)
+	}
+	if last := (*ev)[len(*ev)-1]; last != "message.reacted→[dev lead]" {
+		t.Fatalf("last event = %s", last)
+	}
+	if !slices.Contains(*ev, "message.posted→[dev lead]") {
+		t.Fatalf("events = %v", *ev)
 	}
 }

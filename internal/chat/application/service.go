@@ -297,3 +297,61 @@ func (s *Service) Typing(ctx context.Context, actor, conv string) error {
 	s.d.Notifier.Notify(ctx, others, domain.Typing{Conversation: c.ID, User: domain.UserID(actor)})
 	return nil
 }
+
+// member loads a message and its conversation, which actor must belong to.
+func (s *Service) asMember(ctx context.Context, actor, id string) (*domain.Message, *domain.Conversation, error) {
+	m, err := s.message(ctx, actor, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	c, err := s.d.Conversations.ByID(ctx, m.Conversation)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !c.IsMember(domain.UserID(actor)) {
+		return nil, nil, domain.ErrNotMember
+	}
+	return m, c, nil
+}
+
+// Reply answers a top-level message in its thread.
+func (s *Service) Reply(ctx context.Context, actor, parent, body string) (*domain.Message, error) {
+	p, c, err := s.asMember(ctx, actor, parent)
+	if err != nil {
+		return nil, err
+	}
+	m, err := domain.NewReply(domain.MessageID(s.d.NewID()), p, domain.UserID(actor), body, s.d.Now())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.d.Messages.Post(ctx, m); err != nil {
+		return nil, err
+	}
+	s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *m})
+	return m, nil
+}
+
+// Replies lists a thread, oldest first.
+func (s *Service) Replies(ctx context.Context, actor, parent string) ([]*domain.Message, error) {
+	p, err := s.message(ctx, actor, parent)
+	if err != nil {
+		return nil, err
+	}
+	return s.d.Messages.Replies(ctx, p.ID)
+}
+
+// React toggles actor's emoji on a message.
+func (s *Service) React(ctx context.Context, actor, id, emoji string) (*domain.Message, error) {
+	m, c, err := s.asMember(ctx, actor, id)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := m.React(domain.UserID(actor), emoji); err != nil {
+		return nil, err
+	}
+	if err := s.d.Messages.Update(ctx, m); err != nil {
+		return nil, err
+	}
+	s.d.Notifier.Notify(ctx, c.Members, domain.MessageReacted{Message: *m})
+	return m, nil
+}

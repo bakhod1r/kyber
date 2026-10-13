@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -23,6 +24,8 @@ var (
 	ErrDeleted              = errors.New("the message was deleted")
 	ErrNameTaken            = errors.New("a channel with this name already exists")
 	ErrConversationNotFound = errors.New("conversation not found")
+	ErrNestedThread         = errors.New("a reply cannot have replies")
+	ErrInvalidEmoji         = errors.New("a reaction is one emoji or :name: of up to 32 characters")
 	ErrMessageNotFound      = errors.New("message not found")
 )
 
@@ -147,6 +150,15 @@ type Message struct {
 	CreatedAt    time.Time
 	EditedAt     time.Time // zero unless edited
 	Deleted      bool
+	Thread       MessageID  // the parent message; empty for a top-level message
+	ReplyCount   int        // read model: live replies of a top-level message
+	Reactions    []Reaction // sorted by emoji
+}
+
+// Reaction is one emoji and who reacted with it (sorted).
+type Reaction struct {
+	Emoji string
+	Users []UserID
 }
 
 func body(s string) (string, error) {
@@ -163,6 +175,48 @@ func NewMessage(id MessageID, conv ConversationID, author UserID, text string, n
 		return nil, err
 	}
 	return &Message{ID: id, Conversation: conv, Author: author, Body: b, CreatedAt: now.UTC()}, nil
+}
+
+// NewReply answers a top-level message in its thread.
+func NewReply(id MessageID, parent *Message, author UserID, text string, now time.Time) (*Message, error) {
+	if parent.Thread != "" {
+		return nil, ErrNestedThread
+	}
+	if parent.Deleted {
+		return nil, ErrDeleted
+	}
+	m, err := NewMessage(id, parent.Conversation, author, text, now)
+	if err != nil {
+		return nil, err
+	}
+	m.Thread = parent.ID
+	return m, nil
+}
+
+// React toggles u's emoji on the message and reports whether it is now on.
+func (m *Message) React(u UserID, emoji string) (bool, error) {
+	if m.Deleted {
+		return false, ErrDeleted
+	}
+	if emoji == "" || strings.ContainsFunc(emoji, unicode.IsSpace) || utf8.RuneCountInString(emoji) > 32 {
+		return false, ErrInvalidEmoji
+	}
+	i, found := slices.BinarySearchFunc(m.Reactions, emoji, func(r Reaction, e string) int { return strings.Compare(r.Emoji, e) })
+	if !found {
+		m.Reactions = slices.Insert(m.Reactions, i, Reaction{Emoji: emoji, Users: []UserID{u}})
+		return true, nil
+	}
+	r := &m.Reactions[i]
+	if j, in := slices.BinarySearch(r.Users, u); !in {
+		r.Users = slices.Insert(r.Users, j, u)
+		return true, nil
+	} else {
+		r.Users = slices.Delete(r.Users, j, j+1)
+	}
+	if len(r.Users) == 0 {
+		m.Reactions = slices.Delete(m.Reactions, i, i+1)
+	}
+	return false, nil
 }
 
 func (m *Message) change(actor UserID) error {
@@ -191,7 +245,7 @@ func (m *Message) Delete(actor UserID, now time.Time) error {
 	if err := m.change(actor); err != nil {
 		return err
 	}
-	m.Body, m.Deleted, m.EditedAt = "", true, now.UTC()
+	m.Body, m.Deleted, m.EditedAt, m.Reactions = "", true, now.UTC(), nil
 	return nil
 }
 
@@ -205,15 +259,18 @@ type Repository interface {
 	// Visible lists the workspace's public channels and every conversation u belongs to, by name then creation.
 	Visible(ctx context.Context, ws WorkspaceID, u UserID) ([]*Conversation, error)
 	MarkRead(ctx context.Context, id ConversationID, u UserID, at time.Time) error
-	// Unread counts, per conversation u belongs to, live messages by others newer than u's read cursor.
+	// Unread counts, per conversation u belongs to, live top-level messages by others newer than u's read cursor.
 	Unread(ctx context.Context, u UserID) (map[ConversationID]int, error)
 }
 
 // Messages stores messages.
 type Messages interface {
 	Post(ctx context.Context, m *Message) error
-	Update(ctx context.Context, m *Message) error // body, edited, deleted
+	Update(ctx context.Context, m *Message) error // body, edited, deleted, reactions
 	ByID(ctx context.Context, id MessageID) (*Message, error)
-	// History lists up to limit messages of a conversation older than before (all when empty), newest first.
+	// History lists up to limit top-level messages of a conversation older than before (all when empty),
+	// newest first, with their reply counts.
 	History(ctx context.Context, conv ConversationID, before MessageID, limit int) ([]*Message, error)
+	// Replies lists a thread, oldest first.
+	Replies(ctx context.Context, parent MessageID) ([]*Message, error)
 }

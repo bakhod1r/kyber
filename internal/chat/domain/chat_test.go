@@ -113,3 +113,45 @@ func TestMessage(t *testing.T) {
 		t.Fatalf("delete twice = %v", err)
 	}
 }
+
+func TestReply(t *testing.T) {
+	parent, _ := domain.NewMessage("m-1", "c-1", "u-a", "deploy?", t0)
+	r, err := domain.NewReply("m-2", parent, "u-b", "after lunch", t0)
+	if err != nil || r.Thread != "m-1" || r.Conversation != "c-1" {
+		t.Fatalf("reply = %+v %v", r, err)
+	}
+	if _, err := domain.NewReply("m-3", r, "u-a", "nested", t0); !errors.Is(err, domain.ErrNestedThread) {
+		t.Fatalf("reply to a reply = %v", err)
+	}
+	_ = parent.Delete("u-a", t0)
+	if _, err := domain.NewReply("m-4", parent, "u-b", "late", t0); !errors.Is(err, domain.ErrDeleted) {
+		t.Fatalf("reply to deleted = %v", err)
+	}
+}
+
+func TestReact(t *testing.T) {
+	m, _ := domain.NewMessage("m-1", "c-1", "u-a", "shipped", t0)
+	for _, r := range []struct {
+		user  domain.UserID
+		emoji string
+	}{{"u-b", "🎉"}, {"u-a", "🎉"}, {"u-b", "+1"}} {
+		if on, err := m.React(r.user, r.emoji); err != nil || !on {
+			t.Fatalf("react %v = %v %v", r, on, err)
+		}
+	}
+	if len(m.Reactions) != 2 || m.Reactions[0].Emoji != "+1" || len(m.Reactions[1].Users) != 2 || m.Reactions[1].Users[0] != "u-a" {
+		t.Fatalf("reactions = %+v (sorted by emoji, users sorted)", m.Reactions)
+	}
+	if on, _ := m.React("u-b", "+1"); on || len(m.Reactions) != 1 {
+		t.Fatalf("toggle off = %v %+v (empty reaction removed)", on, m.Reactions)
+	}
+	for _, bad := range []string{"", " ", "two words", strings.Repeat("x", 33)} {
+		if _, err := m.React("u-a", bad); !errors.Is(err, domain.ErrInvalidEmoji) {
+			t.Errorf("emoji %q: err = %v", bad, err)
+		}
+	}
+	_ = m.Delete("u-a", t0)
+	if _, err := m.React("u-b", "🎉"); !errors.Is(err, domain.ErrDeleted) {
+		t.Fatalf("react to deleted = %v", err)
+	}
+}

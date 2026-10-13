@@ -23,6 +23,8 @@ backends.
 - **S52 Threads, reactions, mentions, issue previews** — `thread_id` replies + reply count; reactions toggle
   (one per emoji per user); `@email`/`@name` mentions notify through the Notify context; issue keys in a message
   come back as previews only when the reader may browse the issue.
+  ✅ **Threads and reactions done** (replies stay out of channel history and unread, `reply_count`, toggle
+  reactions, `message.reacted` on the stream; API 0.29.0). Mentions and issue previews follow (S52b).
 - **S53 Chat UI** — sidebar (channels, DMs, unread badges), channel view with infinite scroll, composer with
   mentions, thread panel, reactions, typing line; TanStack Query + the stream.
 - **S54 Pins, search, files** (P1) — pin messages, search in messages I can read, file attachments via BlobStore.

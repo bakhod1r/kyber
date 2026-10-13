@@ -102,3 +102,49 @@ func TestChat(t *testing.T) {
 		expect(t, code, 422, b)
 	})
 }
+
+// S52: threads and reactions.
+func TestChatThreadsAndReactions(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		qa := anon.signedIn("qa@x.uz")
+		_, devMe := dev.do("GET", "/api/v1/me", nil)
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "general"})
+		url := "/api/v1/conversations/" + ch["id"].(string)
+		dev.do("POST", url+"/join", nil)
+		_, parent := lead.do("POST", url+"/messages", map[string]string{"body": "release today?"})
+		pURL := "/api/v1/messages/" + parent["id"].(string)
+
+		code, reply := dev.do("POST", pURL+"/replies", map[string]string{"body": "after lunch"})
+		expect(t, code, 201, reply)
+		if reply["thread_id"] != parent["id"] {
+			t.Fatalf("reply = %v", reply)
+		}
+		code, b := dev.do("POST", "/api/v1/messages/"+reply["id"].(string)+"/replies", map[string]string{"body": "nested"})
+		expect(t, code, 422, b)
+		code, b = qa.do("POST", pURL+"/replies", map[string]string{"body": "not joined"})
+		expect(t, code, 403, b)
+		_, thread := qa.do("GET", pURL+"/replies", nil)
+		if items := thread["items"].([]any); len(items) != 1 || items[0].(map[string]any)["body"] != "after lunch" {
+			t.Fatalf("thread = %v", thread)
+		}
+		_, page := dev.do("GET", url+"/messages", nil)
+		if items := page["items"].([]any); len(items) != 1 || items[0].(map[string]any)["reply_count"] != float64(1) {
+			t.Fatalf("history = %v", page)
+		}
+
+		code, m := dev.do("POST", pURL+"/reactions", map[string]string{"emoji": "🎉"})
+		expect(t, code, 200, m)
+		rs := m["reactions"].([]any)
+		if len(rs) != 1 || rs[0].(map[string]any)["emoji"] != "🎉" || rs[0].(map[string]any)["user_ids"].([]any)[0] != devMe["id"] {
+			t.Fatalf("reactions = %v", m)
+		}
+		code, b = dev.do("POST", pURL+"/reactions", map[string]string{"emoji": "two words"})
+		expect(t, code, 422, b)
+		_, m = dev.do("POST", pURL+"/reactions", map[string]string{"emoji": "🎉"})
+		if len(m["reactions"].([]any)) != 0 {
+			t.Fatalf("toggle off = %v", m)
+		}
+	})
+}

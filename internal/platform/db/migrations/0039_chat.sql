@@ -32,6 +32,15 @@ CREATE TABLE messages (
     created_at      timestamptz NOT NULL,
     edited_at       timestamptz,
     deleted         boolean NOT NULL DEFAULT false,
+    thread_id       uuid REFERENCES messages (id) ON DELETE CASCADE,
     CHECK (deleted OR btrim(body) <> '')
 );
-CREATE INDEX messages_history ON messages (conversation_id, created_at DESC, id DESC);
+CREATE INDEX messages_history ON messages (conversation_id, created_at DESC, id DESC) WHERE thread_id IS NULL;
+CREATE INDEX messages_thread ON messages (thread_id, created_at) WHERE thread_id IS NOT NULL;
+
+CREATE TABLE message_reactions (
+    message_id uuid NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+    user_id    uuid NOT NULL,
+    emoji      text NOT NULL CHECK (char_length(emoji) BETWEEN 1 AND 32),
+    PRIMARY KEY (message_id, emoji, user_id)
+);

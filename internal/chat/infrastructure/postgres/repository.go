@@ -4,6 +4,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -121,7 +122,7 @@ func (r *Repository) Unread(ctx context.Context, u domain.UserID) (map[domain.Co
 	}
 	rows, err := r.pool.Query(ctx, `SELECT m.conversation_id, count(msg.id) FROM conversation_members m
 		JOIN messages msg ON msg.conversation_id = m.conversation_id AND msg.created_at > m.last_read_at
-			AND msg.author_id <> m.user_id AND NOT msg.deleted
+			AND msg.author_id <> m.user_id AND NOT msg.deleted AND msg.thread_id IS NULL
 		WHERE m.user_id = $1 GROUP BY m.conversation_id`, string(u))
 	if err != nil {
 		return nil, err
@@ -139,13 +140,28 @@ type Messages struct{ pool *pgxpool.Pool }
 
 func NewMessages(pool *pgxpool.Pool) *Messages { return &Messages{pool: pool} }
 
-const msgCols = `id, conversation_id, author_id, body, created_at, edited_at, deleted`
+const insertCols = `id, conversation_id, author_id, body, created_at, edited_at, deleted, thread_id`
+
+// msgCols reads a message (alias m) with its reply count and reactions ("emoji user,user" rows).
+const msgCols = `m.id, m.conversation_id, m.author_id, m.body, m.created_at, m.edited_at, m.deleted, coalesce(m.thread_id::text, ''),
+	(SELECT count(*) FROM messages r WHERE r.thread_id = m.id AND NOT r.deleted),
+	ARRAY(SELECT x.emoji || ' ' || string_agg(x.user_id::text, ',' ORDER BY x.user_id) FROM message_reactions x
+		WHERE x.message_id = m.id GROUP BY x.emoji ORDER BY x.emoji)`
 
 func scanMsg(row pgx.CollectableRow) (*domain.Message, error) {
 	var m domain.Message
 	var edited *time.Time
-	if err := row.Scan(&m.ID, &m.Conversation, &m.Author, &m.Body, &m.CreatedAt, &edited, &m.Deleted); err != nil {
+	var reactions []string
+	if err := row.Scan(&m.ID, &m.Conversation, &m.Author, &m.Body, &m.CreatedAt, &edited, &m.Deleted, &m.Thread, &m.ReplyCount, &reactions); err != nil {
 		return nil, err
+	}
+	for _, r := range reactions {
+		emoji, users, _ := strings.Cut(r, " ")
+		re := domain.Reaction{Emoji: emoji}
+		for _, u := range strings.Split(users, ",") {
+			re.Users = append(re.Users, domain.UserID(u))
+		}
+		m.Reactions = append(m.Reactions, re)
 	}
 	m.CreatedAt = m.CreatedAt.UTC()
 	if edited != nil {
@@ -162,25 +178,46 @@ func editedAt(m *domain.Message) *time.Time {
 }
 
 func (s *Messages) Post(ctx context.Context, m *domain.Message) error {
-	_, err := s.pool.Exec(ctx, `INSERT INTO messages (`+msgCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		string(m.ID), string(m.Conversation), string(m.Author), m.Body, m.CreatedAt, editedAt(m), m.Deleted)
+	var thread *string
+	if m.Thread != "" {
+		thread = (*string)(&m.Thread)
+	}
+	_, err := s.pool.Exec(ctx, `INSERT INTO messages (`+insertCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		string(m.ID), string(m.Conversation), string(m.Author), m.Body, m.CreatedAt, editedAt(m), m.Deleted, thread)
 	return err
 }
 
+// Update rewrites the message and replaces its reactions.
 func (s *Messages) Update(ctx context.Context, m *domain.Message) error {
-	tag, err := s.pool.Exec(ctx, `UPDATE messages SET body = $2, edited_at = $3, deleted = $4 WHERE id = $1`,
-		string(m.ID), m.Body, editedAt(m), m.Deleted)
-	if err == nil && tag.RowsAffected() == 0 {
-		return domain.ErrMessageNotFound
-	}
-	return err
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE messages SET body = $2, edited_at = $3, deleted = $4 WHERE id = $1`,
+			string(m.ID), m.Body, editedAt(m), m.Deleted)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return domain.ErrMessageNotFound
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM message_reactions WHERE message_id = $1`, string(m.ID)); err != nil {
+			return err
+		}
+		for _, r := range m.Reactions {
+			for _, u := range r.Users {
+				if _, err := tx.Exec(ctx, `INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)`,
+					string(m.ID), string(u), r.Emoji); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func (s *Messages) ByID(ctx context.Context, mid domain.MessageID) (*domain.Message, error) {
 	if !id.Valid(string(mid)) {
 		return nil, domain.ErrMessageNotFound
 	}
-	rows, err := s.pool.Query(ctx, `SELECT `+msgCols+` FROM messages WHERE id = $1`, string(mid))
+	rows, err := s.pool.Query(ctx, `SELECT `+msgCols+` FROM messages m WHERE m.id = $1`, string(mid))
 	if err != nil {
 		return nil, err
 	}
@@ -199,9 +236,20 @@ func (s *Messages) History(ctx context.Context, conv domain.ConversationID, befo
 	if id.Valid(string(before)) {
 		cursor = (*string)(&before)
 	}
-	rows, err := s.pool.Query(ctx, `SELECT `+msgCols+` FROM messages WHERE conversation_id = $1
-		AND ($2::uuid IS NULL OR (created_at, id) < (SELECT created_at, id FROM messages WHERE id = $2))
-		ORDER BY created_at DESC, id DESC LIMIT $3`, string(conv), cursor, limit)
+	rows, err := s.pool.Query(ctx, `SELECT `+msgCols+` FROM messages m WHERE m.conversation_id = $1 AND m.thread_id IS NULL
+		AND ($2::uuid IS NULL OR (m.created_at, m.id) < (SELECT c.created_at, c.id FROM messages c WHERE c.id = $2))
+		ORDER BY m.created_at DESC, m.id DESC LIMIT $3`, string(conv), cursor, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, scanMsg)
+}
+
+func (s *Messages) Replies(ctx context.Context, parent domain.MessageID) ([]*domain.Message, error) {
+	if !id.Valid(string(parent)) {
+		return nil, nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT `+msgCols+` FROM messages m WHERE m.thread_id = $1 ORDER BY m.created_at, m.id`, string(parent))
 	if err != nil {
 		return nil, err
 	}

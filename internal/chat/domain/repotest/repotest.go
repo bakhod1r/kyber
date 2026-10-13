@@ -139,6 +139,49 @@ func Run(t *testing.T, r domain.Repository, msgs domain.Messages) {
 	if got, _ := msgs.ByID(ctx, mid(1)); !got.EditedAt.IsZero() {
 		t.Fatalf("never edited = %+v", got)
 	}
+	// Threads: replies stay out of history and unread, and are counted on the parent.
+	m2 := posted[1]
+	for i, at := range []int{20, 10} {
+		r, _ := domain.NewReply(mid(10+i), m2, Dev, fmt.Sprintf("reply %d", i), t0.Add(time.Duration(at)*time.Minute))
+		if err := msgs.Post(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	thread, err := msgs.Replies(ctx, m2.ID)
+	if err != nil || len(thread) != 2 || thread[0].Body != "reply 1" || thread[0].Thread != m2.ID {
+		t.Fatalf("replies = %v %v (oldest first)", thread, err)
+	}
+	top, _ := msgs.History(ctx, general.ID, "", 10)
+	if len(top) != 5 || top[3].ID != m2.ID || top[3].ReplyCount != 2 || top[0].ReplyCount != 0 {
+		t.Fatalf("history with threads = %+v", top)
+	}
+	if unread, _ := r.Unread(ctx, Lead); unread[general.ID] != 1 {
+		t.Fatalf("lead unread = %v (Dev's msg 5 only; replies do not count)", unread)
+	}
+	if got, _ := msgs.ByID(ctx, mid(10)); got.Thread != m2.ID {
+		t.Fatalf("reply ByID = %+v", got)
+	}
+
+	// Reactions are stored with the message.
+	_, _ = m2.React(Dev, "🎉")
+	_, _ = m2.React(Lead, "🎉")
+	_, _ = m2.React(Lead, "+1")
+	if err := msgs.Update(ctx, m2); err != nil {
+		t.Fatal(err)
+	}
+	got2, _ := msgs.ByID(ctx, m2.ID)
+	if len(got2.Reactions) != 2 || got2.Reactions[0].Emoji != "+1" || len(got2.Reactions[1].Users) != 2 || got2.Reactions[1].Users[0] != Lead {
+		t.Fatalf("reactions = %+v", got2.Reactions)
+	}
+	if top, _ := msgs.History(ctx, general.ID, "", 10); len(top[3].Reactions) != 2 {
+		t.Fatalf("history reactions = %+v", top[3])
+	}
+	_, _ = m2.React(Lead, "+1")
+	_ = msgs.Update(ctx, m2)
+	if got2, _ := msgs.ByID(ctx, m2.ID); len(got2.Reactions) != 1 {
+		t.Fatalf("after toggle off = %+v", got2.Reactions)
+	}
+
 	for _, err := range []error{
 		func() error { _, err := msgs.ByID(ctx, mid(99)); return err }(),
 		func() error { _, err := msgs.ByID(ctx, "nope"); return err }(),
