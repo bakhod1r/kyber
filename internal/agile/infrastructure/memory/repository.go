@@ -126,7 +126,7 @@ func (r *Repository) Outbox() []domain.Event {
 }
 
 func appendNow(ctx context.Context, ts []outbox.Meta, n int) []outbox.Meta {
-	m := outbox.Meta{At: time.Now(), Workspace: tenant.Workspace(ctx)}
+	m := outbox.MetaOf(ctx, time.Now())
 	for range n {
 		ts = append(ts, m)
 	}

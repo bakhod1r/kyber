@@ -28,7 +28,7 @@ function usePeople() {
 /** A slot the app shell fills with other contexts' UIs for the open conversation (huddle, whiteboards). */
 export type ConversationSlot = (conversationId: string, me: string, names: Map<string, string>) => ReactNode;
 
-/** Team chat (S53, ADR-0007): channels and DMs on the left, the open conversation and its threads on the right. */
+/** Team chat (S53, ADR-0008): channels and DMs on the left, the open conversation and its threads on the right. */
 export function ChatPage({ extras }: { extras?: ConversationSlot }) {
   const { id } = useParams();
   const qc = useQueryClient();

@@ -25,6 +25,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/config"
 	"github.com/bakhod1r/kyber/internal/platform/db"
 	"github.com/bakhod1r/kyber/internal/platform/otel"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	"github.com/bakhod1r/kyber/internal/server"
 )
 
@@ -34,6 +35,9 @@ func main() {
 	if err != nil {
 		log.Error("invalid configuration", "err", err)
 		os.Exit(1)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "outbox" {
+		os.Exit(outboxCommand(log, cfg, os.Args[2:]))
 	}
 	log.Info("configuration loaded", "config", cfg.String())
 	addr := cfg.Addr
@@ -170,4 +174,24 @@ func buildVersion() string {
 		}
 	}
 	return info.Main.Version
+}
+
+// outboxCommand runs `kyber outbox …` against KYBER_DATABASE_URL and returns the exit code.
+func outboxCommand(log *slog.Logger, cfg *config.Config, args []string) int {
+	if cfg.DatabaseURL == "" {
+		log.Error("kyber outbox needs KYBER_DATABASE_URL")
+		return 2
+	}
+	ctx := context.Background()
+	pool, err := db.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Error("database", "err", err)
+		return 1
+	}
+	defer pool.Close()
+	if err := runOutbox(ctx, args, outbox.NewPostgresStore(pool), os.Stdout); err != nil {
+		log.Error("kyber outbox", "err", err)
+		return 1
+	}
+	return 0
 }

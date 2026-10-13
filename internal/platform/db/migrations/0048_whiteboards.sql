@@ -1,4 +1,4 @@
--- Sprint 11 (S59, ADR-0007): whiteboards drawn together in a conversation. Conversations, users and
+-- Sprint 11 (S59, ADR-0008): whiteboards drawn together in a conversation. Conversations, users and
 -- workspaces belong to other contexts: referenced by id only.
 CREATE TABLE whiteboards (
     id              uuid PRIMARY KEY,

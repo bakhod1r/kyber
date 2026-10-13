@@ -1,6 +1,6 @@
 # Sprint 11 — Team chat and huddles (video, audio, screen share)
 
-Source: product request (2026-10-13). Design: ADR-0007. Order: **chat first, then video calls**. Every story is
+Source: product request (2026-10-13). Design: ADR-0008. Order: **chat first, then video calls**. Every story is
 planned before it starts (scope + acceptance criteria below), then built DDD + TDD with acceptance tests on all
 backends.
 

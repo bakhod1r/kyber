@@ -1,4 +1,4 @@
-// Package ice hands browsers the STUN/TURN servers for WebRTC (ADR-0007). TURN credentials are
+// Package ice hands browsers the STUN/TURN servers for WebRTC (ADR-0008). TURN credentials are
 // short-lived and follow coturn's REST scheme (use-auth-secret): username "expiry:user",
 // credential base64(HMAC-SHA1(secret, username)).
 package ice
