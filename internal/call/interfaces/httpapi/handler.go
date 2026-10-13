@@ -13,18 +13,26 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 )
 
+// ICE lists the STUN/TURN servers (with credentials) a user's browser should use.
+type ICE func(user string, now time.Time) any
+
 type Handler struct {
 	svc *application.Service
 	log *slog.Logger
+	ice ICE
 }
 
-func New(svc *application.Service, log *slog.Logger) *Handler { return &Handler{svc: svc, log: log} }
+func New(svc *application.Service, log *slog.Logger, ice ICE) *Handler {
+	return &Handler{svc: svc, log: log, ice: ice}
+}
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/conversations/{id}/call", h.live)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/call", h.join)
 	mux.HandleFunc("POST /api/v1/calls/{id}/leave", h.leave)
 	mux.HandleFunc("PUT /api/v1/calls/{id}/media", h.media)
+	mux.HandleFunc("POST /api/v1/calls/{id}/signal", h.signal)
+	mux.HandleFunc("GET /api/v1/calls/ice", h.iceServers)
 }
 
 func codeFor(err error) (string, bool) {
@@ -39,6 +47,8 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeCallFull, true
 	case errors.Is(err, domain.ErrNotInCall), errors.Is(err, domain.ErrCallEnded), errors.Is(err, domain.ErrConflict):
 		return httpx.CodeCallState, true
+	case errors.Is(err, domain.ErrInvalidSignal):
+		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
 	}
@@ -124,4 +134,25 @@ func (h *Handler) media(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+func (h *Handler) signal(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		To   string `json:"to"`
+		Kind string `json:"kind"`
+		Data string `json:"data"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := h.svc.Signal(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.To, in.Kind, in.Data); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) iceServers(w http.ResponseWriter, r *http.Request) {
+	httpx.JSON(w, http.StatusOK, map[string]any{"ice_servers": h.ice(auth.Actor(r.Context()), time.Now())})
 }

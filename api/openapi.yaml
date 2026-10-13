@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.32.0
+  version: 0.33.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -372,7 +372,7 @@ paths:
       operationId: openStream
       description: |
         Server-Sent Events of this workspace for the caller (`message.posted`, `message.edited`,
-        `message.deleted`, `message.reacted`, `typing`, `call.updated`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
+        `message.deleted`, `message.reacted`, `typing`, `call.updated`, `call.signal`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
         what was missed. Keeping the stream open marks the caller online.
       parameters:
         - { name: Last-Event-ID, in: header, schema: { type: string } }
@@ -544,6 +544,49 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/signal:
+    post:
+      operationId: sendCallSignal
+      description: |
+        Relays WebRTC signaling (an SDP offer/answer or an ICE candidate, opaque to the server, at most 64 KB) to
+        another participant of the call, who receives it as `call.signal` on the stream. Never stored.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to, kind, data]
+              properties: { to: { type: string }, kind: { type: string, enum: [offer, answer, candidate] }, data: { type: string } }
+      responses:
+        "204": { description: Relayed }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/ice:
+    get:
+      operationId: getIceServers
+      description: STUN/TURN servers for RTCPeerConnection; TURN comes with credentials valid for 12 hours.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ice_servers]
+                properties:
+                  ice_servers:
+                    type: array
+                    items:
+                      type: object
+                      required: [urls]
+                      properties: { urls: { type: array, items: { type: string } }, username: { type: string }, credential: { type: string } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/focus:
     get:
       operationId: currentFocus

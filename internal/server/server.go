@@ -43,6 +43,7 @@ import (
 	callapp "github.com/bakhod1r/kyber/internal/call/application"
 	calldomain "github.com/bakhod1r/kyber/internal/call/domain"
 	callacl "github.com/bakhod1r/kyber/internal/call/infrastructure/acl"
+	"github.com/bakhod1r/kyber/internal/call/infrastructure/ice"
 	callmemory "github.com/bakhod1r/kyber/internal/call/infrastructure/memory"
 	callpg "github.com/bakhod1r/kyber/internal/call/infrastructure/postgres"
 	callrealtime "github.com/bakhod1r/kyber/internal/call/infrastructure/realtime"
@@ -164,6 +165,7 @@ type deps struct {
 	messages      chatdomain.Messages
 	calls         calldomain.Repository
 	baseDomain    string // "" = single-tenant (ADR-0004)
+	ice           ice.Config
 	outbox        outbox.Store
 	ctx           context.Context // lifetime of background work (outbox relay)
 	relayEvery    time.Duration
@@ -195,6 +197,12 @@ func WithDispatchEvery(every time.Duration) Option { return func(d *deps) { d.di
 
 // WithBaseDomain enables workspaces on subdomains of domain (ADR-0004).
 func WithBaseDomain(domain string) Option { return func(d *deps) { d.baseDomain = domain } }
+
+// WithICE sets the STUN/TURN servers for calls; TURN gets short-lived credentials from secret
+// (coturn use-auth-secret).
+func WithICE(urls []string, turnSecret string) Option {
+	return func(d *deps) { d.ice = ice.Config{URLs: urls, Secret: turnSecret} }
+}
 
 // Option configures optional infrastructure.
 type Option func(*deps)
@@ -334,8 +342,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 	chat := chatapp.NewService(chatapp.Deps{Notifier: chatrealtime.New(hub), Conversations: d.conversations, Messages: d.messages,
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	chat.WithIssues(chatacl.NewIssues(issues))
+	callEvents := callrealtime.New(hub, func(c *calldomain.Call) any { return callhttp.ToDTO(c) })
 	calls := callapp.NewService(callapp.Deps{Calls: d.calls, Conversations: callacl.NewConversations(chat),
-		Notifier: callrealtime.New(hub, func(c *calldomain.Call) any { return callhttp.ToDTO(c) }), NewID: id.New, Now: time.Now})
+		Notifier: callEvents, Signals: callEvents, NewID: id.New, Now: time.Now})
 	notify.WithConversations(notifyacl.NewConversations(chat))
 	relay := outbox.NewRelay(d.outbox, log)
 	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated", "issue.imported"} {
@@ -407,7 +416,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	focushttp.New(focus, log, time.Now).Register(api)
 	chathttp.New(chat, log).Register(api)
 	hub.Register(api, 25*time.Second)
-	callhttp.New(calls, log).Register(api)
+	callhttp.New(calls, log, func(user string, now time.Time) any { return d.ice.Servers(user, now) }).Register(api)
 	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
 		auditacl.NewOwners(agile, d.boards, d.links), log)
 	audit.Register(api)

@@ -3,6 +3,7 @@ package domain_test
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,5 +67,32 @@ func TestMedia(t *testing.T) {
 	_ = c.SetMedia("u-b", domain.Media{Screen: true})
 	if c.Participants[0].Media.Screen || !c.Participants[1].Media.Screen {
 		t.Fatalf("screens = %+v", c.Participants)
+	}
+}
+
+func TestSignal(t *testing.T) {
+	c := domain.Start("k-1", "w-1", "c-1", "u-a", t0)
+	_ = c.Join("u-b", t0)
+	s, err := c.Signal("u-a", "u-b", "offer", `{"sdp":"v=0"}`)
+	if err != nil || s.From != "u-a" || s.To != "u-b" || s.Kind != domain.SignalOffer || s.Call != "k-1" {
+		t.Fatalf("signal = %+v %v", s, err)
+	}
+	cases := map[string]struct {
+		from, to domain.UserID
+		kind     string
+		data     string
+		want     error
+	}{
+		"outsider sends": {"u-x", "u-b", "offer", "{}", domain.ErrNotInCall},
+		"to an outsider": {"u-a", "u-x", "offer", "{}", domain.ErrNotInCall},
+		"to yourself":    {"u-a", "u-a", "offer", "{}", domain.ErrInvalidSignal},
+		"unknown kind":   {"u-a", "u-b", "hack", "{}", domain.ErrInvalidSignal},
+		"empty":          {"u-a", "u-b", "answer", "", domain.ErrInvalidSignal},
+		"too large":      {"u-a", "u-b", "candidate", strings.Repeat("x", domain.MaxSignal+1), domain.ErrInvalidSignal},
+	}
+	for name, tc := range cases {
+		if _, err := c.Signal(tc.from, tc.to, tc.kind, tc.data); !errors.Is(err, tc.want) {
+			t.Errorf("%s: err = %v", name, err)
+		}
 	}
 }

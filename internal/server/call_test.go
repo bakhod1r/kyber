@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/bakhod1r/kyber/internal/server"
 )
 
 // S55: huddles in a conversation — start/join, media state, leave; only members; at most 6 people.
@@ -72,4 +74,40 @@ func TestHuddle(t *testing.T) {
 			t.Fatalf("full = %v", b)
 		}
 	})
+}
+
+// S56: signaling reaches only its recipient; ICE servers come with short-lived TURN credentials.
+func TestCallSignaling(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		qa := anon.signedIn("qa@x.uz")
+		_, devMe := dev.do("GET", "/api/v1/me", nil)
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "dev"})
+		url := "/api/v1/conversations/" + ch["id"].(string)
+		dev.do("POST", url+"/join", nil)
+		qa.do("POST", url+"/join", nil)
+		_, call := lead.do("POST", url+"/call", nil)
+		dev.do("POST", url+"/call", nil)
+		qa.do("POST", url+"/call", nil)
+		devStream, qaStream := dev.stream(""), qa.stream("")
+
+		sig := "/api/v1/calls/" + call["id"].(string) + "/signal"
+		code, b := lead.do("POST", sig, map[string]string{"to": devMe["id"].(string), "kind": "offer", "data": `{"type":"offer","sdp":"v=0"}`})
+		expect(t, code, 204, b)
+		e := next(t, devStream, "call.signal")
+		if !strings.Contains(e.data, `"kind":"offer"`) || !strings.Contains(e.data, `"call_id":"`+call["id"].(string)) || !strings.Contains(e.data, `v=0`) {
+			t.Fatalf("signal = %+v", e)
+		}
+		quiet(t, qaStream)
+		code, b = lead.do("POST", sig, map[string]string{"to": devMe["id"].(string), "kind": "bogus", "data": "x"})
+		expect(t, code, 422, b)
+
+		code, ice := lead.do("GET", "/api/v1/calls/ice", nil)
+		expect(t, code, 200, ice)
+		servers := ice["ice_servers"].([]any)
+		if len(servers) != 2 || servers[1].(map[string]any)["username"] == "" || servers[1].(map[string]any)["credential"] == "" {
+			t.Fatalf("ice = %v", ice)
+		}
+	}, server.WithICE([]string{"stun:stun.example.com:3478", "turn:turn.example.com:3478"}, "s3cret"))
 }

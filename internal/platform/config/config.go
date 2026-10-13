@@ -33,6 +33,9 @@ type Config struct {
 	SMTPPassword string `env:"KYBER_SMTP_PASSWORD"`
 	SMTPFrom     string `env:"KYBER_SMTP_FROM" default:"Kyber <noreply@localhost>"`
 	SMTPTLS      string `env:"KYBER_SMTP_TLS" default:"starttls"` // starttls (587), tls (465) or none
+	// Calls (WebRTC): comma-separated stun:/turn:/turns: URLs, and coturn's static-auth-secret for TURN.
+	ICEServers string `env:"KYBER_ICE_SERVERS"`
+	TURNSecret string `env:"KYBER_TURN_SECRET"`
 }
 
 func Load() (*Config, error) {

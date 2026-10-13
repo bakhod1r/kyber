@@ -20,6 +20,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/bakhod1r/kyber/internal/call/infrastructure/ice"
 	"github.com/bakhod1r/kyber/internal/platform/config"
 	"github.com/bakhod1r/kyber/internal/platform/db"
 	"github.com/bakhod1r/kyber/internal/server"
@@ -77,7 +78,7 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		TelegramBot: cfg.TelegramBotName,
 	})
 	common := append([]server.Option{social, server.WithContext(ctx), server.WithBaseDomain(cfg.BaseDomain),
-		server.WithPublicURL(cfg.PublicURL)}, telegramBot(cfg)...)
+		server.WithPublicURL(cfg.PublicURL), server.WithICE(ice.Parse(cfg.ICEServers), cfg.TURNSecret)}, telegramBot(cfg)...)
 	mailer, err := mailer(cfg)
 	if err != nil {
 		return nil, nil, err

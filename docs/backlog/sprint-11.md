@@ -46,6 +46,7 @@ backends.
 - **S56 Signaling** — `POST /calls/{id}/signal` relays `offer|answer|candidate` to one participant over the
   stream; only participants may signal and receive; `GET /calls/ice` returns STUN/TURN servers with
   short-lived TURN credentials (`KYBER_ICE_SERVERS`, `KYBER_TURN_SECRET`).
+  ✅ **Done:** API 0.33.0.
 - **S57 Huddle UI** — WebRTC mesh: camera, microphone, screen share (`getDisplayMedia`) with mute/camera/share
   toggles, participant grid, active-speaker highlight, device picker, join from channel header.
 - **S59 Whiteboard (Zoom-style drawing)** — open a whiteboard in a huddle or channel; draw rectangles, ellipses,

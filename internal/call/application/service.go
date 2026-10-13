@@ -28,14 +28,21 @@ type Notifier interface {
 	Notify(ctx context.Context, to []string, c *domain.Call)
 }
 
+// Signals delivers WebRTC signaling to its one recipient (never stored).
+type Signals interface {
+	Relay(ctx context.Context, s domain.Signal)
+}
+
 type nobody struct{}
 
 func (nobody) Notify(context.Context, []string, *domain.Call) {}
+func (nobody) Relay(context.Context, domain.Signal)           {}
 
 type Deps struct {
 	Calls         domain.Repository
 	Conversations Conversations
 	Notifier      Notifier // optional
+	Signals       Signals  // optional
 	NewID         func() string
 	Now           func() time.Time
 }
@@ -45,6 +52,9 @@ type Service struct{ d Deps }
 func NewService(d Deps) *Service {
 	if d.Notifier == nil {
 		d.Notifier = nobody{}
+	}
+	if d.Signals == nil {
+		d.Signals = nobody{}
 	}
 	return &Service{d: d}
 }
@@ -97,19 +107,42 @@ func (s *Service) Join(ctx context.Context, actor, conv string) (*domain.Call, e
 	return nil, domain.ErrConflict
 }
 
+// load is a call of the request's workspace in a conversation actor belongs to.
+func (s *Service) load(ctx context.Context, actor, id string) (*domain.Call, []string, error) {
+	c, err := s.d.Calls.ByID(ctx, domain.CallID(id))
+	if err != nil {
+		return nil, nil, err
+	}
+	if string(c.Workspace) != tenant.Workspace(ctx) {
+		return nil, nil, domain.ErrCallNotFound
+	}
+	members, err := s.d.Conversations.Members(ctx, actor, string(c.Conversation))
+	if err != nil {
+		return nil, nil, domain.ErrCallNotFound
+	}
+	return c, members, nil
+}
+
+// Signal relays an offer, answer or ICE candidate from actor to another participant.
+func (s *Service) Signal(ctx context.Context, actor, id, to, kind, data string) error {
+	c, _, err := s.load(ctx, actor, id)
+	if err != nil {
+		return err
+	}
+	sig, err := c.Signal(domain.UserID(actor), domain.UserID(to), kind, data)
+	if err != nil {
+		return err
+	}
+	s.d.Signals.Relay(ctx, sig)
+	return nil
+}
+
 // change applies fn to a call of a conversation actor belongs to, retrying on conflicts.
 func (s *Service) change(ctx context.Context, actor, id string, fn func(*domain.Call) error) (*domain.Call, error) {
 	for range attempts {
-		c, err := s.d.Calls.ByID(ctx, domain.CallID(id))
+		c, members, err := s.load(ctx, actor, id)
 		if err != nil {
 			return nil, err
-		}
-		if string(c.Workspace) != tenant.Workspace(ctx) {
-			return nil, domain.ErrCallNotFound
-		}
-		members, err := s.d.Conversations.Members(ctx, actor, string(c.Conversation))
-		if err != nil {
-			return nil, domain.ErrCallNotFound
 		}
 		if err := fn(c); err != nil {
 			return nil, err

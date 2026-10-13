@@ -111,3 +111,28 @@ func TestJoinRetriesOnConflict(t *testing.T) {
 		t.Fatalf("join after conflict = %+v %v", c, err)
 	}
 }
+
+type relayed []domain.Signal
+
+func (r *relayed) Relay(_ context.Context, s domain.Signal) { *r = append(*r, s) }
+
+func TestSignalRelay(t *testing.T) {
+	r := &relayed{}
+	svc := app.NewService(app.Deps{Calls: memory.NewRepository(), Conversations: convs{"dev": {"lead", "dev"}}, Signals: r,
+		NewID: func() string { return "k-1" }, Now: time.Now})
+	ctx := tenant.With(context.Background(), "w1")
+	c, _ := svc.Join(ctx, "lead", "dev")
+	if err := svc.Signal(ctx, "lead", string(c.ID), "dev", "offer", "sdp"); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("to someone not in the call yet = %v", err)
+	}
+	_, _ = svc.Join(ctx, "dev", "dev")
+	if err := svc.Signal(ctx, "lead", string(c.ID), "dev", "offer", "sdp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Signal(ctx, "eve", string(c.ID), "dev", "offer", "sdp"); !errors.Is(err, domain.ErrCallNotFound) {
+		t.Fatalf("outsider = %v", err)
+	}
+	if len(*r) != 1 || (*r)[0].To != "dev" || (*r)[0].Data != "sdp" {
+		t.Fatalf("relayed = %+v", *r)
+	}
+}

@@ -25,3 +25,9 @@ func New(hub Publisher, render func(*domain.Call) any) Notifier {
 func (n Notifier) Notify(ctx context.Context, to []string, c *domain.Call) {
 	_ = n.hub.Publish(tenant.Workspace(ctx), to, "call.updated", n.render(c))
 }
+
+// Relay sends call.signal to the signal's one recipient.
+func (n Notifier) Relay(ctx context.Context, s domain.Signal) {
+	_ = n.hub.Publish(tenant.Workspace(ctx), []string{string(s.To)}, "call.signal", map[string]string{
+		"call_id": string(s.Call), "from": string(s.From), "kind": string(s.Kind), "data": s.Data})
+}

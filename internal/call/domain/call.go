@@ -115,3 +115,35 @@ type Repository interface {
 	ByID(ctx context.Context, id CallID) (*Call, error)
 	LiveIn(ctx context.Context, conv ConversationID) (*Call, error) // ErrCallNotFound when none
 }
+
+// WebRTC signaling between two participants; relayed, never stored.
+type SignalKind string
+
+const (
+	SignalOffer     SignalKind = "offer"
+	SignalAnswer    SignalKind = "answer"
+	SignalCandidate SignalKind = "candidate"
+	// MaxSignal bounds one SDP or ICE candidate (bytes).
+	MaxSignal = 64 << 10
+)
+
+var ErrInvalidSignal = errors.New("a signal is an offer, answer or candidate of at most 64 KB to another participant")
+
+type Signal struct {
+	Call     CallID
+	From, To UserID
+	Kind     SignalKind
+	Data     string // opaque to the server (SDP or ICE candidate JSON)
+}
+
+// Signal checks that from may send kind/data to to in this call.
+func (c *Call) Signal(from, to UserID, kind, data string) (Signal, error) {
+	if !c.Live() || !c.In(from) || !c.In(to) {
+		return Signal{}, ErrNotInCall
+	}
+	k := SignalKind(kind)
+	if from == to || (k != SignalOffer && k != SignalAnswer && k != SignalCandidate) || data == "" || len(data) > MaxSignal {
+		return Signal{}, ErrInvalidSignal
+	}
+	return Signal{Call: c.ID, From: from, To: to, Kind: k, Data: data}, nil
+}
