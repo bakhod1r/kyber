@@ -316,6 +316,8 @@ const (
 	KindTranscript MessageKind = "transcript"
 	// KindWorkflow: a message a channel's workflow posted (S80).
 	KindWorkflow MessageKind = "workflow"
+	// KindWebhook: a message another system posted through an incoming webhook (S81).
+	KindWebhook MessageKind = "webhook"
 )
 
 // ErrDuplicateRef: a system message about this already exists (events may be delivered twice).

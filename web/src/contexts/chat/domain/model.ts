@@ -17,7 +17,7 @@ export type Message = {
   id: string; conversation_id: string; author_id: string; body: string; created_at: string; edited_at: string | null;
   deleted: boolean; thread_id: string | null; reply_count: number; reactions: Reaction[]; issues: IssuePreview[];
   /** System messages (a huddle started or ended); people's messages have none. */
-  kind?: "" | "huddle_started" | "huddle_ended" | "huddle_recording" | "project_event" | "transcript" | "workflow";
+  kind?: "" | "huddle_started" | "huddle_ended" | "huddle_recording" | "project_event" | "transcript" | "workflow" | "webhook";
   file?: { name: string; type: string; size: number; url: string } | null;
   pinned_by?: string | null;
   pinned_at?: string | null;
@@ -106,6 +106,9 @@ export function localTime(utc: number, today = new Date()): string {
   const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), Math.floor(utc / 60), utc % 60));
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
+
+/** An incoming webhook (S81); url (with its secret) only right after making or rotating it. */
+export type Webhook = { id: string; name: string; created_by: string; created_at: string; url?: string };
 
 /** A doc or link kept in a conversation's header (S79). */
 export type Bookmark = { id: string; kind: "doc" | "link"; ref: string; title: string; added_by: string; added_at: string };

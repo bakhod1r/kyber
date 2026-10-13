@@ -95,5 +95,15 @@ Order: daily use first, then channel management, Jira integration, huddle extras
   **Done:** `GET/POST /conversations/{id}/workflows`, `DELETE /workflows/{id}` (owner/admins), migration 0066;
   join welcomes with `{name}`; schedules (days + UTC minute) run once per occurrence across replicas (claimed by
   `last_run`), missed ones collapse into the latest. "🤖 Workflows" in channel settings. API 0.58.0.
-- **S81 Incoming webhooks and bot tokens** — a channel webhook URL (secret, rotatable) that posts messages, e.g.
+- ✅ **S81 Incoming webhooks and bot tokens** — a channel webhook URL (secret, rotatable) that posts messages, e.g.
   from CI. AC: the secret is stored hashed and never shown again; rate limited.
+  **Done:** `GET/POST /conversations/{id}/webhooks`, `POST /webhooks/{id}/rotate`, `DELETE /webhooks/{id}` (owner/
+  admins); public `POST /api/v1/hooks/{secret}` `{"text"}` (Slack-compatible), 30/min per webhook (per replica);
+  only the SHA-256 is stored (migration 0067); request logs and traces never record hook URLs. Bot tokens (a bot
+  user with its own token) are left for later. API 0.59.0.
+
+## Result
+
+All 18 stories done (S64–S81), each with domain/repository contract tests on memory and PostgreSQL, acceptance
+tests on every backend, and Playwright e2e. Left for later: dragging sidebar sections to reorder, recording
+summaries (needs an LLM), bot users with their own tokens, an S3 blob adapter.

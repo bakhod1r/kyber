@@ -3,7 +3,7 @@ import { ApiError, isProblem, request, seg, type List } from "../../../shared/ht
 import { onConnect, subscribe } from "../../../shared/stream";
 
 export { onConnect };
-import type { Bookmark, ChannelWorkflow, ChatEvent, Conversation, ConversationPrefs, Level, Message, Receipt, SavedItem, ScheduledMessage, UserGroup, UserStatus } from "../domain/model";
+import type { Bookmark, ChannelWorkflow, Webhook, ChatEvent, Conversation, ConversationPrefs, Level, Message, Receipt, SavedItem, ScheduledMessage, UserGroup, UserStatus } from "../domain/model";
 
 const conv = (id: string) => `/api/v1/conversations/${seg(id)}`;
 const msg = (id: string) => `/api/v1/messages/${seg(id)}`;
@@ -61,6 +61,10 @@ export const chatGateway = {
   addWorkflow: (id: string, w: { trigger: ChannelWorkflow["trigger"]; minute?: number; days?: number[]; text: string }) =>
     request<ChannelWorkflow>("POST", `${conv(id)}/workflows`, w),
   removeWorkflow: (id: string) => request<undefined>("DELETE", `/api/v1/workflows/${seg(id)}`),
+  webhooks: (id: string) => request<List<Webhook>>("GET", `${conv(id)}/webhooks`).then((r) => r.items),
+  createWebhook: (id: string, name: string) => request<Webhook>("POST", `${conv(id)}/webhooks`, { name }),
+  rotateWebhook: (id: string) => request<{ url: string }>("POST", `/api/v1/webhooks/${seg(id)}/rotate`),
+  removeWebhook: (id: string) => request<undefined>("DELETE", `/api/v1/webhooks/${seg(id)}`),
   search: (q: string) => request<List<Message>>("GET", `/api/v1/chat/search?q=${encodeURIComponent(q)}`).then((r) => r.items),
   /** Uploads a file as a message (raw body; the header satisfies the CSRF guard for cookie sessions). */
   upload: async (id: string, file: Blob, name: string): Promise<Message> => {

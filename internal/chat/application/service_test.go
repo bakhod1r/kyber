@@ -2,8 +2,8 @@ package application_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -875,6 +875,51 @@ func TestWorkflows(t *testing.T) {
 		t.Fatalf("non-manager removes = %v", err)
 	}
 	if err := svc.RemoveWorkflow(ctx, "lead", string(daily.ID)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// S81: incoming webhooks post into a channel with a secret URL; managers create and rotate them.
+func TestWebhooks(t *testing.T) {
+	svc, ctx, ev := setupWithEvents(t)
+	svc = svc.WithWebhooks(memory.NewWebhooks())
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "builds"})
+	id := string(ch.ID)
+	_ = svc.Join(ctx, "dev", id)
+	if _, _, err := svc.CreateWebhook(ctx, "dev", id, "CI"); !errors.Is(err, domain.ErrNotManager) {
+		t.Fatalf("member creates = %v", err)
+	}
+	h, secret, err := svc.CreateWebhook(ctx, "lead", id, "CI")
+	if err != nil || len(secret) < 32 {
+		t.Fatalf("create = %+v %q %v", h, secret, err)
+	}
+	*ev = nil
+	m, err := svc.PostViaWebhook(context.Background(), secret, "build #42 passed")
+	if err != nil || m.Body != "CI: build #42 passed" || m.Kind != domain.KindWebhook || len(*ev) != 1 {
+		t.Fatalf("post = %+v %v %v", m, err, *ev)
+	}
+	if _, err := svc.PostViaWebhook(context.Background(), "wrong", "x"); !errors.Is(err, domain.ErrWebhookNotFound) {
+		t.Fatalf("wrong secret = %v", err)
+	}
+	fresh, err := svc.RotateWebhook(ctx, "lead", string(h.ID))
+	if err != nil || fresh == secret {
+		t.Fatalf("rotate = %q %v", fresh, err)
+	}
+	if _, err := svc.PostViaWebhook(context.Background(), secret, "x"); !errors.Is(err, domain.ErrWebhookNotFound) {
+		t.Fatalf("old secret after rotate = %v", err)
+	}
+	for i := 0; i < app.WebhookRate-1; i++ {
+		if _, err := svc.PostViaWebhook(context.Background(), fresh, "spam"); err != nil {
+			t.Fatalf("message %d = %v", i, err)
+		}
+	}
+	if _, err := svc.PostViaWebhook(context.Background(), fresh, "spam"); !errors.Is(err, domain.ErrRateLimited) {
+		t.Fatalf("over the rate = %v", err)
+	}
+	if list, _ := svc.Webhooks(ctx, "lead", id); len(list) != 1 {
+		t.Fatalf("hooks = %+v", list)
+	}
+	if err := svc.RemoveWebhook(ctx, "lead", string(h.ID)); err != nil {
 		t.Fatal(err)
 	}
 }

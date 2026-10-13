@@ -107,7 +107,7 @@ test("chat between two people arrives live", async ({ browser }) => {
   await a.goto(`/chat/${channel.id}`);
   await a.getByRole("button", { name: "⚙ Settings" }).click();
   const settings = a.getByRole("region", { name: "Channel settings" });
-  await settings.getByLabel("Name").fill(`renamed-${id}`);
+  await settings.getByLabel("Name", { exact: true }).fill(`renamed-${id}`);
   await settings.getByRole("button", { name: "Save" }).click();
   await expect(a.getByRole("heading", { name: `# renamed-${id}` })).toBeVisible();
   await settings.getByRole("listitem").filter({ hasText: "Bobur" }).getByRole("button", { name: "Make admin" }).click();

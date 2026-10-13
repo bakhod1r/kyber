@@ -38,3 +38,7 @@ func TestBookmarksContract(t *testing.T) {
 func TestWorkflowsContract(t *testing.T) {
 	repotest.RunWorkflows(t, memory.NewRepository(), memory.NewWorkflows())
 }
+
+func TestWebhooksContract(t *testing.T) {
+	repotest.RunWebhooks(t, memory.NewRepository(), memory.NewWebhooks())
+}

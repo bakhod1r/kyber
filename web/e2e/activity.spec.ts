@@ -113,4 +113,13 @@ test("activity shows mentions and unread conversations", async ({ browser }) => 
   const malika = await signIn("Malika");
   await malika.call("POST", `/api/v1/conversations/${channel.id}/join`);
   await expect(a.getByRole("article", { name: /Workflow/ })).toContainText("Welcome Malika! Start with the pinned notes.");
+
+  // S81: Ali adds an incoming webhook; CI posts through it without signing in.
+  await a.getByLabel("Webhook name").fill("CI");
+  await a.getByRole("button", { name: "Add webhook" }).click();
+  const hookUrl = await a.getByLabel("Webhook URL value").inputValue();
+  expect(hookUrl).toContain("/api/v1/hooks/");
+  const res = await fetch(hookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "build #42 passed" }) });
+  expect(res.status).toBe(204);
+  await expect(a.getByRole("article", { name: /Webhook/ })).toContainText("CI: build #42 passed");
 });

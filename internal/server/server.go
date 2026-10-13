@@ -223,6 +223,7 @@ type deps struct {
 	transcriber   chatapp.Transcriber
 	bookmarks     chatdomain.Bookmarks
 	chatWorkflows chatdomain.Workflows
+	webhooks      chatdomain.Webhooks
 	calls         calldomain.Repository
 	whiteboards   wbdomain.Repository
 	chatBlobs     blob.Store // chat files; memory unless WithFilesDir
@@ -336,7 +337,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
-		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), calls: callRepo, whiteboards: wbmemory.NewRepository(),
+		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), calls: callRepo, whiteboards: wbmemory.NewRepository(),
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
@@ -384,7 +385,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
-		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), scheduled: chatpg.NewScheduled(pool), reminders: chatpg.NewReminders(pool), userGroups: chatpg.NewGroups(pool), chatPrefs: chatpg.NewPrefs(pool), bookmarks: chatpg.NewBookmarks(pool), chatWorkflows: chatpg.NewWorkflows(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool),
+		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), scheduled: chatpg.NewScheduled(pool), reminders: chatpg.NewReminders(pool), userGroups: chatpg.NewGroups(pool), chatPrefs: chatpg.NewPrefs(pool), bookmarks: chatpg.NewBookmarks(pool), chatWorkflows: chatpg.NewWorkflows(pool), webhooks: chatpg.NewWebhooks(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
@@ -467,7 +468,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 		log.Warn("KYBER_FILES_DIR not set: chat files are kept in memory and lost on restart")
 		d.chatBlobs = blob.NewMemory()
 	}
-	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved, Statuses: d.statuses, Scheduled: d.scheduled, Reminders: d.reminders, Groups: d.userGroups, Prefs: d.chatPrefs, Projects: chatacl.NewProjects(projects), Transcriber: d.transcriber, Bookmarks: d.bookmarks, Workflows: d.chatWorkflows, Directory: chatacl.NewMembers(workspaces, d.users),
+	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved, Statuses: d.statuses, Scheduled: d.scheduled, Reminders: d.reminders, Groups: d.userGroups, Prefs: d.chatPrefs, Projects: chatacl.NewProjects(projects), Transcriber: d.transcriber, Bookmarks: d.bookmarks, Workflows: d.chatWorkflows, Webhooks: d.webhooks, Directory: chatacl.NewMembers(workspaces, d.users),
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	chat.WithIssues(chatacl.NewIssues(issues))
 	calendar.WithConversations(calendaracl.NewConversations(chat)) // meetings in a channel's huddle (S76)
@@ -590,7 +591,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	}, 25*time.Second))
 	calendarhttp.New(calendar, log, time.Now).Register(api)
 	focushttp.New(focus, log, time.Now).Register(api)
-	chathttp.New(chat, log).Register(api)
+	chatAPI := chathttp.New(chat, log)
+	chatAPI.Register(api)
 	rt.Register(api, 25*time.Second)
 	whiteboards := wbapp.NewService(wbapp.Deps{Boards: d.whiteboards, Conversations: wbacl.NewConversations(chat),
 		Notifier: wbrealtime.New(publish, func(e wbdomain.Element) any { return wbhttp.ToDTO(e) }), NewID: id.New, Now: time.Now})
@@ -625,9 +627,18 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
+	chatAPI.RegisterPublic(mux) // incoming webhooks (S81): the secret in the URL is the credential
 	mux.Handle("/api/v1/", auth.RequireAuth(tenancy.RequireMember(audit.Record(problemFallback(otel.Routed(api))))))
 	mux.Handle("/", web.Handler(web.Dist()))
 	return otel.Middleware(observe(log, m, recoverer(log, tenancy.Resolve(otel.Routed(mux)))))
+}
+
+// loggedPath is the request path as logged: incoming webhook URLs carry their secret, so it is cut (S81).
+func loggedPath(p string) string {
+	if strings.HasPrefix(p, "/api/v1/hooks/") {
+		return "/api/v1/hooks/…"
+	}
+	return p
 }
 
 func observe(log *slog.Logger, m *metrics.HTTP, next http.Handler) http.Handler {
@@ -637,7 +648,7 @@ func observe(log *slog.Logger, m *metrics.HTTP, next http.Handler) http.Handler 
 		next.ServeHTTP(rec, r)
 		d := time.Since(start)
 		m.Observe(r.Method, rec.status, d)
-		log.InfoContext(r.Context(), "http", "method", r.Method, "path", r.URL.Path, "status", rec.status, "dur", d)
+		log.InfoContext(r.Context(), "http", "method", r.Method, "path", loggedPath(r.URL.Path), "status", rec.status, "dur", d)
 	})
 }
 
@@ -658,7 +669,7 @@ func recoverer(log *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if v := recover(); v != nil {
-				log.ErrorContext(r.Context(), "panic", "value", fmt.Sprint(v), "path", r.URL.Path, "stack", string(debug.Stack()))
+				log.ErrorContext(r.Context(), "panic", "value", fmt.Sprint(v), "path", loggedPath(r.URL.Path), "stack", string(debug.Stack()))
 				httpx.Problem(w, r, errorx.New(httpx.CodeInternal, "internal error"))
 			}
 		}()

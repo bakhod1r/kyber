@@ -60,3 +60,8 @@ func TestWorkflowsContract(t *testing.T) {
 	pool := dbtest.New(t)
 	repotest.RunWorkflows(t, postgres.NewRepository(pool), postgres.NewWorkflows(pool))
 }
+
+func TestWebhooksContract(t *testing.T) {
+	pool := dbtest.New(t)
+	repotest.RunWebhooks(t, postgres.NewRepository(pool), postgres.NewWebhooks(pool))
+}

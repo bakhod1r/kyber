@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.58.0
+  version: 0.59.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1187,6 +1187,66 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/webhooks:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: listWebhooks
+      description: The channel's incoming webhooks (S81), for its owner and admins; secrets are never shown again.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Webhook" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createWebhook
+      description: Owner and admins; the answer carries the URL (with its secret) once.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string } } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/webhooks/{id}/rotate:
+    post:
+      operationId: rotateWebhook
+      description: A new secret (the old URL stops working), shown once.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [url], properties: { url: { type: string } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/webhooks/{id}:
+    delete:
+      operationId: removeWebhook
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/hooks/{secret}:
+    post:
+      operationId: postViaWebhook
+      security: []
+      description: |
+        Another system posts into the webhook's channel (no session: the secret in the URL is the credential), as
+        Slack's incoming webhooks: {"text": "…"}. At most 30 messages a minute per webhook.
+      parameters: [{ name: secret, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [text], properties: { text: { type: string } } } } }
+      responses:
+        "204": { description: Posted }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
   /api/v1/bookmarks/{id}:
     delete:
       operationId: removeBookmark
@@ -3084,6 +3144,15 @@ components:
         updated_by: { type: string }
         updated_at: { type: string, format: date-time }
         deleted: { type: boolean }
+    Webhook:
+      type: object
+      required: [id, name, created_by, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        url: { type: string, description: "The path to POST to (contains the secret); only when made or rotated." }
     ChannelWorkflow:
       type: object
       required: [id, trigger, minute, days, text, created_by, created_at]
@@ -3211,7 +3280,7 @@ components:
         deleted: { type: boolean }
         thread_id: { oneOf: [{ type: string }, { type: "null" }], description: The parent message of a reply }
         reply_count: { type: integer }
-        kind: { type: string, enum: ["", huddle_started, huddle_ended, huddle_recording, project_event, transcript, workflow], description: "Empty for people's messages; system messages cannot be edited." }
+        kind: { type: string, enum: ["", huddle_started, huddle_ended, huddle_recording, project_event, transcript, workflow, webhook], description: "Empty for people's messages; system messages cannot be edited." }
         file:
           description: An attached file; download it from url (members of the conversation only).
           oneOf:

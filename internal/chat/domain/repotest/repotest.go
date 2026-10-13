@@ -594,7 +594,9 @@ func RunBookmarks(t *testing.T, r domain.Repository, bm domain.Bookmarks) {
 	if err := r.Create(ctx, ch); err != nil {
 		t.Fatal(err)
 	}
-	bid := func(n int) domain.BookmarkID { return domain.BookmarkID(fmt.Sprintf("78000000-0000-4000-8000-%012d", n)) }
+	bid := func(n int) domain.BookmarkID {
+		return domain.BookmarkID(fmt.Sprintf("78000000-0000-4000-8000-%012d", n))
+	}
 	a, _ := domain.NewBookmark(bid(1), WS, ch.ID, domain.BookmarkDoc, "75000000-0000-4000-8000-000000000001", "Design", Lead, t0)
 	b, _ := domain.NewBookmark(bid(2), WS, ch.ID, domain.BookmarkLink, "https://ci.example", "CI", Dev, t0.Add(time.Minute))
 	for _, x := range []*domain.Bookmark{a, b} {
@@ -628,7 +630,9 @@ func RunWorkflows(t *testing.T, r domain.Repository, wf domain.Workflows) {
 	if err := r.Create(ctx, ch); err != nil {
 		t.Fatal(err)
 	}
-	wid := func(n int) domain.WorkflowID { return domain.WorkflowID(fmt.Sprintf("79000000-0000-4000-8000-%012d", n)) }
+	wid := func(n int) domain.WorkflowID {
+		return domain.WorkflowID(fmt.Sprintf("79000000-0000-4000-8000-%012d", n))
+	}
 	join, _ := domain.NewWorkflow(wid(1), WS, ch.ID, domain.OnJoin, 0, 0, "Welcome {name}", Lead, t0)
 	daily, _ := domain.NewWorkflow(wid(2), WS, ch.ID, domain.OnSchedule, 9*60+30, domain.Weekdays, "Standup", Lead, t0.Add(time.Minute))
 	for _, w := range []*domain.Workflow{join, daily} {
@@ -662,6 +666,48 @@ func RunWorkflows(t *testing.T, r domain.Repository, wf domain.Workflows) {
 	}
 	for _, id := range []domain.WorkflowID{join.ID, "nope"} {
 		if _, err := wf.ByID(ctx, id); !errors.Is(err, domain.ErrWorkflowNotFound) {
+			t.Fatalf("ByID %s = %v", id, err)
+		}
+	}
+}
+
+// RunWebhooks checks incoming webhooks (S81) over the store of r.
+func RunWebhooks(t *testing.T, r domain.Repository, hooks domain.Webhooks) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	ch, _ := domain.NewChannel(cid(97), WS, "hooks", "", false, Lead, t0)
+	if err := r.Create(ctx, ch); err != nil {
+		t.Fatal(err)
+	}
+	hid := func(n int) domain.WebhookID { return domain.WebhookID(fmt.Sprintf("7a000000-0000-4000-8000-%012d", n)) }
+	ci, _ := domain.NewWebhook(hid(1), WS, ch.ID, "CI", "s1", Lead, t0)
+	mon, _ := domain.NewWebhook(hid(2), WS, ch.ID, "Monitoring", "s2", Lead, t0.Add(time.Minute))
+	for _, h := range []*domain.Webhook{ci, mon} {
+		if err := hooks.Add(ctx, h); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, err := hooks.BySecret(ctx, domain.HashSecret("s1")); err != nil || got.ID != ci.ID || got.Name != "CI" || got.Workspace != WS {
+		t.Fatalf("BySecret = %+v %v", got, err)
+	}
+	ci.Rotate("s3")
+	if err := hooks.Update(ctx, ci); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hooks.BySecret(ctx, domain.HashSecret("s1")); !errors.Is(err, domain.ErrWebhookNotFound) {
+		t.Fatalf("old secret = %v", err)
+	}
+	if got, _ := hooks.BySecret(ctx, domain.HashSecret("s3")); got == nil || got.ID != ci.ID {
+		t.Fatalf("new secret = %+v", got)
+	}
+	if list, _ := hooks.In(ctx, ch.ID); len(list) != 2 || list[0].Name != "CI" || list[1].Name != "Monitoring" {
+		t.Fatalf("In = %+v", list)
+	}
+	if err := hooks.Remove(ctx, mon.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []domain.WebhookID{mon.ID, "nope"} {
+		if _, err := hooks.ByID(ctx, id); !errors.Is(err, domain.ErrWebhookNotFound) {
 			t.Fatalf("ByID %s = %v", id, err)
 		}
 	}

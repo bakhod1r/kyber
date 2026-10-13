@@ -2,6 +2,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -69,6 +70,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/conversations/{id}/workflows", h.workflows)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/workflows", h.addWorkflow)
 	mux.HandleFunc("DELETE /api/v1/workflows/{id}", h.removeWorkflow)
+	mux.HandleFunc("GET /api/v1/conversations/{id}/webhooks", h.webhooks)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/webhooks", h.createWebhook)
+	mux.HandleFunc("POST /api/v1/webhooks/{id}/rotate", h.rotateWebhook)
+	mux.HandleFunc("DELETE /api/v1/webhooks/{id}", h.removeWebhook)
 	mux.HandleFunc("GET /api/v1/conversations/{id}/receipts", h.receipts)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/scheduled", h.schedule)
 	mux.HandleFunc("GET /api/v1/chat/scheduled", h.scheduledList)
@@ -88,6 +93,10 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeConversationNotFound, true
 	case errors.Is(err, domain.ErrHandleTaken):
 		return httpx.CodeGroupHandleTaken, true
+	case errors.Is(err, domain.ErrWebhookNotFound):
+		return httpx.CodeWebhookNotFound, true
+	case errors.Is(err, domain.ErrRateLimited):
+		return httpx.CodeWebhookRateLimited, true
 	case errors.Is(err, domain.ErrWorkflowNotFound):
 		return httpx.CodeWorkflowNotFound, true
 	case errors.Is(err, domain.ErrBookmarkNotFound):
@@ -106,7 +115,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
-		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle), errors.Is(err, domain.ErrInvalidPref), errors.Is(err, domain.ErrInvalidProject), errors.Is(err, domain.ErrInvalidBookmark), errors.Is(err, domain.ErrTooManyBookmarks), errors.Is(err, domain.ErrInvalidWorkflow):
+		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle), errors.Is(err, domain.ErrInvalidPref), errors.Is(err, domain.ErrInvalidProject), errors.Is(err, domain.ErrInvalidBookmark), errors.Is(err, domain.ErrTooManyBookmarks), errors.Is(err, domain.ErrInvalidWorkflow), errors.Is(err, domain.ErrInvalidWebhook):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -1055,6 +1064,91 @@ func (h *Handler) addWorkflow(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) removeWorkflow(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.RemoveWorkflow(r.Context(), auth.Actor(r.Context()), r.PathValue("id")); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// RegisterPublic mounts what needs no session: incoming webhooks (S81), authorized by the secret in the URL.
+func (h *Handler) RegisterPublic(mux *http.ServeMux) {
+	mux.HandleFunc("POST /api/v1/hooks/{secret}", h.hook)
+}
+
+type webhookDTO struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	// URL is the path to POST to; only in the answer that made or rotated it.
+	URL string `json:"url,omitempty"`
+}
+
+func toWebhook(x *domain.Webhook, secret string) webhookDTO {
+	d := webhookDTO{ID: string(x.ID), Name: x.Name, CreatedBy: string(x.CreatedBy), CreatedAt: x.CreatedAt}
+	if secret != "" {
+		d.URL = "/api/v1/hooks/" + secret
+	}
+	return d
+}
+
+func (h *Handler) webhooks(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.Webhooks(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := make([]webhookDTO, len(list))
+	for i, x := range list {
+		out[i] = toWebhook(x, "")
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+func (h *Handler) createWebhook(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	x, secret, err := h.svc.CreateWebhook(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Name)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, toWebhook(x, secret))
+}
+
+func (h *Handler) rotateWebhook(w http.ResponseWriter, r *http.Request) {
+	secret, err := h.svc.RotateWebhook(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]string{"url": "/api/v1/hooks/" + secret})
+}
+
+func (h *Handler) removeWebhook(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.RemoveWebhook(r.Context(), auth.Actor(r.Context()), r.PathValue("id")); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// hook: {"text": "…"} (as Slack's incoming webhooks), at most 64 KB.
+func (h *Handler) hook(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	var in struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		h.fail(w, r, httpx.ErrBadJSON)
+		return
+	}
+	if _, err := h.svc.PostViaWebhook(r.Context(), r.PathValue("secret"), in.Text); err != nil {
 		h.fail(w, r, err)
 		return
 	}

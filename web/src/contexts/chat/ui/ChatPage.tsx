@@ -261,6 +261,53 @@ function IssueFromMessage({ m, onDone }: { m: Message; onDone: (m: Message) => v
   );
 }
 
+/** S81: incoming webhooks — other systems (CI, monitoring) post here through a secret URL, shown once. */
+function Webhooks({ c }: { c: Conversation }) {
+  const qc = useQueryClient();
+  const key = ["chat", "webhooks", c.id];
+  const list = useQuery({ queryKey: key, queryFn: () => chatUseCases.webhooks(c.id) });
+  const done = () => qc.invalidateQueries({ queryKey: key });
+  const [name, setName] = useState("");
+  const [shown, setShown] = useState<{ name: string; url: string } | null>(null);
+  const abs = (url: string) => `${window.location.origin}${url}`;
+  const create = useMutation({
+    mutationFn: () => chatUseCases.createWebhook(c.id, name),
+    onSuccess: (h) => { setShown({ name: h.name, url: abs(h.url ?? "") }); setName(""); void done(); },
+  });
+  const rotate = useMutation({
+    mutationFn: (h: { id: string; name: string }) => chatUseCases.rotateWebhook(h.id).then((r) => ({ name: h.name, url: abs(r.url) })),
+    onSuccess: setShown,
+  });
+  const remove = useMutation({ mutationFn: (id: string) => chatUseCases.removeWebhook(id), onSuccess: done });
+  return (
+    <div role="group" aria-label="Webhooks">
+      <h3>🔌 Incoming webhooks</h3>
+      <ul>
+        {(list.data ?? []).map((h) => (
+          <li key={h.id}>
+            {h.name}{" "}
+            <button className="ghost" onClick={() => rotate.mutate(h)}>New URL</button>
+            <button className="ghost" onClick={() => remove.mutate(h.id)}>Remove</button>
+          </li>
+        ))}
+      </ul>
+      {shown && (
+        <div className="panel" role="status" aria-label="Webhook URL">
+          <p>Copy the URL for <b>{shown.name}</b> now — it is not shown again:</p>
+          <input readOnly value={shown.url} aria-label="Webhook URL value" onFocus={(e) => e.currentTarget.select()} style={{ width: "100%" }} />
+          <pre className="muted">{`curl -X POST -H 'Content-Type: application/json' -d '{"text":"Build passed"}' ${shown.url}`}</pre>
+          <button className="ghost" onClick={() => setShown(null)}>Done</button>
+        </div>
+      )}
+      <form className="row" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
+        <input aria-label="Webhook name" placeholder="CI" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
+        <button disabled={!name.trim()}>Add webhook</button>
+      </form>
+      {(create.error ?? rotate.error) && <p role="alert" className="error">{(create.error ?? rotate.error)!.message}</p>}
+    </div>
+  );
+}
+
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** S80: a welcome when someone joins, or a message on chosen days at a time. */
@@ -366,6 +413,7 @@ function ChannelSettings({ c, me, names }: { c: Conversation; me: string; names:
       )}
       {manager && <ProjectLink c={c} onChange={() => void done()} />}
       {manager && <Workflows c={c} />}
+      {manager && <Webhooks c={c} />}
       {!manager && c.project_key && <p className="muted">📋 Posts news of {c.project_key}</p>}
       <ul aria-label="Channel members">
         {c.member_ids.map((u) => (
@@ -824,6 +872,13 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
   const pin = useMutation({ mutationFn: () => (m.pinned_by ? chatUseCases.unpin(m.id) : chatUseCases.pin(m.id)), onSuccess: onChange });
   const remove = useMutation({ mutationFn: () => chatUseCases.remove(m.id), onSuccess: () => onChange({ ...m, deleted: true, body: "", reactions: [], issues: [] }) });
   const mine = m.author_id === me && !m.kind;
+  if (m.kind === "webhook") {
+    return (
+      <article className="chat-message chat-system" aria-label={`Webhook at ${time(m.created_at)}`}>
+        <p className="chat-body">🔌 {m.body} <time className="muted" dateTime={m.created_at}>{time(m.created_at)}</time></p>
+      </article>
+    );
+  }
   if (m.kind === "workflow") {
     return (
       <article className="chat-message chat-system" aria-label={`Workflow at ${time(m.created_at)}`}>

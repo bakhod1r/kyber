@@ -692,3 +692,44 @@ func TestWorkflows(t *testing.T) {
 		expect(t, code, 204, b)
 	})
 }
+
+// S81: incoming webhooks — a secret URL posts into the channel without a session.
+func TestIncomingWebhooks(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "builds"})
+		conv := ch["id"].(string)
+		dev.do("POST", "/api/v1/conversations/"+conv+"/join", nil)
+		code, b := dev.do("POST", "/api/v1/conversations/"+conv+"/webhooks", map[string]string{"name": "CI"})
+		expect(t, code, 403, b)
+		code, hook := lead.do("POST", "/api/v1/conversations/"+conv+"/webhooks", map[string]string{"name": "CI"})
+		expect(t, code, 201, hook)
+		url := hook["url"].(string)
+
+		code, b = anon.do("POST", url, map[string]string{"text": "build #42 passed ✅"}) // no session
+		expect(t, code, 204, b)
+		_, page := dev.do("GET", "/api/v1/conversations/"+conv+"/messages", nil)
+		if items := page["items"].([]any); len(items) != 1 || items[0].(map[string]any)["body"] != "CI: build #42 passed ✅" ||
+			items[0].(map[string]any)["kind"] != "webhook" {
+			t.Fatalf("messages = %v", page)
+		}
+		code, b = anon.do("POST", "/api/v1/hooks/not-the-secret", map[string]string{"text": "x"})
+		expect(t, code, 404, b)
+		if _, l := lead.do("GET", "/api/v1/conversations/"+conv+"/webhooks", nil); len(l["items"].([]any)) != 1 || l["items"].([]any)[0].(map[string]any)["url"] != nil {
+			t.Fatalf("listed (no secrets) = %v", l)
+		}
+		code, rot := lead.do("POST", "/api/v1/webhooks/"+hook["id"].(string)+"/rotate", nil)
+		expect(t, code, 200, rot)
+		code, b = anon.do("POST", url, map[string]string{"text": "old url"})
+		expect(t, code, 404, b)
+		for i := 0; i < 29; i++ {
+			code, b = anon.do("POST", rot["url"].(string), map[string]string{"text": "spam"})
+			expect(t, code, 204, b)
+		}
+		code, b = anon.do("POST", rot["url"].(string), map[string]string{"text": "spam"})
+		expect(t, code, 429, b)
+		code, b = lead.do("DELETE", "/api/v1/webhooks/"+hook["id"].(string), nil)
+		expect(t, code, 204, b)
+	})
+}

@@ -5,6 +5,8 @@ package application
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,7 +14,9 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/bakhod1r/kyber/internal/chat/domain"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
@@ -91,19 +95,23 @@ type Deps struct {
 	Transcriber   Transcriber              // optional: recording transcripts (S77); nothing leaves the server without it
 	Bookmarks     domain.Bookmarks         // optional: docs and links in a conversation's header (S79)
 	Workflows     domain.Workflows         // optional: channel automations (S80)
+	Webhooks      domain.Webhooks          // optional: incoming webhooks (S81)
 	Directory     Directory                // optional: names for workflow welcomes
 	Members       Members
 	NewID         func() string
 	Now           func() time.Time
 }
 
-type Service struct{ d Deps }
+type Service struct {
+	d     Deps
+	hooks hookLimiter // incoming webhook rate (S81), per replica
+}
 
 func NewService(d Deps) *Service {
 	if d.Notifier == nil {
 		d.Notifier = nobody{}
 	}
-	return &Service{d: d}
+	return &Service{d: d, hooks: hookLimiter{hits: map[domain.WebhookID][]time.Time{}}}
 }
 
 // tell notifies the members of the message's conversation.
@@ -1453,4 +1461,149 @@ func (s *Service) RunWorkflows(ctx context.Context) (int, error) {
 		ran++
 	}
 	return ran, nil
+}
+
+func (s *Service) WithWebhooks(h domain.Webhooks) *Service { s.d.Webhooks = h; return s }
+
+// WebhookRate is how many messages one webhook may post a minute (on each replica).
+const WebhookRate = 30
+
+type hookLimiter struct {
+	mu   sync.Mutex
+	hits map[domain.WebhookID][]time.Time
+}
+
+func (l *hookLimiter) allow(id domain.WebhookID, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	recent := l.hits[id][:0]
+	for _, t := range l.hits[id] {
+		if now.Sub(t) < time.Minute {
+			recent = append(recent, t)
+		}
+	}
+	if len(recent) >= WebhookRate {
+		l.hits[id] = recent
+		return false
+	}
+	l.hits[id] = append(recent, now)
+	return true
+}
+
+func newSecret() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// managedChannel is a channel the actor may read and manage.
+func (s *Service) managedChannel(ctx context.Context, actor, conv string) (*domain.Conversation, error) {
+	c, err := s.readable(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	if !c.CanManage(domain.UserID(actor)) {
+		return nil, domain.ErrNotManager
+	}
+	return c, nil
+}
+
+// CreateWebhook: owners and admins let another system post into the channel (S81). The secret is returned once.
+func (s *Service) CreateWebhook(ctx context.Context, actor, conv, name string) (*domain.Webhook, string, error) {
+	c, err := s.managedChannel(ctx, actor, conv)
+	if err != nil {
+		return nil, "", err
+	}
+	secret, err := newSecret()
+	if err != nil {
+		return nil, "", err
+	}
+	h, err := domain.NewWebhook(domain.WebhookID(s.d.NewID()), c.Workspace, c.ID, name, secret, domain.UserID(actor), s.d.Now())
+	if err != nil {
+		return nil, "", err
+	}
+	return h, secret, s.d.Webhooks.Add(ctx, h)
+}
+
+// managedHook is a webhook of a channel the actor manages (others' look missing).
+func (s *Service) managedHook(ctx context.Context, actor, id string) (*domain.Webhook, error) {
+	h, err := s.d.Webhooks.ByID(ctx, domain.WebhookID(id))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.managedChannel(ctx, actor, string(h.Conversation)); errors.Is(err, domain.ErrConversationNotFound) {
+		return nil, domain.ErrWebhookNotFound
+	} else if err != nil {
+		return nil, err
+	}
+	return h, nil
+}
+
+// RotateWebhook gives the webhook a new secret (returned once); the old URL stops working.
+func (s *Service) RotateWebhook(ctx context.Context, actor, id string) (string, error) {
+	h, err := s.managedHook(ctx, actor, id)
+	if err != nil {
+		return "", err
+	}
+	secret, err := newSecret()
+	if err != nil {
+		return "", err
+	}
+	h.Rotate(secret)
+	return secret, s.d.Webhooks.Update(ctx, h)
+}
+
+func (s *Service) RemoveWebhook(ctx context.Context, actor, id string) error {
+	h, err := s.managedHook(ctx, actor, id)
+	if err != nil {
+		return err
+	}
+	return s.d.Webhooks.Remove(ctx, h.ID)
+}
+
+// Webhooks lists a channel's webhooks for its managers (without secrets).
+func (s *Service) Webhooks(ctx context.Context, actor, conv string) ([]*domain.Webhook, error) {
+	c, err := s.managedChannel(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	return s.d.Webhooks.In(ctx, c.ID)
+}
+
+// PostViaWebhook posts text into the webhook's channel, as "Name: text", for whoever holds the secret.
+func (s *Service) PostViaWebhook(ctx context.Context, secret, text string) (*domain.Message, error) {
+	if s.d.Webhooks == nil || secret == "" {
+		return nil, domain.ErrWebhookNotFound
+	}
+	h, err := s.d.Webhooks.BySecret(ctx, domain.HashSecret(secret))
+	if err != nil {
+		return nil, err
+	}
+	ctx = tenant.With(ctx, string(h.Workspace))
+	c, err := s.d.Conversations.ByID(ctx, h.Conversation)
+	if errors.Is(err, domain.ErrConversationNotFound) {
+		return nil, domain.ErrWebhookNotFound
+	} else if err != nil {
+		return nil, err
+	}
+	if err := c.Writable(); err != nil {
+		return nil, err
+	}
+	b := strings.TrimSpace(text)
+	if b == "" || utf8.RuneCountInString(h.Name)+2+utf8.RuneCountInString(b) > domain.MaxBody {
+		return nil, domain.ErrInvalidBody
+	}
+	now := s.d.Now()
+	if !s.hooks.allow(h.ID, now) {
+		return nil, domain.ErrRateLimited
+	}
+	id := domain.MessageID(s.d.NewID())
+	m := domain.NewSystemMessage(id, c.ID, h.CreatedBy, domain.KindWebhook, "hook:"+string(id), h.Name+": "+b, now)
+	if err := s.d.Messages.Post(ctx, m); err != nil {
+		return nil, err
+	}
+	s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *m})
+	return m, nil
 }

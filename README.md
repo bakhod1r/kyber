@@ -6,7 +6,9 @@
 > categories), Scrum & Kanban boards with status-mapped columns and WIP limits, backlog & sprints, reports (burndown,
 > velocity, created vs resolved, cycle time, workload), notifications & @mentions, Pomodoro focus with a meetings
 > time table, eye-break exercises, Jira CSV import/export, Google & Telegram sign-in, multi-tenant workspaces on
-> subdomains, Slack-style chat with video huddles (screen share, recording) and shared whiteboards,
+> subdomains, Slack-style chat (threads, mentions, @groups, saved items, reminders, scheduled messages, statuses &
+> DND, channel sections, slash commands, project channels, workflows, incoming webhooks) with video huddles
+> (screen share, recording, transcripts, reactions) and shared whiteboards,
 > OpenAPI contract, localized errors (en/uz/ru), PostgreSQL, optional Redis.
 
 <p align="center"><img src="docs/assets/landing.png" alt="Kyber landing page" width="820"></p>
