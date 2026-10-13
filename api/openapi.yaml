@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.29.0
+  version: 0.30.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -736,6 +736,8 @@ paths:
                 remaining_estimate: { type: string, description: "Jira-style duration; empty sets zero." }
                 custom_fields: { type: object, additionalProperties: { type: string }, description: "Field id → value (number, YYYY-MM-DD date, one of a select field's options, or text); empty clears." }
                 security_level: { type: string, enum: ["", confidential] }
+                start_date: { type: string, description: "Planned start, YYYY-MM-DD; empty clears. Must not be after the due date." }
+                due_date: { type: string, description: "Due date, YYYY-MM-DD; empty clears." }
       responses:
         "200": { description: Updated issue, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
         "400": { $ref: "#/components/responses/Error" }
@@ -2044,6 +2046,8 @@ components:
           description: How a resolved issue ended; "" while it is not in a Done status.
           type: string
           enum: ["", done, wont_do, duplicate, cannot_reproduce]
+        start_date: { type: [string, "null"], format: date, description: Planned start (the timeline). }
+        due_date: { type: [string, "null"], format: date }
         security_level:
           type: string
           enum: ["", confidential]

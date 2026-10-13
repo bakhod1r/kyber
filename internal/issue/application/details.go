@@ -28,6 +28,9 @@ type EditIssue struct {
 	// OriginalEstimate / RemainingEstimate are durations like "1d 4h" ("" clears); nil leaves them.
 	OriginalEstimate  *string
 	RemainingEstimate *string
+	// StartDate / DueDate are YYYY-MM-DD ("" clears); nil leaves them.
+	StartDate *string
+	DueDate   *string
 	// Fields sets custom field values (field id → value, "" clears).
 	Fields map[string]string
 }
@@ -122,6 +125,25 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 	}
 	if remaining != nil {
 		is.EstimateRemaining(*remaining)
+	}
+	if cmd.StartDate != nil || cmd.DueDate != nil {
+		start, due := is.Schedule()
+		for _, c := range []struct {
+			in  *string
+			out *domain.Date
+		}{{cmd.StartDate, &start}, {cmd.DueDate, &due}} {
+			if c.in == nil {
+				continue
+			}
+			d, err := domain.ParseDate(*c.in)
+			if err != nil {
+				return nil, err
+			}
+			*c.out = d
+		}
+		if err := is.Plan(start, due); err != nil {
+			return nil, err
+		}
 	}
 	if cmd.Resolution != nil && *cmd.Resolution != string(is.Resolution()) {
 		if err := is.ChangeResolution(domain.Resolution(*cmd.Resolution)); err != nil {

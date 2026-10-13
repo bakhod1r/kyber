@@ -30,3 +30,6 @@ architecture test, Vitest, e2e ×3) → commit + push → short report.
 ## D. Jira project navigation (requested 2026-10-13)
 Tabs like Jira's: Summary, Timeline, Backlog, Active sprints, Reports, List, Forms, Goals, Docs — plus quick
 filters on the board and the list (and saved filters reused there).
+
+Status: D1 Summary, Active sprints, List and quick filters — done. D3 Timeline — done (start/due dates on
+issues, `startDate`/`dueDate`/`due` in JQL, the Timeline tab). Next: D4 Goals, D5 Docs, D6 Forms.
