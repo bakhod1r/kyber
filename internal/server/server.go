@@ -102,6 +102,7 @@ import (
 	notifyhttp "github.com/bakhod1r/kyber/internal/notify/interfaces/httpapi"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 	"github.com/bakhod1r/kyber/internal/platform/id"
+	"github.com/bakhod1r/kyber/internal/platform/live"
 	"github.com/bakhod1r/kyber/internal/platform/metrics"
 	"github.com/bakhod1r/kyber/internal/platform/otel"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
@@ -169,6 +170,7 @@ type deps struct {
 	focusSessions focusdomain.Repository
 	baseDomain    string // "" = single-tenant (ADR-0004)
 	outbox        outbox.Store
+	livePool      *pgxpool.Pool   // set: hints cross replicas through NOTIFY
 	ctx           context.Context // lifetime of background work (outbox relay)
 	relayEvery    time.Duration
 }
@@ -264,7 +266,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), worklogs: issuepg.NewWorklogRepository(pool), fields: issuepg.NewCustomFieldRepository(pool),
 		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), forms: formpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
-		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool),
+		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
@@ -335,6 +337,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	focus := focusapp.NewService(focusapp.Deps{Sessions: d.focusSessions, Calendar: focusacl.NewCalendar(calendar),
 		Issues: focusacl.NewIssues(issues, projectcompat.NewGate(projects, access, accessdomain.AssignableUser)), NewID: id.New, Clock: systemClock{}})
 	relay := outbox.NewRelay(d.outbox, log)
+	hub := live.NewHub()
 	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated", "issue.imported"} {
 		relay.Handle(name, insights.OnIssueEvent)
 	}
@@ -356,6 +359,13 @@ func build(log *slog.Logger, d deps) http.Handler {
 	for _, name := range []string{"version.released", "version.deleted"} {
 		relay.Handle(name, issues.OnVersionEvent)
 	}
+	var hints live.Broadcaster = hub
+	if d.livePool != nil {
+		pg := live.NewPostgres(d.livePool, hub, log)
+		go pg.Listen(d.liveCtx())
+		hints = pg
+	}
+	relay.HandleAll(live.OnEvent(hints, log))
 	if d.ctx == nil {
 		d.ctx = context.Background()
 	}
@@ -402,6 +412,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 	insightshttp.New(insights, log).Register(api)
 	importerhttp.New(importer, log).Register(api)
 	tenancy.Register(api)
+	api.Handle("GET /api/v1/events", hub.Handler(func(ctx context.Context, user, project string) bool {
+		return projects.Authorize(ctx, projectdomain.UserID(user), project, projectdomain.PermRead) == nil
+	}, 25*time.Second))
 	calendarhttp.New(calendar, log, time.Now).Register(api)
 	focushttp.New(focus, log, time.Now).Register(api)
 	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
@@ -445,6 +458,9 @@ type statusRecorder struct {
 	status int
 }
 
+// Unwrap lets http.ResponseController reach the connection (flushing an event stream).
+func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
+
 func (s *statusRecorder) WriteHeader(code int) {
 	s.status = code
 	s.ResponseWriter.WriteHeader(code)
@@ -478,6 +494,9 @@ type fallbackWriter struct {
 	r        *http.Request
 	replaced bool
 }
+
+// Unwrap lets http.ResponseController reach the connection (flushing an event stream).
+func (f *fallbackWriter) Unwrap() http.ResponseWriter { return f.ResponseWriter }
 
 func (f *fallbackWriter) WriteHeader(code int) {
 	plain := strings.HasPrefix(f.Header().Get("Content-Type"), "text/plain")
@@ -557,4 +576,12 @@ func (d deps) botMessenger() notifyapp.Messenger {
 		return nil
 	}
 	return d.telegramBot
+}
+
+// liveCtx bounds the replica's live listener like the relay (d.ctx may be set after construction).
+func (d *deps) liveCtx() context.Context {
+	if d.ctx == nil {
+		return context.Background()
+	}
+	return d.ctx
 }

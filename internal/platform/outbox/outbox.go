@@ -71,6 +71,7 @@ type Relay struct {
 	maxAttempts int
 	mu          sync.RWMutex
 	handlers    map[string][]Handler
+	all         []Handler
 }
 
 // DefaultMaxAttempts is how often a message may fail before it becomes a dead letter.
@@ -89,6 +90,13 @@ func NewRelay(store Store, log *slog.Logger, opts ...Option) *Relay {
 	return r
 }
 
+// HandleAll subscribes h to every event, after the handlers of its name.
+func (r *Relay) HandleAll(h Handler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.all = append(r.all, h)
+}
+
 // Handle subscribes h to events named name.
 func (r *Relay) Handle(name string, h Handler) {
 	r.mu.Lock()
@@ -102,7 +110,7 @@ const batch = 100
 func (r *Relay) ProcessOnce(ctx context.Context) (int, error) {
 	return r.store.Process(ctx, batch, func(m Message) error {
 		r.mu.RLock()
-		hs := r.handlers[m.Name]
+		hs := append(slices.Clone(r.handlers[m.Name]), r.all...)
 		r.mu.RUnlock()
 		hctx := ctx
 		if m.Workspace != "" {

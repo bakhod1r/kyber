@@ -4,9 +4,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { identityUseCases, type User } from "../contexts/identity/application";
 import { FocusTimer } from "../contexts/focus/ui/Focus";
 import { NotificationBell } from "../contexts/notify/ui/NotificationBell";
+import { useLive } from "../shared/live";
 
 export function Layout({ user, children }: { user: User; children: ReactNode }) {
   const qc = useQueryClient();
+  useLive();
   const navigate = useNavigate();
   const logout = useMutation({
     mutationFn: identityUseCases.logout,

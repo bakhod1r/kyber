@@ -24,7 +24,7 @@ architecture test, Vitest, e2e ×3) → commit + push → short report.
 4. ✅ Custom fields: per-project definitions (text, number, date, select), values on issues, API/UI, JQL.
 5. Attachments: storage port; MinIO/S3 and local adapters; size limits, authorization, UI.
 6. S49: event envelope (workspace, project, actor, occurred_at, schema version) and a dead-letter queue. — done (ADR-0007: actor, trace context, schema version; dead letters after 10 failures; `kyber outbox` CLI).
-7. Real time (SSE): outbox relay → per-workspace stream filtered by visibility; UI invalidates queries.
+7. Real time (SSE): outbox relay → per-workspace stream filtered by visibility; UI invalidates queries. — done (ADR-0008; hints only, NOTIFY across replicas).
 8. Admin panel (workspace users, projects, settings), MCP server (tools over the API), PostgreSQL RLS.
 
 ## D. Jira project navigation (requested 2026-10-13)

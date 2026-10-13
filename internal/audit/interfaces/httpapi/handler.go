@@ -49,6 +49,9 @@ type statusWriter struct {
 	status int
 }
 
+// Unwrap lets http.ResponseController reach the connection (flushing an event stream).
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 func (w *statusWriter) WriteHeader(code int) {
 	if w.status == 0 {
 		w.status = code

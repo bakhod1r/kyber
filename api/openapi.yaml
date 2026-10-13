@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.33.0
+  version: 0.34.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1394,6 +1394,21 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/events:
+    get:
+      operationId: liveEvents
+      description: |
+        Server-Sent Events stream of change hints for the caller's workspace (ADR-0008). An `event: change`
+        carries only `{"project","event"}` for projects the caller may browse, never content; clients refetch
+        through the API. `event: resync` means hints were dropped (refetch everything). Comments keep the
+        connection alive every 25 s; `retry: 3000` sets the reconnect delay.
+      responses:
+        "200":
+          description: The event stream (never ends on its own)
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/goals:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
