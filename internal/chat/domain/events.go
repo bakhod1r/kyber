@@ -45,6 +45,7 @@ type MessageWritten struct {
 	Thread       MessageID      `json:"thread_id"`
 	Author       UserID         `json:"author_id"`
 	Body         string         `json:"body"`
+	Kind         MessageKind    `json:"kind,omitempty"` // e.g. huddle_recording (S77)
 }
 
 func (MessageWritten) EventName() string { return "chat.message_posted" }

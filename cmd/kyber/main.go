@@ -22,6 +22,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/bakhod1r/kyber/internal/call/infrastructure/ice"
+	"github.com/bakhod1r/kyber/internal/chat/infrastructure/stt"
 	"github.com/bakhod1r/kyber/internal/platform/config"
 	"github.com/bakhod1r/kyber/internal/platform/db"
 	"github.com/bakhod1r/kyber/internal/platform/otel"
@@ -101,6 +102,9 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		server.WithICE(ice.Parse(cfg.ICEServers), cfg.TURNSecret)}, telegramBot(cfg)...)
 	if cfg.FilesDir != "" {
 		common = append(common, server.WithFilesDir(cfg.FilesDir))
+	}
+	if cfg.STTURL != "" {
+		common = append(common, server.WithTranscriber(stt.New(cfg.STTURL, cfg.STTModel, cfg.STTKey)))
 	}
 	mailer, err := mailer(cfg)
 	if err != nil {

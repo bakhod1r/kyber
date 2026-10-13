@@ -556,3 +556,6 @@ label.button { cursor: pointer; }
 .huddle-tile { position: relative; }
 .huddle-reaction { position: absolute; top: 6px; right: 8px; font-size: 32px; animation: huddle-pop 4s ease-out forwards; }
 @keyframes huddle-pop { 0% { transform: scale(.5); opacity: 0; } 10% { transform: scale(1.2); opacity: 1; } 80% { opacity: 1; } 100% { transform: translateY(-30px); opacity: 0; } }
+.chat-transcript { white-space: pre-wrap; font-size: 14px; }
+.chat-clip { display: flex; align-items: center; gap: 8px; }
+.chat-clip-preview { width: 160px; border-radius: 6px; background: #000; }

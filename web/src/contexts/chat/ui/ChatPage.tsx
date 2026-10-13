@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, canManage, type ChatEvent, type ConversationPrefs, type Level, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, COMMAND_HELP, type Message, parseCommand, parseRemind, type SlashCommand, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
+  applyEvent, canManage, type ChatEvent, type ConversationPrefs, type Level, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, COMMAND_HELP, clipName, type ClipKind, type ClipRecorder, MAX_CLIP_MS, type Message, parseCommand, startClip, parseRemind, type SlashCommand, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
 } from "../application";
 
 const PAGE = 50;
@@ -177,6 +177,58 @@ function MyStatus({ me }: { me: string }) {
         </form>
       )}
     </div>
+  );
+}
+
+/** S78: record a short video or voice message (at most five minutes) and post it. */
+function ClipButton({ onClip }: { onClip: (f: File) => void }) {
+  const [rec, setRec] = useState<{ kind: ClipKind; r: ClipRecorder; started: number } | null>(null);
+  const [now, setNow] = useState(0);
+  const [error, setError] = useState("");
+  const preview = useRef<HTMLVideoElement>(null);
+  const stop = async () => {
+    if (!rec) return;
+    const blob = await rec.r.stop();
+    setRec(null);
+    if (blob.size > 0) onClip(new File([blob], clipName(rec.kind, new Date()), { type: blob.type }));
+  };
+  useEffect(() => {
+    if (!rec) return;
+    if (preview.current) preview.current.srcObject = rec.kind === "video" ? rec.r.stream : null;
+    const t = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(t);
+  }, [rec]);
+  useEffect(() => {
+    if (rec && now - rec.started >= MAX_CLIP_MS) void stop();
+  });
+  const start = async (kind: ClipKind) => {
+    setError("");
+    try {
+      setRec({ kind, r: await startClip(kind), started: Date.now() });
+      setNow(Date.now());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No camera or microphone");
+    }
+  };
+  if (rec) {
+    const secs = Math.max(0, Math.floor((now - rec.started) / 1000));
+    return (
+      <div className="chat-clip" role="group" aria-label="Recording a clip">
+        {rec.kind === "video" && <video ref={preview} autoPlay muted playsInline className="chat-clip-preview" />}
+        <span className="huddle-recording">● {Math.floor(secs / 60)}:{String(secs % 60).padStart(2, "0")} / 5:00</span>
+        <button onClick={() => void stop()}>Stop and send</button>
+      </div>
+    );
+  }
+  return (
+    <>
+      <select className="ghost" aria-label="Record a clip" value="" onChange={(e) => e.target.value && void start(e.target.value as ClipKind)}>
+        <option value="">🎬</option>
+        <option value="video">Video clip</option>
+        <option value="voice">Voice clip</option>
+      </select>
+      {error && <span role="alert" className="error"> {error}</span>}
+    </>
   );
 }
 
@@ -690,6 +742,7 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
               if (f) upload.mutate(f);
             }} />
           </label>
+          <ClipButton onClip={(f) => upload.mutate(f)} />
           <Composer label={`Message ${title}`} onSend={send} onSchedule={(body, at) => later.mutate({ body, at })}
             onTyping={() => void chatUseCases.typing(id).catch(() => {})} />
         </div>
@@ -720,6 +773,13 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
   const pin = useMutation({ mutationFn: () => (m.pinned_by ? chatUseCases.unpin(m.id) : chatUseCases.pin(m.id)), onSuccess: onChange });
   const remove = useMutation({ mutationFn: () => chatUseCases.remove(m.id), onSuccess: () => onChange({ ...m, deleted: true, body: "", reactions: [], issues: [] }) });
   const mine = m.author_id === me && !m.kind;
+  if (m.kind === "transcript") {
+    return (
+      <article className="chat-message chat-system" aria-label={`Transcript at ${time(m.created_at)}`}>
+        <p className="chat-body chat-transcript">{m.body}</p>
+      </article>
+    );
+  }
   if (m.kind === "project_event") {
     return (
       <article className="chat-message chat-system" aria-label={`Project news at ${time(m.created_at)}`}>

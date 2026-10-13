@@ -19,3 +19,4 @@ export function useChatStream(onEvent: (e: ChatEvent) => void, onConnected?: () 
 }
 
 export * from "../domain/model";
+export { startClip, type ClipKind, type ClipRecorder } from "../infrastructure/clip";

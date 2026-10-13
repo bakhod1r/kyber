@@ -312,6 +312,8 @@ const (
 	KindHuddleRecording MessageKind = "huddle_recording"
 	// KindProjectEvent: news of the linked project (S73); the body names issues by key only.
 	KindProjectEvent MessageKind = "project_event"
+	// KindTranscript: the transcript of a huddle recording, in its thread (S77).
+	KindTranscript MessageKind = "transcript"
 )
 
 // ErrDuplicateRef: a system message about this already exists (events may be delivered twice).
@@ -379,7 +381,21 @@ func NewRecordingMessage(id MessageID, conv ConversationID, author UserID, f Fil
 		return nil, err
 	}
 	m.Kind = KindHuddleRecording
+	for i := range m.events {
+		m.events[i].Kind = m.Kind
+	}
 	return m, nil
+}
+
+// NewTranscript is the transcript of a recording, written by Kyber in the recording's thread (S77).
+func NewTranscript(id MessageID, rec *Message, text string, now time.Time) *Message {
+	text = "📝 Transcript:\n" + strings.TrimSpace(text)
+	if r := []rune(text); len(r) > MaxBody {
+		text = string(r[:MaxBody-1]) + "…"
+	}
+	m := NewSystemMessage(id, rec.Conversation, rec.Author, KindTranscript, "transcript:"+string(rec.ID), text, now)
+	m.Thread = rec.ID
+	return m
 }
 
 // NewFileMessage posts a file; the message body is its name (searchable).

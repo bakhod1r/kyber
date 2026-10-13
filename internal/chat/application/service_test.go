@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"context"
 	"errors"
 	"fmt"
@@ -743,5 +744,49 @@ func TestProjectChannels(t *testing.T) {
 		if strings.Contains(b, "secret") {
 			t.Fatalf("issue details leaked into the channel: %q", b)
 		}
+	}
+}
+
+// transcriber is a fake Transcriber.
+type transcriber struct{ calls int }
+
+func (t *transcriber) Transcribe(_ context.Context, name string, audio io.Reader) (string, error) {
+	t.calls++
+	b, _ := io.ReadAll(audio)
+	return fmt.Sprintf("transcript of %s (%d bytes)", name, len(b)), nil
+}
+
+// S77: with a speech-to-text service configured, a recording gets its transcript in its thread, once.
+func TestRecordingTranscript(t *testing.T) {
+	repo := memory.NewRepository()
+	n := 0
+	tr := &transcriber{}
+	svc := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Blobs: blob.NewMemory(), Transcriber: tr,
+		Members: members{"lead": {"w1"}}, NewID: func() string { n++; return fmt.Sprintf("id-%03d", n) }, Now: time.Now})
+	ctx := tenant.With(context.Background(), "w1")
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "general"})
+	rec, err := svc.UploadRecording(ctx, "lead", string(ch.ID), "huddle.webm", bytes.NewReader(append([]byte("\x1aE\xdf\xa3"), make([]byte, 100)...)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := repo.Outbox()
+	if len(out) != 1 || out[0].Kind != domain.KindHuddleRecording {
+		t.Fatalf("outbox = %+v", out)
+	}
+	payload, _ := json.Marshal(out[0])
+	m := outbox.Message{ID: 1, Name: out[0].EventName(), Payload: payload, Workspace: "w1"}
+	for range 2 {
+		if err := svc.OnRecordingPosted(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	replies, _ := svc.Replies(ctx, "lead", string(rec.ID))
+	if tr.calls != 1 || len(replies) != 1 || !strings.HasPrefix(replies[0].Body, "📝 Transcript:\ntranscript of huddle.webm") || replies[0].Kind != domain.KindTranscript {
+		t.Fatalf("calls %d, replies = %+v", tr.calls, replies)
+	}
+	// Without a service nothing leaves the server.
+	plain := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Blobs: blob.NewMemory(), Members: members{}, NewID: func() string { return "x" }, Now: time.Now})
+	if err := plain.OnRecordingPosted(ctx, m); err != nil {
+		t.Fatal(err)
 	}
 }

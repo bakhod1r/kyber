@@ -52,10 +52,16 @@ sends `X-Accel-Buffering: no` for nginx; keep read timeouts above the 25-second 
 
 ## Files
 
-Chat files (and, later, huddle recordings) are kept under `KYBER_FILES_DIR` (one file per message id, two
-levels deep). Back the directory up together with the database. Without it, files live in memory and vanish on
-restart (fine for a demo). With several replicas, put the directory on shared storage — or wait for the S3
-adapter.
+Chat files and huddle recordings are kept under `KYBER_FILES_DIR` (one file per message id, two levels deep).
+Back the directory up together with the database. Without it, files live in memory and vanish on restart (fine
+for a demo). With several replicas, put the directory on shared storage — or wait for the S3 adapter.
+
+## Recording transcripts (optional)
+
+Set `KYBER_STT_URL` to an OpenAI-compatible speech-to-text endpoint (for example a self-hosted Whisper server's
+`/v1/audio/transcriptions`) and each huddle recording gets a "📝 Transcript" in its thread. `KYBER_STT_MODEL`
+defaults to `whisper-1`; `KYBER_STT_KEY` (a secret — set it in the environment, never in files) is sent as a
+bearer token. Unset, recordings never leave the server. Transcripts are capped at 4000 characters.
 
 ## Metrics
 

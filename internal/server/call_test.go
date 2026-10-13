@@ -2,8 +2,10 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -221,7 +223,22 @@ func TestHuddleRecording(t *testing.T) {
 		res = eve.raw("GET", m["file"].(map[string]any)["url"].(string), nil, nil)
 		res.Body.Close()
 		expect(t, res.StatusCode, 404, nil)
-	})
+
+		// S77: with a speech-to-text service, the transcript lands in the recording's thread.
+		eventuallyJSON(t, lead, "/api/v1/messages/"+m["id"].(string)+"/replies", func(b map[string]any) bool {
+			items := b["items"].([]any)
+			return len(items) == 1 && items[0].(map[string]any)["kind"] == "transcript" &&
+				strings.HasPrefix(items[0].(map[string]any)["body"].(string), "📝 Transcript:\nHuddle 13 Oct.webm")
+		})
+	}, server.WithTranscriber(fakeSTT{}))
+}
+
+// fakeSTT "transcribes" a recording into its name and size.
+type fakeSTT struct{}
+
+func (fakeSTT) Transcribe(_ context.Context, name string, audio io.Reader) (string, error) {
+	n, _ := io.Copy(io.Discard, audio)
+	return fmt.Sprintf("%s: %d bytes", name, n), nil
 }
 
 // S75: raised hands are on the participant; reactions reach the others live.

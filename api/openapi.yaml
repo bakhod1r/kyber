@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.55.0
+  version: 0.56.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -3116,7 +3116,7 @@ components:
         deleted: { type: boolean }
         thread_id: { oneOf: [{ type: string }, { type: "null" }], description: The parent message of a reply }
         reply_count: { type: integer }
-        kind: { type: string, enum: ["", huddle_started, huddle_ended, huddle_recording, project_event], description: "Empty for people's messages; system messages cannot be edited." }
+        kind: { type: string, enum: ["", huddle_started, huddle_ended, huddle_recording, project_event, transcript], description: "Empty for people's messages; system messages cannot be edited." }
         file:
           description: An attached file; download it from url (members of the conversation only).
           oneOf:

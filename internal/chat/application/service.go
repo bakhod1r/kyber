@@ -21,6 +21,11 @@ import (
 
 var ErrQueryTooShort = errors.New("search for at least 2 characters")
 
+// Transcriber turns a recording's audio into text (a speech-to-text service).
+type Transcriber interface {
+	Transcribe(ctx context.Context, name string, audio io.Reader) (string, error)
+}
+
 // Projects tells whether someone may browse a project (Project context).
 type Projects interface {
 	CanBrowse(ctx context.Context, user, key string) (bool, error)
@@ -78,6 +83,7 @@ type Deps struct {
 	Groups        domain.Groups            // optional: user groups (S70)
 	Prefs         domain.Prefs             // optional: levels and sections (S71)
 	Projects      Projects                 // optional: project channels (S73)
+	Transcriber   Transcriber              // optional: recording transcripts (S77); nothing leaves the server without it
 	Members       Members
 	NewID         func() string
 	Now           func() time.Time
@@ -1208,6 +1214,53 @@ func (s *Service) OnProjectEvent(ctx context.Context, m outbox.Message) error {
 			return err
 		}
 		s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *msg})
+	}
+	return nil
+}
+
+// OnRecordingPosted transcribes a huddle recording into its thread when a speech-to-text service is configured
+// (chat.message_posted of kind huddle_recording); once per recording.
+func (s *Service) OnRecordingPosted(ctx context.Context, m outbox.Message) error {
+	var e domain.MessageWritten
+	if err := json.Unmarshal(m.Payload, &e); err != nil || e.Kind != domain.KindHuddleRecording || s.d.Transcriber == nil || s.d.Blobs == nil {
+		return nil
+	}
+	rec, err := s.d.Messages.ByID(ctx, e.ID)
+	if errors.Is(err, domain.ErrMessageNotFound) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	replies, err := s.d.Messages.Replies(ctx, rec.ID)
+	if err != nil {
+		return err
+	}
+	for _, r := range replies {
+		if r.Kind == domain.KindTranscript {
+			return nil // done already (redelivery)
+		}
+	}
+	if rec.Deleted || rec.File == nil {
+		return nil
+	}
+	audio, err := s.d.Blobs.Open(ctx, string(rec.ID))
+	if err != nil {
+		return err
+	}
+	defer audio.Close()
+	text, err := s.d.Transcriber.Transcribe(ctx, rec.File.Name, audio)
+	if err != nil {
+		return err // retried by the relay
+	}
+	t := domain.NewTranscript(domain.MessageID(s.d.NewID()), rec, text, s.d.Now())
+	if err := s.d.Messages.Post(ctx, t); errors.Is(err, domain.ErrDuplicateRef) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	c, err := s.d.Conversations.ByID(ctx, rec.Conversation)
+	if err == nil {
+		s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *t})
 	}
 	return nil
 }

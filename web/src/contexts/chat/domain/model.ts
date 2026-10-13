@@ -17,7 +17,7 @@ export type Message = {
   id: string; conversation_id: string; author_id: string; body: string; created_at: string; edited_at: string | null;
   deleted: boolean; thread_id: string | null; reply_count: number; reactions: Reaction[]; issues: IssuePreview[];
   /** System messages (a huddle started or ended); people's messages have none. */
-  kind?: "" | "huddle_started" | "huddle_ended" | "huddle_recording" | "project_event";
+  kind?: "" | "huddle_started" | "huddle_ended" | "huddle_recording" | "project_event" | "transcript";
   file?: { name: string; type: string; size: number; url: string } | null;
   pinned_by?: string | null;
   pinned_at?: string | null;
@@ -89,6 +89,11 @@ export function sections(convs: Conversation[], prefs: ConversationPrefs[]): { t
 
 /** A user group (S70): @handle notifies its members. */
 export type UserGroup = { id: string; handle: string; name: string; member_ids: string[]; created_by: string; created_at: string };
+
+/** A clip (S78) is at most five minutes long. */
+export const MAX_CLIP_MS = 5 * 60 * 1000;
+export const clipName = (kind: "video" | "voice", at: Date) =>
+  `${kind === "video" ? "Video clip" : "Voice clip"} ${at.toISOString().slice(0, 16).replace("T", " ").replace(":", "-")}.webm`;
 
 /** A message I scheduled (S67). */
 export type ScheduledMessage = { id: string; conversation_id: string; body: string; send_at: string; created_at: string };

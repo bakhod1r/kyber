@@ -77,12 +77,17 @@ Order: daily use first, then channel management, Jira integration, huddle extras
   **Done:** meetings take `conversation_id` (a channel the organizer may read, via an ACL to Chat; migration 0063);
   the time table shows "🎧 Join huddle" → `/chat/{id}?huddle=join` joins at once (reading is still checked by
   Chat). API 0.55.0.
-- **S77 Recording transcripts (optional)** — a transcript and summary for a recording when a speech-to-text
+- ✅ **S77 Recording transcripts (optional)** — a transcript and summary for a recording when a speech-to-text
   service is configured (off by default; no data leaves the server without it).
+  **Done:** `KYBER_STT_URL` (+ `KYBER_STT_MODEL`, `KYBER_STT_KEY`) → an OpenAI-compatible transcription client; a
+  relay handler posts "📝 Transcript" in the recording's thread once (migration 0064). Summaries need an LLM and are
+  left out. Docs: `docs/ops/calls.md`. API 0.56.0.
 
 ## 5. Rest
 
-- **S78 Clips** — record a short video or voice message (≤ 5 min) and post it.
+- ✅ **S78 Clips** — record a short video or voice message (≤ 5 min) and post it.
+  **Done:** 🎬 in the composer records with MediaRecorder at low bitrates (5 min of video stays under 25 MB),
+  stops itself at 5:00 and posts the WebM as a file (played inline).
 - **S79 Docs in channels** — attach docs to a channel (like Slack canvases); shown in the channel header.
 - **S80 Workflows** — simple automations: on member joined / on schedule → post a message.
 - **S81 Incoming webhooks and bot tokens** — a channel webhook URL (secret, rotatable) that posts messages, e.g.

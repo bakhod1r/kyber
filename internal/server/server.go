@@ -220,6 +220,7 @@ type deps struct {
 	reminders     chatdomain.Reminders
 	userGroups    chatdomain.Groups // chat @groups (S70); groups are Telegram groups
 	chatPrefs     chatdomain.Prefs
+	transcriber   chatapp.Transcriber
 	calls         calldomain.Repository
 	whiteboards   wbdomain.Repository
 	chatBlobs     blob.Store // chat files; memory unless WithFilesDir
@@ -294,6 +295,9 @@ func WithBaseDomain(domain string) Option { return func(d *deps) { d.baseDomain 
 func WithICE(urls []string, turnSecret string) Option {
 	return func(d *deps) { d.ice = ice.Config{URLs: urls, Secret: turnSecret} }
 }
+
+// WithTranscriber transcribes huddle recordings into their threads (S77).
+func WithTranscriber(t chatapp.Transcriber) Option { return func(d *deps) { d.transcriber = t } }
 
 // WithFilesDir keeps chat files on disk under dir (default: in memory, lost on restart).
 func WithFilesDir(dir string) Option {
@@ -461,7 +465,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 		log.Warn("KYBER_FILES_DIR not set: chat files are kept in memory and lost on restart")
 		d.chatBlobs = blob.NewMemory()
 	}
-	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved, Statuses: d.statuses, Scheduled: d.scheduled, Reminders: d.reminders, Groups: d.userGroups, Prefs: d.chatPrefs, Projects: chatacl.NewProjects(projects),
+	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved, Statuses: d.statuses, Scheduled: d.scheduled, Reminders: d.reminders, Groups: d.userGroups, Prefs: d.chatPrefs, Projects: chatacl.NewProjects(projects), Transcriber: d.transcriber,
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	chat.WithIssues(chatacl.NewIssues(issues))
 	calendar.WithConversations(calendaracl.NewConversations(chat)) // meetings in a channel's huddle (S76)
@@ -493,6 +497,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	relay.Handle("comment.added", notify.OnCommentAdded)
 	relay.Handle("chat.message_posted", notify.OnChatMessage)
 	relay.Handle("chat.reminder", notify.OnChatReminder)
+	relay.Handle("chat.message_posted", chat.OnRecordingPosted) // transcripts (S77)
 	for _, name := range []string{"issue.created", "issue.transitioned", "sprint.started", "sprint.completed"} {
 		relay.Handle(name, chat.OnProjectEvent) // project channels (S73)
 	}

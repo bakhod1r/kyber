@@ -43,6 +43,11 @@ type Config struct {
 	TURNSecret string `env:"KYBER_TURN_SECRET"`
 	// FilesDir keeps chat files and huddle recordings on disk (back it up with the database).
 	FilesDir string `env:"KYBER_FILES_DIR"`
+	// STTURL turns on transcripts of huddle recordings (S77): an OpenAI-compatible speech-to-text endpoint, e.g.
+	// a self-hosted Whisper. Unset (the default), recordings never leave the server.
+	STTURL   string `env:"KYBER_STT_URL"`
+	STTModel string `env:"KYBER_STT_MODEL"`
+	STTKey   string `env:"KYBER_STT_KEY"`
 }
 
 func Load() (*Config, error) {
