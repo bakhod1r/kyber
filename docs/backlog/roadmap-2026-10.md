@@ -27,7 +27,8 @@ architecture test, Vitest, e2e ×3) → commit + push → short report.
 7. Real time (SSE): outbox relay → per-workspace stream filtered by visibility; UI invalidates queries. — done (ADR-0008; hints only, NOTIFY across replicas).
 8. Admin panel (workspace users, projects, settings), MCP server (tools over the API), PostgreSQL RLS.
    C8a admin panel — done: members and roles, projects, stuck events (view, retry). 
-   C8b MCP server — done: POST /api/v1/mcp with list_projects, search_issues, get_issue, create_issue, add_comment (ADR-0009). Next: C8c RLS.
+   C8b MCP server — done: POST /api/v1/mcp with list_projects, search_issues, get_issue, create_issue, add_comment (ADR-0009).
+   C8c PostgreSQL RLS — done: tenant_isolation policy on every workspace table, pool scopes each connection to the request's workspace (ADR-0010).
 
 ## D. Jira project navigation (requested 2026-10-13)
 Tabs like Jira's: Summary, Timeline, Backlog, Active sprints, Reports, List, Forms, Goals, Docs — plus quick

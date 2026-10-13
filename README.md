@@ -41,7 +41,7 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 | Env | Default | Purpose |
 |---|---|---|
 | `KYBER_ADDR` | `:8080` | Listen address |
-| `KYBER_DATABASE_URL` | — | PostgreSQL URL; unset = in-memory dev mode |
+| `KYBER_DATABASE_URL` | — | PostgreSQL URL; unset = in-memory dev mode. Connect as a non-superuser role so row-level security (ADR-0010) applies |
 | `KYBER_REDIS_URL` | — | Optional; shares the login limiter across replicas (guard) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Enables OpenTelemetry tracing (OTLP/HTTP, e.g. `http://otel-collector:4318`); unset = tracing off. The standard `OTEL_*` variables apply (`OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_SDK_DISABLED`). See ADR-0006 |
 | — | — | Operators: `kyber outbox dead-letters` lists outbox events parked after 10 failed deliveries, `kyber outbox retry <id>` queues one again (needs `KYBER_DATABASE_URL`; ADR-0007) |
