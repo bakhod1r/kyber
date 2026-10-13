@@ -619,3 +619,50 @@ func RunBookmarks(t *testing.T, r domain.Repository, bm domain.Bookmarks) {
 		}
 	}
 }
+
+// RunWorkflows checks workflows (S80) over the store of r.
+func RunWorkflows(t *testing.T, r domain.Repository, wf domain.Workflows) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 13, 8, 0, 0, 0, time.UTC)
+	ch, _ := domain.NewChannel(cid(96), WS, "wf", "", false, Lead, t0)
+	if err := r.Create(ctx, ch); err != nil {
+		t.Fatal(err)
+	}
+	wid := func(n int) domain.WorkflowID { return domain.WorkflowID(fmt.Sprintf("79000000-0000-4000-8000-%012d", n)) }
+	join, _ := domain.NewWorkflow(wid(1), WS, ch.ID, domain.OnJoin, 0, 0, "Welcome {name}", Lead, t0)
+	daily, _ := domain.NewWorkflow(wid(2), WS, ch.ID, domain.OnSchedule, 9*60+30, domain.Weekdays, "Standup", Lead, t0.Add(time.Minute))
+	for _, w := range []*domain.Workflow{join, daily} {
+		if err := wf.Add(ctx, w); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := wf.In(ctx, ch.ID)
+	if err != nil || len(list) != 2 || list[0].Trigger != domain.OnJoin || list[1].Minute != 9*60+30 || list[1].Days != domain.Weekdays ||
+		!list[1].LastRun.Equal(t0.Add(time.Minute)) || list[1].CreatedBy != Lead {
+		t.Fatalf("In = %+v %v", list, err)
+	}
+	sched, _ := wf.Scheduled(ctx)
+	if len(sched) != 1 || sched[0].ID != daily.ID {
+		t.Fatalf("Scheduled = %+v", sched)
+	}
+	w := sched[0]
+	prev := w.LastRun
+	w.Ran(t0.Add(90 * time.Minute))
+	if ok, err := wf.MarkRan(ctx, w, prev); !ok || err != nil {
+		t.Fatalf("mark = %v %v", ok, err)
+	}
+	if ok, _ := wf.MarkRan(ctx, w, prev); ok {
+		t.Fatal("a second replica ran it again")
+	}
+	if got, _ := wf.ByID(ctx, daily.ID); !got.LastRun.Equal(t0.Add(90 * time.Minute)) {
+		t.Fatalf("last run = %v", got.LastRun)
+	}
+	if err := wf.Remove(ctx, join.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []domain.WorkflowID{join.ID, "nope"} {
+		if _, err := wf.ByID(ctx, id); !errors.Is(err, domain.ErrWorkflowNotFound) {
+			t.Fatalf("ByID %s = %v", id, err)
+		}
+	}
+}

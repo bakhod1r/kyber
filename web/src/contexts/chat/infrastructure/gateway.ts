@@ -3,7 +3,7 @@ import { ApiError, isProblem, request, seg, type List } from "../../../shared/ht
 import { onConnect, subscribe } from "../../../shared/stream";
 
 export { onConnect };
-import type { Bookmark, ChatEvent, Conversation, ConversationPrefs, Level, Message, Receipt, SavedItem, ScheduledMessage, UserGroup, UserStatus } from "../domain/model";
+import type { Bookmark, ChannelWorkflow, ChatEvent, Conversation, ConversationPrefs, Level, Message, Receipt, SavedItem, ScheduledMessage, UserGroup, UserStatus } from "../domain/model";
 
 const conv = (id: string) => `/api/v1/conversations/${seg(id)}`;
 const msg = (id: string) => `/api/v1/messages/${seg(id)}`;
@@ -57,6 +57,10 @@ export const chatGateway = {
   bookmarks: (id: string) => request<List<Bookmark>>("GET", `${conv(id)}/bookmarks`).then((r) => r.items),
   addBookmark: (id: string, b: { kind: "doc" | "link"; ref: string; title: string }) => request<Bookmark>("POST", `${conv(id)}/bookmarks`, b),
   removeBookmark: (id: string) => request<undefined>("DELETE", `/api/v1/bookmarks/${seg(id)}`),
+  workflows: (id: string) => request<List<ChannelWorkflow>>("GET", `${conv(id)}/workflows`).then((r) => r.items),
+  addWorkflow: (id: string, w: { trigger: ChannelWorkflow["trigger"]; minute?: number; days?: number[]; text: string }) =>
+    request<ChannelWorkflow>("POST", `${conv(id)}/workflows`, w),
+  removeWorkflow: (id: string) => request<undefined>("DELETE", `/api/v1/workflows/${seg(id)}`),
   search: (q: string) => request<List<Message>>("GET", `/api/v1/chat/search?q=${encodeURIComponent(q)}`).then((r) => r.items),
   /** Uploads a file as a message (raw body; the header satisfies the CSRF guard for cookie sessions). */
   upload: async (id: string, file: Blob, name: string): Promise<Message> => {

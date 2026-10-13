@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter, parseRemind, seen, sections, type Conversation, parseCommand } from "./model";
+import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter, parseRemind, seen, sections, type Conversation, parseCommand, utcMinute, localTime } from "./model";
 
 const msg = (id: string, body: string, extra: Partial<Message> = {}): Message => ({
   id, conversation_id: "c-1", author_id: "u-1", body, created_at: "2026-10-13T09:00:00Z", edited_at: null, deleted: false,
@@ -125,5 +125,12 @@ describe("slash commands (S72)", () => {
   });
   it("is null otherwise", () => {
     for (const s of ["/issue", "/issue KYB", "/assign KYB @me", "/status KYB-0 Done", "hello /issue KYB x"]) expect(parseCommand(s)).toBeNull();
+  });
+});
+
+describe("workflow times (S80)", () => {
+  it("round-trips a local time through UTC", () => {
+    expect(localTime(utcMinute("09:30"))).toBe("09:30");
+    expect(localTime(utcMinute("23:45"))).toBe("23:45");
   });
 });

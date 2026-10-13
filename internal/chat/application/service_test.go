@@ -825,3 +825,56 @@ func TestBookmarks(t *testing.T) {
 		t.Fatalf("21st = %v", err)
 	}
 }
+
+// names is a fake Directory.
+type names map[string]string
+
+func (n names) DisplayName(_ context.Context, u string) (string, error) { return n[u], nil }
+
+// S80: workflows — a welcome on join, a message on a schedule (once per occurrence).
+func TestWorkflows(t *testing.T) {
+	repo := memory.NewRepository()
+	n := 0
+	c := &clock{t: time.Date(2026, 10, 13, 8, 0, 0, 0, time.UTC)} // Tuesday
+	svc := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Workflows: memory.NewWorkflows(), Directory: names{"dev": "Dev"},
+		Members: members{"lead": {"w1"}, "dev": {"w1"}}, NewID: func() string { n++; return fmt.Sprintf("id-%03d", n) }, Now: c.now})
+	ctx := tenant.With(context.Background(), "w1")
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "general"})
+	id := string(ch.ID)
+	if _, err := svc.AddWorkflow(ctx, "dev", id, domain.OnJoin, 0, 0, "hi"); !errors.Is(err, domain.ErrNotManager) {
+		t.Fatalf("non-manager adds = %v", err)
+	}
+	if _, err := svc.AddWorkflow(ctx, "lead", id, domain.OnJoin, 0, 0, "Welcome {name}! Read the pinned notes."); err != nil {
+		t.Fatal(err)
+	}
+	daily, err := svc.AddWorkflow(ctx, "lead", id, domain.OnSchedule, 9*60+30, domain.Weekdays, "Standup in the huddle")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Join(ctx, "dev", id); err != nil {
+		t.Fatal(err)
+	}
+	h, _ := svc.History(ctx, "lead", id, "", 50)
+	if len(h) != 1 || h[0].Body != "Welcome Dev! Read the pinned notes." || h[0].Kind != domain.KindWorkflow {
+		t.Fatalf("after join = %+v", h)
+	}
+	c.t = time.Date(2026, 10, 13, 9, 31, 0, 0, time.UTC)
+	for range 2 {
+		if _, err := svc.RunWorkflows(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h, _ = svc.History(ctx, "lead", id, "", 50)
+	if len(h) != 2 || h[0].Body != "Standup in the huddle" {
+		t.Fatalf("after 09:30 = %+v", h)
+	}
+	if list, _ := svc.Workflows(ctx, "dev", id); len(list) != 2 {
+		t.Fatalf("workflows = %+v", list)
+	}
+	if err := svc.RemoveWorkflow(ctx, "dev", string(daily.ID)); !errors.Is(err, domain.ErrNotManager) {
+		t.Fatalf("non-manager removes = %v", err)
+	}
+	if err := svc.RemoveWorkflow(ctx, "lead", string(daily.ID)); err != nil {
+		t.Fatal(err)
+	}
+}

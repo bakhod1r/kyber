@@ -55,3 +55,8 @@ func TestBookmarksContract(t *testing.T) {
 	pool := dbtest.New(t)
 	repotest.RunBookmarks(t, postgres.NewRepository(pool), postgres.NewBookmarks(pool))
 }
+
+func TestWorkflowsContract(t *testing.T) {
+	pool := dbtest.New(t)
+	repotest.RunWorkflows(t, postgres.NewRepository(pool), postgres.NewWorkflows(pool))
+}

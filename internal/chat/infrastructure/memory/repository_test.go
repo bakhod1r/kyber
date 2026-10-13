@@ -34,3 +34,7 @@ func TestPrefsContract(t *testing.T) { repotest.RunPrefs(t, memory.NewRepository
 func TestBookmarksContract(t *testing.T) {
 	repotest.RunBookmarks(t, memory.NewRepository(), memory.NewBookmarks())
 }
+
+func TestWorkflowsContract(t *testing.T) {
+	repotest.RunWorkflows(t, memory.NewRepository(), memory.NewWorkflows())
+}

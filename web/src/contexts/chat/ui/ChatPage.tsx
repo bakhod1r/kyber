@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, canManage, type ChatEvent, type ConversationPrefs, type Level, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, COMMAND_HELP, clipName, type ClipKind, type ClipRecorder, MAX_CLIP_MS, type Message, parseCommand, startClip, parseRemind, type SlashCommand, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
+  applyEvent, canManage, type ChannelWorkflow, type ChatEvent, localTime, utcMinute, type ConversationPrefs, type Level, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, COMMAND_HELP, clipName, type ClipKind, type ClipRecorder, MAX_CLIP_MS, type Message, parseCommand, startClip, parseRemind, type SlashCommand, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
 } from "../application";
 
 const PAGE = 50;
@@ -261,6 +261,55 @@ function IssueFromMessage({ m, onDone }: { m: Message; onDone: (m: Message) => v
   );
 }
 
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** S80: a welcome when someone joins, or a message on chosen days at a time. */
+function Workflows({ c }: { c: Conversation }) {
+  const qc = useQueryClient();
+  const key = ["chat", "workflows", c.id];
+  const list = useQuery({ queryKey: key, queryFn: () => chatUseCases.workflows(c.id) });
+  const done = () => qc.invalidateQueries({ queryKey: key });
+  const [trigger, setTrigger] = useState<ChannelWorkflow["trigger"]>("member_joined");
+  const [at, setAt] = useState("09:30");
+  const [days, setDays] = useState([1, 2, 3, 4, 5]);
+  const [text, setText] = useState("");
+  const add = useMutation({
+    mutationFn: () => chatUseCases.addWorkflow(c.id, trigger === "schedule" ? { trigger, minute: utcMinute(at), days, text } : { trigger, text }),
+    onSuccess: () => { setText(""); void done(); },
+  });
+  const remove = useMutation({ mutationFn: (id: string) => chatUseCases.removeWorkflow(id), onSuccess: done });
+  return (
+    <div aria-label="Workflows" role="group">
+      <h3>🤖 Workflows</h3>
+      <ul>
+        {(list.data ?? []).map((w) => (
+          <li key={w.id}>
+            {w.trigger === "member_joined" ? "When someone joins" : `${w.days.map((d) => DAY_NAMES[d]).join(", ")} at ${localTime(w.minute)}`}: <i>{w.text}</i>{" "}
+            <button className="ghost" onClick={() => remove.mutate(w.id)}>Remove</button>
+          </li>
+        ))}
+      </ul>
+      <form className="row" onSubmit={(e) => { e.preventDefault(); add.mutate(); }}>
+        <select aria-label="Workflow trigger" value={trigger} onChange={(e) => setTrigger(e.target.value as ChannelWorkflow["trigger"])}>
+          <option value="member_joined">When someone joins</option>
+          <option value="schedule">On a schedule</option>
+        </select>
+        {trigger === "schedule" && (
+          <>
+            <input type="time" aria-label="At" value={at} onChange={(e) => setAt(e.target.value)} />
+            {DAY_NAMES.map((d, i) => (
+              <label key={d}><input type="checkbox" checked={days.includes(i)} onChange={(e) => setDays((x) => (e.target.checked ? [...x, i] : x.filter((y) => y !== i)))} />{d}</label>
+            ))}
+          </>
+        )}
+        <input aria-label="Workflow message" value={text} onChange={(e) => setText(e.target.value)} placeholder={trigger === "member_joined" ? "Welcome {name}!" : "Standup in 5 minutes"} />
+        <button disabled={!text.trim()}>Add workflow</button>
+      </form>
+      {add.error && <p role="alert" className="error">{add.error.message}</p>}
+    </div>
+  );
+}
+
 /** S73: post a project's news (issues created and moved, sprints) into the channel. */
 function ProjectLink({ c, onChange }: { c: Conversation; onChange: () => void }) {
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
@@ -316,6 +365,7 @@ function ChannelSettings({ c, me, names }: { c: Conversation; me: string; names:
         </form>
       )}
       {manager && <ProjectLink c={c} onChange={() => void done()} />}
+      {manager && <Workflows c={c} />}
       {!manager && c.project_key && <p className="muted">📋 Posts news of {c.project_key}</p>}
       <ul aria-label="Channel members">
         {c.member_ids.map((u) => (
@@ -774,6 +824,13 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
   const pin = useMutation({ mutationFn: () => (m.pinned_by ? chatUseCases.unpin(m.id) : chatUseCases.pin(m.id)), onSuccess: onChange });
   const remove = useMutation({ mutationFn: () => chatUseCases.remove(m.id), onSuccess: () => onChange({ ...m, deleted: true, body: "", reactions: [], issues: [] }) });
   const mine = m.author_id === me && !m.kind;
+  if (m.kind === "workflow") {
+    return (
+      <article className="chat-message chat-system" aria-label={`Workflow at ${time(m.created_at)}`}>
+        <p className="chat-body">🤖 {m.body} <time className="muted" dateTime={m.created_at}>{time(m.created_at)}</time></p>
+      </article>
+    );
+  }
   if (m.kind === "transcript") {
     return (
       <article className="chat-message chat-system" aria-label={`Transcript at ${time(m.created_at)}`}>

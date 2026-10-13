@@ -103,4 +103,14 @@ test("activity shows mentions and unread conversations", async ({ browser }) => 
   await ali.call("POST", `/api/v1/conversations/${channel.id}/messages`, { body: `@${bobur.email} are you there?` });
   await b.waitForTimeout(1500);
   expect((await bobur.call("GET", "/api/v1/notifications")).items.length).toBe(n); // muted
+
+  // S80: Ali adds a welcome workflow; when Malika joins, the channel greets her.
+  await a.goto(`/chat/${channel.id}`);
+  await a.getByRole("button", { name: "⚙ Settings" }).click();
+  await a.getByLabel("Workflow message").fill("Welcome {name}! Start with the pinned notes.");
+  await a.getByRole("button", { name: "Add workflow" }).click();
+  await expect(a.getByRole("group", { name: "Workflows" })).toContainText("When someone joins");
+  const malika = await signIn("Malika");
+  await malika.call("POST", `/api/v1/conversations/${channel.id}/join`);
+  await expect(a.getByRole("article", { name: /Workflow/ })).toContainText("Welcome Malika! Start with the pinned notes.");
 });

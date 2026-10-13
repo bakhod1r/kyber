@@ -661,3 +661,34 @@ func TestBookmarks(t *testing.T) {
 		expect(t, code, 204, b)
 	})
 }
+
+// S80: channel workflows — a welcome when someone joins; schedules are validated and listed.
+func TestWorkflows(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "general"})
+		url := "/api/v1/conversations/" + ch["id"].(string) + "/workflows"
+		code, b := dev.do("POST", url, map[string]any{"trigger": "member_joined", "text": "hi"})
+		expect(t, code, 403, b)
+		code, b = lead.do("POST", url, map[string]any{"trigger": "schedule", "minute": 9 * 60, "days": []int{}, "text": "x"})
+		expect(t, code, 422, b)
+		code, sched := lead.do("POST", url, map[string]any{"trigger": "schedule", "minute": 9*60 + 30, "days": []int{1, 2, 3, 4, 5}, "text": "Standup"})
+		expect(t, code, 201, sched)
+		code, b = lead.do("POST", url, map[string]any{"trigger": "member_joined", "text": "Welcome {name}!"})
+		expect(t, code, 201, b)
+		dev.do("POST", "/api/v1/conversations/"+ch["id"].(string)+"/join", nil)
+		_, page := lead.do("GET", "/api/v1/conversations/"+ch["id"].(string)+"/messages", nil)
+		if items := page["items"].([]any); len(items) != 1 || items[0].(map[string]any)["kind"] != "workflow" ||
+			items[0].(map[string]any)["body"] != "Welcome dev@x.uz!" && !strings.HasPrefix(items[0].(map[string]any)["body"].(string), "Welcome ") {
+			t.Fatalf("welcome = %v", page)
+		}
+		if _, l := dev.do("GET", url, nil); len(l["items"].([]any)) != 2 {
+			t.Fatalf("workflows = %v", l)
+		}
+		code, b = dev.do("DELETE", "/api/v1/workflows/"+sched["id"].(string), nil)
+		expect(t, code, 403, b)
+		code, b = lead.do("DELETE", "/api/v1/workflows/"+sched["id"].(string), nil)
+		expect(t, code, 204, b)
+	})
+}

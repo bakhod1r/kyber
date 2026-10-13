@@ -21,6 +21,11 @@ import (
 
 var ErrQueryTooShort = errors.New("search for at least 2 characters")
 
+// Directory gives people's display names (Identity).
+type Directory interface {
+	DisplayName(ctx context.Context, user string) (string, error)
+}
+
 // Transcriber turns a recording's audio into text (a speech-to-text service).
 type Transcriber interface {
 	Transcribe(ctx context.Context, name string, audio io.Reader) (string, error)
@@ -85,6 +90,8 @@ type Deps struct {
 	Projects      Projects                 // optional: project channels (S73)
 	Transcriber   Transcriber              // optional: recording transcripts (S77); nothing leaves the server without it
 	Bookmarks     domain.Bookmarks         // optional: docs and links in a conversation's header (S79)
+	Workflows     domain.Workflows         // optional: channel automations (S80)
+	Directory     Directory                // optional: names for workflow welcomes
 	Members       Members
 	NewID         func() string
 	Now           func() time.Time
@@ -205,10 +212,14 @@ func (s *Service) Join(ctx context.Context, actor, id string) error {
 	if err != nil {
 		return err
 	}
+	already := c.IsMember(domain.UserID(actor))
 	if err := c.Join(domain.UserID(actor)); err != nil {
 		return err
 	}
-	return s.d.Conversations.AddMember(ctx, c.ID, domain.UserID(actor), s.d.Now())
+	if err := s.d.Conversations.AddMember(ctx, c.ID, domain.UserID(actor), s.d.Now()); err != nil || already {
+		return err
+	}
+	return s.welcome(ctx, c, actor)
 }
 
 func (s *Service) Leave(ctx context.Context, actor, id string) error {
@@ -233,7 +244,10 @@ func (s *Service) Invite(ctx context.Context, actor, id, user string) error {
 	if err := s.requireMembers(ctx, string(c.Workspace), []string{user}); err != nil {
 		return err
 	}
-	return s.d.Conversations.AddMember(ctx, c.ID, domain.UserID(user), s.d.Now())
+	if err := s.d.Conversations.AddMember(ctx, c.ID, domain.UserID(user), s.d.Now()); err != nil {
+		return err
+	}
+	return s.welcome(ctx, c, user)
 }
 
 // Post: only members write (join a public channel first).
@@ -1319,4 +1333,124 @@ func (s *Service) Bookmarks(ctx context.Context, actor, conv string) ([]*domain.
 		return nil, err
 	}
 	return s.d.Bookmarks.In(ctx, c.ID)
+}
+
+// postWorkflow writes a workflow's message (once per ref) and tells the members.
+func (s *Service) postWorkflow(ctx context.Context, c *domain.Conversation, w *domain.Workflow, ref, text string) error {
+	m := domain.NewSystemMessage(domain.MessageID(s.d.NewID()), c.ID, w.CreatedBy, domain.KindWorkflow, ref, text, s.d.Now())
+	if err := s.d.Messages.Post(ctx, m); errors.Is(err, domain.ErrDuplicateRef) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *m})
+	return nil
+}
+
+// welcome runs the channel's join workflows for a newcomer.
+func (s *Service) welcome(ctx context.Context, c *domain.Conversation, user string) error {
+	if s.d.Workflows == nil || c.Kind != domain.KindChannel {
+		return nil
+	}
+	list, err := s.d.Workflows.In(ctx, c.ID)
+	if err != nil {
+		return err
+	}
+	name := "there"
+	if s.d.Directory != nil {
+		if n, err := s.d.Directory.DisplayName(ctx, user); err == nil && n != "" {
+			name = n
+		}
+	}
+	for _, w := range list {
+		if w.Trigger == domain.OnJoin {
+			if err := s.postWorkflow(ctx, c, w, fmt.Sprintf("workflow:%s:join:%s:%d", w.ID, user, s.d.Now().UnixNano()), w.Welcome(name)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// AddWorkflow: the channel's owner and admins automate it (S80).
+func (s *Service) AddWorkflow(ctx context.Context, actor, conv string, trig domain.Trigger, minute int, days domain.Days, text string) (*domain.Workflow, error) {
+	c, err := s.readable(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	if !c.CanManage(domain.UserID(actor)) {
+		return nil, domain.ErrNotManager
+	}
+	if err := c.Writable(); err != nil {
+		return nil, err
+	}
+	w, err := domain.NewWorkflow(domain.WorkflowID(s.d.NewID()), c.Workspace, c.ID, trig, minute, days, text, domain.UserID(actor), s.d.Now())
+	if err != nil {
+		return nil, err
+	}
+	return w, s.d.Workflows.Add(ctx, w)
+}
+
+func (s *Service) RemoveWorkflow(ctx context.Context, actor, id string) error {
+	w, err := s.d.Workflows.ByID(ctx, domain.WorkflowID(id))
+	if err != nil {
+		return err
+	}
+	c, err := s.readable(ctx, actor, string(w.Conversation))
+	if err != nil {
+		return domain.ErrWorkflowNotFound
+	}
+	if !c.CanManage(domain.UserID(actor)) {
+		return domain.ErrNotManager
+	}
+	return s.d.Workflows.Remove(ctx, w.ID)
+}
+
+// Workflows are a channel's automations, for anyone who may read it.
+func (s *Service) Workflows(ctx context.Context, actor, conv string) ([]*domain.Workflow, error) {
+	c, err := s.readable(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	return s.d.Workflows.In(ctx, c.ID)
+}
+
+// RunWorkflows posts the scheduled workflows that are due (each occurrence once, across replicas).
+func (s *Service) RunWorkflows(ctx context.Context) (int, error) {
+	if s.d.Workflows == nil {
+		return 0, nil
+	}
+	list, err := s.d.Workflows.Scheduled(ctx)
+	if err != nil {
+		return 0, err
+	}
+	now, ran := s.d.Now(), 0
+	for _, w := range list {
+		at := w.Due(now)
+		if at.IsZero() {
+			continue
+		}
+		prev := w.LastRun
+		w.Ran(at)
+		wctx := tenant.With(ctx, string(w.Workspace))
+		if ok, err := s.d.Workflows.MarkRan(wctx, w, prev); err != nil {
+			return ran, err
+		} else if !ok {
+			continue // another replica runs it
+		}
+		c, err := s.d.Conversations.ByID(wctx, w.Conversation)
+		if errors.Is(err, domain.ErrConversationNotFound) {
+			continue
+		} else if err != nil {
+			return ran, err
+		}
+		if c.Archived() {
+			continue
+		}
+		if err := s.postWorkflow(wctx, c, w, fmt.Sprintf("workflow:%s:%s", w.ID, at.Format(time.RFC3339)), w.Text); err != nil {
+			return ran, err
+		}
+		ran++
+	}
+	return ran, nil
 }

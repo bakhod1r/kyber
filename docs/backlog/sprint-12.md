@@ -91,6 +91,9 @@ Order: daily use first, then channel management, Jira integration, huddle extras
 - ✅ **S79 Docs in channels** — attach docs to a channel (like Slack canvases); shown in the channel header.
   **Done:** bookmarks (`GET/POST /conversations/{id}/bookmarks`, `DELETE /bookmarks/{id}`, migration 0065): a doc
   by id or an http(s) link, ≤ 20 per conversation; the header bar opens docs inline (app shell). API 0.57.0.
-- **S80 Workflows** — simple automations: on member joined / on schedule → post a message.
+- ✅ **S80 Workflows** — simple automations: on member joined / on schedule → post a message.
+  **Done:** `GET/POST /conversations/{id}/workflows`, `DELETE /workflows/{id}` (owner/admins), migration 0066;
+  join welcomes with `{name}`; schedules (days + UTC minute) run once per occurrence across replicas (claimed by
+  `last_run`), missed ones collapse into the latest. "🤖 Workflows" in channel settings. API 0.58.0.
 - **S81 Incoming webhooks and bot tokens** — a channel webhook URL (secret, rotatable) that posts messages, e.g.
   from CI. AC: the secret is stored hashed and never shown again; rate limited.

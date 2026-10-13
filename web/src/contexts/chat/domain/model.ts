@@ -17,7 +17,7 @@ export type Message = {
   id: string; conversation_id: string; author_id: string; body: string; created_at: string; edited_at: string | null;
   deleted: boolean; thread_id: string | null; reply_count: number; reactions: Reaction[]; issues: IssuePreview[];
   /** System messages (a huddle started or ended); people's messages have none. */
-  kind?: "" | "huddle_started" | "huddle_ended" | "huddle_recording" | "project_event" | "transcript";
+  kind?: "" | "huddle_started" | "huddle_ended" | "huddle_recording" | "project_event" | "transcript" | "workflow";
   file?: { name: string; type: string; size: number; url: string } | null;
   pinned_by?: string | null;
   pinned_at?: string | null;
@@ -89,6 +89,23 @@ export function sections(convs: Conversation[], prefs: ConversationPrefs[]): { t
 
 /** A user group (S70): @handle notifies its members. */
 export type UserGroup = { id: string; handle: string; name: string; member_ids: string[]; created_by: string; created_at: string };
+
+/** A channel automation (S80): minute is after midnight UTC, days 0 = Sunday … 6 = Saturday. */
+export type ChannelWorkflow = { id: string; trigger: "member_joined" | "schedule"; minute: number; days: number[]; text: string; created_by: string; created_at: string };
+
+/** Local "HH:MM" → minutes after midnight UTC (today's offset). */
+export function utcMinute(local: string, today = new Date()): number {
+  const [h, m] = local.split(":").map(Number);
+  const d = new Date(today);
+  d.setHours(h ?? 0, m ?? 0, 0, 0);
+  return d.getUTCHours() * 60 + d.getUTCMinutes();
+}
+
+/** Minutes after midnight UTC → local "HH:MM". */
+export function localTime(utc: number, today = new Date()): string {
+  const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), Math.floor(utc / 60), utc % 60));
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 /** A doc or link kept in a conversation's header (S79). */
 export type Bookmark = { id: string; kind: "doc" | "link"; ref: string; title: string; added_by: string; added_at: string };

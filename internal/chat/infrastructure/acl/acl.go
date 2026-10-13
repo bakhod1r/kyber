@@ -37,6 +37,15 @@ func (m Members) IsMember(ctx context.Context, workspace, user string) (bool, er
 	return m.ws.IsMember(ctx, workspace, user)
 }
 
+// DisplayName is someone's name (workflow welcomes, S80).
+func (m Members) DisplayName(ctx context.Context, user string) (string, error) {
+	u, err := m.users.ByID(ctx, identitydomain.UserID(user))
+	if err != nil {
+		return "", err
+	}
+	return u.Name(), nil
+}
+
 // IssueReader is Issue Tracking's authorized read (browse permission and security level).
 type IssueReader interface {
 	Get(ctx context.Context, actor, rawKey string) (*issuedomain.Issue, error)

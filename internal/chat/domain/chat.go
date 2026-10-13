@@ -314,6 +314,8 @@ const (
 	KindProjectEvent MessageKind = "project_event"
 	// KindTranscript: the transcript of a huddle recording, in its thread (S77).
 	KindTranscript MessageKind = "transcript"
+	// KindWorkflow: a message a channel's workflow posted (S80).
+	KindWorkflow MessageKind = "workflow"
 )
 
 // ErrDuplicateRef: a system message about this already exists (events may be delivered twice).

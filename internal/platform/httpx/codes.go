@@ -37,6 +37,7 @@ const (
 	CodeGroupHandleTaken     = "GROUP_HANDLE_TAKEN"
 	CodeGroupNotFound        = "GROUP_NOT_FOUND"
 	CodeBookmarkNotFound     = "BOOKMARK_NOT_FOUND"
+	CodeWorkflowNotFound     = "WORKFLOW_NOT_FOUND"
 	CodeWorkspaceSlugTaken   = "WORKSPACE_SLUG_TAKEN"
 	CodeOTPPending           = "AUTH_OTP_PENDING"
 	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
@@ -128,6 +129,7 @@ var codes = []code{
 	{CodeCallNotPresenter, "6109", 403, "Only the presenter can do that.", "Buni faqat taqdimotchi qila oladi.", "Это может сделать только докладчик.", errorx.CategoryBusiness},
 	{CodeCallRecording, "6110", 409, "Someone is already recording this call.", "Bu qo'ng'iroqni allaqachon kimdir yozib olyapti.", "Этот звонок уже кто-то записывает.", errorx.CategoryBusiness},
 	{CodeGroupHandleTaken, "6113", 409, "That group handle is taken.", "Bu guruh nomi band.", "Это имя группы уже занято.", errorx.CategoryBusiness},
+	{CodeWorkflowNotFound, "6116", 404, "Workflow not found.", "Ish jarayoni topilmadi.", "Сценарий не найден.", errorx.CategoryBusiness},
 	{CodeBookmarkNotFound, "6115", 404, "Bookmark not found.", "Xatcho'p topilmadi.", "Закладка не найдена.", errorx.CategoryBusiness},
 	{CodeGroupNotFound, "6114", 404, "Group not found.", "Guruh topilmadi.", "Группа не найдена.", errorx.CategoryBusiness},
 	{CodeScheduledNotFound, "6112", 404, "Scheduled message not found.", "Rejalashtirilgan xabar topilmadi.", "Запланированное сообщение не найдено.", errorx.CategoryBusiness},

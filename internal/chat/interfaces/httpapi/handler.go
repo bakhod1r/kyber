@@ -66,6 +66,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/conversations/{id}/bookmarks", h.bookmarks)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/bookmarks", h.addBookmark)
 	mux.HandleFunc("DELETE /api/v1/bookmarks/{id}", h.removeBookmark)
+	mux.HandleFunc("GET /api/v1/conversations/{id}/workflows", h.workflows)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/workflows", h.addWorkflow)
+	mux.HandleFunc("DELETE /api/v1/workflows/{id}", h.removeWorkflow)
 	mux.HandleFunc("GET /api/v1/conversations/{id}/receipts", h.receipts)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/scheduled", h.schedule)
 	mux.HandleFunc("GET /api/v1/chat/scheduled", h.scheduledList)
@@ -85,6 +88,8 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeConversationNotFound, true
 	case errors.Is(err, domain.ErrHandleTaken):
 		return httpx.CodeGroupHandleTaken, true
+	case errors.Is(err, domain.ErrWorkflowNotFound):
+		return httpx.CodeWorkflowNotFound, true
 	case errors.Is(err, domain.ErrBookmarkNotFound):
 		return httpx.CodeBookmarkNotFound, true
 	case errors.Is(err, domain.ErrGroupNotFound):
@@ -101,7 +106,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
-		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle), errors.Is(err, domain.ErrInvalidPref), errors.Is(err, domain.ErrInvalidProject), errors.Is(err, domain.ErrInvalidBookmark), errors.Is(err, domain.ErrTooManyBookmarks):
+		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle), errors.Is(err, domain.ErrInvalidPref), errors.Is(err, domain.ErrInvalidProject), errors.Is(err, domain.ErrInvalidBookmark), errors.Is(err, domain.ErrTooManyBookmarks), errors.Is(err, domain.ErrInvalidWorkflow):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -981,6 +986,75 @@ func (h *Handler) addBookmark(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) removeBookmark(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.RemoveBookmark(r.Context(), auth.Actor(r.Context()), r.PathValue("id")); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type workflowDTO struct {
+	ID        string    `json:"id"`
+	Trigger   string    `json:"trigger"`
+	Minute    int       `json:"minute"`
+	Days      []int     `json:"days"`
+	Text      string    `json:"text"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func toWorkflow(w *domain.Workflow) workflowDTO {
+	d := workflowDTO{ID: string(w.ID), Trigger: string(w.Trigger), Minute: w.Minute, Days: []int{}, Text: w.Text, CreatedBy: string(w.CreatedBy), CreatedAt: w.CreatedAt}
+	for day := time.Sunday; day <= time.Saturday; day++ {
+		if w.Days.Has(day) {
+			d.Days = append(d.Days, int(day))
+		}
+	}
+	return d
+}
+
+func (h *Handler) workflows(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.Workflows(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := make([]workflowDTO, len(list))
+	for i, x := range list {
+		out[i] = toWorkflow(x)
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+// addWorkflow: {"trigger": "member_joined"|"schedule", "minute": 0–1439 (UTC), "days": [0–6, Sunday = 0], "text"}.
+func (h *Handler) addWorkflow(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Trigger string `json:"trigger"`
+		Minute  int    `json:"minute"`
+		Days    []int  `json:"days"`
+		Text    string `json:"text"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var days domain.Days
+	for _, d := range in.Days {
+		if d < 0 || d > 6 {
+			h.fail(w, r, domain.ErrInvalidWorkflow)
+			return
+		}
+		days |= 1 << uint(d)
+	}
+	wf, err := h.svc.AddWorkflow(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), domain.Trigger(in.Trigger), in.Minute, days, in.Text)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, toWorkflow(wf))
+}
+
+func (h *Handler) removeWorkflow(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.RemoveWorkflow(r.Context(), auth.Actor(r.Context()), r.PathValue("id")); err != nil {
 		h.fail(w, r, err)
 		return
 	}
