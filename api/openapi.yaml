@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.32.0
+  version: 0.33.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1521,6 +1521,89 @@ paths:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/PageRevision" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/forms:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listForms
+      description: The project's intake forms by name (anyone who can browse the project).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Form" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createForm
+      description: Project admins design a form; it creates stories, tasks or bugs.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FormInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Form" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/forms/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: getForm
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Form" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      operationId: redesignForm
+      description: Project admins change a form loaded at `version`; question ids follow the new order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf: [{ $ref: "#/components/schemas/FormInput" }]
+              required: [version]
+              properties: { version: { type: integer } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Form" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteForm
+      description: Project admins delete a form; issues it created stay.
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/forms/{id}/submissions:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: submitForm
+      description: Project members fill in a form; the summary becomes the new issue's title and the answers its description.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [summary]
+              properties:
+                summary: { type: string, minLength: 1, maxLength: 255 }
+                answers: { type: object, additionalProperties: { type: string }, description: Question id → answer. }
+      responses:
+        "201":
+          description: The issue was created
+          content: { application/json: { schema: { type: object, required: [issue_key], properties: { issue_key: { type: string } } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/fields:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -1981,6 +2064,33 @@ components:
         assignee_id: { type: [string, "null"] }
         resolution: { type: string }
         points: { type: [number, "null"] }
+    FormQuestion:
+      type: object
+      required: [label, required, long]
+      properties:
+        id: { type: string, description: "q1, q2, … in display order (set by the server)." }
+        label: { type: string, minLength: 1, maxLength: 120 }
+        required: { type: boolean }
+        long: { type: boolean, description: A multi-line answer. }
+    FormInput:
+      type: object
+      required: [name, issue_type]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        intro: { type: string, maxLength: 2000 }
+        issue_type: { type: string, enum: [story, task, bug] }
+        questions: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/FormQuestion" } }
+    Form:
+      type: object
+      required: [id, project_key, name, intro, issue_type, questions, version]
+      properties:
+        id: { type: string }
+        project_key: { type: string }
+        name: { type: string }
+        intro: { type: string }
+        issue_type: { type: string, enum: [story, task, bug] }
+        questions: { type: array, items: { $ref: "#/components/schemas/FormQuestion" } }
+        version: { type: integer }
     PageInput:
       type: object
       required: [title]

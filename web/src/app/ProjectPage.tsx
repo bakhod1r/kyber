@@ -17,6 +17,7 @@ import { WorkflowEditor } from "../contexts/issue/ui/WorkflowEditor";
 import { JiraImport } from "../contexts/importer/ui/ImportPage";
 import { Reports } from "../contexts/insights/ui/ReportsPage";
 import { Docs } from "../contexts/docs/ui/Docs";
+import { Forms } from "../contexts/form/ui/Forms";
 import { Goals } from "../contexts/goal/ui/Goals";
 import { Timeline } from "../contexts/issue/ui/Timeline";
 import { ProjectSummary } from "../contexts/insights/ui/ProjectSummary";
@@ -24,7 +25,7 @@ import { IssueList } from "../contexts/search/ui/IssueList";
 import { type QuickFilterState, QuickFilters } from "../contexts/search/ui/QuickFilters";
 import { useState } from "react";
 
-export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "docs" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" }) {
+export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "docs" | "forms" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" }) {
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
   const project = projects.data?.find((p) => p.key === key);
@@ -56,6 +57,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         <NavLink to={`/projects/${encodeURIComponent(key)}/releases`}>Releases</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/goals`}>Goals</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/docs`}>Docs</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/forms`}>Forms</NavLink>
       </nav>
       <nav className="tabs settings-tabs" aria-label="Project settings">
         <NavLink to={`/projects/${encodeURIComponent(key)}/workflow`}>Workflow</NavLink>
@@ -86,6 +88,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         {view === "releases" && <Releases projectKey={key} />}
         {view === "goals" && <Goals projectKey={key} />}
         {view === "docs" && <Docs projectKey={key} />}
+        {view === "forms" && <Forms projectKey={key} onOpen={setOpen} />}
         {view === "permissions" && <PermissionScheme projectKey={key} />}
         {view === "notifications" && <TelegramGroups projectKey={key} />}
         <Members projectKey={key} />

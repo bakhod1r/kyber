@@ -24,3 +24,6 @@
 ./internal/docs/domain
 ./internal/docs/application
 ./internal/docs/infrastructure/memory
+./internal/form/domain
+./internal/form/application
+./internal/form/infrastructure/memory

@@ -58,6 +58,8 @@ const (
 	CodeGoalConflict         = "GOAL_CONFLICT"
 	CodePageNotFound         = "PAGE_NOT_FOUND"
 	CodePageConflict         = "PAGE_CONFLICT"
+	CodeFormNotFound         = "FORM_NOT_FOUND"
+	CodeFormConflict         = "FORM_CONFLICT"
 	CodeNotificationNotFound = "NOTIFICATION_NOT_FOUND"
 	CodeImportTooLarge       = "IMPORT_TOO_LARGE"
 	CodeImportInvalidFile    = "IMPORT_INVALID_FILE"
@@ -126,6 +128,8 @@ var codes = []code{
 	{CodeGoalConflict, "6096", 409, "Someone else changed this goal. Reload and try again.", "Maqsadni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Цель изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodePageNotFound, "6085", 404, "Page not found.", "Sahifa topilmadi.", "Страница не найдена.", errorx.CategoryBusiness},
 	{CodePageConflict, "6086", 409, "Someone else changed this page. Reload and try again.", "Sahifani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Страницу изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
+	{CodeFormNotFound, "6087", 404, "Form not found.", "Forma topilmadi.", "Форма не найдена.", errorx.CategoryBusiness},
+	{CodeFormConflict, "6088", 409, "Someone else changed this form. Reload and try again.", "Formani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Форму изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeLastBoard, "6026", 409, "A project must keep at least one board.", "Loyihada kamida bitta board qolishi kerak.", "В проекте должна остаться хотя бы одна доска.", errorx.CategoryBusiness},
 	{CodeNotificationNotFound, "6040", 404, "Notification not found.", "Bildirishnoma topilmadi.", "Уведомление не найдено.", errorx.CategoryBusiness},
 	{CodeImportTooLarge, "6050", 413, "The file is too large to import (10 MB max).", "Fayl import uchun juda katta (ko'pi bilan 10 MB).", "Файл слишком большой для импорта (не более 10 МБ).", errorx.CategoryValidation},
