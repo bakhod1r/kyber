@@ -385,3 +385,5 @@ a.user:hover { text-decoration: underline; }
 .search-page .grow { flex: 1; }
 .search-page .grow input { width: 100%; }
 @media (max-width: 720px) { .search-grid { grid-template-columns: 1fr; } }
+.columns-editor { list-style: none; padding: 0; margin: 0 0 0.5rem; display: grid; gap: 0.35rem; }
+.columns-editor .narrow input { width: 4.5rem; }
