@@ -55,8 +55,15 @@ type Conversations interface {
 	Readable(ctx context.Context, user, conversation string) (name string, ok bool, err error)
 }
 
+// Quiet tells whether someone does not want to be disturbed now (Do Not Disturb, a running Pomodoro): chat
+// mentions then stay in the inbox without email or Telegram copies (S66).
+type Quiet interface {
+	Quiet(ctx context.Context, user string) (bool, error)
+}
+
 type Deps struct {
 	Conversations Conversations // optional: chat mentions
+	Quiet         Quiet         // optional
 	Repo          domain.Repository
 	Deliveries    domain.DeliveryRepository // optional: email/Telegram copies of notifications
 	Prefs         domain.PrefsRepository
@@ -88,6 +95,11 @@ func NewService(d Deps) *Service {
 }
 
 // WithConversations enables notifications for mentions in chat.
+func (s *Service) WithQuiet(q Quiet) *Service {
+	s.d.Quiet = q
+	return s
+}
+
 func (s *Service) WithConversations(c Conversations) *Service {
 	s.d.Conversations = c
 	return s
@@ -420,6 +432,13 @@ func (s *Service) OnChatMessage(ctx context.Context, m outbox.Message) error {
 		}
 		if err := s.d.Repo.Add(ctx, n); err != nil {
 			return err
+		}
+		if s.d.Quiet != nil {
+			if quiet, err := s.d.Quiet.Quiet(ctx, id); err != nil {
+				return err
+			} else if quiet {
+				continue
+			}
 		}
 		if err := s.enqueue(ctx, n, ""); err != nil {
 			return err

@@ -71,6 +71,18 @@ func (s *Service) current(ctx context.Context, user string) (*domain.Session, er
 	return sess, nil
 }
 
+// Focusing reports whether the user has a running (not paused) Pomodoro.
+func (s *Service) Focusing(ctx context.Context, user string) (bool, error) {
+	sess, err := s.current(ctx, user)
+	if errors.Is(err, domain.ErrSessionNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return sess.State == domain.Running, nil
+}
+
 func (s *Service) Current(ctx context.Context, user string) (*domain.Session, error) {
 	return s.current(ctx, user)
 }

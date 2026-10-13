@@ -379,3 +379,29 @@ func TestSavedForLater(t *testing.T) {
 		}
 	}, server.WithReminderEvery(100*time.Millisecond))
 }
+
+// S66: status and Do Not Disturb, seen by the workspace.
+func TestStatusAndDND(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		_, me := lead.do("GET", "/api/v1/me", nil)
+		dev := anon.signedIn("dev@x.uz")
+		_, devMe := dev.do("GET", "/api/v1/me", nil)
+		code, b := lead.do("PUT", "/api/v1/me/status", map[string]any{"emoji": "🏖", "text": "On vacation",
+			"expires_at": time.Now().Add(time.Hour).Format(time.RFC3339), "dnd_until": time.Now().Add(30 * time.Minute).Format(time.RFC3339)})
+		expect(t, code, 200, b)
+		code, b = lead.do("PUT", "/api/v1/me/status", map[string]any{"text": strings.Repeat("x", 101)})
+		expect(t, code, 422, b)
+		code, list := dev.do("GET", "/api/v1/chat/statuses?user_id="+me["id"].(string)+"&user_id="+devMe["id"].(string), nil)
+		expect(t, code, 200, list)
+		items := list["items"].([]any)
+		if len(items) != 1 || items[0].(map[string]any)["text"] != "On vacation" || items[0].(map[string]any)["dnd"] != true {
+			t.Fatalf("statuses = %v", list)
+		}
+		code, b = lead.do("PUT", "/api/v1/me/status", map[string]any{"emoji": "", "text": ""})
+		expect(t, code, 200, b)
+		if _, l := dev.do("GET", "/api/v1/chat/statuses?user_id="+me["id"].(string), nil); len(l["items"].([]any)) != 0 {
+			t.Fatalf("after clearing = %v", l)
+		}
+	})
+}

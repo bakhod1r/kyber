@@ -63,6 +63,7 @@ type Deps struct {
 	Conversations domain.Repository
 	Messages      domain.Messages
 	Saved         domain.SavedMessages // optional: save for later (S65)
+	Statuses      domain.Statuses      // optional: status and DND (S66)
 	Members       Members
 	NewID         func() string
 	Now           func() time.Time
@@ -664,4 +665,51 @@ func (s *Service) RemindDue(ctx context.Context) (int, error) {
 		}
 	}
 	return sent, nil
+}
+
+// SetStatus sets the actor's status in the workspace; empty emoji and text clear it, a zero dndUntil ends DND.
+func (s *Service) SetStatus(ctx context.Context, actor, emoji, text string, expires, dndUntil time.Time) (*domain.Status, error) {
+	st, err := domain.NewStatus(domain.WorkspaceID(tenant.Workspace(ctx)), domain.UserID(actor), emoji, text, expires, dndUntil, s.d.Now())
+	if err != nil {
+		return nil, err
+	}
+	return st, s.d.Statuses.Put(ctx, st)
+}
+
+// Statuses are the current statuses of users, by id, for a member of the workspace (people without one are left out).
+func (s *Service) Statuses(ctx context.Context, actor string, users []string) (map[string]domain.StatusView, error) {
+	ws := tenant.Workspace(ctx)
+	if ok, err := s.d.Members.IsMember(ctx, ws, actor); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, ErrNotWorkspaceMember
+	}
+	ids := make([]domain.UserID, len(users))
+	for i, u := range users {
+		ids[i] = domain.UserID(u)
+	}
+	list, err := s.d.Statuses.Of(ctx, domain.WorkspaceID(ws), ids)
+	if err != nil {
+		return nil, err
+	}
+	now := s.d.Now()
+	out := map[string]domain.StatusView{}
+	for _, st := range list {
+		if v := st.At(now); v.Emoji != "" || v.Text != "" || v.DND {
+			out[string(st.User)] = v
+		}
+	}
+	return out, nil
+}
+
+// InDND reports whether user is in Do Not Disturb in the request's workspace now.
+func (s *Service) InDND(ctx context.Context, user string) (bool, error) {
+	if s.d.Statuses == nil {
+		return false, nil
+	}
+	list, err := s.d.Statuses.Of(ctx, domain.WorkspaceID(tenant.Workspace(ctx)), []domain.UserID{domain.UserID(user)})
+	if err != nil || len(list) == 0 {
+		return false, err
+	}
+	return list[0].At(s.d.Now()).DND, nil
 }

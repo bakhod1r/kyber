@@ -220,3 +220,31 @@ func (c Conversations) Readable(ctx context.Context, user, conversation string) 
 	}
 	return v.Name, true, nil
 }
+
+// DND is what Quiet asks Chat: is the user in Do Not Disturb now.
+type DND interface {
+	InDND(ctx context.Context, user string) (bool, error)
+}
+
+// Focusing is what Quiet asks Focus: is a Pomodoro running for the user.
+type Focusing interface {
+	Focusing(ctx context.Context, user string) (bool, error)
+}
+
+// Quiet: someone in Do Not Disturb or in a running Pomodoro is not disturbed (S66).
+type Quiet struct {
+	dnd   DND
+	focus Focusing
+}
+
+func NewQuiet(dnd DND, focus Focusing) Quiet { return Quiet{dnd: dnd, focus: focus} }
+
+func (q Quiet) Quiet(ctx context.Context, user string) (bool, error) {
+	if on, err := q.dnd.InDND(ctx, user); err != nil || on {
+		return on, err
+	}
+	if q.focus == nil {
+		return false, nil
+	}
+	return q.focus.Focusing(ctx, user)
+}

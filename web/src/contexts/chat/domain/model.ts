@@ -15,6 +15,25 @@ export type Message = {
   pinned_at?: string | null;
 };
 
+/** Someone's status (S66): emoji and text, and whether they are in Do Not Disturb. */
+export type UserStatus = { user_id: string; emoji: string; text: string; expires_at: string | null; dnd: boolean; dnd_until: string | null };
+
+export const STATUS_PRESETS = [
+  { emoji: "📅", text: "In a meeting" }, { emoji: "🎧", text: "Focusing" }, { emoji: "🍽", text: "Lunch" },
+  { emoji: "🏠", text: "Working remotely" }, { emoji: "🤒", text: "Out sick" }, { emoji: "🏖", text: "On vacation" },
+];
+
+/** "Clear after" choices for a status, from now; null means never. */
+export function clearAfter(now: Date): { label: string; at: Date | null }[] {
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 0, 0);
+  const plus = (min: number) => new Date(now.getTime() + min * 60_000);
+  return [
+    { label: "30 minutes", at: plus(30) }, { label: "1 hour", at: plus(60) }, { label: "4 hours", at: plus(240) },
+    { label: "Today", at: endOfDay }, { label: "Don't clear", at: null },
+  ];
+}
+
 /** A message I saved for later (S65). */
 export type SavedItem = { message: Message; saved_at: string; remind_at: string | null; reminded: boolean };
 

@@ -44,4 +44,17 @@ test("activity shows mentions and unread conversations", async ({ browser }) => 
   await expect(saved).toContainText("⏰");
   await saved.getByRole("button", { name: "Remove" }).click();
   await expect(b.getByText("Nothing saved.")).toBeVisible();
+
+  // S66: Bobur sets a status with Do Not Disturb; Ali sees it next to his name.
+  await b.getByRole("button", { name: "😀 Set a status" }).click();
+  await b.getByRole("button", { name: "🏖" }).click();
+  await b.getByLabel("Do not disturb").selectOption("60");
+  await b.getByRole("form", { name: "Status" }).getByRole("button", { name: "Save" }).click();
+  await expect(b.getByRole("button", { name: /On vacation · 🌙 Do not disturb/ })).toBeVisible();
+  await bobur.call("POST", `/api/v1/conversations/${channel.id}/messages`, { body: "back on Monday" });
+  const a = await ali.ctx.newPage();
+  await a.goto(`/chat/${channel.id}`);
+  const last = a.getByRole("article").filter({ hasText: "back on Monday" });
+  await expect(last.getByTitle("On vacation")).toHaveText("🏖");
+  await expect(last.getByLabel("Do not disturb")).toBeVisible();
 });

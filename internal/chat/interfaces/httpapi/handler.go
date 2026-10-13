@@ -48,6 +48,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/messages/{id}/save", h.save)
 	mux.HandleFunc("DELETE /api/v1/messages/{id}/save", h.unsave)
 	mux.HandleFunc("GET /api/v1/chat/saved", h.saved)
+	mux.HandleFunc("PUT /api/v1/me/status", h.setStatus)
+	mux.HandleFunc("GET /api/v1/chat/statuses", h.statuses)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/files", h.upload)
 	mux.HandleFunc("GET /api/v1/messages/{id}/file", h.download)
 }
@@ -67,7 +69,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
-		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder):
+		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -544,6 +546,76 @@ func (h *Handler) saved(w http.ResponseWriter, r *http.Request) {
 	out := make([]savedDTO, len(items))
 	for i, it := range items {
 		out[i] = toSaved(it.Saved, rendered[i])
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+type statusDTO struct {
+	UserID    string     `json:"user_id"`
+	Emoji     string     `json:"emoji"`
+	Text      string     `json:"text"`
+	ExpiresAt *time.Time `json:"expires_at"`
+	DND       bool       `json:"dnd"`
+	DNDUntil  *time.Time `json:"dnd_until"`
+}
+
+func timeOrNil(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
+func toStatus(user string, v domain.StatusView) statusDTO {
+	return statusDTO{UserID: user, Emoji: v.Emoji, Text: v.Text, ExpiresAt: timeOrNil(v.ExpiresAt), DND: v.DND, DNDUntil: timeOrNil(v.DNDUntil)}
+}
+
+// setStatus: {"emoji", "text", "expires_at"?, "dnd_until"?}; empty emoji and text clear the status.
+func (h *Handler) setStatus(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Emoji     string     `json:"emoji"`
+		Text      string     `json:"text"`
+		ExpiresAt *time.Time `json:"expires_at"`
+		DNDUntil  *time.Time `json:"dnd_until"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var exp, dnd time.Time
+	if in.ExpiresAt != nil {
+		exp = *in.ExpiresAt
+	}
+	if in.DNDUntil != nil {
+		dnd = *in.DNDUntil
+	}
+	actor := auth.Actor(r.Context())
+	st, err := h.svc.SetStatus(r.Context(), actor, in.Emoji, in.Text, exp, dnd)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toStatus(actor, st.At(time.Now())))
+}
+
+// statuses: ?user_id=a&user_id=b (at most 200); people without a status are left out.
+func (h *Handler) statuses(w http.ResponseWriter, r *http.Request) {
+	users := r.URL.Query()["user_id"]
+	if len(users) > 200 {
+		h.fail(w, r, errBadLimit)
+		return
+	}
+	got, err := h.svc.Statuses(r.Context(), auth.Actor(r.Context()), users)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := []statusDTO{}
+	for _, u := range users {
+		if v, ok := got[u]; ok {
+			out = append(out, toStatus(u, v))
+			delete(got, u)
+		}
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
 }

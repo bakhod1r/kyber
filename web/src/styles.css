@@ -543,3 +543,5 @@ label.button { cursor: pointer; }
 .chat-mentions p { margin: 4px 0 0; font-weight: 400; }
 .chat-activity-link { display: block; margin: 8px 0; padding: 4px 8px; border-radius: 6px; }
 .chat-activity-link.active { background: var(--accent, #2563eb); color: #fff; }
+.chat-status { margin-bottom: 8px; }
+.chat-status > button { width: 100%; text-align: left; }

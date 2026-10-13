@@ -215,6 +215,7 @@ type deps struct {
 	conversations chatdomain.Repository
 	messages      chatdomain.Messages
 	saved         chatdomain.SavedMessages
+	statuses      chatdomain.Statuses
 	calls         calldomain.Repository
 	whiteboards   wbdomain.Repository
 	chatBlobs     blob.Store // chat files; memory unless WithFilesDir
@@ -324,7 +325,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
-		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, calls: callRepo, whiteboards: wbmemory.NewRepository(),
+		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), calls: callRepo, whiteboards: wbmemory.NewRepository(),
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
@@ -372,7 +373,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
-		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool),
+		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
@@ -455,13 +456,14 @@ func build(log *slog.Logger, d deps) http.Handler {
 		log.Warn("KYBER_FILES_DIR not set: chat files are kept in memory and lost on restart")
 		d.chatBlobs = blob.NewMemory()
 	}
-	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved,
+	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved, Statuses: d.statuses,
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	chat.WithIssues(chatacl.NewIssues(issues))
 	callEvents := callrealtime.New(publish, func(c *calldomain.Call) any { return callhttp.ToDTO(c) })
 	calls := callapp.NewService(callapp.Deps{Calls: d.calls, Conversations: callacl.NewConversations(chat),
 		Notifier: callEvents, Signals: callEvents, NewID: id.New, Now: time.Now})
 	notify.WithConversations(notifyacl.NewConversations(chat))
+	notify.WithQuiet(notifyacl.NewQuiet(chat, focus))
 	relay := outbox.NewRelay(d.outbox, log)
 	hub := live.NewHub()
 	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated", "issue.imported"} {

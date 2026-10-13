@@ -449,3 +449,33 @@ func TestSavedForLater(t *testing.T) {
 		t.Fatalf("after unsave = %+v", l)
 	}
 }
+
+// S66: statuses and Do Not Disturb, visible to the workspace.
+func TestStatuses(t *testing.T) {
+	c := &clock{t: time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)}
+	repo := memory.NewRepository()
+	svc := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Statuses: memory.NewStatuses(),
+		Members: members{"lead": {"w1"}, "dev": {"w1"}, "eve": {"w2"}}, NewID: func() string { return "x" }, Now: c.now})
+	ctx := tenant.With(context.Background(), "w1")
+	if _, err := svc.SetStatus(ctx, "lead", "🏖", "On vacation", c.t.Add(2*time.Hour), c.t.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.Statuses(ctx, "dev", []string{"lead", "dev"})
+	if err != nil || len(got) != 1 || got["lead"].Text != "On vacation" || !got["lead"].DND {
+		t.Fatalf("statuses = %+v %v", got, err)
+	}
+	if quiet, _ := svc.InDND(ctx, "lead"); !quiet {
+		t.Fatal("lead not in DND")
+	}
+	if _, err := svc.Statuses(tenant.With(context.Background(), "w1"), "eve", []string{"lead"}); !errors.Is(err, app.ErrNotWorkspaceMember) {
+		t.Fatalf("outsider = %v", err)
+	}
+	c.t = c.t.Add(90 * time.Minute)
+	if quiet, _ := svc.InDND(ctx, "lead"); quiet {
+		t.Fatal("DND did not end")
+	}
+	c.t = c.t.Add(time.Hour)
+	if got, _ := svc.Statuses(ctx, "dev", []string{"lead"}); len(got) != 0 {
+		t.Fatalf("expired status = %+v", got)
+	}
+}

@@ -14,9 +14,11 @@ Order: daily use first, then channel management, Jira integration, huddle extras
   **Done:** `PUT/DELETE /messages/{id}/save`, migration 0055 (RLS), `chat.reminder` outbox event → Notify kind
   `reminder`, background job (once across replicas); 🔖 menu on messages and "Saved for later" in Activity, API 0.46.0.
   Also fixed: chat notifications in the bell now open the conversation.
-- **S66 Status and Do Not Disturb** — status emoji + text with optional expiry; DND until a time; while a
+- ✅ **S66 Status and Do Not Disturb** — status emoji + text with optional expiry; DND until a time; while a
   Pomodoro is running I am in DND automatically. Others see status next to my name. AC: chat notifications are
   held during DND (still listed in Activity); status expires by itself.
+  **Done:** `PUT /me/status`, `GET /chat/statuses`, migration 0056 (RLS); Notify's Quiet ACL (DND or a running
+  Pomodoro) keeps chat mentions in-app only; status presets, "clear after", 🌙 next to names, API 0.47.0.
 - **S67 Scheduled messages and reminders** — post a message at a later time (edit/cancel before it is sent);
   `/remind me <when> <what>`. AC: sent by the background worker once, at most a minute late; only the author sees
   it before it is sent.

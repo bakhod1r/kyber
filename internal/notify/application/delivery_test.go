@@ -11,6 +11,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/notify/application"
 	"github.com/bakhod1r/kyber/internal/notify/domain"
 	"github.com/bakhod1r/kyber/internal/notify/infrastructure/memory"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
 type contacts struct{ chats map[string]string }
@@ -204,5 +205,35 @@ func TestSettings(t *testing.T) {
 	none, _, _ := deliverySetup()
 	if got, _ := none.Settings(ctx, "bob"); got.EmailAvailable || got.TelegramAvailable {
 		t.Fatalf("unconfigured server = %+v", got)
+	}
+}
+
+// quiet is a fake Quiet: who is in Do Not Disturb (or a Pomodoro).
+type quiet map[string]bool
+
+func (q quiet) Quiet(_ context.Context, user string) (bool, error) { return q[user], nil }
+
+// S66: a chat mention during Do Not Disturb stays in the inbox; no email or Telegram copy.
+func TestChatMentionsDuringDNDStayInApp(t *testing.T) {
+	for _, dnd := range []bool{false, true} {
+		f := &fakes{emails: map[string]string{"bob@x.uz": "bob"}, names: map[string]string{"alice": "Alice", "bob": "Bob"}}
+		deliveries := memory.NewDeliveryRepository()
+		s := application.NewService(application.Deps{
+			Repo: memory.NewRepository(), Issues: f, Members: f, Workspaces: f, Users: f, Audience: f,
+			Deliveries: deliveries, Prefs: memory.NewPrefsRepository(), Contacts: contacts{chats: map[string]string{"bob": "777"}},
+			Channels: []domain.Channel{domain.ChannelEmail, domain.ChannelTelegram}, PublicURL: "https://kyber.example",
+			NewID: func() string { return "00000000-0000-4000-8000-000000000001" }, Now: func() time.Time { return clock },
+		}).WithConversations(chats{"c-1": {name: "general", readers: []string{"alice", "bob"}}}).WithQuiet(quiet{"bob": dnd})
+		m := msg(1, "chat.message_posted", `{"id":"m-1","conversation_id":"c-1","author_id":"alice","body":"@bob@x.uz look"}`)
+		if err := s.OnChatMessage(tenant.With(context.Background(), tenant.Default), m); err != nil {
+			t.Fatal(err)
+		}
+		items, _, _ := s.List(tenant.With(context.Background(), tenant.Default), "bob", false)
+		if len(items) != 1 {
+			t.Fatalf("dnd=%v inbox = %+v", dnd, items)
+		}
+		if got, want := len(deliveries.All()), map[bool]int{false: 2, true: 0}[dnd]; got != want {
+			t.Fatalf("dnd=%v deliveries = %d, want %d", dnd, got, want)
+		}
 	}
 }

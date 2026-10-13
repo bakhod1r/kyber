@@ -3,7 +3,7 @@ import { ApiError, isProblem, request, seg, type List } from "../../../shared/ht
 import { onConnect, subscribe } from "../../../shared/stream";
 
 export { onConnect };
-import type { ChatEvent, Conversation, Message, SavedItem } from "../domain/model";
+import type { ChatEvent, Conversation, Message, SavedItem, UserStatus } from "../domain/model";
 
 const conv = (id: string) => `/api/v1/conversations/${seg(id)}`;
 const msg = (id: string) => `/api/v1/messages/${seg(id)}`;
@@ -32,6 +32,10 @@ export const chatGateway = {
   save: (id: string, remindAt: Date | null) => request<{ saved_at: string; remind_at: string | null }>("PUT", `${msg(id)}/save`, { remind_at: remindAt?.toISOString() ?? null }),
   unsave: (id: string) => request<undefined>("DELETE", `${msg(id)}/save`),
   saved: () => request<List<SavedItem>>("GET", "/api/v1/chat/saved").then((r) => r.items),
+  setStatus: (s: { emoji: string; text: string; expires_at: string | null; dnd_until: string | null }) => request<UserStatus>("PUT", "/api/v1/me/status", s),
+  statuses: (ids: string[]) =>
+    ids.length === 0 ? Promise.resolve([]) :
+      request<List<UserStatus>>("GET", `/api/v1/chat/statuses?${ids.map((u) => `user_id=${encodeURIComponent(u)}`).join("&")}`).then((r) => r.items),
   search: (q: string) => request<List<Message>>("GET", `/api/v1/chat/search?q=${encodeURIComponent(q)}`).then((r) => r.items),
   /** Uploads a file as a message (raw body; the header satisfies the CSRF guard for cookie sessions). */
   upload: async (id: string, file: Blob, name: string): Promise<Message> => {

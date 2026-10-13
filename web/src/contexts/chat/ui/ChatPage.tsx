@@ -1,10 +1,10 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { createContext, type FormEvent, type KeyboardEvent, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, type ChatEvent, chatUseCases, type Conversation, conversationTitle, fileSize, MAX_FILE, type Message, remindPresets, type SavedItem, splitMentions, useChatStream,
+  applyEvent, type ChatEvent, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, type Message, remindPresets, type SavedItem, splitMentions, STATUS_PRESETS, type UserStatus, useChatStream,
 } from "../application";
 
 const PAGE = 50;
@@ -23,6 +23,21 @@ function usePeople() {
   const names = new Map<string, string>();
   for (const q of lists) for (const m of q.data ?? []) names.set(m.user_id, m.name);
   return names;
+}
+
+/** People's statuses by id (S66), for the names shown in chat. */
+const Statuses = createContext<Map<string, UserStatus>>(new Map());
+
+/** A name with its status emoji (and 🌙 in Do Not Disturb). */
+function Who({ id, names }: { id: string; names: Map<string, string> }) {
+  const s = useContext(Statuses).get(id);
+  return (
+    <>
+      <b>{names.get(id) ?? "Someone"}</b>
+      {s?.emoji && <span className="status-emoji" title={s.text}> {s.emoji}</span>}
+      {s?.dnd && <span title="Do not disturb" aria-label="Do not disturb"> 🌙</span>}
+    </>
+  );
 }
 
 /** A slot the app shell fills with other contexts' UIs for the open conversation (huddle, whiteboards). */
@@ -60,9 +75,13 @@ export function ChatPage({ extras, activity }: { extras?: ConversationSlot; /** 
   const current = conversations.data?.find((c) => c.id === id);
   const myId = me.data?.id ?? "";
   const title = (c: Conversation) => conversationTitle(c, names, myId);
+  const people = [...new Set([...names.keys(), myId].filter(Boolean))].sort();
+  const statuses = useQuery({ queryKey: ["chat", "statuses", people], queryFn: () => chatUseCases.statuses(people), refetchInterval: 60_000 });
+  const statusMap = new Map((statuses.data ?? []).map((s) => [s.user_id, s]));
   const typers = (typing[id ?? ""] ?? []).filter((x) => x.until > Date.now() && x.user !== myId).map((x) => names.get(x.user) ?? "Someone");
 
   return (
+    <Statuses.Provider value={statusMap}>
     <div className="chat">
       <Sidebar conversations={conversations.data ?? []} current={id} title={title} names={names} me={myId} />
       {id ? (
@@ -72,6 +91,68 @@ export function ChatPage({ extras, activity }: { extras?: ConversationSlot; /** 
         <Activity conversations={conversations.data ?? []} title={title} activity={activity} />
       )}
       {thread && <ThreadPanel parent={thread} names={names} me={myId} onClose={() => setThread(null)} />}
+    </div>
+    </Statuses.Provider>
+  );
+}
+
+/** Set my status and Do Not Disturb (S66). */
+function MyStatus({ me }: { me: string }) {
+  const qc = useQueryClient();
+  const mine = useContext(Statuses).get(me);
+  const [open, setOpen] = useState(false);
+  const [emoji, setEmoji] = useState("");
+  const [text, setText] = useState("");
+  const [clear, setClear] = useState(1);
+  const [dnd, setDnd] = useState("");
+  const set = useMutation({
+    mutationFn: (s: { emoji: string; text: string; expires_at: string | null; dnd_until: string | null }) => chatUseCases.setStatus(s),
+    onSuccess: () => {
+      setOpen(false);
+      void qc.invalidateQueries({ queryKey: ["chat", "statuses"] });
+    },
+  });
+  const save = (e: FormEvent) => {
+    e.preventDefault();
+    const now = new Date();
+    const until = dnd ? new Date(now.getTime() + Number(dnd) * 60_000).toISOString() : null;
+    set.mutate({ emoji, text, expires_at: clearAfter(now)[clear]!.at?.toISOString() ?? null, dnd_until: until });
+  };
+  return (
+    <div className="chat-status">
+      <button className="ghost" onClick={() => { setOpen(!open); setEmoji(mine?.emoji ?? ""); setText(mine?.text ?? ""); }}>
+        {mine?.emoji || mine?.text ? `${mine.emoji} ${mine.text}` : "😀 Set a status"}{mine?.dnd ? " · 🌙 Do not disturb" : ""}
+      </button>
+      {open && (
+        <form onSubmit={save} aria-label="Status" className="chat-new">
+          <div className="row">
+            {STATUS_PRESETS.map((p) => (
+              <button type="button" key={p.text} className="ghost" title={p.text} onClick={() => { setEmoji(p.emoji); setText(p.text); }}>{p.emoji}</button>
+            ))}
+          </div>
+          <label>Emoji <input value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={8} style={{ width: "4em" }} /></label>
+          <label>Status <input value={text} onChange={(e) => setText(e.target.value)} maxLength={100} placeholder="What's your status?" /></label>
+          <label>Clear after{" "}
+            <select value={clear} onChange={(e) => setClear(Number(e.target.value))}>
+              {clearAfter(new Date()).map((c, i) => <option key={c.label} value={i}>{c.label}</option>)}
+            </select>
+          </label>
+          <label>Do not disturb{" "}
+            <select value={dnd} onChange={(e) => setDnd(e.target.value)}>
+              <option value="">Off</option>
+              <option value="30">30 minutes</option>
+              <option value="60">1 hour</option>
+              <option value="240">4 hours</option>
+              <option value="720">12 hours</option>
+            </select>
+          </label>
+          <div className="row">
+            <button>Save</button>
+            <button type="button" className="ghost" onClick={() => set.mutate({ emoji: "", text: "", expires_at: null, dnd_until: null })}>Clear</button>
+          </div>
+          {set.error && <p role="alert" className="error">{set.error.message}</p>}
+        </form>
+      )}
     </div>
   );
 }
@@ -166,10 +247,14 @@ function Sidebar({ conversations, current, title, names, me }: {
     if (form === "channel") create.mutate();
     else openDM.mutate();
   };
+  const statuses = useContext(Statuses);
+  const peer = (c: Conversation) => (c.kind === "dm" && c.member_ids.length === 2 ? statuses.get(c.member_ids.find((u) => u !== me) ?? "") : undefined);
   const item = (c: Conversation) => (
     <li key={c.id}>
       <Link to={`/chat/${c.id}`} className={`${c.id === current ? "active" : ""} ${c.unread > 0 ? "unread" : ""}`} aria-current={c.id === current ? "page" : undefined}>
         {title(c)}
+        {peer(c)?.emoji && <span title={peer(c)?.text}> {peer(c)?.emoji}</span>}
+        {peer(c)?.dnd && <span aria-label="Do not disturb"> 🌙</span>}
         {c.unread > 0 && <span className="badge" aria-label={`${c.unread} unread`}>{c.unread}</span>}
       </Link>
     </li>
@@ -184,6 +269,7 @@ function Sidebar({ conversations, current, title, names, me }: {
   };
   return (
     <nav aria-label="Conversations" className="chat-sidebar panel">
+      <MyStatus me={me} />
       <form role="search" onSubmit={(e) => { e.preventDefault(); setQuery(q.trim()); }}>
         <input type="search" aria-label="Search messages" placeholder="Search messages" value={q} onChange={(e) => setQ(e.target.value)} />
       </form>
@@ -338,8 +424,8 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
     return (
       <article className="chat-message chat-system" aria-label={`Huddle at ${time(m.created_at)}`}>
         <p className="muted">
-          🎧 {m.kind === "huddle_recording" ? <><b>{names.get(m.author_id) ?? "Someone"}</b> recorded the huddle</>
-            : m.kind === "huddle_started" ? <><b>{names.get(m.author_id) ?? "Someone"}</b> {m.body}</> : m.body}{" "}
+          🎧 {m.kind === "huddle_recording" ? <><Who id={m.author_id} names={names} /> recorded the huddle</>
+            : m.kind === "huddle_started" ? <><Who id={m.author_id} names={names} /> {m.body}</> : m.body}{" "}
           <time dateTime={m.created_at}>{time(m.created_at)}</time>
         </p>
         {m.kind === "huddle_recording" && m.file && !m.deleted && <Attachment file={m.file} />}
@@ -349,7 +435,7 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
   return (
     <article className="chat-message" aria-label={`${names.get(m.author_id) ?? "Someone"} at ${time(m.created_at)}`}>
       <header>
-        <b>{names.get(m.author_id) ?? "Someone"}</b> <time className="muted" dateTime={m.created_at}>{time(m.created_at)}</time>
+        <Who id={m.author_id} names={names} /> <time className="muted" dateTime={m.created_at}>{time(m.created_at)}</time>
         {m.edited_at && !m.deleted && <span className="muted"> (edited)</span>}
         {m.pinned_by && <span className="muted" aria-label="pinned"> 📌</span>}
       </header>

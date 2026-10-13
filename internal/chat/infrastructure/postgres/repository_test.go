@@ -28,3 +28,5 @@ func TestSavedContract(t *testing.T) {
 	}
 	repotest.RunSaved(t, postgres.NewRepository(pool), postgres.NewMessages(pool), postgres.NewSaved(pool))
 }
+
+func TestStatusContract(t *testing.T) { repotest.RunStatuses(t, postgres.NewStatuses(dbtest.New(t))) }

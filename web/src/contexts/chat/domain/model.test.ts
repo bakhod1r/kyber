@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions } from "./model";
+import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter } from "./model";
 
 const msg = (id: string, body: string, extra: Partial<Message> = {}): Message => ({
   id, conversation_id: "c-1", author_id: "u-1", body, created_at: "2026-10-13T09:00:00Z", edited_at: null, deleted: false,
@@ -59,5 +59,15 @@ describe("save for later (S65)", () => {
     expect(p.map((x) => x.label)).toEqual(["In 20 minutes", "In 1 hour", "In 3 hours", "Tomorrow at 9:00"]);
     expect(p[0]!.at.getTime() - now.getTime()).toBe(20 * 60_000);
     expect([p[3]!.at.getDate(), p[3]!.at.getHours(), p[3]!.at.getMinutes()]).toEqual([14, 9, 0]);
+  });
+});
+
+describe("status (S66)", () => {
+  it("clears after a while, at the end of the day, or never", () => {
+    const now = new Date(2026, 9, 13, 10, 0);
+    const c = clearAfter(now);
+    expect(c.map((x) => x.label)).toEqual(["30 minutes", "1 hour", "4 hours", "Today", "Don't clear"]);
+    expect(c[3]!.at!.getHours()).toBe(23);
+    expect(c[4]!.at).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.46.0
+  version: 0.47.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -918,6 +918,41 @@ paths:
       responses:
         "204": { description: Forgotten }
         "401": { $ref: "#/components/responses/Error" }
+  /api/v1/me/status:
+    put:
+      operationId: setStatus
+      description: |
+        My status in the workspace (S66): an emoji and up to 100 characters until expires_at, and Do Not Disturb
+        until dnd_until (chat mentions then stay in the inbox, without email or Telegram; a running Pomodoro does
+        the same). Empty emoji and text clear the status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                emoji: { type: string }
+                text: { type: string }
+                expires_at: { type: [string, "null"], format: date-time }
+                dnd_until: { type: [string, "null"], format: date-time }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserStatus" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/chat/statuses:
+    get:
+      operationId: listStatuses
+      description: The current statuses of the given people in the workspace (people without one are left out).
+      parameters:
+        - { name: user_id, in: query, schema: { type: array, items: { type: string }, maxItems: 200 }, style: form, explode: true }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/UserStatus" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/chat/saved:
     get:
       operationId: listSavedMessages
@@ -2733,6 +2768,16 @@ components:
         updated_by: { type: string }
         updated_at: { type: string, format: date-time }
         deleted: { type: boolean }
+    UserStatus:
+      type: object
+      required: [user_id, emoji, text, expires_at, dnd, dnd_until]
+      properties:
+        user_id: { type: string }
+        emoji: { type: string }
+        text: { type: string }
+        expires_at: { type: [string, "null"], format: date-time }
+        dnd: { type: boolean }
+        dnd_until: { type: [string, "null"], format: date-time }
     Call:
       type: object
       required: [id, conversation_id, started_by, started_at, live, participants, presentation, recording]

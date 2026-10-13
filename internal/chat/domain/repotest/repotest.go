@@ -335,3 +335,33 @@ func RunSaved(t *testing.T, r domain.Repository, msgs domain.Messages, saved dom
 		t.Fatalf("Other's saves = %+v", l)
 	}
 }
+
+// RunStatuses checks statuses (S66).
+func RunStatuses(t *testing.T, st domain.Statuses) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	a, _ := domain.NewStatus(WS, Lead, "🏖", "On vacation", t0.Add(time.Hour), t0.Add(30*time.Minute), t0)
+	b, _ := domain.NewStatus(WS, Dev, "", "", time.Time{}, time.Time{}, t0)
+	for _, s := range []*domain.Status{a, b} {
+		if err := st.Put(ctx, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := st.Of(ctx, WS, []domain.UserID{Lead, Other})
+	if err != nil || len(got) != 1 || got[0].User != Lead || got[0].Emoji != "🏖" || got[0].Text != "On vacation" ||
+		!got[0].ExpiresAt.Equal(t0.Add(time.Hour)) || !got[0].DNDUntil.Equal(t0.Add(30*time.Minute)) {
+		t.Fatalf("Of = %+v %v", got, err)
+	}
+	// Setting again replaces; another workspace sees nothing.
+	c, _ := domain.NewStatus(WS, Lead, "🎧", "Focus", time.Time{}, time.Time{}, t0)
+	_ = st.Put(ctx, c)
+	if got, _ := st.Of(ctx, WS, []domain.UserID{Lead}); len(got) != 1 || got[0].Text != "Focus" || !got[0].ExpiresAt.IsZero() || !got[0].DNDUntil.IsZero() {
+		t.Fatalf("after replace = %+v", got)
+	}
+	if got, _ := st.Of(ctx, "00000000-0000-4000-8000-000000000009", []domain.UserID{Lead}); len(got) != 0 {
+		t.Fatalf("other workspace = %+v", got)
+	}
+	if got, err := st.Of(ctx, WS, nil); err != nil || len(got) != 0 {
+		t.Fatalf("no users = %+v %v", got, err)
+	}
+}
