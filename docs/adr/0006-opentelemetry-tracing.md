@@ -33,5 +33,5 @@ could not be followed through its use case, its SQL and the domain events it cau
 - Operators enable tracing with environment variables only; no build flags.
 - Metrics stay on the existing Prometheus `/metrics`; moving them to OpenTelemetry metrics is a
   later decision.
-- Outbox spans start a new trace: the request that recorded an event and its asynchronous handling
-  are not yet linked (that needs the trace context in the event envelope, C6).
+- Outbox spans continue the trace of the request that recorded the event, through the trace
+  context in the event envelope (ADR-0007).
