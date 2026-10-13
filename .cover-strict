@@ -35,3 +35,4 @@
 ./internal/announcement/infrastructure/acl
 ./internal/admin/application
 ./internal/admin/infrastructure/acl
+./internal/platform/mcp

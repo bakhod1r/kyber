@@ -549,6 +549,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
 		auditacl.NewOwners(agile, d.boards, d.links), log)
 	audit.Register(api)
+	api.Handle("POST /api/v1/mcp", newMCP(projects, issues, search))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

@@ -78,6 +78,18 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/probl
 | POST | `/api/v1/notifications/{id}/read` · `/read-all` | Mark one · all as read |
 | POST | `/api/v1/issues/{KEY-N}/transitions` | Move issue (`todo ⇄ in_progress ⇄ done`) |
 
+## AI assistants (MCP)
+
+Kyber is a [Model Context Protocol](https://modelcontextprotocol.io) server at `POST /api/v1/mcp`
+(Streamable HTTP, ADR-0009). Tools: `list_projects`, `search_issues` (JQL), `get_issue`,
+`create_issue`, `add_comment`; each runs with your own permissions. Use a session token from
+`/api/v1/auth/login` (keep it out of shared config files):
+
+```sh
+claude mcp add --transport http kyber https://kyber.example.com/api/v1/mcp \
+  --header "Authorization: Bearer $KYBER_TOKEN"
+```
+
 ## Development
 
 Domain-Driven Design + Test-Driven Development — see [`CLAUDE.md`](CLAUDE.md) and `docs/PLAN.md` §3.5–3.6.
