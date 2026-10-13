@@ -203,3 +203,12 @@ func (s *Service) Follow(ctx context.Context, actor, id string, v View) error {
 
 // LiveCalls counts live calls across workspaces (operations metric).
 func (s *Service) LiveCalls(ctx context.Context) (int, error) { return s.d.Calls.CountLive(ctx) }
+
+// StartRecording marks the call as recorded by actor (everyone sees it); StopRecording ends that.
+func (s *Service) StartRecording(ctx context.Context, actor, id string) (*domain.Call, error) {
+	return s.change(ctx, actor, id, func(c *domain.Call) error { return c.StartRecording(domain.UserID(actor), s.d.Now()) })
+}
+
+func (s *Service) StopRecording(ctx context.Context, actor, id string) (*domain.Call, error) {
+	return s.change(ctx, actor, id, func(c *domain.Call) error { return c.StopRecording(domain.UserID(actor)) })
+}

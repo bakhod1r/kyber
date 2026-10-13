@@ -45,6 +45,10 @@ func clone(c domain.Call) *domain.Call {
 		p := *c.Presentation
 		c.Presentation = &p
 	}
+	if c.Recording != nil {
+		r := *c.Recording
+		c.Recording = &r
+	}
 	return &c
 }
 

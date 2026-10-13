@@ -167,6 +167,8 @@ type MessageKind string
 const (
 	KindHuddleStarted MessageKind = "huddle_started"
 	KindHuddleEnded   MessageKind = "huddle_ended"
+	// KindHuddleRecording: a recording of a huddle, uploaded by the one who recorded it (a video file).
+	KindHuddleRecording MessageKind = "huddle_recording"
 )
 
 // ErrDuplicateRef: a system message about this already exists (events may be delivered twice).
@@ -212,10 +214,13 @@ func NewMessage(id MessageID, conv ConversationID, author UserID, text string, n
 	return m, nil
 }
 
-// MaxFile bounds one attachment (bytes).
-const MaxFile = 25 << 20
+// MaxFile bounds one attachment, MaxRecording one huddle recording (bytes).
+const (
+	MaxFile      = 25 << 20
+	MaxRecording = 1 << 30
+)
 
-var ErrInvalidFile = errors.New("a file has a name and 1 byte to 25 MB")
+var ErrInvalidFile = errors.New("a file has a name and 1 byte to 25 MB (a huddle recording up to 1 GB)")
 
 // File is an attachment; its bytes live in the blob store under the message's id.
 type File struct {
@@ -224,13 +229,27 @@ type File struct {
 	Size int64
 }
 
+// NewRecordingMessage posts a huddle recording (a video up to MaxRecording).
+func NewRecordingMessage(id MessageID, conv ConversationID, author UserID, f File, now time.Time) (*Message, error) {
+	m, err := newFile(id, conv, author, f, MaxRecording, now)
+	if err != nil {
+		return nil, err
+	}
+	m.Kind = KindHuddleRecording
+	return m, nil
+}
+
 // NewFileMessage posts a file; the message body is its name (searchable).
 func NewFileMessage(id MessageID, conv ConversationID, author UserID, f File, now time.Time) (*Message, error) {
+	return newFile(id, conv, author, f, MaxFile, now)
+}
+
+func newFile(id MessageID, conv ConversationID, author UserID, f File, limit int64, now time.Time) (*Message, error) {
 	f.Name = strings.TrimSpace(f.Name)
 	if i := strings.LastIndexAny(f.Name, `/\`); i >= 0 {
 		f.Name = f.Name[i+1:]
 	}
-	if f.Name == "" || utf8.RuneCountInString(f.Name) > 255 || f.Size <= 0 || f.Size > MaxFile {
+	if f.Name == "" || utf8.RuneCountInString(f.Name) > 255 || f.Size <= 0 || f.Size > limit {
 		return nil, ErrInvalidFile
 	}
 	m, err := NewMessage(id, conv, author, f.Name, now)
@@ -320,7 +339,9 @@ func (m *Message) Edit(actor UserID, text string, now time.Time) error {
 }
 
 func (m *Message) Delete(actor UserID, now time.Time) error {
-	if err := m.change(actor); err != nil {
+	if m.Kind == KindHuddleRecording && actor == m.Author && !m.Deleted {
+		// the recorder may delete their recording (it is not editable)
+	} else if err := m.change(actor); err != nil {
 		return err
 	}
 	m.Body, m.Deleted, m.EditedAt, m.Reactions, m.File = "", true, now.UTC(), nil, nil

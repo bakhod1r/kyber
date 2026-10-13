@@ -36,6 +36,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/calls/{id}/presentation", h.present)
 	mux.HandleFunc("DELETE /api/v1/calls/{id}/presentation", h.stopPresenting)
 	mux.HandleFunc("POST /api/v1/calls/{id}/presentation/follow", h.follow)
+	mux.HandleFunc("PUT /api/v1/calls/{id}/recording", h.startRecording)
+	mux.HandleFunc("DELETE /api/v1/calls/{id}/recording", h.stopRecording)
 }
 
 func codeFor(err error) (string, bool) {
@@ -50,6 +52,10 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeCallFull, true
 	case errors.Is(err, domain.ErrNotInCall), errors.Is(err, domain.ErrCallEnded), errors.Is(err, domain.ErrConflict):
 		return httpx.CodeCallState, true
+	case errors.Is(err, domain.ErrAlreadyRecording):
+		return httpx.CodeCallRecording, true
+	case errors.Is(err, domain.ErrNotRecorder):
+		return httpx.CodeCallNotRecorder, true
 	case errors.Is(err, domain.ErrNotPresenter):
 		return httpx.CodeCallNotPresenter, true
 	case errors.Is(err, domain.ErrInvalidSignal), errors.Is(err, domain.ErrInvalidPresentation):
@@ -77,6 +83,12 @@ type CallDTO struct {
 	Live           bool             `json:"live"`
 	Participants   []ParticipantDTO `json:"participants"`
 	Presentation   *PresentationDTO `json:"presentation"`
+	Recording      *RecordingDTO    `json:"recording"`
+}
+
+type RecordingDTO struct {
+	By    string    `json:"by"`
+	Since time.Time `json:"since"`
 }
 
 type PresentationDTO struct {
@@ -88,6 +100,9 @@ type PresentationDTO struct {
 func ToDTO(c *domain.Call) CallDTO {
 	d := CallDTO{ID: string(c.ID), ConversationID: string(c.Conversation), StartedBy: string(c.StartedBy),
 		StartedAt: c.StartedAt.Format(time.RFC3339Nano), Live: c.Live(), Participants: []ParticipantDTO{}}
+	if r := c.Recording; r != nil {
+		d.Recording = &RecordingDTO{By: string(r.By), Since: r.Since}
+	}
 	if p := c.Presentation; p != nil {
 		d.Presentation = &PresentationDTO{Kind: string(p.Kind), Ref: p.Ref, By: string(p.By)}
 	}
@@ -213,4 +228,22 @@ func (h *Handler) follow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) startRecording(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.StartRecording(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+func (h *Handler) stopRecording(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.StopRecording(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, ToDTO(c))
 }

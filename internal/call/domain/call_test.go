@@ -152,3 +152,28 @@ func TestCallEvents(t *testing.T) {
 		t.Fatalf("ended = %+v", ev)
 	}
 }
+
+func TestRecording(t *testing.T) {
+	c := domain.Start("k-1", "w-1", "c-1", "u-a", t0)
+	_ = c.Join("u-b", t0)
+	if err := c.StartRecording("u-x", t0); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("outsider records = %v", err)
+	}
+	if err := c.StartRecording("u-a", t0); err != nil || c.Recording == nil || c.Recording.By != "u-a" || !c.Recording.Since.Equal(t0) {
+		t.Fatalf("start = %+v %v", c.Recording, err)
+	}
+	if err := c.StartRecording("u-b", t0); !errors.Is(err, domain.ErrAlreadyRecording) {
+		t.Fatalf("second recording = %v", err)
+	}
+	if err := c.StopRecording("u-b"); !errors.Is(err, domain.ErrNotRecorder) {
+		t.Fatalf("stop by someone else = %v", err)
+	}
+	if err := c.StopRecording("u-a"); err != nil || c.Recording != nil {
+		t.Fatalf("stop = %+v %v", c.Recording, err)
+	}
+	_ = c.StartRecording("u-b", t0)
+	_ = c.Leave("u-b", t0) // the recorder leaving stops the recording
+	if c.Recording != nil {
+		t.Fatalf("after the recorder left = %+v", c.Recording)
+	}
+}

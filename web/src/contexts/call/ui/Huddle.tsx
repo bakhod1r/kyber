@@ -101,6 +101,8 @@ export function Huddle({ conversationId, me, names, platform, presentables = [],
   const shownTitle = shown ? (presentables.find((x) => x.kind === shown.kind && x.ref === shown.ref)?.title ?? (shown.kind === "doc" ? "a doc" : "a whiteboard")) : "";
   return (
     <section className="huddle" aria-label="Huddle">
+      {call?.recording && <p className="huddle-recording" role="status">● Recording by {name(call.recording.by)}</p>}
+      {h.saving && <p className="muted" role="status">Saving the recording…</p>}
       {shown && renderPresentation && (
         <PresentationView p={shown} mine={shown.by === me} title={shownTitle} by={name(shown.by)} view={h.view}
           onScroll={(x, y) => h.follow(x, y)} onStop={() => void h.stopPresenting()} render={renderPresentation} />
@@ -138,6 +140,8 @@ export function Huddle({ conversationId, me, names, platform, presentables = [],
             {presentables.map((x) => <option key={`${x.kind}:${x.ref}`} value={`${x.kind}:${x.ref}`}>{x.kind === "doc" ? "📄" : "🖍"} {x.title}</option>)}
           </select>
         )}
+        {!call?.recording && <button onClick={() => void h.startRecording().catch(() => {})}>Record</button>}
+        {call?.recording?.by === me && <button aria-pressed onClick={() => void h.stopRecording()}>Stop recording</button>}
         <button className="ghost" onClick={() => void pickDevices()}>Devices</button>
         <button className="danger" onClick={() => void h.leave()}>Leave</button>
       </div>

@@ -48,6 +48,7 @@ type Call struct {
 	EndedAt      time.Time     // zero while live
 	Participants []Participant // in joining order
 	Presentation *Presentation // what everyone looks at together, if anything
+	Recording    *Recording    // someone is recording the call (everyone sees it)
 	Version      int           // optimistic locking
 	events       []Event
 }
@@ -77,6 +78,36 @@ func (c *Call) PullEvents() []Event {
 	ev := c.events
 	c.events = nil
 	return ev
+}
+
+// Recording: one participant's browser records the call; everyone in it is shown who and since when.
+type Recording struct {
+	By    UserID
+	Since time.Time
+}
+
+var (
+	ErrAlreadyRecording = errors.New("the call is already being recorded")
+	ErrNotRecorder      = errors.New("only the one recording can stop it")
+)
+
+func (c *Call) StartRecording(by UserID, now time.Time) error {
+	if !c.Live() || !c.In(by) {
+		return ErrNotInCall
+	}
+	if c.Recording != nil {
+		return ErrAlreadyRecording
+	}
+	c.Recording = &Recording{By: by, Since: now.UTC()}
+	return nil
+}
+
+func (c *Call) StopRecording(by UserID) error {
+	if c.Recording == nil || c.Recording.By != by {
+		return ErrNotRecorder
+	}
+	c.Recording = nil
+	return nil
 }
 
 // A Presentation is a shared file opened for everyone in the call ("present to all"); each viewer opens it
@@ -166,6 +197,9 @@ func (c *Call) Leave(u UserID, now time.Time) error {
 	c.Participants = slices.Delete(c.Participants, i, i+1)
 	if c.Presentation != nil && c.Presentation.By == u {
 		c.Presentation = nil
+	}
+	if c.Recording != nil && c.Recording.By == u {
+		c.Recording = nil
 	}
 	if len(c.Participants) == 0 {
 		c.EndedAt = now.UTC()

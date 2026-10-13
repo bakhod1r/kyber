@@ -268,9 +268,11 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
     return (
       <article className="chat-message chat-system" aria-label={`Huddle at ${time(m.created_at)}`}>
         <p className="muted">
-          🎧 {m.kind === "huddle_started" ? <><b>{names.get(m.author_id) ?? "Someone"}</b> {m.body}</> : m.body}{" "}
+          🎧 {m.kind === "huddle_recording" ? <><b>{names.get(m.author_id) ?? "Someone"}</b> recorded the huddle</>
+            : m.kind === "huddle_started" ? <><b>{names.get(m.author_id) ?? "Someone"}</b> {m.body}</> : m.body}{" "}
           <time dateTime={m.created_at}>{time(m.created_at)}</time>
         </p>
+        {m.kind === "huddle_recording" && m.file && !m.deleted && <Attachment file={m.file} />}
       </article>
     );
   }

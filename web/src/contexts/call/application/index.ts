@@ -1,8 +1,9 @@
 // call: application layer — the huddle of a conversation as a React hook over HuddleEngine.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Call, FollowView, PresentKind } from "../domain/model";
 import { callGateway, onCallEvents, onConnect } from "../infrastructure/gateway";
+import { type Recorder, startRecorder } from "../infrastructure/recorder";
 import { browserPlatform } from "../infrastructure/webrtc";
 import type { Platform } from "../domain/model";
 import { HuddleEngine } from "./engine";
@@ -42,6 +43,22 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
   useEffect(() => onConnect(() => void qc.invalidateQueries({ queryKey: liveKey(conversationId) })), [conversationId, qc]);
 
   const call = state.joined ? state.call : (live.data ?? null);
+  const recorder = useRef<Recorder | null>(null);
+  const [saving, setSaving] = useState(false);
+  /** Stops this tab's recorder (if any) and posts the video to the conversation. */
+  const finishRecording = async () => {
+    const r = recorder.current;
+    recorder.current = null;
+    if (!r) return;
+    setSaving(true);
+    try {
+      const video = await r.stop();
+      const at = new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "-");
+      if (video.size > 0) await callGateway.uploadRecording(conversationId, video, `Huddle ${at}.webm`);
+    } finally {
+      setSaving(false);
+    }
+  };
   return {
     call,
     state,
@@ -50,6 +67,11 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
       qc.setQueryData(liveKey(conversationId), engine.snapshot.call);
     },
     leave: async () => {
+      const id = engine.snapshot.call?.id;
+      if (id && recorder.current) {
+        await callGateway.stopRecording(id).catch(() => {});
+        await finishRecording();
+      }
       await engine.leave();
       await qc.invalidateQueries({ queryKey: liveKey(conversationId) });
     },
@@ -67,6 +89,23 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
     stopPresenting: async () => {
       const id = engine.snapshot.call?.id;
       if (id) engine.update(await callGateway.stopPresenting(id));
+    },
+    /** The recording is being uploaded (S62). */
+    saving,
+    startRecording: async () => {
+      const id = engine.snapshot.call?.id;
+      if (!id) return;
+      engine.update(await callGateway.startRecording(id));
+      recorder.current = startRecorder(() => {
+        const s = engine.snapshot;
+        const all = [s.local, s.screen, ...Object.values(s.remotes).flatMap((r) => [r.camera, r.screen])];
+        return all.filter((x): x is MediaStream => !!x);
+      });
+    },
+    stopRecording: async () => {
+      const id = engine.snapshot.call?.id;
+      if (id) engine.update(await callGateway.stopRecording(id));
+      await finishRecording();
     },
     follow: (x: number, y: number, zoom = 1) => {
       const id = engine.snapshot.call?.id;

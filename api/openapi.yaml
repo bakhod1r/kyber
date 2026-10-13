@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.42.0
+  version: 0.43.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -824,6 +824,26 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/recording:
+    put:
+      operationId: startRecording
+      description: Starts recording the call (one recorder at a time); everyone sees `recording` on the call.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: stopRecording
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/messages/{id}/pin:
     post:
       operationId: pinMessage
@@ -870,6 +890,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
         - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: recording, in: query, description: "1 posts the huddle recording (WebM, at most 1 GB) of the caller's recording.", schema: { type: string, enum: ["1"] } }
         - { name: X-Kyber-Upload, in: header, schema: { type: string, enum: ["1"] } }
       requestBody:
         required: true
@@ -2613,7 +2634,7 @@ components:
         deleted: { type: boolean }
     Call:
       type: object
-      required: [id, conversation_id, started_by, started_at, live, participants, presentation]
+      required: [id, conversation_id, started_by, started_at, live, participants, presentation, recording]
       properties:
         id: { type: string }
         conversation_id: { type: string }
@@ -2624,6 +2645,10 @@ components:
           oneOf:
             - { type: "null" }
             - { type: object, required: [kind, ref, by], properties: { kind: { type: string, enum: [doc, whiteboard] }, ref: { type: string }, by: { type: string } } }
+        recording:
+          oneOf:
+            - { type: "null" }
+            - { type: object, required: [by, since], properties: { by: { type: string }, since: { type: string, format: date-time } } }
         participants:
           type: array
           items:
@@ -2661,7 +2686,7 @@ components:
         deleted: { type: boolean }
         thread_id: { oneOf: [{ type: string }, { type: "null" }], description: The parent message of a reply }
         reply_count: { type: integer }
-        kind: { type: string, enum: ["", huddle_started, huddle_ended], description: "Empty for people's messages; system messages cannot be edited." }
+        kind: { type: string, enum: ["", huddle_started, huddle_ended, huddle_recording], description: "Empty for people's messages; system messages cannot be edited." }
         file:
           description: An attached file; download it from url (members of the conversation only).
           oneOf:

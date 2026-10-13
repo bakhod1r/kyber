@@ -61,8 +61,14 @@ func (r *Repository) Create(ctx context.Context, c *domain.Call) error {
 func (r *Repository) Save(ctx context.Context, c *domain.Call) error {
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		kind, ref, by := presentation(c)
+		var recBy *string
+		var recSince *time.Time
+		if r := c.Recording; r != nil {
+			recBy, recSince = (*string)(&r.By), &r.Since
+		}
 		tag, err := tx.Exec(ctx, `UPDATE calls SET ended_at = $3, presentation_kind = $4, presentation_ref = $5, presentation_by = $6,
-			version = version + 1 WHERE id = $1 AND version = $2`, string(c.ID), c.Version, ended(c), kind, ref, by)
+			recording_by = $7, recording_since = $8, version = version + 1 WHERE id = $1 AND version = $2`,
+			string(c.ID), c.Version, ended(c), kind, ref, by, recBy, recSince)
 		if err != nil {
 			return err
 		}
@@ -78,7 +84,7 @@ func (r *Repository) Save(ctx context.Context, c *domain.Call) error {
 }
 
 const cols = `c.id, c.workspace_id, c.conversation_id, c.started_by, c.started_at, c.ended_at, c.version,
-	c.presentation_kind, c.presentation_ref, c.presentation_by::text`
+	c.presentation_kind, c.presentation_ref, c.presentation_by::text, c.recording_by::text, c.recording_since`
 
 func presentation(c *domain.Call) (kind, ref, by *string) {
 	if p := c.Presentation; p != nil {
@@ -91,9 +97,10 @@ func presentation(c *domain.Call) (kind, ref, by *string) {
 func (r *Repository) one(ctx context.Context, where string, arg string) (*domain.Call, error) {
 	var c domain.Call
 	var end *time.Time
-	var pKind, pRef, pBy *string
+	var pKind, pRef, pBy, recBy *string
+	var recSince *time.Time
 	err := r.pool.QueryRow(ctx, `SELECT `+cols+` FROM calls c WHERE `+where, arg).
-		Scan(&c.ID, &c.Workspace, &c.Conversation, &c.StartedBy, &c.StartedAt, &end, &c.Version, &pKind, &pRef, &pBy)
+		Scan(&c.ID, &c.Workspace, &c.Conversation, &c.StartedBy, &c.StartedAt, &end, &c.Version, &pKind, &pRef, &pBy, &recBy, &recSince)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrCallNotFound
 	}
@@ -103,6 +110,9 @@ func (r *Repository) one(ctx context.Context, where string, arg string) (*domain
 	c.StartedAt = c.StartedAt.UTC()
 	if end != nil {
 		c.EndedAt = end.UTC()
+	}
+	if recBy != nil && recSince != nil {
+		c.Recording = &domain.Recording{By: domain.UserID(*recBy), Since: recSince.UTC()}
 	}
 	if pKind != nil && pRef != nil && pBy != nil {
 		c.Presentation = &domain.Presentation{Kind: domain.PresentKind(*pKind), Ref: *pRef, By: domain.UserID(*pBy)}

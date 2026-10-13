@@ -7,7 +7,10 @@ export type Presentation = { kind: PresentKind; ref: string; by: string };
 export type Call = {
   id: string; conversation_id: string; started_by: string; started_at: string; live: boolean; participants: Participant[];
   presentation?: Presentation | null;
+  /** Who is recording the huddle, if anyone (S62); everyone sees the banner. */
+  recording?: Recording | null;
 };
+export type Recording = { by: string; since: string };
 /** Something that can be presented to everyone in a huddle. */
 export type Presentable = { kind: PresentKind; ref: string; title: string };
 /** Where the presenter is looking: scroll position as fractions of the scrollable size, and zoom. */

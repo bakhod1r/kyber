@@ -18,6 +18,15 @@ export const callGateway = {
   present: (callId: string, kind: PresentKind, ref: string) => request<Call>("PUT", `${call(callId)}/presentation`, { kind, ref }),
   stopPresenting: (callId: string) => request<Call>("DELETE", `${call(callId)}/presentation`),
   follow: (callId: string, v: { x: number; y: number; zoom: number }) => request<undefined>("POST", `${call(callId)}/presentation/follow`, v),
+  startRecording: (callId: string) => request<Call>("PUT", `${call(callId)}/recording`),
+  stopRecording: (callId: string) => request<Call>("DELETE", `${call(callId)}/recording`),
+  /** Posts the finished recording to the conversation (raw body; the header satisfies the CSRF guard). */
+  uploadRecording: async (conversationId: string, video: Blob, name: string): Promise<void> => {
+    const res = await fetch(`/api/v1/conversations/${seg(conversationId)}/files?recording=1&name=${encodeURIComponent(name)}`, {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream", "X-Kyber-Upload": "1" }, body: video,
+    });
+    if (!res.ok) throw new Error(`Uploading the recording failed (${res.status})`);
+  },
   ice: () => request<{ ice_servers: IceServer[] }>("GET", "/api/v1/calls/ice").then((r) => r.ice_servers),
 };
 

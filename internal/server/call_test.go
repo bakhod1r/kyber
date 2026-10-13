@@ -1,7 +1,11 @@
 package server_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -157,5 +161,64 @@ func TestPresentToAll(t *testing.T) {
 		if b["presentation"] != nil {
 			t.Fatalf("stopped = %v", b)
 		}
+	})
+}
+
+// S62: recording a huddle — everyone in the call sees who records; the recording lands in the conversation
+// as a members-only video message.
+func TestHuddleRecording(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		eve := anon.signedIn("eve@x.uz")
+		_, devMe := dev.do("GET", "/api/v1/me", nil)
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "rec", "private": true})
+		conv := ch["id"].(string)
+		lead.do("POST", "/api/v1/conversations/"+conv+"/members", map[string]string{"user_id": devMe["id"].(string)})
+		_, call := lead.do("POST", "/api/v1/conversations/"+conv+"/call", nil)
+		dev.do("POST", "/api/v1/conversations/"+conv+"/call", nil)
+		recURL := "/api/v1/calls/" + call["id"].(string) + "/recording"
+		devStream := dev.stream("")
+
+		code, c := lead.do("PUT", recURL, nil)
+		expect(t, code, 200, c)
+		if r := c["recording"].(map[string]any); r["by"] == nil || r["since"] == nil {
+			t.Fatalf("recording = %v", c)
+		}
+		if e := next(t, devStream, "call.updated"); !strings.Contains(e.data, `"recording":{`) {
+			t.Fatalf("participants are told: %+v", e)
+		}
+		code, b := dev.do("PUT", recURL, nil)
+		expect(t, code, 409, b)
+		code, b = dev.do("DELETE", recURL, nil)
+		expect(t, code, 403, b)
+		code, b = eve.do("PUT", recURL, nil)
+		expect(t, code, 404, b)
+		code, c = lead.do("DELETE", recURL, nil)
+		expect(t, code, 200, c)
+		if c["recording"] != nil {
+			t.Fatalf("stopped = %v", c)
+		}
+
+		// The recorder uploads the WebM; it becomes a huddle_recording message, larger than ordinary files may be.
+		webm := append([]byte{0x1a, 0x45, 0xdf, 0xa3}, bytes.Repeat([]byte{1}, 26<<20)...)
+		req, _ := http.NewRequest("POST", lead.srv.URL+"/api/v1/conversations/"+conv+"/files?recording=1&name="+url.QueryEscape("Huddle 13 Oct.webm"), bytes.NewReader(webm))
+		req.Header.Set("Authorization", "Bearer "+lead.token)
+		req.Header.Set("Content-Type", "application/octet-stream")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		spec.check(t, req, res)
+		var m map[string]any
+		_ = json.NewDecoder(res.Body).Decode(&m)
+		res.Body.Close()
+		expect(t, res.StatusCode, 201, m)
+		if m["kind"] != "huddle_recording" || m["file"].(map[string]any)["type"] != "video/webm" {
+			t.Fatalf("recording message = %v", m)
+		}
+		res = eve.raw("GET", m["file"].(map[string]any)["url"].(string), nil, nil)
+		res.Body.Close()
+		expect(t, res.StatusCode, 404, nil)
 	})
 }

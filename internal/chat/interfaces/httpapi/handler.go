@@ -429,8 +429,12 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 
 // upload: the request body is the file (≤ 25 MB), ?name= its name.
 func (h *Handler) upload(w http.ResponseWriter, r *http.Request) {
-	body := http.MaxBytesReader(w, r.Body, domain.MaxFile+1)
-	m, err := h.svc.Upload(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), r.URL.Query().Get("name"), body)
+	upload, limit := h.svc.Upload, int64(domain.MaxFile)
+	if r.URL.Query().Get("recording") == "1" {
+		upload, limit = h.svc.UploadRecording, domain.MaxRecording
+	}
+	body := http.MaxBytesReader(w, r.Body, limit+1)
+	m, err := upload(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), r.URL.Query().Get("name"), body)
 	var tooBig *http.MaxBytesError
 	if errors.As(err, &tooBig) {
 		err = domain.ErrInvalidFile

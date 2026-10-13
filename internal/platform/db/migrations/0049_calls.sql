@@ -11,6 +11,9 @@ CREATE TABLE calls (
     presentation_kind text CHECK (presentation_kind IN ('doc', 'whiteboard')),
     presentation_ref  text,
     presentation_by   uuid,
+    -- S62: who records the call, since when
+    recording_by      uuid,
+    recording_since   timestamptz,
     version         integer NOT NULL DEFAULT 0
 );
 -- One live call per conversation, enforced by the database.

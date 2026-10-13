@@ -527,3 +527,4 @@ a.user:hover { text-decoration: underline; }
 .chat-video { max-width: min(480px, 100%); border-radius: 8px; display: block; margin: 4px 0; }
 .chat-file { display: inline-block; margin: 4px 0; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.huddle-recording { margin: 0 0 8px; color: #d33; font-weight: 600; }

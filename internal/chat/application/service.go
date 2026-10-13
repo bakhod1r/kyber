@@ -524,6 +524,15 @@ func (c *counter) Read(p []byte) (int, error) {
 // Upload stores a file and posts it to the conversation (members only). Its type is detected from the
 // content, never taken from the client; files over MaxFile are refused and leave nothing behind.
 func (s *Service) Upload(ctx context.Context, actor, conv, name string, body io.Reader) (*domain.Message, error) {
+	return s.upload(ctx, actor, conv, name, body, false)
+}
+
+// UploadRecording posts a huddle recording (a video up to MaxRecording) to the conversation.
+func (s *Service) UploadRecording(ctx context.Context, actor, conv, name string, body io.Reader) (*domain.Message, error) {
+	return s.upload(ctx, actor, conv, name, body, true)
+}
+
+func (s *Service) upload(ctx context.Context, actor, conv, name string, body io.Reader, recording bool) (*domain.Message, error) {
 	if s.d.Blobs == nil {
 		return nil, domain.ErrInvalidFile
 	}
@@ -538,12 +547,20 @@ func (s *Service) Upload(ctx context.Context, actor, conv, name string, body io.
 	head, _ := br.Peek(512)
 	typ, _, _ := strings.Cut(http.DetectContentType(head), ";")
 	id := domain.MessageID(s.d.NewID())
-	cr := &counter{r: io.LimitReader(br, domain.MaxFile+1)}
+	limit := int64(domain.MaxFile)
+	if recording {
+		limit = domain.MaxRecording
+	}
+	cr := &counter{r: io.LimitReader(br, limit+1)}
 	if err := s.d.Blobs.Put(ctx, string(id), cr); err != nil {
 		return nil, err
 	}
 	now := s.d.Now()
-	m, err := domain.NewFileMessage(id, c.ID, domain.UserID(actor), domain.File{Name: name, Type: typ, Size: cr.n}, now)
+	newMessage := domain.NewFileMessage
+	if recording {
+		newMessage = domain.NewRecordingMessage
+	}
+	m, err := newMessage(id, c.ID, domain.UserID(actor), domain.File{Name: name, Type: typ, Size: cr.n}, now)
 	if err == nil {
 		err = s.d.Messages.Post(ctx, m)
 	}

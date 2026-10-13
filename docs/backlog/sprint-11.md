@@ -67,7 +67,7 @@ backends.
   live changes and named cursors, SVG/PNG export; e2e with two browsers drawing together. Sticky note → issue: next.
 - **S60 Shared file in a call** — "present to all": everyone opens the same Markdown doc or whiteboard, edits it
   together and comments on a line/element; the presenter can follow-me (everyone scrolls with them).
-- **S62 Huddle recording** (requested 2026-10-13; needs S54b) — "Record" in a huddle: everyone sees a red
+- ✅ **S62 Huddle recording** (requested 2026-10-13; needs S54b) — "Record" in a huddle: everyone sees a red
   "● Recording by Ali" banner (consent; anyone may leave); the recorder's browser composes the participants'
   video (grid, or the presented screen/file large) on a canvas and mixes all audio (Web Audio) into one
   `MediaRecorder` WebM; on stop it uploads through BlobStore and the recording appears in the conversation as a
