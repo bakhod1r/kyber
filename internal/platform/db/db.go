@@ -5,6 +5,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"github.com/bakhod1r/kyber/internal/platform/otel"
 	"io/fs"
 	"sort"
 
@@ -21,6 +22,7 @@ func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
+	cfg.ConnConfig.Tracer = otel.QueryTracer{} // a span per statement (no-op while tracing is off)
 	return OpenConfig(ctx, cfg)
 }
 

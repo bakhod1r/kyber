@@ -2,6 +2,7 @@
 package main
 
 import (
+	"runtime/debug"
 	"strings"
 
 	"context"
@@ -22,11 +23,12 @@ import (
 
 	"github.com/bakhod1r/kyber/internal/platform/config"
 	"github.com/bakhod1r/kyber/internal/platform/db"
+	"github.com/bakhod1r/kyber/internal/platform/otel"
 	"github.com/bakhod1r/kyber/internal/server"
 )
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	log := slog.New(otel.LogHandler{Handler: slog.NewJSONHandler(os.Stdout, nil)})
 	cfg, err := config.Load()
 	if err != nil {
 		log.Error("invalid configuration", "err", err)
@@ -36,6 +38,19 @@ func main() {
 	addr := cfg.Addr
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	shutdownTracing, err := otel.Setup(ctx, "kyber", buildVersion(), os.Getenv)
+	if err != nil {
+		log.Error("tracing setup failed", "err", err)
+		os.Exit(1)
+	}
+	defer func() {
+		flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownTracing(flushCtx); err != nil {
+			log.Warn("tracing shutdown", "err", err)
+		}
+	}()
+	log.Info("tracing", "enabled", otel.Enabled(os.Getenv))
 
 	handler, cleanup, err := newHandler(ctx, log, cfg)
 	if err != nil {
@@ -139,4 +154,19 @@ func mailer(cfg *config.Config) ([]server.Option, error) {
 		return nil, err
 	}
 	return []server.Option{server.WithMailer(m)}, nil
+}
+
+// buildVersion is the module version the binary was built from ("(devel)" for local builds),
+// or its VCS revision when that is known.
+func buildVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	for _, kv := range info.Settings {
+		if kv.Key == "vcs.revision" {
+			return kv.Value
+		}
+	}
+	return info.Main.Version
 }

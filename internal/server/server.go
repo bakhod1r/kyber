@@ -103,6 +103,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 	"github.com/bakhod1r/kyber/internal/platform/id"
 	"github.com/bakhod1r/kyber/internal/platform/metrics"
+	"github.com/bakhod1r/kyber/internal/platform/otel"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	projectapp "github.com/bakhod1r/kyber/internal/project/application"
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
@@ -423,9 +424,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
-	mux.Handle("/api/v1/", auth.RequireAuth(tenancy.RequireMember(audit.Record(problemFallback(api)))))
+	mux.Handle("/api/v1/", auth.RequireAuth(tenancy.RequireMember(audit.Record(problemFallback(otel.Routed(api))))))
 	mux.Handle("/", web.Handler(web.Dist()))
-	return observe(log, m, recoverer(log, tenancy.Resolve(mux)))
+	return otel.Middleware(observe(log, m, recoverer(log, tenancy.Resolve(otel.Routed(mux)))))
 }
 
 func observe(log *slog.Logger, m *metrics.HTTP, next http.Handler) http.Handler {

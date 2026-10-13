@@ -27,3 +27,4 @@
 ./internal/form/domain
 ./internal/form/application
 ./internal/form/infrastructure/memory
+./internal/platform/otel

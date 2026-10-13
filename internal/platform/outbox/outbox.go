@@ -13,6 +13,11 @@ import (
 	"time"
 
 	"github.com/bakhod1r/jitterx"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/bakhod1r/kyber/internal/platform/otel"
 )
 
 // Event is a domain event (any context's) as stored in the outbox.
@@ -65,8 +70,13 @@ func (r *Relay) ProcessOnce(ctx context.Context) (int, error) {
 		if m.Workspace != "" {
 			hctx = tenant.With(ctx, m.Workspace)
 		}
+		hctx, span := otel.Tracer().Start(hctx, "outbox "+m.Name, trace.WithSpanKind(trace.SpanKindConsumer),
+			trace.WithAttributes(attribute.Int64("outbox.id", m.ID), attribute.Int("outbox.handlers", len(hs))))
+		defer span.End()
 		for _, h := range hs {
 			if err := h(hctx, m); err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 				return fmt.Errorf("outbox %d %s: %w", m.ID, m.Name, err)
 			}
 		}
