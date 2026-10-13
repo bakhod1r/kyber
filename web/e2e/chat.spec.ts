@@ -88,8 +88,8 @@ test("chat between two people arrives live", async ({ browser }) => {
   await a.getByLabel("Project news", { exact: true }).selectOption(key);
   await expect(a.getByLabel("Project news", { exact: true })).toHaveValue(key);
   await ali.call("POST", `/api/v1/projects/${key}/issues`, { title: "Announce the release", type: "task" });
-  const news = a.getByRole("article", { name: /Project news/ });
-  await expect(news).toContainText(`created ${key}-3`);
+  const news = a.getByRole("article", { name: /Project news/ }).filter({ hasText: `created ${key}-3` });
+  await expect(news).toBeVisible();
   await expect(news.getByRole("link", { name: `${key}-3 Announce the release` })).toBeVisible();
   await a.getByRole("button", { name: "⚙ Settings" }).click(); // close
 

@@ -42,7 +42,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeProjectNotFound, true
 	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidTime), errors.Is(err, application.ErrNotMember),
 		errors.Is(err, application.ErrRange), errors.Is(err, errBadRange), errors.Is(err, application.ErrInPast),
-		errors.Is(err, domain.ErrInvalidAudience), errors.Is(err, domain.ErrInvalidResponse):
+		errors.Is(err, domain.ErrInvalidAudience), errors.Is(err, domain.ErrInvalidResponse), errors.Is(err, application.ErrNoConversation):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -59,6 +59,8 @@ type meetingDTO struct {
 	AttendeeIDs []string  `json:"attendee_ids"`
 	Scope       string    `json:"scope"`
 	ProjectKey  *string   `json:"project_key"`
+	// ConversationID is the channel whose huddle the meeting happens in (S76); null when none.
+	ConversationID *string `json:"conversation_id"`
 	// Responses maps attendee ids to going, maybe or declined (attendees who answered).
 	Responses map[string]string `json:"responses"`
 }
@@ -75,6 +77,10 @@ func toDTO(m *domain.Meeting) meetingDTO {
 	if m.Audience.Project != "" {
 		p := m.Audience.Project
 		d.ProjectKey = &p
+	}
+	if m.Conversation != "" {
+		c := m.Conversation
+		d.ConversationID = &c
 	}
 	return d
 }
@@ -111,19 +117,20 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Title       string    `json:"title"`
-		StartsAt    time.Time `json:"starts_at"`
-		EndsAt      time.Time `json:"ends_at"`
-		AttendeeIDs []string  `json:"attendee_ids"`
-		Scope       string    `json:"scope"`
-		ProjectKey  string    `json:"project_key"`
+		Title        string    `json:"title"`
+		StartsAt     time.Time `json:"starts_at"`
+		EndsAt       time.Time `json:"ends_at"`
+		AttendeeIDs  []string  `json:"attendee_ids"`
+		Scope        string    `json:"scope"`
+		ProjectKey   string    `json:"project_key"`
+		Conversation string    `json:"conversation_id"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	m, err := h.svc.Schedule(r.Context(), auth.Actor(r.Context()), application.Schedule{Title: in.Title, Start: in.StartsAt, End: in.EndsAt,
-		Attendees: in.AttendeeIDs, Scope: in.Scope, Project: in.ProjectKey})
+		Attendees: in.AttendeeIDs, Scope: in.Scope, Project: in.ProjectKey, Conversation: in.Conversation})
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return

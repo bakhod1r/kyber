@@ -7,6 +7,7 @@ import { AuthPage } from "../contexts/identity/ui/AuthPage";
 import { LandingPage } from "./LandingPage";
 import { MeetingsPage } from "../contexts/calendar/ui/MeetingsPage";
 import { ChatPage, type ConversationSlot } from "../contexts/chat/ui/ChatPage";
+import { chatUseCases } from "../contexts/chat/application";
 import { ConversationExtras } from "./ConversationExtras";
 import { ChatMentions } from "../contexts/notify/ui/ChatMentions";
 import { issueFromMessage, runChatCommand } from "./chatCommands";
@@ -24,6 +25,13 @@ import { identityUseCases } from "../contexts/identity/application";
 import { SearchPage } from "../contexts/search/ui/SearchPage";
 
 export const ME = ["me"];
+
+/** The time table, with the channels a meeting can happen in (S76). */
+function Meetings() {
+  const convs = useQuery({ queryKey: ["chat", "conversations"], queryFn: chatUseCases.conversations });
+  const channels = (convs.data ?? []).filter((c) => c.kind === "channel" && c.member && !c.archived).map((c) => ({ id: c.id, name: c.name }));
+  return <MeetingsPage channels={channels} />;
+}
 
 function useMe() {
   return useQuery({
@@ -82,7 +90,7 @@ export function AppRoutes() {
       <Route path="/projects/:key/notifications" element={<RequireUser><ProjectPage view="notifications" /></RequireUser>} />
       <Route path="/chat" element={<RequireUser><ChatPage extras={extras} activity={<ChatMentions />} commands={runChatCommand} issueMaker={issueFromMessage} /></RequireUser>} />
       <Route path="/chat/:id" element={<RequireUser><ChatPage extras={extras} activity={<ChatMentions />} commands={runChatCommand} issueMaker={issueFromMessage} /></RequireUser>} />
-      <Route path="/meetings" element={<RequireUser><MeetingsPage /></RequireUser>} />
+      <Route path="/meetings" element={<RequireUser><Meetings /></RequireUser>} />
       <Route path="/search" element={<RequireUser><SearchPage /></RequireUser>} />
       <Route path="/settings" element={<RequireUser><SettingsPage /></RequireUser>} />
       <Route path="*" element={<Navigate to="/" replace />} />

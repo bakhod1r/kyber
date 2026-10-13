@@ -67,17 +67,26 @@ function StreamAudio({ stream }: { stream?: MediaStream }) {
  * Zoom-style huddle of a conversation (S57): start or join, then a grid of participants with microphone,
  * camera and screen-share controls. Media flows browser to browser (WebRTC mesh, ADR-0009).
  */
-export function Huddle({ conversationId, me, names, platform, presentables = [], renderPresentation, renderChat }: {
+export function Huddle({ conversationId, me, names, platform, presentables = [], renderPresentation, renderChat, autoJoin }: {
   conversationId: string; me: string; names: Map<string, string>; platform?: Platform;
   /** Docs and whiteboards that can be presented; renderPresentation draws the presented one. */
   presentables?: Presentable[]; renderPresentation?: RenderPresentation;
   /** The huddle's chat (S75), composed by the app shell. */
   renderChat?: (call: Call) => ReactNode;
+  /** Join (or start) the huddle right away, e.g. from a meeting's "Join huddle" (S76). */
+  autoJoin?: boolean;
 }) {
   const h = useHuddle(conversationId, me, platform);
   const { call, state } = h;
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
+  const joining = useRef(false);
+  useEffect(() => {
+    if (autoJoin && !joining.current && !h.state.joined) {
+      joining.current = true;
+      void h.join();
+    }
+  }, [autoJoin, h]);
   const remoteAudio: Record<string, MediaStream | undefined> = {};
   for (const [id, r] of Object.entries(state.remotes)) remoteAudio[id] = r.camera;
   const speaking = useSpeaking({ ...remoteAudio, [me]: state.joined && state.media.audio ? state.local : undefined });

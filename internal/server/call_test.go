@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bakhod1r/kyber/internal/server"
 )
@@ -252,5 +253,32 @@ func TestHuddleHandsAndReactions(t *testing.T) {
 		expect(t, code, 422, b)
 		code, b = eve.do("POST", base+"/reactions", map[string]string{"emoji": "🎉"})
 		expect(t, code, 404, b)
+	})
+}
+
+// S76: a meeting held in a channel's huddle; only channels the organizer may read.
+func TestMeetingHuddle(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		_, devMe := dev.do("GET", "/api/v1/me", nil)
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "sync"})
+		_, secret := dev.do("POST", "/api/v1/channels", map[string]any{"name": "secret", "private": true})
+		start := time.Now().Add(time.Hour).UTC().Truncate(time.Minute)
+		body := func(conv string) map[string]any {
+			return map[string]any{"title": "Weekly sync", "starts_at": start.Format(time.RFC3339), "ends_at": start.Add(30 * time.Minute).Format(time.RFC3339),
+				"attendee_ids": []string{devMe["id"].(string)}, "conversation_id": conv}
+		}
+		code, b := lead.do("POST", "/api/v1/meetings", body(secret["id"].(string)))
+		expect(t, code, 422, b)
+		code, m := lead.do("POST", "/api/v1/meetings", body(ch["id"].(string)))
+		expect(t, code, 201, m)
+		if m["conversation_id"] != ch["id"] {
+			t.Fatalf("meeting = %v", m)
+		}
+		_, day := dev.do("GET", "/api/v1/meetings?from="+start.Add(-time.Hour).Format(time.RFC3339)+"&to="+start.Add(time.Hour).Format(time.RFC3339), nil)
+		if items := day["items"].([]any); len(items) != 1 || items[0].(map[string]any)["conversation_id"] != ch["id"] {
+			t.Fatalf("dev's time table = %v", day)
+		}
 	})
 }

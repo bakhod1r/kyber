@@ -26,6 +26,7 @@ func Run(t *testing.T, r domain.Repository) {
 		return m
 	}
 	standup := mk("71000000-0000-4000-8000-000000000001", "Standup", t0, 15, domain.Audience{}, Dev)
+	standup.Conversation = "72000000-0000-4000-8000-000000000001" // S76: its huddle
 	review := mk("71000000-0000-4000-8000-000000000002", "Review", t0.Add(3*time.Hour), 60, domain.Audience{Scope: domain.ScopeProject, Project: "KYB"}, Dev, Other)
 	for _, m := range []*domain.Meeting{review, standup} {
 		if err := r.Create(ctx, m); err != nil {
@@ -34,7 +35,7 @@ func Run(t *testing.T, r domain.Repository) {
 	}
 	got, err := r.ByID(ctx, standup.ID)
 	if err != nil || got.Title != "Standup" || len(got.Attendees) != 2 || !got.Start.Equal(t0) || got.Workspace != WS || got.Organizer != Lead ||
-		got.Audience.Scope != domain.ScopePeople || got.Reminded || len(got.Responses) != 0 {
+		got.Audience.Scope != domain.ScopePeople || got.Reminded || len(got.Responses) != 0 || got.Conversation != standup.Conversation {
 		t.Fatalf("ByID = %+v %v", got, err)
 	}
 	if got, _ := r.ByID(ctx, review.ID); got.Audience != (domain.Audience{Scope: domain.ScopeProject, Project: "KYB"}) {

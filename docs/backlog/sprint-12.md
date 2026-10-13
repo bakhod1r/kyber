@@ -72,8 +72,11 @@ Order: daily use first, then channel management, Jira integration, huddle extras
   **Done:** `PUT /calls/{id}/hand` (stored on the participant, migration 0062), `POST /calls/{id}/reactions` →
   live `call.reaction`; "💬 Huddle chat" is the thread of the call's "started a huddle" message, composed by the app
   shell. API 0.54.0.
-- **S76 Join a meeting's huddle** — a meeting in the Time table can be linked to a channel; "Join" opens its
+- ✅ **S76 Join a meeting's huddle** — a meeting in the Time table can be linked to a channel; "Join" opens its
   huddle. AC: only for people invited to the meeting who may read the channel.
+  **Done:** meetings take `conversation_id` (a channel the organizer may read, via an ACL to Chat; migration 0063);
+  the time table shows "🎧 Join huddle" → `/chat/{id}?huddle=join` joins at once (reading is still checked by
+  Chat). API 0.55.0.
 - **S77 Recording transcripts (optional)** — a transcript and summary for a recording when a speech-to-text
   service is configured (off by default; no data leaves the server without it).
 

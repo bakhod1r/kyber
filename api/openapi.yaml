@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.54.0
+  version: 0.55.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -416,6 +416,7 @@ paths:
                 attendee_ids: { type: array, items: { type: string } }
                 scope: { type: string, enum: ["", people, project, workspace] }
                 project_key: { type: string }
+                conversation_id: { type: string, description: "Optional: a channel the organizer may read; the meeting happens in its huddle (S76)." }
       responses:
         "201": { description: Scheduled, content: { application/json: { schema: { $ref: "#/components/schemas/Meeting" } } } }
         "400": { $ref: "#/components/responses/Error" }
@@ -3133,7 +3134,7 @@ components:
     Meeting:
       type: object
       additionalProperties: false
-      required: [id, title, starts_at, ends_at, organizer_id, attendee_ids, scope, project_key, responses]
+      required: [id, title, starts_at, ends_at, organizer_id, attendee_ids, scope, project_key, conversation_id, responses]
       properties:
         id: { type: string }
         title: { type: string }
@@ -3143,6 +3144,7 @@ components:
         attendee_ids: { type: array, items: { type: string } }
         scope: { type: string, enum: [people, project, workspace] }
         project_key: { type: [string, "null"] }
+        conversation_id: { type: [string, "null"], description: "The chat channel whose huddle the meeting happens in (S76)." }
         responses: { type: object, additionalProperties: { type: string, enum: [going, maybe, declined] }, description: Attendee id → answer (those who answered). }
     FocusSession:
       type: object

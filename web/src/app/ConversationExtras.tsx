@@ -1,5 +1,6 @@
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { type Presentable, type Presentation } from "../contexts/call/application";
 import { Huddle } from "../contexts/call/ui/Huddle";
 import { notifyUseCases } from "../contexts/notify/application";
@@ -33,6 +34,7 @@ function HuddleChat({ call, me, names }: { call: Call; me: string; names: Map<st
  */
 export function ConversationExtras({ conversationId, me, names }: { conversationId: string; me: string; names: Map<string, string> }) {
   const qc = useQueryClient();
+  const [params] = useSearchParams(); // ?huddle=join from a meeting (S76)
   // Opening the conversation reads my mentions in it (S64).
   useEffect(() => {
     void notifyUseCases.markConversationRead(conversationId).then(() => qc.invalidateQueries({ queryKey: ["notifications"] }), () => {});
@@ -49,6 +51,7 @@ export function ConversationExtras({ conversationId, me, names }: { conversation
   return (
     <div className="conversation-extras">
       <Huddle conversationId={conversationId} me={me} names={names} presentables={presentables} renderPresentation={render}
+        autoJoin={params.get("huddle") === "join"}
         renderChat={(call) => <HuddleChat call={call} me={me} names={names} />} />
       <Whiteboards conversationId={conversationId} me={me} names={names} />
     </div>
