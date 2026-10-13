@@ -40,7 +40,8 @@ function routes() {
     "GET /api/v1/conversations/c-1/messages": { status: 200, body: { items: [
       message("m-2", "KYB-1 is ready @ali@x.uz", { issues: [{ key: "KYB-1", title: "Login page", status: "done" }], reply_count: 1,
         reactions: [{ emoji: "🎉", user_ids: ["u-2"] }] }),
-      message("m-1", "morning", { author_id: "u-1" })] } },
+      message("m-1", "morning", { author_id: "u-1" }),
+      message("m-0", "started a huddle", { kind: "huddle_started" })] } },
     "POST /api/v1/conversations/c-1/read": { status: 204 },
     "POST /api/v1/conversations/c-1/typing": { status: 204 },
     "POST /api/v1/conversations/c-1/messages": { status: 201, body: message("m-3", "ship it", { author_id: "u-1" }) },
@@ -80,6 +81,7 @@ describe("Chat (S53)", () => {
     expect(within(history).getByText("@ali@x.uz")).toHaveClass("chat-mention");
     expect(within(history).getByRole("button", { name: "1 reply" })).toBeInTheDocument();
     expect(await screen.findByText("All hands")).toBeInTheDocument();
+    expect(within(history).getByRole("article", { name: /Huddle at/ })).toHaveTextContent("Bobur started a huddle");
     expect(calls.some((c) => c.key === "POST /api/v1/conversations/c-1/read")).toBe(true);
   });
 

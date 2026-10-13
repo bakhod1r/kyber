@@ -1,6 +1,8 @@
 // chat: HTTP gateway to the chat API and the realtime stream (infrastructure).
 import { request, seg, type List } from "../../../shared/http";
-import { subscribe } from "../../../shared/stream";
+import { onConnect, subscribe } from "../../../shared/stream";
+
+export { onConnect };
 import type { ChatEvent, Conversation, Message } from "../domain/model";
 
 const conv = (id: string) => `/api/v1/conversations/${seg(id)}`;

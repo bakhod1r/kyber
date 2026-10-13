@@ -56,6 +56,13 @@ func TestHuddle(t *testing.T) {
 		if _, now := dev.do("GET", url, nil); now["call"] != nil {
 			t.Fatalf("after leaving = %v", now)
 		}
+		// The conversation shows that a huddle happened (system messages from call.started/call.ended).
+		convURL := "/api/v1/conversations/" + ch["id"].(string) + "/messages"
+		eventuallyJSON(t, dev, convURL, func(b map[string]any) bool { return len(b["items"].([]any)) == 2 })
+		_, page := dev.do("GET", convURL, nil)
+		if items := page["items"].([]any); items[0].(map[string]any)["kind"] != "huddle_ended" || items[1].(map[string]any)["kind"] != "huddle_started" {
+			t.Fatalf("system messages = %v", page)
+		}
 		code, b = dev.do("POST", callURL+"/leave", nil)
 		expect(t, code, 409, b)
 

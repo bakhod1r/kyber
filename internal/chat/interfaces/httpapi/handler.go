@@ -94,6 +94,7 @@ type messageDTO struct {
 	Deleted        bool       `json:"deleted"`
 	ThreadID       *string    `json:"thread_id"`
 	ReplyCount     int        `json:"reply_count"`
+	Kind           string     `json:"kind"`
 	Reactions      []reaction `json:"reactions"`
 	Issues         []issueDTO `json:"issues"`
 }
@@ -111,7 +112,7 @@ type reaction struct {
 
 func toMessage(m *domain.Message) messageDTO {
 	d := messageDTO{ID: string(m.ID), ConversationID: string(m.Conversation), AuthorID: string(m.Author), Body: m.Body,
-		CreatedAt: m.CreatedAt, Deleted: m.Deleted, ReplyCount: m.ReplyCount, Reactions: []reaction{}}
+		CreatedAt: m.CreatedAt, Deleted: m.Deleted, ReplyCount: m.ReplyCount, Kind: string(m.Kind), Reactions: []reaction{}}
 	if !m.EditedAt.IsZero() {
 		d.EditedAt = &m.EditedAt
 	}

@@ -141,10 +141,10 @@ type Messages struct{ pool *pgxpool.Pool }
 
 func NewMessages(pool *pgxpool.Pool) *Messages { return &Messages{pool: pool} }
 
-const insertCols = `id, conversation_id, author_id, body, created_at, edited_at, deleted, thread_id`
+const insertCols = `id, conversation_id, author_id, body, created_at, edited_at, deleted, thread_id, kind, ref`
 
 // msgCols reads a message (alias m) with its reply count and reactions ("emoji user,user" rows).
-const msgCols = `m.id, m.conversation_id, m.author_id, m.body, m.created_at, m.edited_at, m.deleted, coalesce(m.thread_id::text, ''),
+const msgCols = `m.id, m.conversation_id, m.author_id, m.body, m.created_at, m.edited_at, m.deleted, coalesce(m.thread_id::text, ''), m.kind, m.ref,
 	(SELECT count(*) FROM messages r WHERE r.thread_id = m.id AND NOT r.deleted),
 	ARRAY(SELECT x.emoji || ' ' || string_agg(x.user_id::text, ',' ORDER BY x.user_id) FROM message_reactions x
 		WHERE x.message_id = m.id GROUP BY x.emoji ORDER BY x.emoji)`
@@ -153,7 +153,7 @@ func scanMsg(row pgx.CollectableRow) (*domain.Message, error) {
 	var m domain.Message
 	var edited *time.Time
 	var reactions []string
-	if err := row.Scan(&m.ID, &m.Conversation, &m.Author, &m.Body, &m.CreatedAt, &edited, &m.Deleted, &m.Thread, &m.ReplyCount, &reactions); err != nil {
+	if err := row.Scan(&m.ID, &m.Conversation, &m.Author, &m.Body, &m.CreatedAt, &edited, &m.Deleted, &m.Thread, &m.Kind, &m.Ref, &m.ReplyCount, &reactions); err != nil {
 		return nil, err
 	}
 	for _, r := range reactions {
@@ -184,8 +184,12 @@ func (s *Messages) Post(ctx context.Context, m *domain.Message) error {
 		thread = (*string)(&m.Thread)
 	}
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `INSERT INTO messages (`+insertCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			string(m.ID), string(m.Conversation), string(m.Author), m.Body, m.CreatedAt, editedAt(m), m.Deleted, thread); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO messages (`+insertCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			string(m.ID), string(m.Conversation), string(m.Author), m.Body, m.CreatedAt, editedAt(m), m.Deleted, thread, string(m.Kind), m.Ref); err != nil {
+			var pg *pgconn.PgError
+			if errors.As(err, &pg) && pg.ConstraintName == "messages_ref" {
+				return domain.ErrDuplicateRef
+			}
 			return err
 		}
 		return db.WriteOutbox(ctx, tx, m.PullEvents())

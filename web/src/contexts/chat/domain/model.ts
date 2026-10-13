@@ -8,6 +8,8 @@ export type IssuePreview = { key: string; title: string; status: string };
 export type Message = {
   id: string; conversation_id: string; author_id: string; body: string; created_at: string; edited_at: string | null;
   deleted: boolean; thread_id: string | null; reply_count: number; reactions: Reaction[]; issues: IssuePreview[];
+  /** System messages (a huddle started or ended); people's messages have none. */
+  kind?: "" | "huddle_started" | "huddle_ended";
 };
 
 /** Events on the realtime stream (GET /api/v1/stream). Stream messages carry no issue previews. */

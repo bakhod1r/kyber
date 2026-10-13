@@ -33,9 +33,13 @@ CREATE TABLE messages (
     edited_at       timestamptz,
     deleted         boolean NOT NULL DEFAULT false,
     thread_id       uuid REFERENCES messages (id) ON DELETE CASCADE,
+    -- System messages (e.g. a huddle started): their kind, and what they are about (unique).
+    kind            text NOT NULL DEFAULT '' CHECK (kind IN ('', 'huddle_started', 'huddle_ended')),
+    ref             text NOT NULL DEFAULT '',
     CHECK (deleted OR btrim(body) <> '')
 );
 CREATE INDEX messages_history ON messages (conversation_id, created_at DESC, id DESC) WHERE thread_id IS NULL;
+CREATE UNIQUE INDEX messages_ref ON messages (ref) WHERE ref <> '';
 CREATE INDEX messages_thread ON messages (thread_id, created_at) WHERE thread_id IS NOT NULL;
 
 CREATE TABLE message_reactions (

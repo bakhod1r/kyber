@@ -1,6 +1,8 @@
 // call: HTTP gateway to the huddle API and its realtime events (infrastructure).
 import { request, seg } from "../../../shared/http";
-import { subscribe } from "../../../shared/stream";
+import { onConnect, subscribe } from "../../../shared/stream";
+
+export { onConnect };
 import type { Call, FollowView, IceServer, Media, PresentKind, Signal, SignalKind } from "../domain/model";
 
 const conv = (id: string) => `/api/v1/conversations/${seg(id)}/call`;

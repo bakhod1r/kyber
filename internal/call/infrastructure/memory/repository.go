@@ -5,13 +5,36 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/bakhod1r/kyber/internal/call/domain"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 )
 
 type Repository struct {
-	mu    sync.Mutex
-	calls map[domain.CallID]domain.Call
+	mu     sync.Mutex
+	calls  map[domain.CallID]domain.Call
+	outbox []domain.Event
+	outAt  []outbox.Meta
+}
+
+// Outbox returns the published events written so far; OutboxMeta their envelope.
+func (r *Repository) Outbox() []domain.Event {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]domain.Event(nil), r.outbox...)
+}
+
+func (r *Repository) OutboxMeta() []outbox.Meta {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]outbox.Meta(nil), r.outAt...)
+}
+
+func (r *Repository) record(ctx context.Context, c *domain.Call) {
+	for _, e := range c.PullEvents() {
+		r.outbox, r.outAt = append(r.outbox, e), append(r.outAt, outbox.MetaOf(ctx, time.Now()))
+	}
 }
 
 func NewRepository() *Repository { return &Repository{calls: map[domain.CallID]domain.Call{}} }
@@ -25,7 +48,7 @@ func clone(c domain.Call) *domain.Call {
 	return &c
 }
 
-func (r *Repository) Create(_ context.Context, c *domain.Call) error {
+func (r *Repository) Create(ctx context.Context, c *domain.Call) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, o := range r.calls {
@@ -33,11 +56,12 @@ func (r *Repository) Create(_ context.Context, c *domain.Call) error {
 			return domain.ErrCallLive
 		}
 	}
+	r.record(ctx, c)
 	r.calls[c.ID] = *clone(*c)
 	return nil
 }
 
-func (r *Repository) Save(_ context.Context, c *domain.Call) error {
+func (r *Repository) Save(ctx context.Context, c *domain.Call) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	old, ok := r.calls[c.ID]
@@ -48,6 +72,7 @@ func (r *Repository) Save(_ context.Context, c *domain.Call) error {
 		return domain.ErrConflict
 	}
 	c.Version++
+	r.record(ctx, c)
 	r.calls[c.ID] = *clone(*c)
 	return nil
 }

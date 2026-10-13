@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { subscribe } from "./stream";
+import { onConnect, subscribe } from "./stream";
 
 class FakeEventSource {
   static opened: FakeEventSource[] = [];
@@ -14,6 +14,7 @@ class FakeEventSource {
   close() {
     this.closed = true;
   }
+  onopen: (() => void) | null = null;
   emit(type: string, data: unknown) {
     this.listeners.get(type)?.(new MessageEvent(type, { data: JSON.stringify(data) }));
   }
@@ -41,7 +42,24 @@ describe("shared stream", () => {
     expect(es.closed).toBe(false);
     stopCall();
     expect(es.closed).toBe(true);
-    subscribe(["typing"], () => {});
+    const stopAgain = subscribe(["typing"], () => {});
     expect(FakeEventSource.opened).toHaveLength(2);
+    stopAgain();
+  });
+});
+
+describe("connections", () => {
+  it("tells listeners whenever the stream (re)connects, so they reload what they may have missed", () => {
+    let n = 0;
+    const stopListen = onConnect(() => n++);
+    const stop = subscribe(["typing"], () => {});
+    const es = FakeEventSource.opened.at(-1)!;
+    es.onopen?.();
+    es.onopen?.(); // a reconnect
+    expect(n).toBe(2);
+    stopListen();
+    es.onopen?.();
+    expect(n).toBe(2);
+    stop();
   });
 });

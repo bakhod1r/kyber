@@ -2,7 +2,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { Call, FollowView, PresentKind } from "../domain/model";
-import { callGateway, onCallEvents } from "../infrastructure/gateway";
+import { callGateway, onCallEvents, onConnect } from "../infrastructure/gateway";
 import { browserPlatform } from "../infrastructure/webrtc";
 import type { Platform } from "../domain/model";
 import { HuddleEngine } from "./engine";
@@ -25,6 +25,8 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
       onCallEvents(
         (c: Call) => {
           if (c.conversation_id !== conversationId) return;
+          // A fetch still in flight would answer with the older state and overwrite this one.
+          void qc.cancelQueries({ queryKey: liveKey(conversationId) });
           qc.setQueryData(liveKey(conversationId), c.live ? c : null);
           engine.update(c);
         },
@@ -36,6 +38,8 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
     [conversationId, engine, qc],
   );
   useEffect(() => () => void engine.leave(), [engine]); // leaving the page leaves the huddle
+  // A huddle that started before our stream connected would otherwise go unnoticed.
+  useEffect(() => onConnect(() => void qc.invalidateQueries({ queryKey: liveKey(conversationId) })), [conversationId, qc]);
 
   const call = state.joined ? state.call : (live.data ?? null);
   return {

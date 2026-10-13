@@ -183,3 +183,19 @@ func TestIssueKeys(t *testing.T) {
 		t.Fatal("previews are capped")
 	}
 }
+
+func TestSystemMessage(t *testing.T) {
+	m := domain.NewSystemMessage("m-1", "c-1", "u-a", domain.KindHuddleStarted, "call:k-1:started", "started a huddle", t0)
+	if m.Kind != domain.KindHuddleStarted || m.Ref != "call:k-1:started" || m.Author != "u-a" || len(m.PullEvents()) != 0 {
+		t.Fatalf("system = %+v (no outbox event: nobody is mentioned by the system)", m)
+	}
+	if err := m.Edit("u-a", "x", t0); !errors.Is(err, domain.ErrNotAuthor) {
+		t.Fatalf("edit system message = %v", err)
+	}
+	if _, err := m.React("u-b", "🎉"); err != nil {
+		t.Fatalf("react to system message = %v", err)
+	}
+	if _, err := domain.NewReply("m-2", m, "u-b", "joining", t0); err != nil {
+		t.Fatalf("reply to system message = %v", err)
+	}
+}

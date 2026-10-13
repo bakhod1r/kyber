@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/bakhod1r/kyber/internal/call/domain"
+	"github.com/bakhod1r/kyber/internal/platform/db"
 	"github.com/bakhod1r/kyber/internal/platform/id"
 )
 
@@ -45,7 +46,10 @@ func (r *Repository) Create(ctx context.Context, c *domain.Call) error {
 			c.StartedAt, ended(c), c.Version); err != nil {
 			return err
 		}
-		return writeParticipants(ctx, tx, c)
+		if err := writeParticipants(ctx, tx, c); err != nil {
+			return err
+		}
+		return db.WriteOutbox(ctx, tx, c.PullEvents())
 	})
 	var pg *pgconn.PgError
 	if errors.As(err, &pg) && pg.ConstraintName == "calls_one_live" {
@@ -69,7 +73,7 @@ func (r *Repository) Save(ctx context.Context, c *domain.Call) error {
 			return err
 		}
 		c.Version++
-		return nil
+		return db.WriteOutbox(ctx, tx, c.PullEvents())
 	})
 }
 

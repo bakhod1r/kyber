@@ -150,10 +150,28 @@ type Message struct {
 	CreatedAt    time.Time
 	EditedAt     time.Time // zero unless edited
 	Deleted      bool
-	Thread       MessageID  // the parent message; empty for a top-level message
-	ReplyCount   int        // read model: live replies of a top-level message
-	Reactions    []Reaction // sorted by emoji
+	Thread       MessageID   // the parent message; empty for a top-level message
+	ReplyCount   int         // read model: live replies of a top-level message
+	Reactions    []Reaction  // sorted by emoji
+	Kind         MessageKind // "" for people's messages
+	Ref          string      // system messages: what they are about (unique), e.g. "call:<id>:started"
 	events       []MessageWritten
+}
+
+// MessageKind marks messages the system writes into a conversation.
+type MessageKind string
+
+const (
+	KindHuddleStarted MessageKind = "huddle_started"
+	KindHuddleEnded   MessageKind = "huddle_ended"
+)
+
+// ErrDuplicateRef: a system message about this already exists (events may be delivered twice).
+var ErrDuplicateRef = errors.New("a message about this already exists")
+
+// NewSystemMessage is written by Kyber on someone's behalf (e.g. "started a huddle"); nobody can edit it.
+func NewSystemMessage(id MessageID, conv ConversationID, about UserID, kind MessageKind, ref, text string, now time.Time) *Message {
+	return &Message{ID: id, Conversation: conv, Author: about, Body: text, CreatedAt: now.UTC(), Kind: kind, Ref: ref}
 }
 
 // PullEvents returns and clears the recorded published events.
@@ -238,7 +256,7 @@ func (m *Message) change(actor UserID) error {
 	if m.Deleted {
 		return ErrDeleted
 	}
-	if actor != m.Author {
+	if actor != m.Author || m.Kind != "" {
 		return ErrNotAuthor
 	}
 	return nil
@@ -280,7 +298,7 @@ type Repository interface {
 
 // Messages stores messages.
 type Messages interface {
-	Post(ctx context.Context, m *Message) error
+	Post(ctx context.Context, m *Message) error   // ErrDuplicateRef for a second system message with the same Ref
 	Update(ctx context.Context, m *Message) error // body, edited, deleted, reactions
 	ByID(ctx context.Context, id MessageID) (*Message, error)
 	// History lists up to limit top-level messages of a conversation older than before (all when empty),

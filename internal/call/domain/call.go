@@ -49,6 +49,34 @@ type Call struct {
 	Participants []Participant // in joining order
 	Presentation *Presentation // what everyone looks at together, if anything
 	Version      int           // optimistic locking
+	events       []Event
+}
+
+// Event is a published fact about a call (written to the outbox with it); Chat shows huddles in the
+// conversation from them.
+type Event interface{ EventName() string }
+
+type CallStarted struct {
+	Call         CallID         `json:"call_id"`
+	Conversation ConversationID `json:"conversation_id"`
+	By           UserID         `json:"by"`
+}
+
+type CallEnded struct {
+	Call         CallID         `json:"call_id"`
+	Conversation ConversationID `json:"conversation_id"`
+	By           UserID         `json:"by"` // who started it
+	Seconds      int            `json:"seconds"`
+}
+
+func (CallStarted) EventName() string { return "call.started" }
+func (CallEnded) EventName() string   { return "call.ended" }
+
+// PullEvents returns and clears the recorded events.
+func (c *Call) PullEvents() []Event {
+	ev := c.events
+	c.events = nil
+	return ev
 }
 
 // A Presentation is a shared file opened for everyone in the call ("present to all"); each viewer opens it
@@ -103,7 +131,8 @@ func (c *Call) CanFollow(by UserID) error {
 func Start(id CallID, ws WorkspaceID, conv ConversationID, by UserID, now time.Time) *Call {
 	now = now.UTC()
 	return &Call{ID: id, Workspace: ws, Conversation: conv, StartedBy: by, StartedAt: now,
-		Participants: []Participant{{User: by, JoinedAt: now, Media: Media{Audio: true}}}}
+		Participants: []Participant{{User: by, JoinedAt: now, Media: Media{Audio: true}}},
+		events:       []Event{CallStarted{Call: id, Conversation: conv, By: by}}}
 }
 
 func (c *Call) Live() bool { return c.EndedAt.IsZero() }
@@ -140,6 +169,7 @@ func (c *Call) Leave(u UserID, now time.Time) error {
 	}
 	if len(c.Participants) == 0 {
 		c.EndedAt = now.UTC()
+		c.events = append(c.events, CallEnded{Call: c.ID, Conversation: c.Conversation, By: c.StartedBy, Seconds: int(c.EndedAt.Sub(c.StartedAt).Seconds())})
 	}
 	return nil
 }

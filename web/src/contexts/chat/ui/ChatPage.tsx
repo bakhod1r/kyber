@@ -51,7 +51,7 @@ export function ChatPage({ extras }: { extras?: ConversationSlot }) {
       if (conv === id && !e.message.thread_id) void chatUseCases.markRead(conv);
       else void qc.invalidateQueries({ queryKey: ["chat", "conversations"] });
     }
-  });
+  }, () => void qc.invalidateQueries({ queryKey: ["chat"] }));
 
   const current = conversations.data?.find((c) => c.id === id);
   const myId = me.data?.id ?? "";
@@ -208,7 +208,17 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
     },
   });
   const remove = useMutation({ mutationFn: () => chatUseCases.remove(m.id), onSuccess: () => onChange({ ...m, deleted: true, body: "", reactions: [], issues: [] }) });
-  const mine = m.author_id === me;
+  const mine = m.author_id === me && !m.kind;
+  if (m.kind) {
+    return (
+      <article className="chat-message chat-system" aria-label={`Huddle at ${time(m.created_at)}`}>
+        <p className="muted">
+          🎧 {m.kind === "huddle_started" ? <><b>{names.get(m.author_id) ?? "Someone"}</b> {m.body}</> : m.body}{" "}
+          <time dateTime={m.created_at}>{time(m.created_at)}</time>
+        </p>
+      </article>
+    );
+  }
   return (
     <article className="chat-message" aria-label={`${names.get(m.author_id) ?? "Someone"} at ${time(m.created_at)}`}>
       <header>

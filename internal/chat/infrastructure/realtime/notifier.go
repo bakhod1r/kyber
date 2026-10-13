@@ -28,6 +28,7 @@ type message struct {
 	Deleted        bool       `json:"deleted"`
 	ThreadID       *string    `json:"thread_id"`
 	ReplyCount     int        `json:"reply_count"`
+	Kind           string     `json:"kind"`
 	Reactions      []reaction `json:"reactions"`
 }
 
@@ -38,7 +39,7 @@ type reaction struct {
 
 func toMessage(m domain.Message) message {
 	d := message{ID: string(m.ID), ConversationID: string(m.Conversation), AuthorID: string(m.Author), Body: m.Body,
-		CreatedAt: m.CreatedAt, Deleted: m.Deleted, ReplyCount: m.ReplyCount, Reactions: []reaction{}}
+		CreatedAt: m.CreatedAt, Deleted: m.Deleted, ReplyCount: m.ReplyCount, Kind: string(m.Kind), Reactions: []reaction{}}
 	if !m.EditedAt.IsZero() {
 		d.EditedAt = &m.EditedAt
 	}

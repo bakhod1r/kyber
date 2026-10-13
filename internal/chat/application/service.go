@@ -4,10 +4,13 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/chat/domain"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
@@ -399,4 +402,36 @@ func (s *Service) Previews(ctx context.Context, actor string, msgs []*domain.Mes
 		}
 	}
 	return out, nil
+}
+
+// OnCallEvent writes "started a huddle" / "the huddle ended" into the call's conversation (call.started,
+// call.ended). Redelivered events find the message already there.
+func (s *Service) OnCallEvent(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		Call         string `json:"call_id"`
+		Conversation string `json:"conversation_id"`
+		By           string `json:"by"`
+		Seconds      int    `json:"seconds"`
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		return nil // a poison message must not block the relay
+	}
+	c, err := s.d.Conversations.ByID(ctx, domain.ConversationID(e.Conversation))
+	if errors.Is(err, domain.ErrConversationNotFound) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	kind, text := domain.KindHuddleStarted, "started a huddle"
+	if m.Name == "call.ended" {
+		kind, text = domain.KindHuddleEnded, fmt.Sprintf("The huddle ended after %d min", max(1, (e.Seconds+30)/60))
+	}
+	msg := domain.NewSystemMessage(domain.MessageID(s.d.NewID()), c.ID, domain.UserID(e.By), kind, "call:"+e.Call+":"+string(kind), text, s.d.Now())
+	if err := s.d.Messages.Post(ctx, msg); errors.Is(err, domain.ErrDuplicateRef) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *msg})
+	return nil
 }

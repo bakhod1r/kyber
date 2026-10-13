@@ -43,6 +43,8 @@ backends.
   ✅ **Done** (except the system messages): Call context, optimistic locking with retries so racing joins never
   exceed 6, one live call per conversation (unique index), one screen share at a time, `call.updated` on the
   stream; migration 0043, API 0.32.0.
+  ✅ **System messages done:** `call.started`/`call.ended` go through the outbox; Chat writes "started a huddle" and
+  "the huddle ended after N min" into the conversation (idempotent by ref); API 0.38.0.
 - **S56 Signaling** — `POST /calls/{id}/signal` relays `offer|answer|candidate` to one participant over the
   stream; only participants may signal and receive; `GET /calls/ice` returns STUN/TURN servers with
   short-lived TURN credentials (`KYBER_ICE_SERVERS`, `KYBER_TURN_SECRET`).

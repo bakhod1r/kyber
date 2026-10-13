@@ -499,3 +499,4 @@ a.user:hover { text-decoration: underline; }
 .huddle-presentation { margin: 0 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg, #fff); }
 .huddle-presentation figcaption { justify-content: space-between; padding: 6px 10px; font-size: 0.9rem; border-bottom: 1px solid var(--border); }
 .huddle-presentation-body { max-height: 60vh; overflow: auto; padding: 8px; }
+.chat-system p { margin: 0; font-size: 0.85rem; }

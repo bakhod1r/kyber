@@ -11,6 +11,7 @@ import (
 	app "github.com/bakhod1r/kyber/internal/chat/application"
 	"github.com/bakhod1r/kyber/internal/chat/domain"
 	"github.com/bakhod1r/kyber/internal/chat/infrastructure/memory"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
@@ -272,5 +273,33 @@ func TestIssuePreviews(t *testing.T) {
 	}
 	if lead, _ := svc.Previews(ctx, "lead", msgs); len(lead[m1.ID]) != 2 || lead[m1.ID][1].Status != "To Do" {
 		t.Fatalf("lead previews = %v", lead)
+	}
+}
+
+func TestHuddleSystemMessages(t *testing.T) {
+	svc, ctx, ev := setupWithEvents(t)
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "dev"})
+	started := outbox.Message{ID: 1, Name: "call.started", Workspace: "w1",
+		Payload: []byte(`{"call_id":"k-1","conversation_id":"` + string(ch.ID) + `","by":"lead"}`)}
+	ended := outbox.Message{ID: 2, Name: "call.ended", Workspace: "w1",
+		Payload: []byte(`{"call_id":"k-1","conversation_id":"` + string(ch.ID) + `","by":"lead","seconds":725}`)}
+	for _, m := range []outbox.Message{started, started, ended} { // redelivery is harmless
+		if err := svc.OnCallEvent(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, _ := svc.History(ctx, "lead", string(ch.ID), "", 0)
+	if len(page) != 2 || page[1].Kind != domain.KindHuddleStarted || page[1].Body != "started a huddle" ||
+		page[0].Kind != domain.KindHuddleEnded || page[0].Body != "The huddle ended after 12 min" {
+		t.Fatalf("history = %+v", page)
+	}
+	if !slices.Contains(*ev, "message.posted→[lead]") {
+		t.Fatalf("members were not told: %v", *ev)
+	}
+	for _, bad := range []outbox.Message{{ID: 3, Name: "call.started", Payload: []byte("{")},
+		{ID: 4, Name: "call.started", Payload: []byte(`{"call_id":"k-2","conversation_id":"gone","by":"lead"}`)}} {
+		if err := svc.OnCallEvent(ctx, bad); err != nil {
+			t.Fatalf("%s must be skipped: %v", bad.Payload, err)
+		}
 	}
 }

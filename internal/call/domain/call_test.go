@@ -135,3 +135,20 @@ func TestPresentation(t *testing.T) {
 		t.Fatalf("stop = %v %+v", err, c.Presentation)
 	}
 }
+
+func TestCallEvents(t *testing.T) {
+	c := domain.Start("k-1", "w-1", "c-1", "u-a", t0)
+	_ = c.Join("u-b", t0)
+	if ev := c.PullEvents(); len(ev) != 1 || ev[0] != (domain.CallStarted{Call: "k-1", Conversation: "c-1", By: "u-a"}) || ev[0].EventName() != "call.started" {
+		t.Fatalf("started = %+v", ev)
+	}
+	_ = c.Leave("u-a", t0.Add(time.Minute))
+	if ev := c.PullEvents(); len(ev) != 0 {
+		t.Fatalf("not ended yet = %+v", ev)
+	}
+	_ = c.Leave("u-b", t0.Add(12*time.Minute))
+	ev := c.PullEvents()
+	if len(ev) != 1 || ev[0] != (domain.CallEnded{Call: "k-1", Conversation: "c-1", By: "u-a", Seconds: 720}) || ev[0].EventName() != "call.ended" {
+		t.Fatalf("ended = %+v", ev)
+	}
+}

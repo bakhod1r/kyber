@@ -182,6 +182,22 @@ func Run(t *testing.T, r domain.Repository, msgs domain.Messages) {
 		t.Fatalf("after toggle off = %+v", got2.Reactions)
 	}
 
+	// System messages: stored with their kind and ref; the same ref only once.
+	sys := domain.NewSystemMessage(mid(20), general.ID, Lead, domain.KindHuddleStarted, "call:k-1:started", "started a huddle", t0.Add(time.Hour))
+	if err := msgs.Post(ctx, sys); err != nil {
+		t.Fatal(err)
+	}
+	again := domain.NewSystemMessage(mid(21), general.ID, Lead, domain.KindHuddleStarted, "call:k-1:started", "started a huddle", t0.Add(time.Hour))
+	if err := msgs.Post(ctx, again); !errors.Is(err, domain.ErrDuplicateRef) {
+		t.Fatalf("duplicate ref = %v", err)
+	}
+	if got, err := msgs.ByID(ctx, sys.ID); err != nil || got.Kind != domain.KindHuddleStarted || got.Ref != "call:k-1:started" {
+		t.Fatalf("system message = %+v %v", got, err)
+	}
+	if got, _ := msgs.ByID(ctx, mid(1)); got.Kind != "" || got.Ref != "" {
+		t.Fatalf("people's message = %+v", got)
+	}
+
 	for _, err := range []error{
 		func() error { _, err := msgs.ByID(ctx, mid(99)); return err }(),
 		func() error { _, err := msgs.ByID(ctx, "nope"); return err }(),

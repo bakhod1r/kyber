@@ -10,7 +10,6 @@ import (
 
 	"github.com/bakhod1r/kyber/internal/chat/domain"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
-	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
 type member struct {
@@ -180,8 +179,15 @@ func (s *Messages) Post(ctx context.Context, m *domain.Message) error {
 	if _, ok := s.r.convs[m.Conversation]; !ok {
 		return domain.ErrConversationNotFound
 	}
+	if m.Ref != "" {
+		for _, o := range s.r.messages {
+			if o.Ref == m.Ref {
+				return domain.ErrDuplicateRef
+			}
+		}
+	}
 	s.r.messages[m.ID] = cloneMsg(*m)
-	at := outbox.Meta{At: time.Now(), Workspace: tenant.Workspace(ctx)}
+	at := outbox.MetaOf(ctx, time.Now())
 	for _, e := range m.PullEvents() {
 		s.r.outbox, s.r.outAt = append(s.r.outbox, e), append(s.r.outAt, at)
 	}
