@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	identityhttp "github.com/bakhod1r/kyber/internal/identity/adapter/httpapi"
-	"github.com/bakhod1r/kyber/internal/identity/adapter/telegram"
+	"github.com/bakhod1r/kyber/internal/identity/infrastructure/telegram"
+	identityhttp "github.com/bakhod1r/kyber/internal/identity/interfaces/httpapi"
 	"github.com/bakhod1r/kyber/internal/server"
 )
 

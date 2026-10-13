@@ -7,7 +7,7 @@
 |---|---|---|---|
 | KYB-S1 Create project | AC1–AC5 | `internal/server/acceptance_test.go: TestS1CreateProject` | PASS |
 | KYB-S2 Create issue | AC1–AC4 | `TestS2toS5IssueLifecycle` | PASS |
-| KYB-S2 AC5 event | AC5 | `internal/issue/app: TestCreateIssue` | PASS |
+| KYB-S2 AC5 event | AC5 | `internal/issue/application: TestCreateIssue` | PASS |
 | KYB-S3 View issue | AC1–AC2 | `TestS2toS5IssueLifecycle/S3` | PASS |
 | KYB-S4 Transitions | AC1–AC3 | `TestS2toS5IssueLifecycle/S4`, `app: TestTransitionIssue` | PASS |
 | KYB-S5 List/filter | AC1–AC2 | `TestS2toS5IssueLifecycle/S5` | PASS |
