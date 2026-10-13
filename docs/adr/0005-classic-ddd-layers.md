@@ -30,6 +30,22 @@ Rules across contexts:
 
 `internal/archtest` enforces the dependency rules on every `go test ./...`.
 
+### Frontend (`web/src`)
+The same bounded contexts, the same four layers:
+
+| Layer | Path | Holds | May depend on |
+|---|---|---|---|
+| Domain | `contexts/<c>/domain/model.ts` | types, constants, pure rules | other contexts' domain models only (published language) |
+| Infrastructure | `contexts/<c>/infrastructure/gateway.ts` | the context's HTTP gateway | `shared/http`, domain models |
+| Application | `contexts/<c>/application/index.ts` | use cases the UI calls (e.g. `createIssueIn`) | its own gateway, domain models |
+| UI | `contexts/<c>/ui/` | components and pages | any context's application, `shared/`; never infrastructure, never another context's UI |
+
+`src/app/` is the composition root (routes, layout, the project page composing every context's view;
+cross-context panels are passed in, e.g. `IssuePanel extensions`). `src/shared/` holds the HTTP client,
+chart primitives, test utilities and browser-side domain events (`shared/events`: an issue reaching Done
+is announced, Focus reacts) and never depends on a context. `src/shared/test/architecture.test.ts`
+enforces the rules on every Vitest run.
+
 ## Consequences
 - Moves across aggregates are eventually consistent (milliseconds with the relay); API responses report
   what *will* move (e.g. a release's `moved`) and tests wait for the projection.

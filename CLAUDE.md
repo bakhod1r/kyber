@@ -41,5 +41,7 @@ Large features: `/flow <goal>`. Every PR: `/review`.
   domain's repository port. **No `sqlc`, no ORM** (ADR-0002). Every adapter passes the shared repository
   contract test (`domain/repotest`) against real PostgreSQL.
 - API: OpenAPI 3.1 in `api/openapi.yaml` first; Go server & TS client generated from it.
-- Frontend: strict TypeScript, TanStack Query for server state, no `any`.
+- Frontend: strict TypeScript, TanStack Query for server state, no `any`. Same contexts and four layers
+  (`web/src/contexts/<c>/{domain,infrastructure,application,ui}`, composition in `web/src/app`, ADR-0005);
+  `web/src/shared/test/architecture.test.ts` enforces them.
 - Conventional Commits. No secrets in code, logs, or fixtures.
