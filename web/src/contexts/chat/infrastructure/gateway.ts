@@ -1,5 +1,6 @@
 // chat: HTTP gateway to the chat API and the realtime stream (infrastructure).
 import { request, seg, type List } from "../../../shared/http";
+import { subscribe } from "../../../shared/stream";
 import type { ChatEvent, Conversation, Message } from "../domain/model";
 
 const conv = (id: string) => `/api/v1/conversations/${seg(id)}`;
@@ -29,15 +30,10 @@ export const chatGateway = {
 
 const EVENTS = ["message.posted", "message.edited", "message.deleted", "message.reacted", "typing"] as const;
 
-/** Opens the realtime stream (Server-Sent Events; the browser reconnects with Last-Event-ID). */
+/** Chat events from the shared realtime stream. */
 export function openChatStream(onEvent: (e: ChatEvent) => void): () => void {
-  if (typeof EventSource === "undefined") return () => {};
-  const es = new EventSource("/api/v1/stream", { withCredentials: true });
-  for (const type of EVENTS) {
-    es.addEventListener(type, (ev) => {
-      const data: unknown = JSON.parse((ev as MessageEvent<string>).data);
-      onEvent(type === "typing" ? { type, ...(data as { conversation_id: string; user_id: string }) } : { type, message: data as Message });
-    });
-  }
-  return () => es.close();
+  return subscribe([...EVENTS], (type, data) => {
+    if (type === "typing") onEvent({ type, ...(data as { conversation_id: string; user_id: string }) });
+    else onEvent({ type: type as Exclude<ChatEvent["type"], "typing">, message: data as Message });
+  });
 }

@@ -49,6 +49,9 @@ backends.
   ✅ **Done:** API 0.33.0.
 - **S57 Huddle UI** — WebRTC mesh: camera, microphone, screen share (`getDisplayMedia`) with mute/camera/share
   toggles, participant grid, active-speaker highlight, device picker, join from channel header.
+  ✅ **Done:** `web/src/contexts/call` (HuddleEngine: mesh, perfect negotiation, the earlier participant opens each
+  connection, signals queued per peer, ICE-restart watchdog), one shared SSE stream for all contexts, e2e in real
+  Chromium with fake devices (camera both ways + screen share), 30/30 runs green.
 - **S59 Whiteboard (Zoom-style drawing)** — open a whiteboard in a huddle or channel; draw rectangles, ellipses,
   arrows, lines, freehand, text and sticky notes (e.g. an architecture diagram); everyone sees changes and
   cursors live; undo/redo; export PNG/SVG; sticky note → issue. AC: only conversation members open or edit it;

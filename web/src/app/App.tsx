@@ -6,7 +6,10 @@ import { Layout } from "./Layout";
 import { AuthPage } from "../contexts/identity/ui/AuthPage";
 import { LandingPage } from "./LandingPage";
 import { MeetingsPage } from "../contexts/calendar/ui/MeetingsPage";
-import { ChatPage } from "../contexts/chat/ui/ChatPage";
+import { ChatPage, type HuddleSlot } from "../contexts/chat/ui/ChatPage";
+import { Huddle } from "../contexts/call/ui/Huddle";
+
+const huddle: HuddleSlot = (conversationId, me, names) => <Huddle key={conversationId} conversationId={conversationId} me={me} names={names} />;
 import { ProjectPage } from "./ProjectPage";
 import { SettingsPage } from "../contexts/notify/ui/SettingsPage";
 import { ProjectsPage } from "../contexts/project/ui/ProjectsPage";
@@ -64,8 +67,8 @@ export function AppRoutes() {
       <Route path="/projects/:key/releases" element={<RequireUser><ProjectPage view="releases" /></RequireUser>} />
       <Route path="/projects/:key/permissions" element={<RequireUser><ProjectPage view="permissions" /></RequireUser>} />
       <Route path="/projects/:key/notifications" element={<RequireUser><ProjectPage view="notifications" /></RequireUser>} />
-      <Route path="/chat" element={<RequireUser><ChatPage /></RequireUser>} />
-      <Route path="/chat/:id" element={<RequireUser><ChatPage /></RequireUser>} />
+      <Route path="/chat" element={<RequireUser><ChatPage huddle={huddle} /></RequireUser>} />
+      <Route path="/chat/:id" element={<RequireUser><ChatPage huddle={huddle} /></RequireUser>} />
       <Route path="/meetings" element={<RequireUser><MeetingsPage /></RequireUser>} />
       <Route path="/search" element={<RequireUser><SearchPage /></RequireUser>} />
       <Route path="/settings" element={<RequireUser><SettingsPage /></RequireUser>} />
