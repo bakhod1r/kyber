@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.31.0
+  version: 0.32.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -372,7 +372,7 @@ paths:
       operationId: openStream
       description: |
         Server-Sent Events of this workspace for the caller (`message.posted`, `message.edited`,
-        `message.deleted`, `message.reacted`, `typing`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
+        `message.deleted`, `message.reacted`, `typing`, `call.updated`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
         what was missed. Keeping the stream open marks the caller online.
       parameters:
         - { name: Last-Event-ID, in: header, schema: { type: string } }
@@ -493,6 +493,57 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/call:
+    get:
+      operationId: getLiveCall
+      description: The conversation's live huddle, or null.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [call], properties: { call: { oneOf: [{ $ref: "#/components/schemas/Call" }, { type: "null" }] } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: joinCall
+      description: |
+        Starts the conversation's huddle, or joins the live one (members only; at most 6 people; the microphone
+        starts on). Members hear `call.updated` on the stream whenever the call changes.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: In the call, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/leave:
+    post:
+      operationId: leaveCall
+      description: Leaves the call; it ends with its last participant.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Left }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/media:
+    put:
+      operationId: setCallMedia
+      description: What the caller sends (microphone, camera, screen). Starting a screen share stops anyone else's.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { audio: { type: boolean }, video: { type: boolean }, screen: { type: boolean } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/focus:
     get:
       operationId: currentFocus
@@ -1894,6 +1945,26 @@ components:
         application/json:
           schema: { type: object, required: [body], properties: { body: { type: string } } }
   schemas:
+    Call:
+      type: object
+      required: [id, conversation_id, started_by, started_at, live, participants]
+      properties:
+        id: { type: string }
+        conversation_id: { type: string }
+        started_by: { type: string }
+        started_at: { type: string, format: date-time }
+        live: { type: boolean }
+        participants:
+          type: array
+          items:
+            type: object
+            required: [user_id, joined_at, audio, video, screen]
+            properties:
+              user_id: { type: string }
+              joined_at: { type: string, format: date-time }
+              audio: { type: boolean }
+              video: { type: boolean }
+              screen: { type: boolean }
     Conversation:
       type: object
       required: [id, kind, name, topic, private, member_ids, member, unread, created_at]

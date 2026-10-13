@@ -40,6 +40,9 @@ backends.
 - **S55 Call context (backend)** — start/join/leave a huddle in a conversation I belong to; one live call per
   conversation; ≤ 6 participants; media state (audio/video/screen on/off); call ends when the last one leaves;
   "huddle started/ended" system messages in the conversation. AC: non-members get 404; 7th participant → 409.
+  ✅ **Done** (except the system messages): Call context, optimistic locking with retries so racing joins never
+  exceed 6, one live call per conversation (unique index), one screen share at a time, `call.updated` on the
+  stream; migration 0042, API 0.32.0.
 - **S56 Signaling** — `POST /calls/{id}/signal` relays `offer|answer|candidate` to one participant over the
   stream; only participants may signal and receive; `GET /calls/ice` returns STUN/TURN servers with
   short-lived TURN credentials (`KYBER_ICE_SERVERS`, `KYBER_TURN_SECRET`).

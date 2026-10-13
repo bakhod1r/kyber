@@ -25,6 +25,9 @@ const (
 	CodeMessageNotFound      = "MESSAGE_NOT_FOUND"
 	CodeChannelNameTaken     = "CHANNEL_NAME_TAKEN"
 	CodeChatForbidden        = "CHAT_FORBIDDEN"
+	CodeCallNotFound         = "CALL_NOT_FOUND"
+	CodeCallFull             = "CALL_FULL"
+	CodeCallState            = "CALL_STATE"
 	CodeWorkspaceSlugTaken   = "WORKSPACE_SLUG_TAKEN"
 	CodeOTPPending           = "AUTH_OTP_PENDING"
 	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
@@ -95,6 +98,9 @@ var codes = []code{
 	{CodeConversationNotFound, "6100", 404, "Conversation not found.", "Suhbat topilmadi.", "Беседа не найдена.", errorx.CategoryBusiness},
 	{CodeMessageNotFound, "6101", 404, "Message not found.", "Xabar topilmadi.", "Сообщение не найдено.", errorx.CategoryBusiness},
 	{CodeChannelNameTaken, "6102", 409, "A channel with this name already exists.", "Bu nomli kanal allaqachon bor.", "Канал с таким названием уже существует.", errorx.CategoryBusiness},
+	{CodeCallNotFound, "6104", 404, "Call not found.", "Qo'ng'iroq topilmadi.", "Звонок не найден.", errorx.CategoryBusiness},
+	{CodeCallFull, "6105", 409, "The call is full (6 people at most).", "Qo'ng'iroq to'lgan (ko'pi bilan 6 kishi).", "Звонок заполнен (не более 6 человек).", errorx.CategoryBusiness},
+	{CodeCallState, "6106", 409, "You are not in this call.", "Siz bu qo'ng'iroqda emassiz.", "Вы не участвуете в этом звонке.", errorx.CategoryBusiness},
 	{CodeChatForbidden, "6103", 403, "You cannot do that in this conversation.", "Bu suhbatda buni qila olmaysiz.", "В этой беседе так сделать нельзя.", errorx.CategorySecurity},
 	{CodeProjectNotFound, "6002", 404, "Project not found.", "Loyiha topilmadi.", "Проект не найден.", errorx.CategoryBusiness},
 	{CodeProjectKeyTaken, "6003", 409, "This project key is already taken.", "Bu loyiha kaliti band.", "Этот ключ проекта уже занят.", errorx.CategoryBusiness},
