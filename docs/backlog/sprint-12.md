@@ -51,8 +51,10 @@ Order: daily use first, then channel management, Jira integration, huddle extras
 
 ## 3. Jira integration
 
-- **S72 Slash commands** — `/issue <project> <title>`, `/assign KEY @user`, `/status KEY <status>`; the answer is
+- ✅ **S72 Slash commands** — `/issue <project> <title>`, `/assign KEY @user`, `/status KEY <status>`; the answer is
   an ephemeral message only I see. AC: the same permissions as the issue API.
+  **Done:** Chat parses the commands; the app shell runs them through the Issue/Project clients (the user's own
+  permissions, no new endpoint) and the answer is a line only the author sees.
 - **S73 Project channels** — link a channel to a project; issue created, status changed, sprint started/completed
   are posted there by the system (outbox handlers). AC: only people who may browse the project see the details.
 - **S74 Issue from a message** — "Create issue" in a message's menu: the message becomes the description with a

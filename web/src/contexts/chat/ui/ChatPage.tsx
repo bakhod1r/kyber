@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, canManage, type ChatEvent, type ConversationPrefs, type Level, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, type Message, parseRemind, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
+  applyEvent, canManage, type ChatEvent, type ConversationPrefs, type Level, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, COMMAND_HELP, type Message, parseCommand, parseRemind, type SlashCommand, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
 } from "../application";
 
 const PAGE = 50;
@@ -44,7 +44,14 @@ function Who({ id, names }: { id: string; names: Map<string, string> }) {
 export type ConversationSlot = (conversationId: string, me: string, names: Map<string, string>) => ReactNode;
 
 /** Team chat (S53, ADR-0009): channels and DMs on the left, the open conversation and its threads on the right. */
-export function ChatPage({ extras, activity }: { extras?: ConversationSlot; /** Other contexts' activity (mentions), shown on the Activity view. */ activity?: ReactNode }) {
+/** Runs /issue, /assign and /status (S72) and answers with a line only the user sees. */
+export type CommandRunner = (cmd: SlashCommand) => Promise<string>;
+const Commands = createContext<CommandRunner | undefined>(undefined);
+
+export function ChatPage({ extras, activity, commands }: {
+  extras?: ConversationSlot; /** Other contexts' activity (mentions), shown on the Activity view. */ activity?: ReactNode;
+  commands?: CommandRunner;
+}) {
   const { id } = useParams();
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: identityUseCases.me });
@@ -90,6 +97,7 @@ export function ChatPage({ extras, activity }: { extras?: ConversationSlot; /** 
   const typers = (typing[id ?? ""] ?? []).filter((x) => x.until > Date.now() && x.user !== myId).map((x) => names.get(x.user) ?? "Someone");
 
   return (
+    <Commands.Provider value={commands}>
     <Statuses.Provider value={statusMap}>
     <div className="chat">
       <Sidebar conversations={conversations.data ?? []} current={id} title={title} names={names} me={myId} />
@@ -102,6 +110,7 @@ export function ChatPage({ extras, activity }: { extras?: ConversationSlot; /** 
       {thread && <ThreadPanel parent={thread} names={names} me={myId} onClose={() => setThread(null)} />}
     </div>
     </Statuses.Provider>
+    </Commands.Provider>
   );
 }
 
@@ -533,9 +542,17 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
     mutationFn: ({ text, at }: { text: string; at: Date }) => chatUseCases.remind(id, text, at),
     onSuccess: (r) => setNote(`⏰ I'll remind you at ${new Date(r.at).toLocaleString()}: ${r.text}`),
   });
-  /** Sends, or for "/remind me …" sets a personal reminder (S67). */
+  const commands = useContext(Commands);
+  const command = useMutation({ mutationFn: (c: SlashCommand) => commands!(c), onSuccess: setNote, onError: (e) => setNote(`⚠️ ${e.message}`) });
+  /** Sends, or for "/remind me …" sets a personal reminder (S67); /issue, /assign and /status run commands (S72). */
   const send = (body: string) => {
     setNote("");
+    if (/^\/(issue|assign|status)\b/i.test(body)) {
+      const c = parseCommand(body);
+      if (c && commands) command.mutate(c);
+      else setNote(COMMAND_HELP);
+      return;
+    }
     if (/^\/remind\b/i.test(body)) {
       const r = parseRemind(body, new Date());
       if (r) remind.mutate(r);

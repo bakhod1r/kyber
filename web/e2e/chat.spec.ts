@@ -62,6 +62,26 @@ test("chat between two people arrives live", async ({ browser }) => {
   await expect(a.getByRole("log", { name: "Messages" })).toContainText("did you see the build?");
   await expect(b.getByLabel("Seen")).toBeVisible(); // live, without reloading
 
+  // S72: slash commands create, assign and move issues; only Ali sees the answers.
+  await a.goto(`/chat/${channel.id}`);
+  const cbox = a.getByRole("textbox", { name: `Message # team-${id}` });
+  await cbox.fill(`/issue ${key} Fix the flaky login test`);
+  await cbox.press("Enter");
+  await expect(a.getByText(`✅ Created ${key}-2: Fix the flaky login test`)).toBeVisible();
+  await cbox.fill(`/assign ${key}-2 @${bobur.email}`);
+  await cbox.press("Enter");
+  await expect(a.getByText(`👤 ${key}-2 is assigned to Bobur`)).toBeVisible();
+  await cbox.fill(`/status ${key}-2 in progress`);
+  await cbox.press("Enter");
+  await expect(a.getByText(new RegExp(`🔀 ${key}-2 is now In Progress`, "i"))).toBeVisible();
+  await cbox.fill(`/status ${key}-2 Shipped`);
+  await cbox.press("Enter");
+  await expect(a.getByText(/No status "Shipped"/)).toBeVisible();
+  const made = await ali.call("GET", `/api/v1/issues/${key}-2`);
+  expect(made.status).toBe("in_progress");
+  await b.goto(`/chat/${channel.id}`);
+  await expect(b.getByRole("log", { name: "Messages" })).not.toContainText("Fix the flaky login test");
+
   // S69: the owner renames the channel, makes Bobur an admin; Bobur archives it and it turns read-only for both.
   await a.goto(`/chat/${channel.id}`);
   await a.getByRole("button", { name: "⚙ Settings" }).click();
