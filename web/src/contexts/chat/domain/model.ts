@@ -34,6 +34,37 @@ export function clearAfter(now: Date): { label: string; at: Date | null }[] {
   ];
 }
 
+/** A message I scheduled (S67). */
+export type ScheduledMessage = { id: string; conversation_id: string; body: string; send_at: string; created_at: string };
+
+const UNITS: Record<string, number> = { m: 1, min: 1, mins: 1, minute: 1, minutes: 1, h: 60, hour: 60, hours: 60, d: 1440, day: 1440, days: 1440 };
+
+/**
+ * Reads "/remind me in 20 minutes to call the bank", "/remind me tomorrow standup notes" (9:00) or
+ * "/remind me at 15:30 deploy" (today, or tomorrow once that time has passed). Null when it is not one.
+ */
+export function parseRemind(input: string, now: Date): { text: string; at: Date } | null {
+  const m = /^\/remind\s+me\s+(?:in\s+(\d+)\s*([a-z]+)|(tomorrow)|at\s+(\d{1,2}):(\d{2}))\s+(?:to\s+)?(.+)$/is.exec(input.trim());
+  if (!m) return null;
+  const text = m[6]!.trim();
+  if (m[1]) {
+    const unit = UNITS[m[2]!.toLowerCase()];
+    if (!unit || Number(m[1]) <= 0) return null;
+    return { text, at: new Date(now.getTime() + Number(m[1]) * unit * 60_000) };
+  }
+  const at = new Date(now);
+  if (m[3]) {
+    at.setDate(at.getDate() + 1);
+    at.setHours(9, 0, 0, 0);
+    return { text, at };
+  }
+  const [h, min] = [Number(m[4]), Number(m[5])];
+  if (h > 23 || min > 59) return null;
+  at.setHours(h, min, 0, 0);
+  if (at <= now) at.setDate(at.getDate() + 1);
+  return { text, at };
+}
+
 /** A message I saved for later (S65). */
 export type SavedItem = { message: Message; saved_at: string; remind_at: string | null; reminded: boolean };
 

@@ -30,3 +30,8 @@ func TestSavedContract(t *testing.T) {
 }
 
 func TestStatusContract(t *testing.T) { repotest.RunStatuses(t, postgres.NewStatuses(dbtest.New(t))) }
+
+func TestScheduledContract(t *testing.T) {
+	pool := dbtest.New(t)
+	repotest.RunScheduled(t, postgres.NewRepository(pool), postgres.NewScheduled(pool), postgres.NewReminders(pool))
+}

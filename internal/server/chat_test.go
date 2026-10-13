@@ -405,3 +405,52 @@ func TestStatusAndDND(t *testing.T) {
 		}
 	})
 }
+
+// S67: a scheduled message is posted at its time; /remind me arrives as a notification.
+func TestScheduledMessagesAndReminders(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "general"})
+		conv := ch["id"].(string)
+		at := func(d time.Duration) string { return time.Now().Add(d).Format(time.RFC3339Nano) }
+
+		code, b := lead.do("POST", "/api/v1/conversations/"+conv+"/scheduled", map[string]any{"body": "too soon", "send_at": at(-time.Minute)})
+		expect(t, code, 422, b)
+		code, sc := lead.do("POST", "/api/v1/conversations/"+conv+"/scheduled", map[string]any{"body": "draft", "send_at": at(time.Hour)})
+		expect(t, code, 201, sc)
+		code, b = dev.do("PATCH", "/api/v1/scheduled/"+sc["id"].(string), map[string]any{"body": "x", "send_at": at(time.Hour)})
+		expect(t, code, 404, b)
+		code, b = lead.do("PATCH", "/api/v1/scheduled/"+sc["id"].(string), map[string]any{"body": "standup moved to 11", "send_at": at(1500 * time.Millisecond)})
+		expect(t, code, 200, b)
+		if _, l := lead.do("GET", "/api/v1/chat/scheduled", nil); len(l["items"].([]any)) != 1 {
+			t.Fatalf("scheduled = %v", l)
+		}
+		if _, l := dev.do("GET", "/api/v1/chat/scheduled", nil); len(l["items"].([]any)) != 0 {
+			t.Fatalf("dev sees lead's scheduled = %v", l)
+		}
+		eventuallyJSON(t, lead, "/api/v1/conversations/"+conv+"/messages", func(b map[string]any) bool {
+			items := b["items"].([]any)
+			return len(items) == 1 && items[0].(map[string]any)["body"] == "standup moved to 11"
+		})
+		if _, l := lead.do("GET", "/api/v1/chat/scheduled", nil); len(l["items"].([]any)) != 0 {
+			t.Fatalf("still scheduled after sending = %v", l)
+		}
+		_, gone := lead.do("POST", "/api/v1/conversations/"+conv+"/scheduled", map[string]any{"body": "never mind", "send_at": at(time.Hour)})
+		code, b = dev.do("DELETE", "/api/v1/scheduled/"+gone["id"].(string), nil)
+		expect(t, code, 404, b)
+		code, b = lead.do("DELETE", "/api/v1/scheduled/"+gone["id"].(string), nil)
+		expect(t, code, 204, b)
+
+		code, b = lead.do("POST", "/api/v1/conversations/"+conv+"/reminders", map[string]any{"text": "call the bank", "at": at(time.Second)})
+		expect(t, code, 201, b)
+		eventuallyJSON(t, lead, "/api/v1/notifications", func(b map[string]any) bool {
+			for _, n := range b["items"].([]any) {
+				if n := n.(map[string]any); n["kind"] == "reminder" && n["excerpt"] == "call the bank" {
+					return true
+				}
+			}
+			return false
+		})
+	}, server.WithReminderEvery(100*time.Millisecond))
+}

@@ -33,6 +33,7 @@ const (
 	CodeCallNotPresenter     = "CALL_NOT_PRESENTER"
 	CodeCallRecording        = "CALL_ALREADY_RECORDING"
 	CodeCallNotRecorder      = "CALL_NOT_RECORDER"
+	CodeScheduledNotFound    = "SCHEDULED_MESSAGE_NOT_FOUND"
 	CodeWorkspaceSlugTaken   = "WORKSPACE_SLUG_TAKEN"
 	CodeOTPPending           = "AUTH_OTP_PENDING"
 	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
@@ -123,6 +124,7 @@ var codes = []code{
 	{CodeWhiteboardBusy, "6108", 409, "The whiteboard is busy. Try again.", "Doska band. Qayta urinib ko'ring.", "Доска занята. Попробуйте снова.", errorx.CategoryBusiness},
 	{CodeCallNotPresenter, "6109", 403, "Only the presenter can do that.", "Buni faqat taqdimotchi qila oladi.", "Это может сделать только докладчик.", errorx.CategoryBusiness},
 	{CodeCallRecording, "6110", 409, "Someone is already recording this call.", "Bu qo'ng'iroqni allaqachon kimdir yozib olyapti.", "Этот звонок уже кто-то записывает.", errorx.CategoryBusiness},
+	{CodeScheduledNotFound, "6112", 404, "Scheduled message not found.", "Rejalashtirilgan xabar topilmadi.", "Запланированное сообщение не найдено.", errorx.CategoryBusiness},
 	{CodeCallNotRecorder, "6111", 403, "Only the one recording can stop it.", "Yozuvni faqat uni boshlagan odam to'xtata oladi.", "Остановить запись может только тот, кто её начал.", errorx.CategoryBusiness},
 	{CodeChatForbidden, "6103", 403, "You cannot do that in this conversation.", "Bu suhbatda buni qila olmaysiz.", "В этой беседе так сделать нельзя.", errorx.CategorySecurity},
 	{CodeProjectNotFound, "6002", 404, "Project not found.", "Loyiha topilmadi.", "Проект не найден.", errorx.CategoryBusiness},

@@ -64,6 +64,8 @@ type Deps struct {
 	Messages      domain.Messages
 	Saved         domain.SavedMessages // optional: save for later (S65)
 	Statuses      domain.Statuses      // optional: status and DND (S66)
+	Scheduled     domain.ScheduledMessages // optional: scheduled messages (S67)
+	Reminders     domain.Reminders         // optional: /remind me (S67)
 	Members       Members
 	NewID         func() string
 	Now           func() time.Time
@@ -641,17 +643,19 @@ func (s *Service) SavedFor(ctx context.Context, actor string) ([]SavedItem, erro
 	return out, nil
 }
 
-// RemindDue sends the due reminders of every workspace (once each, across replicas).
+// RemindDue sends the due reminders of every workspace (once each, across replicas): saved messages and
+// personal reminders.
 func (s *Service) RemindDue(ctx context.Context) (int, error) {
-	if s.d.Saved == nil {
-		return 0, nil
+	personal, err := s.remindPersonal(ctx)
+	if err != nil || s.d.Saved == nil {
+		return personal, err
 	}
 	now := s.d.Now()
 	due, err := s.d.Saved.Due(ctx, now)
 	if err != nil {
 		return 0, err
 	}
-	sent := 0
+	sent := personal
 	for _, sv := range due {
 		if !sv.Remind(now) {
 			continue
@@ -712,4 +716,143 @@ func (s *Service) InDND(ctx context.Context, user string) (bool, error) {
 		return false, err
 	}
 	return list[0].At(s.d.Now()).DND, nil
+}
+
+// memberOf is a conversation of the request's workspace actor belongs to.
+func (s *Service) memberOf(ctx context.Context, actor, conv string) (*domain.Conversation, error) {
+	c, err := s.readable(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	if !c.IsMember(domain.UserID(actor)) {
+		return nil, domain.ErrNotMember
+	}
+	return c, nil
+}
+
+// Schedule writes a message to be posted later (S67); only members write.
+func (s *Service) Schedule(ctx context.Context, actor, conv, body string, at time.Time) (*domain.Scheduled, error) {
+	c, err := s.memberOf(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	sc, err := domain.NewScheduled(domain.ScheduledID(s.d.NewID()), c.Workspace, c.ID, domain.UserID(actor), body, at, s.d.Now())
+	if err != nil {
+		return nil, err
+	}
+	return sc, s.d.Scheduled.Add(ctx, sc)
+}
+
+// own is the actor's scheduled message (someone else's looks missing).
+func (s *Service) own(ctx context.Context, actor, id string) (*domain.Scheduled, error) {
+	sc, err := s.d.Scheduled.ByID(ctx, domain.ScheduledID(id))
+	if err != nil {
+		return nil, err
+	}
+	if string(sc.Author) != actor || string(sc.Workspace) != tenant.Workspace(ctx) {
+		return nil, domain.ErrScheduledNotFound
+	}
+	return sc, nil
+}
+
+func (s *Service) Reschedule(ctx context.Context, actor, id, body string, at time.Time) (*domain.Scheduled, error) {
+	sc, err := s.own(ctx, actor, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := sc.Reschedule(body, at, s.d.Now()); err != nil {
+		return nil, err
+	}
+	return sc, s.d.Scheduled.Update(ctx, sc)
+}
+
+func (s *Service) CancelScheduled(ctx context.Context, actor, id string) error {
+	sc, err := s.own(ctx, actor, id)
+	if err != nil {
+		return err
+	}
+	return s.d.Scheduled.Delete(ctx, sc.ID)
+}
+
+// ScheduledFor lists the actor's scheduled messages, soonest first.
+func (s *Service) ScheduledFor(ctx context.Context, actor string) ([]*domain.Scheduled, error) {
+	return s.d.Scheduled.Mine(ctx, domain.WorkspaceID(tenant.Workspace(ctx)), domain.UserID(actor))
+}
+
+// SendDue posts the scheduled messages whose time has come (each once: its Ref makes a repeat a duplicate). A
+// message whose author left the conversation is dropped.
+func (s *Service) SendDue(ctx context.Context) (int, error) {
+	if s.d.Scheduled == nil {
+		return 0, nil
+	}
+	now := s.d.Now()
+	due, err := s.d.Scheduled.Due(ctx, now)
+	if err != nil {
+		return 0, err
+	}
+	sent := 0
+	for _, sc := range due {
+		wctx := tenant.With(ctx, string(sc.Workspace))
+		c, err := s.d.Conversations.ByID(wctx, sc.Conversation)
+		if errors.Is(err, domain.ErrConversationNotFound) || (err == nil && !c.IsMember(sc.Author)) {
+			if err := s.d.Scheduled.Delete(wctx, sc.ID); err != nil {
+				return sent, err
+			}
+			continue
+		}
+		if err != nil {
+			return sent, err
+		}
+		m := sc.Message(domain.MessageID(s.d.NewID()), now)
+		switch err := s.d.Messages.Post(wctx, m); {
+		case errors.Is(err, domain.ErrDuplicateRef): // another replica sent it
+		case err != nil:
+			return sent, err
+		default:
+			sent++
+			s.d.Notifier.Notify(wctx, c.Members, domain.MessagePosted{Message: *m})
+		}
+		if err := s.d.Scheduled.Delete(wctx, sc.ID); err != nil {
+			return sent, err
+		}
+	}
+	return sent, nil
+}
+
+// Remind sets a personal reminder (/remind me …) in a conversation the actor may read.
+func (s *Service) Remind(ctx context.Context, actor, conv, text string, at time.Time) (*domain.Reminder, error) {
+	c, err := s.readable(ctx, actor, conv)
+	if err != nil {
+		return nil, err
+	}
+	r, err := domain.NewReminder(domain.ReminderID(s.d.NewID()), c.Workspace, domain.UserID(actor), c.ID, text, at, s.d.Now())
+	if err != nil {
+		return nil, err
+	}
+	return r, s.d.Reminders.Add(ctx, r)
+}
+
+func (s *Service) remindPersonal(ctx context.Context) (int, error) {
+	if s.d.Reminders == nil {
+		return 0, nil
+	}
+	now := s.d.Now()
+	due, err := s.d.Reminders.Due(ctx, now)
+	if err != nil {
+		return 0, err
+	}
+	sent := 0
+	for _, r := range due {
+		if !r.Remind(now) {
+			continue
+		}
+		switch err := s.d.Reminders.MarkReminded(tenant.With(ctx, string(r.Workspace)), r); {
+		case errors.Is(err, domain.ErrAlreadyReminded):
+		case err != nil:
+			return sent, err
+		default:
+			sent++
+		}
+	}
+	return sent, nil
 }

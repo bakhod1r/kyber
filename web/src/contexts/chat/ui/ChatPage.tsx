@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, type ChatEvent, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, type Message, remindPresets, type SavedItem, splitMentions, STATUS_PRESETS, type UserStatus, useChatStream,
+  applyEvent, type ChatEvent, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, type Message, parseRemind, remindPresets, type ScheduledMessage, type SavedItem, splitMentions, STATUS_PRESETS, type UserStatus, useChatStream,
 } from "../application";
 
 const PAGE = 50;
@@ -158,6 +158,31 @@ function MyStatus({ me }: { me: string }) {
 }
 
 const savedKey = ["chat", "saved"];
+const scheduledKey = ["chat", "scheduled"];
+
+/** My scheduled messages, soonest first, with Cancel (S67). */
+function ScheduledList({ title }: { title: (conversationId: string) => string }) {
+  const qc = useQueryClient();
+  const list = useQuery({ queryKey: scheduledKey, queryFn: chatUseCases.scheduled, refetchInterval: 30_000 });
+  const cancel = useMutation({ mutationFn: (id: string) => chatUseCases.cancelScheduled(id), onSuccess: () => qc.invalidateQueries({ queryKey: scheduledKey }) });
+  const items: ScheduledMessage[] = list.data ?? [];
+  if (items.length === 0) return null;
+  return (
+    <>
+      <h2>Scheduled</h2>
+      <ul aria-label="Scheduled messages">
+        {items.map((x) => (
+          <li key={x.id}>
+            <Link to={`/chat/${x.conversation_id}`}>{title(x.conversation_id) || "Conversation"}</Link>{" "}
+            <span className="muted">🕒 {new Date(x.send_at).toLocaleString()}</span>
+            <p>{x.body}</p>
+            <button className="ghost" onClick={() => cancel.mutate(x.id)}>Cancel</button>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
 
 /** S65: save a message for later, optionally with a reminder; saved ones can be forgotten again. */
 function SaveMenu({ m }: { m: Message }) {
@@ -209,11 +234,16 @@ function SavedList({ title }: { title: (conversationId: string) => string }) {
 /** S64: where something waits for me — conversations with unread messages, and (from the shell) my mentions. */
 function Activity({ conversations, title, activity }: { conversations: Conversation[]; title: (c: Conversation) => string; activity?: ReactNode }) {
   const unread = conversations.filter((c) => c.member && c.unread > 0);
+  const titleOf = (id: string) => {
+    const c = conversations.find((x) => x.id === id);
+    return c ? title(c) : "";
+  };
   return (
     <section className="chat-activity" aria-label="Activity">
       <h1>Activity</h1>
       {activity}
-      <SavedList title={(id) => { const c = conversations.find((x) => x.id === id); return c ? title(c) : ""; }} />
+      <ScheduledList title={titleOf} />
+      <SavedList title={titleOf} />
       <h2>Unread</h2>
       {unread.length === 0 ? <p className="muted">You are all caught up.</p> : (
         <ul aria-label="Unread conversations">
@@ -342,6 +372,29 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
     mutationFn: (body: string) => chatUseCases.post(id, body),
     onSuccess: (m) => qc.setQueryData<Message[]>(historyKey(id), (list) => applyEvent(list ?? [], id, { type: "message.posted", message: m })),
   });
+  const [note, setNote] = useState("");
+  const later = useMutation({
+    mutationFn: ({ body, at }: { body: string; at: Date }) => chatUseCases.schedule(id, body, at),
+    onSuccess: (sc) => {
+      setNote(`🕒 Scheduled for ${new Date(sc.send_at).toLocaleString()}.`);
+      void qc.invalidateQueries({ queryKey: scheduledKey });
+    },
+  });
+  const remind = useMutation({
+    mutationFn: ({ text, at }: { text: string; at: Date }) => chatUseCases.remind(id, text, at),
+    onSuccess: (r) => setNote(`⏰ I'll remind you at ${new Date(r.at).toLocaleString()}: ${r.text}`),
+  });
+  /** Sends, or for "/remind me …" sets a personal reminder (S67). */
+  const send = (body: string) => {
+    setNote("");
+    if (/^\/remind\b/i.test(body)) {
+      const r = parseRemind(body, new Date());
+      if (r) remind.mutate(r);
+      else setNote("Try: /remind me in 20 minutes to …, /remind me tomorrow …, /remind me at 15:30 …");
+      return;
+    }
+    post.mutate(body);
+  };
   const upload = useMutation({
     mutationFn: (f: File) => {
       if (f.size > MAX_FILE) throw new Error(`${f.name} is larger than 25 MB`);
@@ -393,12 +446,15 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
               if (f) upload.mutate(f);
             }} />
           </label>
-          <Composer label={`Message ${title}`} onSend={(b) => post.mutate(b)} onTyping={() => void chatUseCases.typing(id).catch(() => {})} />
+          <Composer label={`Message ${title}`} onSend={send} onSchedule={(body, at) => later.mutate({ body, at })}
+            onTyping={() => void chatUseCases.typing(id).catch(() => {})} />
         </div>
       ) : (
         <button onClick={() => join.mutate()}>Join {title}</button>
       )}
       {post.error && <p role="alert" className="error">{post.error.message}</p>}
+      {(later.error ?? remind.error) && <p role="alert" className="error">{(later.error ?? remind.error)!.message}</p>}
+      {note && <p role="status" className="muted">{note}</p>}
       {upload.isPending && <p className="muted">Uploading…</p>}
       {upload.error && <p role="alert" className="error">{upload.error.message}</p>}
     </section>
@@ -518,8 +574,10 @@ function ThreadPanel({ parent, names, me, onClose }: { parent: string; names: Ma
 }
 
 /** A message box: Enter sends, Shift+Enter breaks the line; typing is announced at most every 3 s. */
-function Composer({ label, initial = "", onSend, onTyping, onCancel }: {
+function Composer({ label, initial = "", onSend, onSchedule, onTyping, onCancel }: {
   label: string; initial?: string; onSend: (body: string) => void; onTyping?: () => void; onCancel?: () => void;
+  /** Send later (S67): offers times from now. */
+  onSchedule?: (body: string, at: Date) => void;
 }) {
   const [text, setText] = useState(initial);
   const lastTyping = useRef(0);
@@ -546,6 +604,17 @@ function Composer({ label, initial = "", onSend, onTyping, onCancel }: {
           }
         }} />
       <button onClick={send} disabled={!text.trim()}>Send</button>
+      {onSchedule && (
+        <select aria-label="Send later" value="" disabled={!text.trim()} onChange={(e) => {
+          const p = remindPresets(new Date())[Number(e.target.value)];
+          if (!p || !text.trim()) return;
+          onSchedule(text.trim(), p.at);
+          setText("");
+        }}>
+          <option value="">🕒</option>
+          {remindPresets(new Date()).map((p, i) => <option key={p.label} value={i}>Send {p.label.toLowerCase()}</option>)}
+        </select>
+      )}
     </div>
   );
 }

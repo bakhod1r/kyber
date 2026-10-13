@@ -479,3 +479,74 @@ func TestStatuses(t *testing.T) {
 		t.Fatalf("expired status = %+v", got)
 	}
 }
+
+// S67: scheduled messages are posted by the background job at their time; only the author sees them before.
+func TestScheduledMessages(t *testing.T) {
+	repo := memory.NewRepository()
+	sched, rem := memory.NewScheduled(), memory.NewReminders()
+	n := 0
+	c := &clock{t: time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)}
+	ev := &events{}
+	svc := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Scheduled: sched, Reminders: rem, Notifier: ev,
+		Members: members{"lead": {"w1"}, "dev": {"w1"}}, NewID: func() string { n++; return fmt.Sprintf("id-%03d", n) }, Now: c.now})
+	ctx := tenant.With(context.Background(), "w1")
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "general"})
+	if _, err := svc.Schedule(ctx, "dev", string(ch.ID), "hi", c.t.Add(time.Hour)); !errors.Is(err, domain.ErrNotMember) {
+		t.Fatalf("not a member = %v", err)
+	}
+	s, err := svc.Schedule(ctx, "lead", string(ch.ID), "standup in 5", c.t.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Reschedule(ctx, "dev", string(s.ID), "x", c.t.Add(time.Hour)); !errors.Is(err, domain.ErrScheduledNotFound) {
+		t.Fatalf("someone else's = %v", err)
+	}
+	if _, err := svc.Reschedule(ctx, "lead", string(s.ID), "standup in 5 min", c.t.Add(2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if mine, _ := svc.ScheduledFor(ctx, "lead"); len(mine) != 1 || mine[0].Body != "standup in 5 min" {
+		t.Fatalf("mine = %+v", mine)
+	}
+	if h, _ := svc.History(ctx, "lead", string(ch.ID), "", 50); len(h) != 0 {
+		t.Fatalf("posted early: %+v", h)
+	}
+	c.t = c.t.Add(2 * time.Hour)
+	if sent, err := svc.SendDue(context.Background()); sent != 1 || err != nil {
+		t.Fatalf("send due = %d %v", sent, err)
+	}
+	h, _ := svc.History(ctx, "lead", string(ch.ID), "", 50)
+	if len(h) != 1 || h[0].Body != "standup in 5 min" || h[0].Author != "lead" {
+		t.Fatalf("history = %+v", h)
+	}
+	if mine, _ := svc.ScheduledFor(ctx, "lead"); len(mine) != 0 {
+		t.Fatalf("still scheduled: %+v", mine)
+	}
+	if sent, _ := svc.SendDue(context.Background()); sent != 0 {
+		t.Fatalf("sent twice: %d", sent)
+	}
+	if len(repo.Outbox()) != 1 {
+		t.Fatalf("mentions event = %+v", repo.Outbox())
+	}
+
+	// Cancel before it is sent.
+	x, _ := svc.Schedule(ctx, "lead", string(ch.ID), "never", c.t.Add(time.Hour))
+	if err := svc.CancelScheduled(ctx, "lead", string(x.ID)); err != nil {
+		t.Fatal(err)
+	}
+	c.t = c.t.Add(2 * time.Hour)
+	if sent, _ := svc.SendDue(context.Background()); sent != 0 {
+		t.Fatalf("cancelled one sent: %d", sent)
+	}
+
+	// /remind me: a personal reminder, told as a notification.
+	if _, err := svc.Remind(ctx, "dev", string(ch.ID), "call the bank", c.t.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	c.t = c.t.Add(2 * time.Minute)
+	if sent, err := svc.RemindDue(context.Background()); sent != 1 || err != nil {
+		t.Fatalf("reminders = %d %v", sent, err)
+	}
+	if out := rem.Outbox(); len(out) != 1 || out[0].User != "dev" || out[0].Excerpt != "call the bank" {
+		t.Fatalf("reminder outbox = %+v", out)
+	}
+}

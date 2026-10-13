@@ -18,3 +18,7 @@ func TestSavedContract(t *testing.T) {
 }
 
 func TestStatusContract(t *testing.T) { repotest.RunStatuses(t, memory.NewStatuses()) }
+
+func TestScheduledContract(t *testing.T) {
+	repotest.RunScheduled(t, memory.NewRepository(), memory.NewScheduled(), memory.NewReminders())
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter } from "./model";
+import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter, parseRemind } from "./model";
 
 const msg = (id: string, body: string, extra: Partial<Message> = {}): Message => ({
   id, conversation_id: "c-1", author_id: "u-1", body, created_at: "2026-10-13T09:00:00Z", edited_at: null, deleted: false,
@@ -69,5 +69,19 @@ describe("status (S66)", () => {
     expect(c.map((x) => x.label)).toEqual(["30 minutes", "1 hour", "4 hours", "Today", "Don't clear"]);
     expect(c[3]!.at!.getHours()).toBe(23);
     expect(c[4]!.at).toBeNull();
+  });
+});
+
+describe("/remind (S67)", () => {
+  const now = new Date(2026, 9, 13, 16, 0);
+  it("reads in, tomorrow and at", () => {
+    expect(parseRemind("/remind me in 20 minutes to call the bank", now)).toEqual({ text: "call the bank", at: new Date(2026, 9, 13, 16, 20) });
+    expect(parseRemind("/remind me in 2h deploy", now)?.at).toEqual(new Date(2026, 9, 13, 18, 0));
+    expect(parseRemind("/remind me tomorrow standup notes", now)).toEqual({ text: "standup notes", at: new Date(2026, 9, 14, 9, 0) });
+    expect(parseRemind("/remind me at 17:30 review", now)?.at).toEqual(new Date(2026, 9, 13, 17, 30));
+    expect(parseRemind("/remind me at 9:00 review", now)?.at).toEqual(new Date(2026, 9, 14, 9, 0));
+  });
+  it("is null for anything else", () => {
+    for (const s of ["hello", "/remind me", "/remind me in 5 weeks x", "/remind me at 25:00 x", "/remind you in 5m x"]) expect(parseRemind(s, now)).toBeNull();
   });
 });

@@ -19,9 +19,13 @@ Order: daily use first, then channel management, Jira integration, huddle extras
   held during DND (still listed in Activity); status expires by itself.
   **Done:** `PUT /me/status`, `GET /chat/statuses`, migration 0056 (RLS); Notify's Quiet ACL (DND or a running
   Pomodoro) keeps chat mentions in-app only; status presets, "clear after", 🌙 next to names, API 0.47.0.
-- **S67 Scheduled messages and reminders** — post a message at a later time (edit/cancel before it is sent);
+- ✅ **S67 Scheduled messages and reminders** — post a message at a later time (edit/cancel before it is sent);
   `/remind me <when> <what>`. AC: sent by the background worker once, at most a minute late; only the author sees
   it before it is sent.
+  **Done:** `POST /conversations/{id}/scheduled`, `GET /chat/scheduled`, `PATCH/DELETE /scheduled/{id}`,
+  `POST /conversations/{id}/reminders`; migration 0057 (RLS); the job posts each once (message `ref`), drops it
+  if the author left; reminders reuse `chat.reminder`. UI: 🕒 "Send later", `/remind me in|tomorrow|at …`,
+  "Scheduled" in Activity. API 0.48.0.
 - **S68 Typing and read receipts** — "X is typing…" (typing API exists since S51) in the UI; in DMs "Seen" under
   my last message. AC: receipts only in DMs; never for channels.
 

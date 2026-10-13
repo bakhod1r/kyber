@@ -49,6 +49,11 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/messages/{id}/save", h.unsave)
 	mux.HandleFunc("GET /api/v1/chat/saved", h.saved)
 	mux.HandleFunc("PUT /api/v1/me/status", h.setStatus)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/scheduled", h.schedule)
+	mux.HandleFunc("GET /api/v1/chat/scheduled", h.scheduledList)
+	mux.HandleFunc("PATCH /api/v1/scheduled/{id}", h.reschedule)
+	mux.HandleFunc("DELETE /api/v1/scheduled/{id}", h.cancelScheduled)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/reminders", h.remind)
 	mux.HandleFunc("GET /api/v1/chat/statuses", h.statuses)
 	mux.HandleFunc("POST /api/v1/conversations/{id}/files", h.upload)
 	mux.HandleFunc("GET /api/v1/messages/{id}/file", h.download)
@@ -60,6 +65,8 @@ func codeFor(err error) (string, bool) {
 	switch {
 	case errors.Is(err, domain.ErrConversationNotFound):
 		return httpx.CodeConversationNotFound, true
+	case errors.Is(err, domain.ErrScheduledNotFound):
+		return httpx.CodeScheduledNotFound, true
 	case errors.Is(err, domain.ErrMessageNotFound):
 		return httpx.CodeMessageNotFound, true
 	case errors.Is(err, domain.ErrNameTaken):
@@ -69,7 +76,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
-		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus):
+		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -618,4 +625,88 @@ func (h *Handler) statuses(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+type scheduledDTO struct {
+	ID             string    `json:"id"`
+	ConversationID string    `json:"conversation_id"`
+	Body           string    `json:"body"`
+	SendAt         time.Time `json:"send_at"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+func toScheduled(s *domain.Scheduled) scheduledDTO {
+	return scheduledDTO{ID: string(s.ID), ConversationID: string(s.Conversation), Body: s.Body, SendAt: s.SendAt, CreatedAt: s.CreatedAt}
+}
+
+type scheduleIn struct {
+	Body   string    `json:"body"`
+	SendAt time.Time `json:"send_at"`
+}
+
+func (h *Handler) schedule(w http.ResponseWriter, r *http.Request) {
+	var in scheduleIn
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	sc, err := h.svc.Schedule(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Body, in.SendAt)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, toScheduled(sc))
+}
+
+func (h *Handler) scheduledList(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.ScheduledFor(r.Context(), auth.Actor(r.Context()))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := make([]scheduledDTO, len(list))
+	for i, sc := range list {
+		out[i] = toScheduled(sc)
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+func (h *Handler) reschedule(w http.ResponseWriter, r *http.Request) {
+	var in scheduleIn
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	sc, err := h.svc.Reschedule(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Body, in.SendAt)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toScheduled(sc))
+}
+
+func (h *Handler) cancelScheduled(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.CancelScheduled(r.Context(), auth.Actor(r.Context()), r.PathValue("id")); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// remind: {"text", "at"} — /remind me.
+func (h *Handler) remind(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Text string    `json:"text"`
+		At   time.Time `json:"at"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	rem, err := h.svc.Remind(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Text, in.At)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, map[string]any{"id": string(rem.ID), "text": rem.Text, "at": rem.At})
 }

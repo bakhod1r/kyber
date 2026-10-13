@@ -57,4 +57,22 @@ test("activity shows mentions and unread conversations", async ({ browser }) => 
   const last = a.getByRole("article").filter({ hasText: "back on Monday" });
   await expect(last.getByTitle("On vacation")).toHaveText("🏖");
   await expect(last.getByLabel("Do not disturb")).toBeVisible();
+
+  // S67: Ali schedules a message (only he sees it until then) and sets a /remind.
+  const box = a.getByRole("textbox", { name: `Message # act-${id}` });
+  await box.fill("release notes are ready");
+  await a.getByLabel("Send later").selectOption({ label: "Send tomorrow at 9:00" });
+  await expect(a.getByText(/🕒 Scheduled for/)).toBeVisible();
+  await expect(a.getByRole("log", { name: "Messages" })).not.toContainText("release notes are ready");
+  await box.fill("/remind me in 20 minutes to check the dashboards");
+  await box.press("Enter");
+  await expect(a.getByText(/⏰ I'll remind you at .*check the dashboards/)).toBeVisible();
+  await box.fill("/remind me someday");
+  await box.press("Enter");
+  await expect(a.getByText(/Try: \/remind me in 20 minutes/)).toBeVisible();
+  await a.getByRole("link", { name: "🔔 Activity" }).click();
+  const scheduled = a.getByRole("list", { name: "Scheduled messages" });
+  await expect(scheduled).toContainText("release notes are ready");
+  await scheduled.getByRole("button", { name: "Cancel" }).click();
+  await expect(scheduled).toHaveCount(0);
 });

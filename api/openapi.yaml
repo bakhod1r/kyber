@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.47.0
+  version: 0.48.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -952,6 +952,59 @@ paths:
           description: OK
           content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/UserStatus" } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/scheduled:
+    post:
+      operationId: scheduleMessage
+      description: Schedules a message (members only) to be posted at send_at (1 minute to 120 days ahead); only I see it before.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ScheduleInput" } } } }
+      responses:
+        "201": { description: Scheduled, content: { application/json: { schema: { $ref: "#/components/schemas/ScheduledMessage" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/chat/scheduled:
+    get:
+      operationId: listScheduledMessages
+      description: My scheduled messages, soonest first.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ScheduledMessage" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/scheduled/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    patch:
+      operationId: rescheduleMessage
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ScheduleInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ScheduledMessage" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: cancelScheduledMessage
+      responses:
+        "204": { description: Cancelled }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/reminders:
+    post:
+      operationId: remindMe
+      description: A personal reminder (/remind me), told to me as a notification of kind reminder at `at`.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [text, at], properties: { text: { type: string }, at: { type: string, format: date-time } } } } }
+      responses:
+        "201":
+          description: Set
+          content: { application/json: { schema: { type: object, required: [id, text, at], properties: { id: { type: string }, text: { type: string }, at: { type: string, format: date-time } } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/chat/saved:
     get:
@@ -2768,6 +2821,19 @@ components:
         updated_by: { type: string }
         updated_at: { type: string, format: date-time }
         deleted: { type: boolean }
+    ScheduleInput:
+      type: object
+      required: [body, send_at]
+      properties: { body: { type: string }, send_at: { type: string, format: date-time } }
+    ScheduledMessage:
+      type: object
+      required: [id, conversation_id, body, send_at, created_at]
+      properties:
+        id: { type: string }
+        conversation_id: { type: string }
+        body: { type: string }
+        send_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
     UserStatus:
       type: object
       required: [user_id, emoji, text, expires_at, dnd, dnd_until]

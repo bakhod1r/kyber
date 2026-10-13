@@ -365,3 +365,70 @@ func RunStatuses(t *testing.T, st domain.Statuses) {
 		t.Fatalf("no users = %+v %v", got, err)
 	}
 }
+
+func sid(n int) domain.ScheduledID {
+	return domain.ScheduledID(fmt.Sprintf("76000000-0000-4000-8000-%012d", n))
+}
+
+// RunScheduled checks scheduled messages and personal reminders (S67) over the store of r.
+func RunScheduled(t *testing.T, r domain.Repository, sched domain.ScheduledMessages, rem domain.Reminders) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	ch, _ := domain.NewChannel(cid(60), WS, "sched", "", false, Lead, t0)
+	if err := r.Create(ctx, ch); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := domain.NewScheduled(sid(1), WS, ch.ID, Lead, "later", t0.Add(2*time.Hour), t0)
+	b, _ := domain.NewScheduled(sid(2), WS, ch.ID, Lead, "sooner", t0.Add(time.Hour), t0)
+	c, _ := domain.NewScheduled(sid(3), WS, ch.ID, Dev, "dev's", t0.Add(time.Hour), t0)
+	for _, s := range []*domain.Scheduled{a, b, c} {
+		if err := sched.Add(ctx, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mine, err := sched.Mine(ctx, WS, Lead)
+	if err != nil || len(mine) != 2 || mine[0].ID != b.ID || mine[1].Body != "later" || !mine[1].SendAt.Equal(t0.Add(2*time.Hour)) ||
+		mine[0].Conversation != ch.ID || mine[0].Workspace != WS {
+		t.Fatalf("mine = %+v %v", mine, err)
+	}
+	_ = a.Reschedule("much later", t0.Add(3*time.Hour), t0)
+	if err := sched.Update(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := sched.ByID(ctx, a.ID); err != nil || got.Body != "much later" || !got.SendAt.Equal(t0.Add(3*time.Hour)) || got.Author != Lead {
+		t.Fatalf("ByID = %+v %v", got, err)
+	}
+	if due, _ := sched.Due(ctx, t0.Add(time.Hour)); len(due) != 2 {
+		t.Fatalf("due = %+v", due)
+	}
+	if err := sched.Delete(ctx, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []domain.ScheduledID{b.ID, "nope"} {
+		if _, err := sched.ByID(ctx, id); !errors.Is(err, domain.ErrScheduledNotFound) {
+			t.Fatalf("deleted %s = %v", id, err)
+		}
+	}
+
+	r1, _ := domain.NewReminder(domain.ReminderID(sid(10)), WS, Dev, ch.ID, "call the bank", t0.Add(time.Hour), t0)
+	r2, _ := domain.NewReminder(domain.ReminderID(sid(11)), WS, Dev, ch.ID, "tomorrow", t0.Add(24*time.Hour), t0)
+	for _, x := range []*domain.Reminder{r1, r2} {
+		if err := rem.Add(ctx, x); err != nil {
+			t.Fatal(err)
+		}
+	}
+	due, err := rem.Due(ctx, t0.Add(time.Hour))
+	if err != nil || len(due) != 1 || due[0].Text != "call the bank" || due[0].User != Dev || due[0].Workspace != WS {
+		t.Fatalf("due reminders = %+v %v", due, err)
+	}
+	due[0].Remind(t0.Add(time.Hour))
+	if err := rem.MarkReminded(ctx, due[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := rem.MarkReminded(ctx, due[0]); !errors.Is(err, domain.ErrAlreadyReminded) {
+		t.Fatalf("twice = %v", err)
+	}
+	if left, _ := rem.Due(ctx, t0.Add(time.Hour)); len(left) != 0 {
+		t.Fatalf("left = %+v", left)
+	}
+}
