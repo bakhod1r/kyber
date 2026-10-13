@@ -6,5 +6,6 @@ describe("notificationTarget", () => {
     expect(notificationTarget({ kind: "assigned", issue_key: "MY-APP-12" })).toBe("/projects/MY-APP?issue=MY-APP-12");
     expect(notificationTarget({ kind: "announcement", issue_key: "", project_key: "KYB" })).toBe("/projects/KYB/announcements");
     expect(notificationTarget({ kind: "announcement", issue_key: "", project_key: "" })).toBe("/");
+    expect(notificationTarget({ kind: "meeting", issue_key: "", project_key: "KYB" })).toBe("/meetings");
   });
 });

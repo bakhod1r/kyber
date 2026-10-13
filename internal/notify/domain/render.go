@@ -6,6 +6,16 @@ import "fmt"
 // notification; link opens the issue in Kyber.
 func Render(n Notification, link string) (subject, text string) {
 	switch n.Kind {
+	case KindMeeting:
+		subject = n.IssueTitle + " — " + n.Excerpt
+		if n.Project != "" {
+			subject = fmt.Sprintf("[%s] %s", n.Project, subject)
+		}
+		who := ""
+		if n.ActorName != "" {
+			who = n.ActorName + ": "
+		}
+		text = fmt.Sprintf("📅 %s«%s»\n%s", who, n.IssueTitle, n.Excerpt)
 	case KindAnnouncement:
 		subject = "Announcement: " + n.IssueTitle
 		if n.Project != "" {

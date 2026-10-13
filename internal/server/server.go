@@ -181,10 +181,14 @@ type deps struct {
 	livePool      *pgxpool.Pool   // set: hints cross replicas through NOTIFY
 	ctx           context.Context // lifetime of background work (outbox relay)
 	relayEvery    time.Duration
+	reminderEvery time.Duration // how often due meeting reminders are sent (default 30s)
 }
 
 // WithContext bounds background work (the outbox relay) to ctx.
 func WithContext(ctx context.Context) Option { return func(d *deps) { d.ctx = ctx } }
+
+// WithReminderEvery sets how often due meeting reminders are looked for (default 30s).
+func WithReminderEvery(every time.Duration) Option { return func(d *deps) { d.reminderEvery = every } }
 
 // WithRelayEvery sets how often the outbox relay polls (default 1s).
 func WithRelayEvery(every time.Duration) Option { return func(d *deps) { d.relayEvery = every } }
@@ -247,6 +251,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	sprintRepo := agilememory.NewRepository()
 	versionRepo := agilememory.NewVersionRepository()
 	annRepo := annmemory.NewRepository()
+	meetingRepo := calendarmemory.NewRepository()
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), worklogs: issuememory.NewWorklogRepository(), fields: issuememory.NewCustomFieldRepository(),
@@ -254,8 +259,8 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
-		meetings: calendarmemory.NewRepository(), focusSessions: focusmemory.NewRepository(),
-		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta)),
+		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
@@ -366,7 +371,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 		Access: importeracl.NewProject(importGate), Members: importeracl.NewProject(importGate),
 		Issues: importeracl.NewIssues(issues, time.Now), Mappings: d.mappings, Source: importeracl.NewSource(issues, d.users),
 	})
-	calendar := calendarapp.NewService(d.meetings, calendaracl.NewMembers(workspaces, d.users), id.New, time.Now)
+	teams := calendaracl.NewTeams(projects, workspaces, d.siteAdmin)
+	calendar := calendarapp.NewService(d.meetings, calendaracl.NewMembers(workspaces, d.users), id.New, time.Now).WithTeams(teams, teams)
 	focus := focusapp.NewService(focusapp.Deps{Sessions: d.focusSessions, Calendar: focusacl.NewCalendar(calendar),
 		Issues: focusacl.NewIssues(issues, projectcompat.NewGate(projects, access, accessdomain.AssignableUser)), NewID: id.New, Clock: systemClock{}})
 	relay := outbox.NewRelay(d.outbox, log)
@@ -383,6 +389,10 @@ func build(log *slog.Logger, d deps) http.Handler {
 	relay.Handle("issue.assigned", notify.OnIssueAssigned)
 	relay.Handle("announcement.published", notify.OnAnnouncement)
 	relay.Handle("announcement.published", notify.OnProjectEvent)
+	for _, name := range []string{"meeting.scheduled", "meeting.cancelled", "meeting.reminder"} {
+		relay.Handle(name, notify.OnMeetingEvent)
+		relay.Handle(name, notify.OnProjectEvent)
+	}
 	relay.Handle("comment.added", notify.OnCommentAdded)
 	relay.Handle("issue.changed", notify.OnIssueChanged)
 	for _, name := range []string{"issue.created", "issue.assigned", "comment.added"} {
@@ -409,6 +419,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	}
 	go relay.Run(d.ctx, d.relayEvery)
 	go dispatch(d.ctx, log, notify, d.senders(), d.dispatchEvery)
+	go remindMeetings(d.ctx, log, calendar, d.reminderEvery)
 	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
@@ -580,6 +591,25 @@ func (d deps) senders() map[notifydomain.Channel]notifyapp.Sender {
 }
 
 // dispatch sends due email/Telegram deliveries until ctx ends.
+// remindMeetings sends due meeting reminders until ctx ends (once per meeting, across replicas).
+func remindMeetings(ctx context.Context, log *slog.Logger, calendar *calendarapp.Service, every time.Duration) {
+	if every == 0 {
+		every = 30 * time.Second
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if _, err := calendar.RemindDue(ctx); err != nil {
+				log.WarnContext(ctx, "meeting reminders: will retry", "err", err)
+			}
+		}
+	}
+}
+
 func dispatch(ctx context.Context, log *slog.Logger, notify *notifyapp.Service, senders map[notifydomain.Channel]notifyapp.Sender, every time.Duration) {
 	if len(senders) == 0 {
 		return

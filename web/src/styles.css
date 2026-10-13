@@ -439,3 +439,8 @@ a.user:hover { text-decoration: underline; }
 .announcement-feed { list-style: none; padding: 0; display: grid; gap: 10px; }
 .announcement-feed article { border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 10px 12px; }
 .announcement-feed h3 { margin: 0 0 4px; }
+
+/* Team events (E2) */
+.meeting-list .badge-label { display: inline-block; padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-size: 0.85em; }
+.meeting-list .rsvp { display: inline-flex; gap: 4px; margin-left: 8px; }
+.meeting-list .rsvp button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }

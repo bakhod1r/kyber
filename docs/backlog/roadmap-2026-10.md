@@ -41,5 +41,7 @@ submissions become issues through the Issue Tracking ACL). Section D is complete
 1. E1 Announcements — done: project admins (project) and workspace owners/admins or `KYBER_ADMIN_EMAILS`
    (workspace) publish; every member is notified in the inbox, by email/Telegram per their settings, in
    the project's Telegram groups, and open pages refresh live.
-2. E2 Team events: meetings for a project or the workspace with notifications on create/change/cancel,
-   a reminder 15 minutes before, and RSVP.
+2. E2 Team events — done: meetings for chosen people, a project's members or the workspace's; everyone
+   invited is notified when it is scheduled or cancelled (inbox, email/Telegram, the project's Telegram
+   groups), reminded once 15 minutes before (once across replicas), and answers going/maybe/declined.
+   Rescheduling (moving a meeting) is not there yet.

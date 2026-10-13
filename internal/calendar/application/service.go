@@ -23,11 +23,36 @@ type Members interface {
 	IsMember(ctx context.Context, workspace, user string) (bool, error)
 }
 
+// Teams are the ports for team events (ACLs to Project and Workspace).
+type (
+	// Organizers checks who may invite a whole audience: project members with write access for
+	// a project, workspace administrators for the workspace (ErrForbidden / ErrProjectNotFound).
+	Organizers interface {
+		InviteProject(ctx context.Context, actor, project string) error
+		InviteWorkspace(ctx context.Context, actor string) error
+	}
+	// Audience lists the members invited by scope.
+	Audience interface {
+		ProjectMembers(ctx context.Context, project string) ([]string, error)
+		WorkspaceMembers(ctx context.Context) ([]string, error)
+	}
+)
+
+var ErrProjectNotFound = errors.New("project not found")
+
 type Service struct {
-	repo    domain.Repository
-	members Members
-	newID   func() string
-	now     func() time.Time
+	repo       domain.Repository
+	members    Members
+	organizers Organizers
+	audience   Audience
+	newID      func() string
+	now        func() time.Time
+}
+
+// WithTeams enables meetings for a whole project or workspace.
+func (s *Service) WithTeams(o Organizers, a Audience) *Service {
+	s.organizers, s.audience = o, a
+	return s
 }
 
 func NewService(repo domain.Repository, members Members, newID func() string, now func() time.Time) *Service {
@@ -45,14 +70,42 @@ type Schedule struct {
 	Title      string
 	Start, End time.Time
 	Attendees  []string
+	// Scope "project" (with Project) or "workspace" invites every member; "" or "people" invites Attendees.
+	Scope   string
+	Project string
 }
 
-// Schedule books a meeting in the request's workspace; the organizer always attends.
+// Schedule books a meeting in the request's workspace; the organizer always attends. A team
+// event invites a project's or the workspace's members (and tells them all).
 func (s *Service) Schedule(ctx context.Context, actor string, in Schedule) (*domain.Meeting, error) {
 	if in.Start.Before(s.now().Add(-time.Minute)) {
 		return nil, ErrInPast
 	}
 	ws := workspace(ctx)
+	aud := domain.Audience{Scope: domain.Scope(in.Scope), Project: in.Project}
+	if aud.Scope != domain.ScopeProject {
+		aud.Project = "" // only a project event names a project
+	}
+	switch aud.Scope {
+	case domain.ScopeProject:
+		if err := s.organizers.InviteProject(ctx, actor, in.Project); err != nil {
+			return nil, err
+		}
+		ids, err := s.audience.ProjectMembers(ctx, in.Project)
+		if err != nil {
+			return nil, err
+		}
+		in.Attendees = append(in.Attendees, ids...)
+	case domain.ScopeWorkspace:
+		if err := s.organizers.InviteWorkspace(ctx, actor); err != nil {
+			return nil, err
+		}
+		ids, err := s.audience.WorkspaceMembers(ctx)
+		if err != nil {
+			return nil, err
+		}
+		in.Attendees = append(in.Attendees, ids...)
+	}
 	attendees := make([]domain.UserID, 0, len(in.Attendees))
 	for _, a := range in.Attendees {
 		ok, err := s.members.IsMember(ctx, ws, a)
@@ -64,20 +117,67 @@ func (s *Service) Schedule(ctx context.Context, actor string, in Schedule) (*dom
 		}
 		attendees = append(attendees, domain.UserID(a))
 	}
-	m, err := domain.NewMeeting(domain.MeetingID(s.newID()), domain.WorkspaceID(ws), in.Title, in.Start, in.End, domain.UserID(actor), attendees)
+	m, err := domain.PlanMeeting(domain.MeetingID(s.newID()), domain.WorkspaceID(ws), in.Title, in.Start, in.End, domain.UserID(actor), attendees, aud)
 	if err != nil {
 		return nil, err
 	}
 	return m, s.repo.Create(ctx, m)
 }
 
-func (s *Service) Cancel(ctx context.Context, actor, id string) error {
+// visible loads a meeting of the request's workspace.
+func (s *Service) visible(ctx context.Context, id string) (*domain.Meeting, error) {
 	m, err := s.repo.ByID(ctx, domain.MeetingID(id))
+	if err == nil && string(m.Workspace) != workspace(ctx) {
+		err = domain.ErrMeetingNotFound
+	}
+	return m, err
+}
+
+// Respond records the actor's answer to an invitation.
+func (s *Service) Respond(ctx context.Context, actor, id, answer string) (*domain.Meeting, error) {
+	m, err := s.visible(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	r, err := domain.ParseResponse(answer)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.Respond(domain.UserID(actor), r); err != nil {
+		return nil, domain.ErrMeetingNotFound // outsiders cannot learn that it exists
+	}
+	return m, s.repo.Respond(ctx, m, domain.UserID(actor))
+}
+
+// RemindDue reminds the attendees of every meeting (in any workspace) starting within
+// domain.ReminderLead of now, once; it returns how many reminders it sent.
+func (s *Service) RemindDue(ctx context.Context) (int, error) {
+	now := s.now()
+	due, err := s.repo.DueForReminder(ctx, now, now.Add(domain.ReminderLead))
+	if err != nil {
+		return 0, err
+	}
+	sent := 0
+	for _, m := range due {
+		if !m.Remind(now) {
+			continue
+		}
+		err := s.repo.SaveReminder(tenant.With(ctx, string(m.Workspace)), m)
+		switch {
+		case errors.Is(err, domain.ErrAlreadyReminded): // another replica was first
+		case err != nil:
+			return sent, err
+		default:
+			sent++
+		}
+	}
+	return sent, nil
+}
+
+func (s *Service) Cancel(ctx context.Context, actor, id string) error {
+	m, err := s.visible(ctx, id)
 	if err != nil {
 		return err
-	}
-	if string(m.Workspace) != workspace(ctx) {
-		return domain.ErrMeetingNotFound
 	}
 	if string(m.Organizer) != actor {
 		if !slices.Contains(m.Attendees, domain.UserID(actor)) {
@@ -85,7 +185,8 @@ func (s *Service) Cancel(ctx context.Context, actor, id string) error {
 		}
 		return ErrForbidden
 	}
-	return s.repo.Delete(ctx, m.ID)
+	m.Cancel(domain.UserID(actor))
+	return s.repo.Cancel(ctx, m)
 }
 
 // Timetable lists the actor's meetings in the request's workspace.

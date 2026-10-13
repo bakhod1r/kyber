@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.35.0
+  version: 0.36.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -253,7 +253,11 @@ paths:
         "422": { $ref: "#/components/responses/Error" }
     post:
       operationId: scheduleMeeting
-      description: Books a meeting; the organizer always attends. During a meeting its attendees cannot run a Pomodoro.
+      description: |
+        Books a meeting; the organizer always attends. During a meeting its attendees cannot run a Pomodoro.
+        scope "project" (with project_key; project members with write access) or "workspace" (workspace owners/admins,
+        KYBER_ADMIN_EMAILS in single-tenant mode) invites every member. Everyone invited is notified, and reminded 15 minutes
+        before the start.
       requestBody:
         required: true
         content:
@@ -266,10 +270,13 @@ paths:
                 starts_at: { type: string, format: date-time }
                 ends_at: { type: string, format: date-time }
                 attendee_ids: { type: array, items: { type: string } }
+                scope: { type: string, enum: ["", people, project, workspace] }
+                project_key: { type: string }
       responses:
         "201": { description: Scheduled, content: { application/json: { schema: { $ref: "#/components/schemas/Meeting" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/meetings/{id}:
@@ -281,6 +288,22 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/meetings/{id}/response:
+    put:
+      operationId: respondToMeeting
+      description: An attendee answers the invitation.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [response], properties: { response: { type: string, enum: [going, maybe, declined] } } }
+      responses:
+        "200": { description: Answered, content: { application/json: { schema: { $ref: "#/components/schemas/Meeting" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/focus:
     get:
       operationId: currentFocus
@@ -1971,7 +1994,7 @@ components:
     Meeting:
       type: object
       additionalProperties: false
-      required: [id, title, starts_at, ends_at, organizer_id, attendee_ids]
+      required: [id, title, starts_at, ends_at, organizer_id, attendee_ids, scope, project_key, responses]
       properties:
         id: { type: string }
         title: { type: string }
@@ -1979,6 +2002,9 @@ components:
         ends_at: { type: string, format: date-time }
         organizer_id: { type: string }
         attendee_ids: { type: array, items: { type: string } }
+        scope: { type: string, enum: [people, project, workspace] }
+        project_key: { type: [string, "null"] }
+        responses: { type: object, additionalProperties: { type: string, enum: [going, maybe, declined] }, description: Attendee id → answer (those who answered). }
     FocusSession:
       type: object
       additionalProperties: false
@@ -2465,7 +2491,7 @@ components:
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [assigned, commented, mentioned, transitioned, announcement], description: "transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To). announcement: news to a project (project_key) or the workspace (project_key empty); issue_key is empty and issue_title holds its title." }
+        kind: { type: string, enum: [assigned, commented, mentioned, transitioned, announcement, meeting], description: "meeting: a meeting you are invited to was scheduled or cancelled, or starts soon (excerpt: when). transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To). announcement: news to a project (project_key) or the workspace (project_key empty); issue_key is empty and issue_title holds its title." }
         issue_key: { type: string }
         issue_title: { type: string }
         project_key: { type: string, description: The announced project; empty for issue notifications and workspace announcements. }

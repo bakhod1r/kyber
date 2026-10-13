@@ -25,6 +25,8 @@ const (
 	KindTransitioned Kind = "transitioned"
 	// KindAnnouncement: news published to a project's or a workspace's members.
 	KindAnnouncement Kind = "announcement"
+	// KindMeeting: a meeting you are invited to was scheduled or cancelled, or starts soon.
+	KindMeeting Kind = "meeting"
 )
 
 // Notification is one message to one recipient about one event. SourceEvent (the

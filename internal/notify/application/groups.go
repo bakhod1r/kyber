@@ -123,6 +123,7 @@ func (s *Service) OnProjectEvent(ctx context.Context, m outbox.Message) error {
 	var e struct {
 		ID, Key, Title, Reporter, By, Project, Author, Excerpt string
 		Items                                                  []fieldChange
+		Start, End                                             time.Time
 	}
 	if err := json.Unmarshal(m.Payload, &e); err != nil {
 		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "name", m.Name)
@@ -134,6 +135,9 @@ func (s *Service) OnProjectEvent(ctx context.Context, m outbox.Message) error {
 		actor, err = s.d.Users.DisplayName(ctx, e.Author)
 		ev, project = domain.ProjectEvent{Kind: domain.EventAnnouncement, Actor: actor, Title: e.Title, Text: e.Excerpt}, e.Project
 	}
+	if strings.HasPrefix(m.Name, "meeting.") && e.Project != "" {
+		ev, project = domain.ProjectEvent{Kind: domain.EventMeeting, Title: e.Title, Text: domain.MeetingText(m.Name, e.Start, e.End)}, e.Project
+	}
 	if err != nil || project == "" {
 		return err
 	}
@@ -143,6 +147,8 @@ func (s *Service) OnProjectEvent(ctx context.Context, m outbox.Message) error {
 	}
 	text := ev.Message(fmt.Sprintf("%s/projects/%s", s.d.PublicURL, url.PathEscape(project)))
 	switch {
+	case ev.Kind == domain.EventMeeting:
+		text = ev.Message(s.d.PublicURL + "/meetings")
 	case ev.Kind == domain.EventAnnouncement:
 		text = ev.Message(announcementLink(s.d.PublicURL, project))
 	case ev.IssueKey != "":

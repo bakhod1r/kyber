@@ -31,19 +31,39 @@ type Meeting struct {
 	Start, End time.Time
 	Organizer  UserID
 	Attendees  []UserID // includes the organizer; sorted, unique
+	Audience   Audience
+	Responses  map[UserID]Response // attendees who answered
+	Reminded   bool                // the reminder before the start was sent
+	events     []Event
 }
 
+// NewMeeting books a meeting with chosen people.
 func NewMeeting(id MeetingID, ws WorkspaceID, title string, start, end time.Time, organizer UserID, attendees []UserID) (*Meeting, error) {
+	return PlanMeeting(id, ws, title, start, end, organizer, attendees, Audience{Scope: ScopePeople})
+}
+
+// PlanMeeting books a meeting for an audience: chosen people, or a project's or the workspace's
+// members (attendees are then those members, resolved by the application). Everyone invited is
+// told through the Scheduled event.
+func PlanMeeting(id MeetingID, ws WorkspaceID, title string, start, end time.Time, organizer UserID, attendees []UserID, aud Audience) (*Meeting, error) {
 	if title = strings.TrimSpace(title); title == "" {
 		return nil, ErrEmptyTitle
 	}
 	if start.IsZero() || !end.After(start) || end.Sub(start) > MaxDuration {
 		return nil, ErrInvalidTime
 	}
+	if aud.Scope == "" {
+		aud.Scope = ScopePeople
+	}
+	if !slices.Contains(scopes, aud.Scope) || (aud.Scope == ScopeProject) != (aud.Project != "") {
+		return nil, ErrInvalidAudience
+	}
 	all := append(slices.Clone(attendees), organizer)
 	slices.Sort(all)
-	return &Meeting{ID: id, Workspace: ws, Title: title, Start: start.UTC(), End: end.UTC(), Organizer: organizer,
-		Attendees: slices.Compact(all)}, nil
+	m := &Meeting{ID: id, Workspace: ws, Title: title, Start: start.UTC(), End: end.UTC(), Organizer: organizer,
+		Attendees: slices.Compact(all), Audience: aud, Responses: map[UserID]Response{}}
+	m.events = append(m.events, Scheduled{m.facts(), m.Organizer})
+	return m, nil
 }
 
 // Blocks reports whether the meeting keeps u busy at some point in [from, to).
@@ -51,10 +71,22 @@ func (m *Meeting) Blocks(u UserID, from, to time.Time) bool {
 	return slices.Contains(m.Attendees, u) && from.Before(m.End) && m.Start.Before(to)
 }
 
+// ErrAlreadyReminded: another replica sent the reminder first.
+var ErrAlreadyReminded = errors.New("meeting reminder already sent")
+
+// Repository stores meetings; saving writes their raised events to the outbox in the same
+// transaction.
 type Repository interface {
 	Create(ctx context.Context, m *Meeting) error
-	Delete(ctx context.Context, id MeetingID) error // ErrMeetingNotFound
+	// Cancel removes the meeting (Cancelled raised); ErrMeetingNotFound if it is gone.
+	Cancel(ctx context.Context, m *Meeting) error
 	ByID(ctx context.Context, id MeetingID) (*Meeting, error)
 	// ForUser lists the user's meetings overlapping [from, to), ordered by start.
 	ForUser(ctx context.Context, u UserID, from, to time.Time) ([]*Meeting, error)
+	// Respond stores u's answer from m.Responses.
+	Respond(ctx context.Context, m *Meeting, u UserID) error
+	// DueForReminder lists meetings of every workspace starting in [from, to) not yet reminded.
+	DueForReminder(ctx context.Context, from, to time.Time) ([]*Meeting, error)
+	// SaveReminder marks m reminded and writes its Reminder; ErrAlreadyReminded if it was.
+	SaveReminder(ctx context.Context, m *Meeting) error
 }

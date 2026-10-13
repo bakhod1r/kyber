@@ -80,6 +80,7 @@ const (
 	EventSprintStarted   EventKind = "sprint_started"
 	EventSprintCompleted EventKind = "sprint_completed"
 	EventAnnouncement    EventKind = "announcement"
+	EventMeeting         EventKind = "meeting"
 )
 
 // Message is the Telegram text for the event, ending with a link to the project.
@@ -92,6 +93,8 @@ func (e ProjectEvent) Message(link string) string {
 		text = fmt.Sprintf("🔄 %s moved %s «%s»: %s → %s", e.Actor, e.IssueKey, e.Title, e.From, e.To)
 	case EventSprintStarted:
 		text = fmt.Sprintf("🏁 %s started", e.Sprint)
+	case EventMeeting:
+		text = fmt.Sprintf("📅 %s — %s", e.Title, e.Text)
 	case EventAnnouncement:
 		text = fmt.Sprintf("📣 %s: %s", e.Actor, e.Title)
 		if e.Text != "" {

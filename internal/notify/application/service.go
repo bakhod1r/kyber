@@ -2,6 +2,7 @@
 package application
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -122,6 +123,50 @@ func (s *Service) OnAnnouncement(ctx context.Context, m outbox.Message) error {
 			return err
 		}
 		if err := s.enqueue(ctx, n, a.Project); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// meeting mirrors the meeting.* events (a published event contract of the Calendar context).
+type meeting struct {
+	Workspace, Project, Title string
+	Start, End                time.Time
+	Attendees                 []string
+	Organizer, By             string
+}
+
+// OnMeetingEvent tells the invited about meeting.scheduled and meeting.cancelled (not whoever did
+// it) and reminds them before meeting.reminder's start.
+func (s *Service) OnMeetingEvent(ctx context.Context, m outbox.Message) error {
+	var e meeting
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "name", m.Name)
+		return nil
+	}
+	actor := cmp.Or(e.Organizer, e.By)
+	actorName := ""
+	if actor != "" {
+		name, err := s.d.Users.DisplayName(ctx, actor)
+		if err != nil {
+			return err
+		}
+		actorName = name
+	}
+	ids := make([]domain.UserID, len(e.Attendees))
+	for i, u := range e.Attendees {
+		ids[i] = domain.UserID(u)
+	}
+	for _, u := range domain.AnnouncementRecipients(domain.UserID(actor), ids) {
+		n := domain.Notification{
+			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Workspace: e.Workspace, Kind: domain.KindMeeting, Project: e.Project,
+			IssueTitle: e.Title, ActorName: actorName, Excerpt: domain.MeetingText(m.Name, e.Start, e.End), SourceEvent: m.ID, CreatedAt: s.d.Now(),
+		}
+		if err := s.d.Repo.Add(ctx, n); err != nil {
+			return err
+		}
+		if err := s.enqueue(ctx, n, e.Project); err != nil {
 			return err
 		}
 	}

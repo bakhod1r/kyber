@@ -9,6 +9,7 @@ const VERB: Record<Notification["kind"], string> = {
   mentioned: "mentioned you on",
   transitioned: "changed the status of",
   announcement: "announced",
+  meeting: "📅",
 };
 
 export function NotificationBell() {
@@ -71,7 +72,7 @@ export function NotificationBell() {
               <li key={n.id}>
                 <button type="button" className={`note${n.read ? "" : " unread"}`} onClick={() => openIssue(n)}>
                   <span className="note-line">
-                    <strong>{n.actor_name}</strong> {VERB[n.kind]} <span className="key">{n.kind === "announcement" ? (n.project_key || "📣") : n.issue_key}</span>
+                    <strong>{n.actor_name}</strong> {VERB[n.kind]} <span className="key">{n.kind === "announcement" || n.kind === "meeting" ? n.project_key || (n.kind === "meeting" ? n.excerpt : "📣") : n.issue_key}</span>
                   </span>
                   <span className="note-title">{n.issue_title}</span>
                   {n.excerpt && <span className="note-excerpt">{n.excerpt}</span>}

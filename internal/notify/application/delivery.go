@@ -47,8 +47,11 @@ func (s *Service) enqueue(ctx context.Context, n domain.Notification, project st
 		return err
 	}
 	link := fmt.Sprintf("%s/projects/%s?issue=%s", s.d.PublicURL, url.PathEscape(project), url.QueryEscape(n.IssueKey))
-	if n.Kind == domain.KindAnnouncement {
+	switch n.Kind {
+	case domain.KindAnnouncement:
 		link = announcementLink(s.d.PublicURL, project)
+	case domain.KindMeeting:
+		link = s.d.PublicURL + "/meetings"
 	}
 	subject, text := domain.Render(n, link)
 	for _, ch := range []domain.Channel{domain.ChannelEmail, domain.ChannelTelegram} {
