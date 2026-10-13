@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ErrInvalidJQL wraps every ParseError.
@@ -44,7 +45,18 @@ type Issue struct {
 	Resolution           string
 	Parent               string // parent key
 	Points               *float64
+	Custom               map[string]string // custom field values by lower-case field name
 }
+
+// CustomType is a custom field's type as queries see it: text, number, date or select.
+type CustomType string
+
+const (
+	CustomText   CustomType = "text"
+	CustomNumber CustomType = "number"
+	CustomDate   CustomType = "date"
+	CustomSelect CustomType = "select"
+)
 
 // Resolver turns names in a query into ids (users by email, sprints and versions by name).
 type Resolver interface {
@@ -130,12 +142,15 @@ const (
 	kEnum   fieldKind = iota // =, !=, IN, NOT IN, IS
 	kText                    // ~, !~, IS
 	kNumber                  // =, !=, <, <=, >, >=, IS
+	kDate                    // =, !=, <, <=, >, >=, IS (YYYY-MM-DD)
 )
 
-var fields = map[string]struct {
+type fieldDef struct {
 	name string
 	kind fieldKind
-}{
+}
+
+var fields = map[string]fieldDef{
 	"project": {"project", kEnum}, "key": {"key", kEnum}, "issuekey": {"key", kEnum},
 	"type": {"type", kEnum}, "issuetype": {"type", kEnum}, "status": {"status", kEnum},
 	"statuscategory": {"statuscategory", kEnum}, "priority": {"priority", kEnum},
@@ -165,6 +180,7 @@ type and struct{ l, r node }
 type or struct{ l, r node }
 type not struct{ n node }
 type clause struct {
+	kind   fieldKind
 	field  string
 	op     string // =, !=, in, not in, ~, !~, <, <=, >, >=, is, is not
 	values []value
@@ -188,15 +204,30 @@ type Query struct {
 // ---- parser
 
 type parser struct {
-	toks []token
-	i    int
+	toks   []token
+	i      int
+	custom map[string]CustomType
+}
+
+// field finds a built-in field or one of the custom fields (by name, case-insensitive).
+func (p *parser) field(name string) (fieldDef, bool) {
+	name = strings.ToLower(name)
+	if f, ok := fields[name]; ok {
+		return f, true
+	}
+	t, ok := p.custom[name]
+	kind := map[CustomType]fieldKind{CustomText: kText, CustomNumber: kNumber, CustomDate: kDate, CustomSelect: kEnum}[t]
+	return fieldDef{name: "cf:" + name, kind: kind}, ok
 }
 
 func (p *parser) peek() token { return p.toks[p.i] }
 func (p *parser) next() token { t := p.toks[p.i]; p.i++; return t }
 
 // Parse reads a JQL query: clauses joined by AND/OR/NOT with parentheses, then ORDER BY.
-func Parse(jql string) (*Query, error) {
+func Parse(jql string) (*Query, error) { return ParseWith(jql, nil) }
+
+// ParseWith also knows custom fields (lower-case name → type) as clause fields.
+func ParseWith(jql string, custom map[string]CustomType) (*Query, error) {
 	if len(jql) > MaxLength {
 		return nil, fail(MaxLength, "a query is at most %d characters", MaxLength)
 	}
@@ -204,7 +235,7 @@ func Parse(jql string) (*Query, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &parser{toks: toks}
+	p := &parser{toks: toks, custom: custom}
 	q := &Query{}
 	if t := p.peek(); t.kind != tEOF && !t.is("order") {
 		if q.where, err = p.or(); err != nil {
@@ -285,14 +316,14 @@ func (p *parser) not() (node, error) {
 
 func (p *parser) clause() (node, error) {
 	ft := p.next()
-	f, ok := fields[strings.ToLower(ft.text)]
+	f, ok := p.field(ft.text)
 	if (ft.kind != tWord && ft.kind != tString) || !ok {
 		if ft.kind == tEOF {
 			return nil, fail(ft.pos, "expected a field")
 		}
 		return nil, fail(ft.pos, "unknown field %q", ft.text)
 	}
-	c := clause{field: f.name}
+	c := clause{field: f.name, kind: f.kind}
 	opTok := p.next()
 	switch {
 	case opTok.kind == tOp:
@@ -333,7 +364,7 @@ func allowed(k fieldKind, op string) bool {
 	switch k {
 	case kText:
 		return op == "~" || op == "!~"
-	case kNumber:
+	case kNumber, kDate:
 		return slices.Contains([]string{"=", "!=", "<", "<=", ">", ">="}, op)
 	}
 	return slices.Contains([]string{"=", "!=", "in", "not in"}, op)
@@ -393,6 +424,11 @@ func (p *parser) value(field string, kind fieldKind) (value, error) {
 			return value{}, fail(t.pos, "%q is not a number", t.text)
 		}
 	}
+	if kind == kDate {
+		if _, err := time.Parse(time.DateOnly, t.text); err != nil {
+			return value{}, fail(t.pos, "%q is not a date (YYYY-MM-DD)", t.text)
+		}
+	}
 	if field == "key" || field == "parent" {
 		if i := strings.LastIndexByte(t.text, '-'); i <= 0 || i == len(t.text)-1 {
 			return value{}, fail(t.pos, "%q is not an issue key", t.text)
@@ -434,9 +470,10 @@ func values(is *Issue, field string) []string {
 		return is.FixVersions
 	case "resolution":
 		return one(is.Resolution)
-	default: // parent
+	case "parent":
 		return one(is.Parent)
 	}
+	return one(is.Custom[strings.TrimPrefix(field, "cf:")])
 }
 
 func norm(s string) string {
@@ -474,12 +511,13 @@ func wanted(field string, v value, r Resolver) []string {
 }
 
 func (c clause) match(is *Issue, r Resolver) bool {
-	f := fields[c.field]
-	if f.kind == kText {
+	switch c.kind {
+	case kText:
 		return c.text(is)
-	}
-	if f.kind == kNumber {
+	case kNumber:
 		return c.number(is)
+	case kDate:
+		return c.date(is)
 	}
 	have := values(is, c.field)
 	if c.op == "is" || c.op == "is not" {
@@ -515,8 +553,10 @@ func (c clause) text(is *Issue) bool {
 		hay = is.Summary
 	case "description":
 		hay = is.Description
-	default:
+	case "text":
 		hay = is.Summary + "\n" + is.Description
+	default:
+		hay = is.Custom[strings.TrimPrefix(c.field, "cf:")]
 	}
 	if c.op == "is" || c.op == "is not" {
 		return (hay == "") == (c.op == "is")
@@ -526,28 +566,51 @@ func (c clause) text(is *Issue) bool {
 }
 
 func (c clause) number(is *Issue) bool {
-	if c.op == "is" || c.op == "is not" || c.values[0].empty {
-		empty := is.Points == nil
-		return empty == (c.op == "is" || c.op == "=")
+	have, ok := 0.0, false
+	if c.field == "points" {
+		if is.Points != nil {
+			have, ok = *is.Points, true
+		}
+	} else if v, err := strconv.ParseFloat(is.Custom[strings.TrimPrefix(c.field, "cf:")], 64); err == nil {
+		have, ok = v, true
 	}
-	if is.Points == nil {
+	if c.op == "is" || c.op == "is not" || c.values[0].empty {
+		return !ok == (c.op == "is" || c.op == "=")
+	}
+	if !ok {
 		return false
 	}
 	want, _ := strconv.ParseFloat(c.values[0].text, 64)
-	have := *is.Points
-	switch c.op {
-	case "=":
-		return have == want
-	case "!=":
-		return have != want
-	case "<":
-		return have < want
-	case "<=":
-		return have <= want
-	case ">":
-		return have > want
+	return compareOp(c.op, cmp.Compare(have, want))
+}
+
+// date compares YYYY-MM-DD values (they sort as text).
+func (c clause) date(is *Issue) bool {
+	have := is.Custom[strings.TrimPrefix(c.field, "cf:")]
+	if c.op == "is" || c.op == "is not" || c.values[0].empty {
+		return (have == "") == (c.op == "is" || c.op == "=")
 	}
-	return have >= want
+	if have == "" {
+		return false
+	}
+	return compareOp(c.op, cmp.Compare(have, c.values[0].text))
+}
+
+// compareOp applies a comparison operator to a three-way comparison result.
+func compareOp(op string, c int) bool {
+	switch op {
+	case "=":
+		return c == 0
+	case "!=":
+		return c != 0
+	case "<":
+		return c < 0
+	case "<=":
+		return c <= 0
+	case ">":
+		return c > 0
+	}
+	return c >= 0
 }
 
 var priorities = map[string]int{"lowest": 1, "low": 2, "medium": 3, "high": 4, "highest": 5}

@@ -34,6 +34,16 @@ func (f *fakes) Facts(_ context.Context, _, project string) ([]domain.Issue, err
 	}
 	return f.issues[project], nil
 }
+func (f *fakes) CustomFields(_ context.Context, project string) (map[string]domain.CustomType, error) {
+	if f.fail == "fields" {
+		return nil, boom
+	}
+	if project == "KYB" {
+		return map[string]domain.CustomType{"customer": domain.CustomText}, nil
+	}
+	return map[string]domain.CustomType{"customer": domain.CustomNumber}, nil // first project's type wins
+}
+
 func (f *fakes) Sprints(_ context.Context, project string) ([]application.Sprint, error) {
 	if f.fail == "sprints" {
 		return nil, boom
@@ -59,7 +69,8 @@ func setup() (*application.Service, *fakes) {
 		projects: map[string][]string{"u-ali": {"KYB", "OPS"}, "u-bob": {"KYB"}},
 		issues: map[string][]domain.Issue{
 			"KYB": {
-				{Key: "KYB-1", Project: "KYB", Number: 1, Summary: "Login", Assignee: "u-bob", Sprints: []string{"s-1"}, FixVersions: []string{"v-1"}},
+				{Key: "KYB-1", Project: "KYB", Number: 1, Summary: "Login", Assignee: "u-bob", Sprints: []string{"s-1"}, FixVersions: []string{"v-1"},
+					Custom: map[string]string{"customer": "Acme"}},
 				{Key: "KYB-2", Project: "KYB", Number: 2, Summary: "Docs", Assignee: "u-ali", Sprints: []string{"s-2"}},
 			},
 			"OPS": {{Key: "OPS-1", Project: "OPS", Number: 1, Summary: "Keys", Assignee: "u-ali"}},
@@ -90,6 +101,7 @@ func TestSearch(t *testing.T) {
 		"sprint in openSprints()":                         "KYB-1/1",
 		`sprint = "sprint 0"`:                             "KYB-2/1",
 		`fixVersion = "1.0"`:                              "KYB-1/1",
+		`customer ~ acme`:                                 "KYB-1/1",
 	} {
 		r, err := s.Search(ctx, "u-ali", jql, 0)
 		if err != nil || keys(r) != want {
@@ -103,7 +115,7 @@ func TestSearch(t *testing.T) {
 	if _, err := s.Search(ctx, "u-ali", "project ==", 0); !errors.Is(err, domain.ErrInvalidJQL) {
 		t.Fatalf("bad jql: %v", err)
 	}
-	for _, port := range []string{"projects", "issues", "sprints", "versions", "users"} {
+	for _, port := range []string{"projects", "fields", "issues", "sprints", "versions", "users"} {
 		f.fail = port
 		if _, err := s.Search(ctx, "u-ali", `assignee = "x@x.uz"`, 0); !errors.Is(err, boom) {
 			t.Errorf("%s failure: %v", port, err)

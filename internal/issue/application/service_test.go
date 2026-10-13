@@ -104,7 +104,7 @@ func setupWithAccess() (*application.Service, *recorder, fakeAccess) {
 	return application.NewService(application.Deps{
 		Issues: repo, Comments: memory.NewCommentRepository(repo), Keys: keys, Access: accessacl.New(accessapp.NewService(access)), Directory: access,
 		Sprints:  fakeSprints{"KYB": {"s-1": true, "s-2": true, "v:v-1": true, "v:v-2": true}},
-		Workflow: domain.DefaultWorkflow(), Workflows: memory.NewWorkflowRepository(), History: memory.NewHistoryRepository(), Links: memory.NewLinkRepository(repo), Watchers: memory.NewWatcherRepository(), Worklogs: memory.NewWorklogRepository(), SecurityLevels: []string{accessapp.LevelConfidential}, NewID: ids,
+		Workflow: domain.DefaultWorkflow(), Workflows: memory.NewWorkflowRepository(), History: memory.NewHistoryRepository(), Links: memory.NewLinkRepository(repo), Watchers: memory.NewWatcherRepository(), Worklogs: memory.NewWorklogRepository(), Fields: memory.NewCustomFieldRepository(), SecurityLevels: []string{accessapp.LevelConfidential}, NewID: ids,
 		Now: func() time.Time { now = now.Add(time.Minute); return now },
 	}), rec, access
 }

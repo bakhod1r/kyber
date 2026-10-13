@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"maps"
 	"math"
 	"strings"
 	"unicode/utf8"
@@ -109,7 +110,9 @@ type Issue struct {
 	resolution  Resolution
 	fixVersions []VersionID
 	time        TimeTracking
-	baseline    *Snapshot // state when loaded or last saved; nil for a new issue
+	fields      map[FieldID]string
+	fieldNames  map[FieldID]string // names of fields set since load (for the changelog)
+	baseline    *Snapshot          // state when loaded or last saved; nil for a new issue
 	description string
 	priority    Priority
 	assignee    UserID   // "" = unassigned
@@ -151,6 +154,7 @@ type Snapshot struct {
 	Resolution  Resolution
 	FixVersions []VersionID
 	Time        TimeTracking
+	Fields      map[FieldID]string // custom field values
 	Version     int
 }
 
@@ -161,7 +165,7 @@ func Rehydrate(s Snapshot) *Issue {
 	}
 	is := &Issue{id: s.ID, key: s.Key, title: s.Title, typ: s.Type, status: s.Status,
 		description: s.Description, priority: s.Priority, assignee: s.Assignee, reporter: s.Reporter, estimate: s.Estimate, rank: s.Rank, sprint: s.Sprint,
-		parent: s.Parent, parentKey: s.ParentKey, security: s.Security, resolution: s.Resolution, time: s.Time, version: s.Version}
+		parent: s.Parent, parentKey: s.ParentKey, security: s.Security, resolution: s.Resolution, time: s.Time, fields: maps.Clone(s.Fields), version: s.Version}
 	is.PlanForVersions(s.FixVersions)
 	is.markBaseline()
 	return is

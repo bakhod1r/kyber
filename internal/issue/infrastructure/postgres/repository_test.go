@@ -205,3 +205,20 @@ func TestWorklogContract(t *testing.T) {
 		return postgres.NewWorklogRepository(pool), is
 	})
 }
+
+func TestCustomFieldContract(t *testing.T) {
+	repotest.RunCustomFields(t, func(t *testing.T) domain.CustomFieldRepository {
+		pool := dbtest.New(t)
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO workspaces (id, slug, name) VALUES ($1, 'other', 'Other')`, repotest.OtherWorkspace); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO projects (id, key, name, workspace_id) VALUES
+			('10000000-0000-4000-8000-000000000001','KYB','Kyber','00000000-0000-4000-8000-000000000001'),
+			('10000000-0000-4000-8000-000000000002','OPS','Ops','00000000-0000-4000-8000-000000000001'),
+			('10000000-0000-4000-8000-000000000003','KYB','Kyber',$1)`, repotest.OtherWorkspace); err != nil {
+			t.Fatal(err)
+		}
+		return postgres.NewCustomFieldRepository(pool)
+	})
+}

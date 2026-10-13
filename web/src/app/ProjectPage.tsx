@@ -9,6 +9,7 @@ import { Board } from "../contexts/agile/ui/Board";
 import { AuditLog } from "../contexts/audit/ui/AuditLog";
 import { IssuePanel } from "../contexts/issue/ui/IssuePanel";
 import { BoardSettings } from "../contexts/agile/ui/BoardSettings";
+import { CustomFieldsAdmin } from "../contexts/issue/ui/CustomFieldsAdmin";
 import { Releases } from "../contexts/agile/ui/Releases";
 import { PermissionScheme } from "../contexts/access/ui/PermissionScheme";
 import { TelegramGroups } from "../contexts/notify/ui/TelegramGroups";
@@ -16,7 +17,7 @@ import { WorkflowEditor } from "../contexts/issue/ui/WorkflowEditor";
 import { JiraImport } from "../contexts/importer/ui/ImportPage";
 import { Reports } from "../contexts/insights/ui/ReportsPage";
 
-export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" }) {
+export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" }) {
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
   const project = projects.data?.find((p) => p.key === key);
@@ -44,6 +45,7 @@ export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "
         <NavLink to={`/projects/${encodeURIComponent(key)}/import`}>Import</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/workflow`}>Workflow</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/board-settings`}>Board settings</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/fields`}>Fields</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/permissions`}>Permissions</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/notifications`}>Notifications</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/audit`}>Audit</NavLink>
@@ -55,6 +57,7 @@ export function ProjectPage({ view = "board" }: { view?: "board" | "backlog" | "
         {view === "import" && <JiraImport projectKey={key} />}
         {view === "workflow" && <WorkflowEditor projectKey={key} />}
         {view === "audit" && <AuditLog projectKey={key} />}
+        {view === "fields" && <CustomFieldsAdmin projectKey={key} />}
         {view === "board-settings" && <BoardSettings projectKey={key} />}
         {view === "releases" && <Releases projectKey={key} />}
         {view === "permissions" && <PermissionScheme projectKey={key} />}

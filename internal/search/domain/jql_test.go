@@ -159,3 +159,45 @@ func TestParseErrors(t *testing.T) {
 		t.Fatalf("too long: %v", err)
 	}
 }
+
+func TestCustomFields(t *testing.T) {
+	custom := map[string]domain.CustomType{"customer": domain.CustomText, "budget": domain.CustomNumber, "due": domain.CustomDate, "tier": domain.CustomSelect}
+	issues := []domain.Issue{
+		{Key: "KYB-1", Project: "KYB", Number: 1, Custom: map[string]string{"customer": "Acme Corp", "budget": "1200", "due": "2026-12-01", "tier": "Gold"}},
+		{Key: "KYB-2", Project: "KYB", Number: 2, Custom: map[string]string{"customer": "Globex", "budget": "300", "due": "2027-01-15", "tier": "Silver"}},
+		{Key: "KYB-3", Project: "KYB", Number: 3},
+	}
+	for jql, want := range map[string]string{
+		`Customer ~ acme`:                         "KYB-1",
+		`customer is empty`:                       "KYB-3",
+		`"Budget" > 500`:                          "KYB-1",
+		`budget <= 300`:                           "KYB-2",
+		`budget is not empty`:                     "KYB-1,KYB-2",
+		`budget = EMPTY`:                          "KYB-3",
+		`due < 2027-01-01`:                        "KYB-1",
+		`due >= 2026-12-01 and due != 2026-12-01`: "KYB-2",
+		`due is empty`:                            "KYB-3",
+		`due = EMPTY`:                             "KYB-3",
+		`tier in (gold)`:                          "KYB-1",
+		`tier != Gold`:                            "KYB-2",
+	} {
+		q, err := domain.ParseWith(jql, custom)
+		if err != nil {
+			t.Fatalf("%q: %v", jql, err)
+		}
+		out, _ := q.Run(issues, resolver{})
+		var keys []string
+		for _, is := range out {
+			keys = append(keys, is.Key)
+		}
+		if got := strings.Join(keys, ","); got != want {
+			t.Errorf("%q = %s, want %s", jql, got, want)
+		}
+	}
+	for jql, pos := range map[string]int{`due > tomorrow`: 6, `budget ~ 3`: 7, `colour = red`: 0} {
+		var pe *domain.ParseError
+		if _, err := domain.ParseWith(jql, custom); !errors.As(err, &pe) || pe.Pos != pos {
+			t.Errorf("%q: %v, want position %d", jql, err, pos)
+		}
+	}
+}
