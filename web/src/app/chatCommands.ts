@@ -37,3 +37,12 @@ export async function runChatCommand(cmd: SlashCommand): Promise<string> {
     }
   }
 }
+
+/** S74: an issue from a chat message — its first line is the title, the message (and a link back) the description. */
+export async function issueFromMessage(body: string, project: string, link: string): Promise<string> {
+  const first = body.split("\n")[0]!.trim();
+  const title = first.length > 120 ? `${first.slice(0, 119)}…` : first || "From chat";
+  const issue = await issueUseCases.createIssue(project, title, "task");
+  await issueUseCases.editIssue(issue.key, { version: issue.version, description: `${body}\n\n— from chat: ${link}` });
+  return issue.key;
+}

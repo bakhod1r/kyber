@@ -85,13 +85,23 @@ test("chat between two people arrives live", async ({ browser }) => {
   // S73: Ali links the channel to the project; a new issue shows up as project news.
   await a.goto(`/chat/${channel.id}`);
   await a.getByRole("button", { name: "⚙ Settings" }).click();
-  await a.getByLabel("Project news").selectOption(key);
-  await expect(a.getByLabel("Project news")).toHaveValue(key);
+  await a.getByLabel("Project news", { exact: true }).selectOption(key);
+  await expect(a.getByLabel("Project news", { exact: true })).toHaveValue(key);
   await ali.call("POST", `/api/v1/projects/${key}/issues`, { title: "Announce the release", type: "task" });
   const news = a.getByRole("article", { name: /Project news/ });
   await expect(news).toContainText(`created ${key}-3`);
   await expect(news.getByRole("link", { name: `${key}-3 Announce the release` })).toBeVisible();
   await a.getByRole("button", { name: "⚙ Settings" }).click(); // close
+
+  // S74: a message becomes an issue; its key is replied in the thread and the issue links back.
+  await cbox.fill("The export button times out on big boards\nSeen on KYB board with 2k cards");
+  await cbox.press("Enter");
+  const msg = a.getByRole("article").filter({ hasText: "The export button times out" }).first();
+  await msg.getByLabel("Create issue from message").selectOption({ label: `Create in ${key}` });
+  await expect(msg.getByRole("button", { name: "1 reply" })).toBeVisible();
+  const fromChat = await ali.call("GET", `/api/v1/issues/${key}-4`);
+  expect(fromChat.title).toBe("The export button times out on big boards");
+  expect(fromChat.description).toContain(`/chat/${channel.id}`);
 
   // S69: the owner renames the channel, makes Bobur an admin; Bobur archives it and it turns read-only for both.
   await a.goto(`/chat/${channel.id}`);

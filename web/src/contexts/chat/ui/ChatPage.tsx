@@ -47,10 +47,13 @@ export type ConversationSlot = (conversationId: string, me: string, names: Map<s
 /** Runs /issue, /assign and /status (S72) and answers with a line only the user sees. */
 export type CommandRunner = (cmd: SlashCommand) => Promise<string>;
 const Commands = createContext<CommandRunner | undefined>(undefined);
+/** Makes an issue from a message (S74): returns its key. Provided by the app shell. */
+export type IssueMaker = (body: string, project: string, link: string) => Promise<string>;
+const IssueMakerContext = createContext<IssueMaker | undefined>(undefined);
 
-export function ChatPage({ extras, activity, commands }: {
+export function ChatPage({ extras, activity, commands, issueMaker }: {
   extras?: ConversationSlot; /** Other contexts' activity (mentions), shown on the Activity view. */ activity?: ReactNode;
-  commands?: CommandRunner;
+  commands?: CommandRunner; issueMaker?: IssueMaker;
 }) {
   const { id } = useParams();
   const qc = useQueryClient();
@@ -98,6 +101,7 @@ export function ChatPage({ extras, activity, commands }: {
 
   return (
     <Commands.Provider value={commands}>
+    <IssueMakerContext.Provider value={issueMaker}>
     <Statuses.Provider value={statusMap}>
     <div className="chat">
       <Sidebar conversations={conversations.data ?? []} current={id} title={title} names={names} me={myId} />
@@ -110,6 +114,7 @@ export function ChatPage({ extras, activity, commands }: {
       {thread && <ThreadPanel parent={thread} names={names} me={myId} onClose={() => setThread(null)} />}
     </div>
     </Statuses.Provider>
+    </IssueMakerContext.Provider>
     </Commands.Provider>
   );
 }
@@ -172,6 +177,34 @@ function MyStatus({ me }: { me: string }) {
         </form>
       )}
     </div>
+  );
+}
+
+/** S74: "Create issue" from a message; the new key is replied in its thread. */
+function IssueFromMessage({ m, onDone }: { m: Message; onDone: (m: Message) => void }) {
+  const maker = useContext(IssueMakerContext);
+  const qc = useQueryClient();
+  const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects, enabled: !!maker });
+  const make = useMutation({
+    mutationFn: async (project: string) => {
+      const key = await maker!(m.body, project, `${window.location.origin}/chat/${m.conversation_id}`);
+      await chatUseCases.reply(m.id, `📋 Created ${key} from this message`);
+      return key;
+    },
+    onSuccess: () => {
+      onDone({ ...m, reply_count: m.reply_count + 1 });
+      void qc.invalidateQueries({ queryKey: ["chat", "thread", m.id] });
+    },
+  });
+  if (!maker || (projects.data?.length ?? 0) === 0) return null;
+  return (
+    <>
+      <select className="ghost" aria-label="Create issue from message" value="" onChange={(e) => e.target.value && make.mutate(e.target.value)}>
+        <option value="">📋 Issue…</option>
+        {projects.data!.map((p) => <option key={p.key} value={p.key}>Create in {p.key}</option>)}
+      </select>
+      {make.error && <span role="alert" className="error"> {make.error.message}</span>}
+    </>
   );
 }
 
@@ -743,6 +776,7 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
           )}
           {canAct && <button className="ghost" onClick={() => pin.mutate()}>{m.pinned_by ? "Unpin" : "Pin"}</button>}
           <SaveMenu m={m} />
+          {canAct && !m.thread_id && <IssueFromMessage m={m} onDone={onChange} />}
           {mine && canAct && <button className="ghost" onClick={() => setEditing(true)}>Edit</button>}
           {mine && canAct && <button className="ghost" onClick={() => remove.mutate()}>Delete</button>}
         </div>

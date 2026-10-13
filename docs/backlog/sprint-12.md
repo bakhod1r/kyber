@@ -60,8 +60,10 @@ Order: daily use first, then channel management, Jira integration, huddle extras
   **Done:** `PUT /conversations/{id}/project` (owner/admins who may browse it), migration 0061, relay handlers post
   `project_event` system messages once per event and channel; the body names issues by key only, details come from
   the permission-filtered preview. "Project news" in channel settings. API 0.53.0.
-- **S74 Issue from a message** — "Create issue" in a message's menu: the message becomes the description with a
+- ✅ **S74 Issue from a message** — "Create issue" in a message's menu: the message becomes the description with a
   link back; the issue key is shown on the message. AC: needs create permission in the chosen project.
+  **Done:** "📋 Issue…" on a message; the app shell creates it through the Issue API (the user's own permission),
+  first line → title, message + chat link → description; the key is replied in the message's thread.
 
 ## 4. Huddles
 
