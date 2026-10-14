@@ -77,3 +77,23 @@ export function boardProblems(name: string, cols: BoardColumn[]): string[] {
   }
   return out;
 }
+
+/** Swimlanes split the board into horizontal rows (Jira): by assignee, by epic, or none. */
+export type SwimlaneMode = "none" | "assignee" | "epic";
+export const SWIMLANE_MODES: SwimlaneMode[] = ["none", "assignee", "epic"];
+
+/** A lane: `id` is the assignee id or epic key ("" for issues without one). */
+export type Lane<T> = { id: string; items: T[] };
+
+/** swimlanes groups issues into lanes, keeping their order; lanes come in order of first
+ * appearance and the lane without an assignee/epic comes last. Mode "none" gives one lane. */
+export function swimlanes<T extends { assignee_id: string | null; parent_key?: string | null }>(issues: T[], mode: SwimlaneMode): Lane<T>[] {
+  if (mode === "none") return [{ id: "", items: issues }];
+  const lanes = new Map<string, T[]>();
+  for (const i of issues) {
+    const id = (mode === "assignee" ? i.assignee_id : i.parent_key) ?? "";
+    lanes.set(id, [...(lanes.get(id) ?? []), i]);
+  }
+  const out = [...lanes].map(([id, items]) => ({ id, items }));
+  return [...out.filter((l) => l.id !== ""), ...out.filter((l) => l.id === "")];
+}

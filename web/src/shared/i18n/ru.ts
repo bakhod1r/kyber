@@ -586,4 +586,7 @@ export const ru: Record<MessageKey, string> = {
   "📅": "📅",
   "Reschedule": "Перенести",
   "Reschedule {title}": "Перенести «{title}»",
+  "Swimlanes": "Дорожки",
+  "No epic": "Без эпика",
+  "Epic": "Эпик",
 };

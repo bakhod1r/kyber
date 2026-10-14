@@ -1,12 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type DragEvent, type FormEvent, useState } from "react";
-import { agileUseCases, type BoardColumn } from "../application";
+import { agileUseCases, type BoardColumn, SWIMLANE_MODES, swimlanes, type SwimlaneMode } from "../application";
 import { issueUseCases, DEFAULT_WORKFLOW, ISSUE_TYPES, type Issue, type IssueType, type Status } from "../../issue/application";
 import { projectUseCases, type Member } from "../../project/application";
 import { announceIssueDone } from "../../../shared/events";
 import { useT } from "../../../shared/i18n/i18n";
 
 const DRAG_TYPE = "application/x-kyber-issue";
+
+/** The swimlane choice is remembered per project in this browser (best effort). */
+function storedMode(projectKey: string): SwimlaneMode {
+  try {
+    const v = localStorage.getItem(`kyber.swimlanes.${projectKey}`);
+    return SWIMLANE_MODES.find((m) => m === v) ?? "none";
+  } catch {
+    return "none";
+  }
+}
+
+function storeMode(projectKey: string, mode: SwimlaneMode) {
+  try {
+    localStorage.setItem(`kyber.swimlanes.${projectKey}`, mode);
+  } catch {
+    // private mode or blocked storage: the choice lasts until reload
+  }
+}
 
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -50,6 +68,7 @@ export function Board({
   const byId = new Map<string, Member>((members.data ?? []).map((m) => [m.user_id, m]));
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [mode, setMode] = useState<SwimlaneMode>(() => storedMode(projectKey));
   const toggleBacklog = useMutation({
     mutationFn: (on: boolean) => agileUseCases.updateBoard(board!, { kanban_backlog: on }),
     onMutate: () => setError(null),
@@ -87,8 +106,70 @@ export function Board({
     if (issue && to && !col.statuses.includes(issue.status)) move.mutate({ key, to });
   }
 
+  const laneLabel = (id: string): string => {
+    if (mode === "assignee") return id ? (byId.get(id)?.name ?? id) : t("Unassigned");
+    if (!id) return t("No epic");
+    const epic = issues.data?.find((i) => i.key === id);
+    return epic ? `${id} ${epic.title}` : id;
+  };
+
   if (sprints.isPending || issues.isPending || boards.isPending || workflow.isPending) return <p className="muted">{t("Loading board…")}</p>;
   if (issues.isError) return <p role="alert" className="error">{issues.error.message}</p>;
+
+  const renderColumns = (laneIssues: Issue[], lane?: string) =>
+    boardColumns.map((col) => {
+      const shown = (i: Issue) => col.statuses.includes(i.status) && (!visibleKeys || visibleKeys.has(i.key));
+      const cards = laneIssues.filter(shown);
+      const total = laneIssues === issues.data ? cards.length : issues.data.filter(shown).length; // WIP counts the whole column
+      const wip = col.max > 0 && total > col.max ? " wip-over" : col.min > 0 && total < col.min ? " wip-under" : "";
+      return (
+        <section
+          key={col.name}
+          aria-label={lane === undefined ? col.name : `${col.name} · ${lane}`}
+          className={`column${over === col.name ? " over" : ""}${wip}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setOver(col.name);
+          }}
+          onDragLeave={() => setOver(null)}
+          onDrop={(e) => onDrop(e, col)}
+        >
+          <h2>
+            {col.name}{" "}
+            <span className="count" title={col.max > 0 ? t("Issues / WIP limit") : undefined}>
+              {col.max > 0 ? `${total} / ${col.max}` : cards.length}
+            </span>
+          </h2>
+          {cards.map((i) => (
+            <article
+              key={i.id}
+              className="card"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(DRAG_TYPE, i.key);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+            >
+              <div className="card-head">
+                <span className={`type type-${i.type}`}>{i.type}</span>
+                <span className={`prio prio-${i.priority}`} aria-label={t("Priority: {priority}", { priority: i.priority })} title={t("Priority: {priority}", { priority: i.priority })} />
+              </div>
+              <button type="button" className="card-open" onClick={() => onOpen?.(i.key)}>
+                {i.title}
+              </button>
+              <div className="card-foot">
+                <small>{i.key}</small>
+                {i.assignee_id && byId.get(i.assignee_id) && (
+                  <span className="avatar" title={byId.get(i.assignee_id)?.name}>
+                    {initials(byId.get(i.assignee_id)?.name ?? "")}
+                  </span>
+                )}
+              </div>
+            </article>
+          ))}
+        </section>
+      );
+    });
 
   return (
     <div className="board-wrap">
@@ -127,59 +208,34 @@ export function Board({
           {error}
         </p>
       )}
-      <div className="board">
-        {boardColumns.map((col) => {
-          const cards = issues.data.filter((i) => col.statuses.includes(i.status) && (!visibleKeys || visibleKeys.has(i.key)));
-          const wip = col.max > 0 && cards.length > col.max ? " wip-over" : col.min > 0 && cards.length < col.min ? " wip-under" : "";
-          return (
-            <section
-              key={col.name}
-              aria-label={col.name}
-              className={`column${over === col.name ? " over" : ""}${wip}`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setOver(col.name);
-              }}
-              onDragLeave={() => setOver(null)}
-              onDrop={(e) => onDrop(e, col)}
-            >
-              <h2>
-                {col.name}{" "}
-                <span className="count" title={col.max > 0 ? t("Issues / WIP limit") : undefined}>
-                  {col.max > 0 ? `${cards.length} / ${col.max}` : cards.length}
-                </span>
-              </h2>
-              {cards.map((i) => (
-                <article
-                  key={i.id}
-                  className="card"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData(DRAG_TYPE, i.key);
-                    e.dataTransfer.effectAllowed = "move";
-                  }}
-                >
-                  <div className="card-head">
-                    <span className={`type type-${i.type}`}>{i.type}</span>
-                    <span className={`prio prio-${i.priority}`} aria-label={t("Priority: {priority}", { priority: i.priority })} title={t("Priority: {priority}", { priority: i.priority })} />
-                  </div>
-                  <button type="button" className="card-open" onClick={() => onOpen?.(i.key)}>
-                    {i.title}
-                  </button>
-                  <div className="card-foot">
-                    <small>{i.key}</small>
-                    {i.assignee_id && byId.get(i.assignee_id) && (
-                      <span className="avatar" title={byId.get(i.assignee_id)?.name}>
-                        {initials(byId.get(i.assignee_id)?.name ?? "")}
-                      </span>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </section>
-          );
-        })}
-      </div>
+      <label className="board-picker">
+        {t("Swimlanes")}{" "}
+        <select
+          aria-label={t("Swimlanes")}
+          value={mode}
+          onChange={(e) => {
+            const m = SWIMLANE_MODES.find((x) => x === e.target.value) ?? "none";
+            setMode(m);
+            storeMode(projectKey, m);
+          }}
+        >
+          <option value="none">{t("None")}</option>
+          <option value="assignee">{t("Assignee")}</option>
+          <option value="epic">{t("Epic")}</option>
+        </select>
+      </label>
+      {mode === "none" ? (
+        <div className="board">{renderColumns(issues.data)}</div>
+      ) : (
+        swimlanes(issues.data, mode).map((l) => (
+          <section key={l.id || "none"} className="swimlane" aria-label={laneLabel(l.id)}>
+            <h3>
+              {laneLabel(l.id)} <span className="count">{l.items.filter((i) => !visibleKeys || visibleKeys.has(i.key)).length}</span>
+            </h3>
+            <div className="board">{renderColumns(l.items, laneLabel(l.id))}</div>
+          </section>
+        ))
+      )}
       {kanbanBacklog && (
         <section aria-label={t("Kanban backlog")} className="kanban-backlog panel">
           <h2>

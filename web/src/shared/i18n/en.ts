@@ -584,6 +584,9 @@ export const en = {
   "📅": "📅",
   "Reschedule": "Reschedule",
   "Reschedule {title}": "Reschedule {title}",
+  "Swimlanes": "Swimlanes",
+  "No epic": "No epic",
+  "Epic": "Epic",
 } as const;
 
 export type MessageKey = keyof typeof en;

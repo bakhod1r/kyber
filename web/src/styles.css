@@ -454,3 +454,7 @@ label.button { cursor: pointer; }
 
 /* Access tokens */
 .secret { display: block; overflow-wrap: anywhere; padding: 0.5rem; margin: 0.25rem 0; }
+
+/* Swimlanes */
+.swimlane { margin-top: 1rem; }
+.swimlane > h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }

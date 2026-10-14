@@ -233,4 +233,35 @@ describe("Board → eye health", () => {
     await waitFor(() => expect(seen).toEqual(["KYB-1"]));
     window.removeEventListener("kyber:issue-done", listener);
   });
+
+  it("splits the board into swimlanes by assignee or epic and remembers the choice", async () => {
+    mockApi({
+      "GET /api/v1/projects/KYB/issues": {
+        status: 200,
+        body: {
+          items: [
+            { ...issue(1, "todo", "Login form"), assignee_id: "u-1", parent_key: "KYB-9" },
+            { ...issue(2, "in_progress", "Logout"), assignee_id: null, parent_key: null },
+            { ...issue(9, "todo", "Accounts"), type: "epic" },
+          ],
+        },
+      },
+      "GET /api/v1/projects/KYB/members": { status: 200, body: { items: [{ user_id: "u-1", name: "Ali Valiyev", email: "a@x.uz", role: "member" }] } },
+    });
+    const { unmount } = renderWithProviders(<Board projectKey="KYB" />);
+    await screen.findByRole("region", { name: "To Do" });
+    await userEvent.selectOptions(screen.getByLabelText("Swimlanes"), "assignee");
+    const ali = await screen.findByRole("region", { name: "Ali Valiyev" });
+    expect(within(within(ali).getByRole("region", { name: "To Do · Ali Valiyev" })).getByText("Login form")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "In Progress · Unassigned" })).getByText("Logout")).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Swimlanes"), "epic");
+    expect(within(await screen.findByRole("region", { name: "To Do · KYB-9 Accounts" })).getByText("Login form")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "No epic" })).toBeInTheDocument();
+    unmount();
+
+    renderWithProviders(<Board projectKey="KYB" />);
+    expect(await screen.findByRole("region", { name: "No epic" })).toBeInTheDocument();
+    localStorage.removeItem("kyber.swimlanes.KYB");
+  });
 });
