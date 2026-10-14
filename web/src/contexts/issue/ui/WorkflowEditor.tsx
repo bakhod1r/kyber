@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
-import { issueUseCases, STATUS_CATEGORIES, type StatusCategory, type Workflow } from "../application";
+import { canTransition, issueUseCases, layoutWorkflow, STATUS_CATEGORIES, type StatusCategory, toggleTransition, type Workflow } from "../application";
 import { useT } from "../../../shared/i18n/i18n";
 
 /** slug turns a status name into a stable id ("Code Review" → "code_review"). */
@@ -114,6 +114,8 @@ export function WorkflowEditor({ projectKey }: { projectKey: string }) {
       <p className="muted">
         {draft.transitions.length === 0 ? t("Any status can move to any other status.") : t("{n} transitions are configured.", { n: draft.transitions.length })}
       </p>
+      <WorkflowDiagram wf={draft} />
+      <TransitionMatrix wf={draft} onChange={update} />
       <button type="button" onClick={() => save.mutate(draft)} disabled={save.isPending}>
         {t("Save workflow")}
       </button>
@@ -124,5 +126,77 @@ export function WorkflowEditor({ projectKey }: { projectKey: string }) {
         </p>
       )}
     </section>
+  );
+}
+
+/** WorkflowDiagram draws statuses in category columns with an arrow per allowed transition. */
+function WorkflowDiagram({ wf }: { wf: Workflow }) {
+  const t = useT();
+  const pos = layoutWorkflow(wf);
+  const rows = Math.max(1, ...STATUS_CATEGORIES.map((c) => wf.statuses.filter((s) => s.category === c.id).length));
+  const edges = wf.statuses.flatMap((a) => wf.statuses.filter((b) => canTransition(wf, a.id, b.id)).map((b) => [a.id, b.id] as const));
+  const W = 580, H = 40 + rows * 70;
+  return (
+    <svg className="wf-diagram" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t("Workflow diagram")}>
+      <defs>
+        <marker id="wf-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+        </marker>
+      </defs>
+      {edges.map(([a, b]) => {
+        const p = pos.get(a)!, q = pos.get(b)!;
+        // Curve each direction to its own side so a ⇄ b shows two arrows.
+        const mx = (p.x + q.x) / 2 + (q.y - p.y) * 0.25, my = (p.y + q.y) / 2 - (q.x - p.x) * 0.25;
+        return <path key={`${a}>${b}`} className="wf-edge" d={`M${p.x},${p.y} Q${mx},${my} ${q.x},${q.y}`} fill="none" stroke="currentColor" markerEnd="url(#wf-arrow)" />;
+      })}
+      {wf.statuses.map((s) => {
+        const p = pos.get(s.id)!;
+        return (
+          <g key={s.id} className={`wf-node status-${s.category}`} transform={`translate(${p.x},${p.y})`}>
+            <rect x={-70} y={-16} width={140} height={32} rx={8} className={s.id === wf.initial ? "initial" : undefined} />
+            <text textAnchor="middle" dominantBaseline="middle">{s.name}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** TransitionMatrix: one checkbox per "from → to" pair (rows: from, columns: to). */
+function TransitionMatrix({ wf, onChange }: { wf: Workflow; onChange: (wf: Workflow) => void }) {
+  const t = useT();
+  return (
+    <div className="wf-matrix">
+      <table>
+        <caption>{t("Allowed transitions")}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("From / To")}</th>
+            {wf.statuses.map((s) => (
+              <th key={s.id} scope="col">{s.name}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {wf.statuses.map((a) => (
+            <tr key={a.id}>
+              <th scope="row">{a.name}</th>
+              {wf.statuses.map((b) => (
+                <td key={b.id}>
+                  {a.id !== b.id && (
+                    <input type="checkbox" aria-label={`${a.name} → ${b.name}`} checked={canTransition(wf, a.id, b.id)} onChange={() => onChange(toggleTransition(wf, a.id, b.id))} />
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {wf.transitions.length > 0 && (
+        <button type="button" className="ghost" onClick={() => onChange({ ...wf, transitions: [] })}>
+          {t("Allow every transition")}
+        </button>
+      )}
+    </div>
   );
 }

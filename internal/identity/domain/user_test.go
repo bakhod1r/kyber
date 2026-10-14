@@ -69,3 +69,25 @@ func TestNameLimits(t *testing.T) {
 		}
 	}
 }
+
+func TestUserActivation(t *testing.T) {
+	u, _ := domain.NewUser("u-1", "a@x.uz", "Ann", "")
+	if !u.Active() {
+		t.Fatal("new users are active")
+	}
+	u.Deactivate()
+	if u.Active() {
+		t.Fatal("deactivated")
+	}
+	u.Activate()
+	if err := u.Rename(" Ann Lee "); err != nil || u.Name() != "Ann Lee" || !u.Active() {
+		t.Fatalf("rename = %q %v", u.Name(), err)
+	}
+	if err := u.Rename(""); !errors.Is(err, domain.ErrEmptyName) {
+		t.Fatalf("blank rename: %v", err)
+	}
+	r := domain.RehydrateUser("u-2", "b@x.uz", "Bo", "h", false)
+	if r.Active() || r.PasswordHash() != "h" {
+		t.Fatal("rehydrated inactive user")
+	}
+}

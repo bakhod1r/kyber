@@ -3,7 +3,7 @@
 // every request satisfies the server's CSRF guard.
 
 export type User = { id: string; email: string; name: string };
-export type AuthProviders = { google: boolean; oidc?: string | null; github?: boolean; telegram_bot: string | null; telegram_otp?: boolean };
+export type AuthProviders = { google: boolean; oidc?: string | null; saml?: string | null; github?: boolean; telegram_bot: string | null; telegram_otp?: boolean };
 export type OtpChallenge = { id: string; link: string; expires_at: string };
 /** The Telegram Login Widget's user object, forwarded unchanged for server-side verification. */
 export type TelegramUser = { id: number; auth_date: number; hash: string; first_name?: string; last_name?: string; username?: string; photo_url?: string };

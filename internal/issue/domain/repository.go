@@ -27,6 +27,11 @@ type ListFilter struct {
 	FixVersion *VersionID
 	// Label selects the issues carrying this label.
 	Label *Label
+	// Types / Priorities keep issues of any of these (nil = all); used by JQL pushdown.
+	Types      []IssueType
+	Priorities []Priority
+	// LabelKeys keeps issues with a label whose LabelKey is one of these.
+	LabelKeys []string
 }
 
 // KeyAllocator hands out the next sequential key of a project (ACL to the Project context).

@@ -5,6 +5,7 @@ package application
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/bakhod1r/kyber/internal/search/domain"
@@ -23,7 +24,8 @@ type (
 	}
 	// Issues returns what a query sees of the project's issues the actor may see (ACL to Issue Tracking).
 	Issues interface {
-		Facts(ctx context.Context, actor, project string) ([]domain.Issue, error)
+		// Facts lists a project's visible issues; the store may drop those outside the narrow.
+		Facts(ctx context.Context, actor, project string, n domain.Narrow) ([]domain.Issue, error)
 		// CustomFields names the project's custom fields (lower-case name → type).
 		CustomFields(ctx context.Context, project string) (map[string]domain.CustomType, error)
 	}
@@ -90,10 +92,20 @@ func (s *Service) Search(ctx context.Context, actor, jql string, limit int) (Res
 	if err != nil {
 		return Result{}, err
 	}
+	narrow := q.Narrow()
+	if narrow.Projects != nil { // only the projects the query names are read at all
+		kept := projects[:0:0]
+		for _, p := range projects {
+			if slices.Contains(narrow.Projects, strings.ToLower(p)) {
+				kept = append(kept, p)
+			}
+		}
+		projects = kept
+	}
 	var facts []domain.Issue
 	r := &resolver{ctx: ctx, s: s, actor: actor, users: map[string]userHit{}}
 	for _, p := range projects {
-		list, err := s.d.Issues.Facts(ctx, actor, p)
+		list, err := s.d.Issues.Facts(ctx, actor, p, narrow)
 		if err != nil {
 			return Result{}, err
 		}

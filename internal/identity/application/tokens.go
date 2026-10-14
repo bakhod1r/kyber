@@ -80,11 +80,7 @@ func (s *Service) authenticateToken(ctx context.Context, secret string) (*domain
 			return nil, err
 		}
 	}
-	u, err := s.users.ByID(ctx, t.UserID)
-	if errors.Is(err, domain.ErrUserNotFound) {
-		return nil, ErrUnauthenticated
-	}
-	return u, err
+	return s.activeUser(ctx, t.UserID)
 }
 
 // botDomain gives bots placeholder addresses that are never mailed (RFC 2606 .invalid).

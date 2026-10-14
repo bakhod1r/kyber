@@ -5,6 +5,7 @@ import (
 	"context"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -83,7 +84,10 @@ func (r *Repository) ListByProject(ctx context.Context, project string, f domain
 			(f.Sprint != nil && is.Sprint() != *f.Sprint) ||
 			(f.Parent != nil && is.Parent() != *f.Parent) ||
 			(f.FixVersion != nil && !is.HasFixVersion(*f.FixVersion)) ||
-			(f.Label != nil && !is.HasLabel(*f.Label)) {
+			(f.Label != nil && !is.HasLabel(*f.Label)) ||
+			(f.Types != nil && !slices.Contains(f.Types, is.Type())) ||
+			(f.Priorities != nil && !slices.Contains(f.Priorities, is.Priority())) ||
+			(f.LabelKeys != nil && !slices.ContainsFunc(is.Labels(), func(l domain.Label) bool { return slices.Contains(f.LabelKeys, domain.LabelKey(string(l))) })) {
 			continue
 		}
 		out = append(out, &is)

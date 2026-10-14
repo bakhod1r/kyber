@@ -23,6 +23,8 @@ type Social struct {
 	OIDC        OAuthClient // the installation's generic OpenID Connect provider (SSO)
 	OIDCName    string      // its button label, e.g. "Okta"
 	GitHub      OAuthClient
+	SAML        SAMLClient // the installation's SAML identity provider
+	SAMLName    string     // its button label
 	Telegram    TelegramVerifier
 	TelegramBot string // bot username for the login widget and the code bot
 	TelegramOTP bool   // the bot sends one-time login codes (needs the bot token)
@@ -53,6 +55,7 @@ func (h *Handler) registerSocial(mux *http.ServeMux) {
 		mux.HandleFunc("GET /api/v1/auth/"+name+"/start", h.oauthStart(name))
 		mux.HandleFunc("GET /api/v1/auth/"+name+"/callback", h.oauthCallback(name))
 	}
+	h.registerSAML(mux)
 	mux.HandleFunc("POST /api/v1/auth/telegram", h.telegram)
 	mux.HandleFunc("POST /api/v1/auth/telegram/otp", h.otpStart)
 	mux.HandleFunc("POST /api/v1/auth/telegram/otp/verify", h.otpVerify)
@@ -73,6 +76,7 @@ func (h *Handler) providers(w http.ResponseWriter, _ *http.Request) {
 	out := struct {
 		Google      bool    `json:"google"`
 		OIDC        *string `json:"oidc"`
+		SAML        *string `json:"saml"`
 		GitHub      bool    `json:"github"`
 		TelegramBot *string `json:"telegram_bot"`
 		TelegramOTP bool    `json:"telegram_otp"`
@@ -83,6 +87,13 @@ func (h *Handler) providers(w http.ResponseWriter, _ *http.Request) {
 			name = "SSO"
 		}
 		out.OIDC = &name
+	}
+	if h.saml() != nil {
+		name := h.social.SAMLName
+		if name == "" {
+			name = "SAML"
+		}
+		out.SAML = &name
 	}
 	if h.telegramOn() {
 		out.TelegramBot = &h.social.TelegramBot

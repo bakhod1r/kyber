@@ -195,6 +195,28 @@ func Run(t *testing.T, newRepo Factory) {
 				t.Errorf("filter %s = %s %v", *l, keys(list), err)
 			}
 		}
+		bugA := mk(t, 4, "Typed")
+		bugA.Edit(domain.Changes{Priority: ptr(domain.PriorityHigh)})
+		_ = bugA.Relabel([]string{"Front-End"})
+		if err := repo.Save(ctx, bugA, nil); err != nil {
+			t.Fatal(err)
+		}
+		for name, c := range map[string]struct {
+			f    domain.ListFilter
+			want string
+		}{
+			"types":           {domain.ListFilter{Types: []domain.IssueType{domain.TypeTask}}, "KYB-1,KYB-2,KYB-3,KYB-4"},
+			"no type matches": {domain.ListFilter{Types: []domain.IssueType{domain.TypeBug}}, ""},
+			"priorities":      {domain.ListFilter{Priorities: []domain.Priority{domain.PriorityHigh}}, "KYB-4"},
+			"label keys":      {domain.ListFilter{LabelKeys: []string{"frontend", "nope"}}, "KYB-4"},
+			"label keys + ui": {domain.ListFilter{LabelKeys: []string{"ui"}}, "KYB-1,KYB-2"},
+			"combined":        {domain.ListFilter{LabelKeys: []string{"ui"}, Priorities: []domain.Priority{domain.PriorityHigh}}, ""},
+		} {
+			list, err := repo.ListByProject(ctx, "KYB", c.f)
+			if err != nil || keys(list) != c.want {
+				t.Errorf("%s = %s %v", name, keys(list), err)
+			}
+		}
 		_ = got.Relabel(nil)
 		if err := repo.Save(ctx, got, nil); err != nil {
 			t.Fatal(err)
@@ -469,3 +491,5 @@ func RunComments(t *testing.T, newRepo CommentFactory) {
 		}
 	})
 }
+
+func ptr[T any](v T) *T { return &v }

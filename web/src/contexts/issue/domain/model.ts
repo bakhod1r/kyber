@@ -217,3 +217,28 @@ export function formatSize(bytes: number): string {
 export function parseLabels(raw: string): string[] {
   return [...new Set(raw.split(/[\s,]+/).filter(Boolean))].sort();
 }
+
+/** canTransition: may an issue move from → to? No configured transitions means any-to-any. */
+export function canTransition(wf: Workflow, from: Status, to: Status): boolean {
+  if (from === to) return false;
+  return wf.transitions.length === 0 || wf.transitions.some((t) => t.from === from && t.to === to);
+}
+
+/** toggleTransition switches one transition; leaving any-to-any first makes every pair explicit. */
+export function toggleTransition(wf: Workflow, from: Status, to: Status): Workflow {
+  let list = wf.transitions;
+  if (list.length === 0) {
+    list = wf.statuses.flatMap((a) => wf.statuses.filter((b) => b.id !== a.id).map((b) => ({ from: a.id, to: b.id })));
+  }
+  const has = list.some((t) => t.from === from && t.to === to);
+  return { ...wf, transitions: has ? list.filter((t) => !(t.from === from && t.to === to)) : [...list, { from, to }] };
+}
+
+/** layoutWorkflow places statuses for the diagram: one column per category, stacked within it. */
+export function layoutWorkflow(wf: Workflow): Map<Status, { x: number; y: number }> {
+  const out = new Map<Status, { x: number; y: number }>();
+  STATUS_CATEGORIES.forEach((c, col) => {
+    wf.statuses.filter((s) => s.category === c.id).forEach((s, row) => out.set(s.id, { x: 90 + col * 200, y: 40 + row * 70 }));
+  });
+  return out;
+}

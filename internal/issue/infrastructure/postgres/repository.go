@@ -106,6 +106,20 @@ func (r *Repository) ListByProject(ctx context.Context, project string, f domain
 		args = append(args, string(*f.Label))
 		where += fmt.Sprintf(` AND $%d = ANY(labels)`, len(args))
 	}
+	if f.Types != nil {
+		args = append(args, strs(f.Types))
+		where += fmt.Sprintf(` AND type = ANY($%d)`, len(args))
+	}
+	if f.Priorities != nil {
+		args = append(args, strs(f.Priorities))
+		where += fmt.Sprintf(` AND priority = ANY($%d)`, len(args))
+	}
+	if f.LabelKeys != nil {
+		// The same normalisation as domain.LabelKey.
+		args = append(args, f.LabelKeys)
+		where += fmt.Sprintf(` AND EXISTS (SELECT 1 FROM unnest(labels) l
+			WHERE replace(replace(replace(lower(btrim(l)), ' ', '_'), '-', ''), '''', '') = ANY($%d))`, len(args))
+	}
 	rows, err := r.pool.Query(ctx, selectCols+" "+where+` ORDER BY rank, number`, args...)
 	if err != nil {
 		return nil, err
@@ -206,6 +220,14 @@ func labelsCol(is *domain.Issue) []string {
 	out := make([]string, 0, len(is.Labels()))
 	for _, l := range is.Labels() {
 		out = append(out, string(l))
+	}
+	return out
+}
+
+func strs[T ~string](vs []T) []string {
+	out := make([]string, len(vs))
+	for i, v := range vs {
+		out[i] = string(v)
 	}
 	return out
 }

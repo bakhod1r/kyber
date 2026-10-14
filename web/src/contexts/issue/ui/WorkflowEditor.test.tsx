@@ -65,4 +65,28 @@ describe("WorkflowEditor (KYB-S43)", () => {
     expect(sent.initial).toBe("in_progress");
     expect(sent.statuses[0]).toEqual({ id: "todo", name: "Backlog", category: "todo" });
   });
+
+  it("draws the workflow and restricts transitions from the matrix", async () => {
+    const calls = mockApi({
+      "GET /api/v1/projects/KYB/workflow": { status: 200, body: simplified },
+      "PUT /api/v1/projects/KYB/workflow": (init) => ({ status: 200, body: JSON.parse(String(init?.body)) }),
+    });
+    renderWithProviders(<WorkflowEditor projectKey="KYB" />);
+    const diagram = await screen.findByRole("img", { name: "Workflow diagram" });
+    expect(diagram.querySelectorAll("g.wf-node")).toHaveLength(3);
+    expect(diagram.querySelectorAll("path.wf-edge")).toHaveLength(6);
+    const toDone = screen.getByRole("checkbox", { name: "To Do → Done" });
+    expect(toDone).toBeChecked();
+    await userEvent.click(toDone);
+    expect(toDone).not.toBeChecked();
+    expect(diagram.querySelectorAll("path.wf-edge")).toHaveLength(5);
+    await userEvent.click(screen.getByRole("button", { name: "Save workflow" }));
+    await waitFor(() => {
+      const body = calls.find((c) => c.key === "PUT /api/v1/projects/KYB/workflow")?.body as { transitions: { from: string; to: string }[] } | undefined;
+      expect(body?.transitions).toHaveLength(5);
+      expect(body?.transitions).not.toContainEqual({ from: "todo", to: "done" });
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Allow every transition" }));
+    expect(screen.getByRole("checkbox", { name: "To Do → Done" })).toBeChecked();
+  });
 });

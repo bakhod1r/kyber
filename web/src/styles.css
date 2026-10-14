@@ -681,3 +681,14 @@ circle.wb-handle { cursor: move; }
 .swatch { display: grid; gap: 0.35rem; padding: 0.5rem; border: 2px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; text-align: start; }
 .swatch[aria-pressed="true"] { border-color: var(--accent); }
 .swatch-preview { height: 2.5rem; border-radius: 6px; border: 1px solid var(--border); background-size: cover; }
+
+/* Visual workflow editor */
+.wf-diagram { width: 100%; max-width: 640px; color: var(--muted, #6b7a90); margin: 0.75rem 0; }
+.wf-diagram .wf-edge { stroke-width: 1.5; opacity: 0.7; }
+.wf-diagram .wf-node rect { fill: var(--surface, #fff); stroke: var(--border, #d7e0ec); stroke-width: 1.5; }
+.wf-diagram .wf-node rect.initial { stroke: var(--accent, #2563eb); stroke-width: 2.5; }
+.wf-diagram .wf-node text { fill: var(--text, #172033); font-size: 13px; }
+.wf-matrix { overflow-x: auto; margin: 0.75rem 0; }
+.wf-matrix table { border-collapse: collapse; }
+.wf-matrix th, .wf-matrix td { padding: 0.25rem 0.6rem; border: 1px solid var(--border, #d7e0ec); text-align: center; }
+.wf-matrix caption { text-align: left; font-weight: 600; padding-bottom: 0.35rem; }

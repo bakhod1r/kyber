@@ -30,6 +30,9 @@ func TestLabels(t *testing.T) {
 	if got := order(t, s, application.ListQuery{Label: "ui"}); got != "KYB-1,KYB-2" {
 		t.Fatalf("labelled ui = %s", got)
 	}
+	if got := order(t, s, application.ListQuery{LabelKeys: []string{"backend"}, Types: []string{"task"}, Priorities: []string{"medium"}}); got != "KYB-1" {
+		t.Fatalf("pushdown filter = %s", got)
+	}
 	got, err := s.ProjectLabels(ctx, dev, "KYB")
 	if err != nil || !slices.Equal(got, []string{"backend", "ui"}) {
 		t.Fatalf("ProjectLabels = %v %v", got, err)

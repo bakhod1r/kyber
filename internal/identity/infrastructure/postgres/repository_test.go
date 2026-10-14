@@ -121,3 +121,8 @@ func TestOAuthContract(t *testing.T) {
 	}
 	externaltest.RunOAuth(t, r, u.ID())
 }
+
+func TestDirectoryContract(t *testing.T) {
+	externaltest.RunDirectory(t, postgres.NewRepository(dbtest.New(t)), [3]domain.UserID{
+		"40000000-0000-4000-8000-000000000001", "40000000-0000-4000-8000-000000000002", "40000000-0000-4000-8000-000000000003"})
+}

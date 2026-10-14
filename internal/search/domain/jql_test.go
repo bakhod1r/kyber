@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -235,5 +236,27 @@ func TestScheduleDates(t *testing.T) {
 	}
 	if _, err := domain.Parse(`dueDate = soon`); !errors.Is(err, domain.ErrInvalidJQL) {
 		t.Fatalf("not a date: %v", err)
+	}
+}
+
+func TestNarrow(t *testing.T) {
+	cases := map[string]domain.Narrow{
+		``:                                        {},
+		`project = KYB AND type in (Bug, story)`:  {Projects: []string{"kyb"}, Types: []string{"bug", "story"}},
+		`priority = High AND labels = Front-End`:  {Priorities: []string{"high"}, Labels: []string{"frontend"}},
+		`project = KYB OR type = bug`:             {},                             // OR: nothing is safe to push down
+		`type != bug AND NOT labels = ui`:         {},                             // negations stay in memory
+		`(project in (A, B)) AND summary ~ x`:     {Projects: []string{"a", "b"}}, // parentheses around a conjunct
+		`assignee = currentUser() AND type = bug`: {Types: []string{"bug"}},       // functions are resolved later
+		`type = bug AND type = story`:             {Types: []string{"bug"}},       // the first constraint per field; the evaluator applies the rest
+	}
+	for jql, want := range cases {
+		q, err := domain.Parse(jql)
+		if err != nil {
+			t.Fatalf("%q: %v", jql, err)
+		}
+		if got := q.Narrow(); fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Errorf("%q: Narrow() = %+v, want %+v", jql, got, want)
+		}
 	}
 }
