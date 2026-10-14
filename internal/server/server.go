@@ -192,6 +192,7 @@ type deps struct {
 	versions      agiledomain.VersionRepository
 	users         identitydomain.Users
 	external      identitydomain.ExternalIdentities
+	tokens        identitydomain.PersonalTokens
 	social        identityhttp.Social
 	otps          identitydomain.OTPChallenges
 	telegramBot   *telegram.Bot
@@ -226,6 +227,7 @@ type deps struct {
 	webhooks      chatdomain.Webhooks
 	calls         calldomain.Repository
 	whiteboards   wbdomain.Repository
+	chatStore     blob.Store // chat files on S3 (S82)
 	chatBlobs     blob.Store // chat files; memory unless WithFilesDir
 	baseDomain    string     // "" = single-tenant (ADR-0004)
 	ice           ice.Config
@@ -260,6 +262,9 @@ func WithMailer(m notifyapp.Sender) Option { return func(d *deps) { d.mailer = m
 // WithPublicURL is the base of links in emails and Telegram messages.
 // WithAttachmentsDir stores uploaded files under dir (default: in memory).
 func WithAttachmentsDir(dir string) Option { return func(d *deps) { d.blobs = blobfs.New(dir) } }
+
+// WithAttachmentStore stores uploaded files in blobs (e.g. an S3 bucket).
+func WithAttachmentStore(blobs attapp.Blobs) Option { return func(d *deps) { d.blobs = blobs } }
 
 func WithPublicURL(u string) Option { return func(d *deps) { d.publicURL = u } }
 
@@ -302,6 +307,9 @@ func WithICE(urls []string, turnSecret string) Option {
 // WithTranscriber transcribes huddle recordings into their threads (S77).
 func WithTranscriber(t chatapp.Transcriber) Option { return func(d *deps) { d.transcriber = t } }
 
+// WithChatFiles keeps chat files and recordings in s (e.g. S3, S82); it wins over WithFilesDir.
+func WithChatFiles(s blob.Store) Option { return func(d *deps) { d.chatStore = s } }
+
 // WithFilesDir keeps chat files on disk under dir (default: in memory, lost on restart).
 func WithFilesDir(dir string) Option {
 	return func(d *deps) {
@@ -339,7 +347,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
 		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), calls: callRepo, whiteboards: wbmemory.NewRepository(),
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
-		users:  ids, sessions: ids, external: ids, otps: ids, ready: func(context.Context) error { return nil },
+		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
 		o(&d)
@@ -386,7 +394,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), scheduled: chatpg.NewScheduled(pool), reminders: chatpg.NewReminders(pool), userGroups: chatpg.NewGroups(pool), chatPrefs: chatpg.NewPrefs(pool), bookmarks: chatpg.NewBookmarks(pool), chatWorkflows: chatpg.NewWorkflows(pool), webhooks: chatpg.NewWebhooks(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool),
-		users: ids, sessions: ids, external: ids, otps: ids, ready: pool.Ping, cookieSecure: cookieSecure,
+		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
 		o(&d)
@@ -464,6 +472,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 		go fanout.Listen(d.liveCtx())
 		publish = fanout
 	}
+	if d.chatStore != nil {
+		d.chatBlobs = d.chatStore
+	}
 	if d.chatBlobs == nil {
 		log.Warn("KYBER_FILES_DIR not set: chat files are kept in memory and lost on restart")
 		d.chatBlobs = blob.NewMemory()
@@ -535,7 +546,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	go remindMeetings(d.ctx, log, chat.RemindDue, d.reminderEvery)    // saved messages (S65), /remind (S67)
 	go remindMeetings(d.ctx, log, chat.SendDue, d.reminderEvery)      // scheduled messages (S67)
 	go remindMeetings(d.ctx, log, chat.RunWorkflows, d.reminderEvery) // channel workflows (S80)
-	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external)}
+	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
 	}

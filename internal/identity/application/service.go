@@ -36,6 +36,7 @@ type Service struct {
 	bot      Messenger
 	connect  domain.ConnectTokens // nil = connecting Telegram for notifications disabled
 	botName  string
+	tokens   domain.PersonalTokens // nil = personal access tokens disabled
 }
 
 // Option customises the service.
@@ -134,6 +135,9 @@ func (s *Service) newSession(ctx context.Context, user domain.UserID) (string, e
 }
 
 func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User, error) {
+	if IsPersonalToken(token) {
+		return s.authenticateToken(ctx, token)
+	}
 	sess, err := s.sessions.SessionByHash(ctx, hashToken(token))
 	if errors.Is(err, domain.ErrSessionNotFound) {
 		return nil, ErrUnauthenticated

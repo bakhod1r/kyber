@@ -19,6 +19,14 @@ type Config struct {
 	PublicURL string `env:"KYBER_PUBLIC_URL" default:"http://localhost:8080"`
 	// AttachmentsDir holds uploaded files (<dir>/<workspace>/<id>); back it up with the database.
 	AttachmentsDir string `env:"KYBER_ATTACHMENTS_DIR" default:"./data/attachments"`
+	// S3 stores attachments in an S3-compatible bucket (AWS S3, MinIO) instead of AttachmentsDir
+	// when S3Bucket is set. S3Endpoint is host[:port] without a scheme.
+	S3Endpoint  string `env:"KYBER_S3_ENDPOINT" default:"s3.amazonaws.com"`
+	S3Bucket    string `env:"KYBER_S3_BUCKET"`
+	S3Region    string `env:"KYBER_S3_REGION"`
+	S3AccessKey string `env:"KYBER_S3_ACCESS_KEY"`
+	S3SecretKey string `env:"KYBER_S3_SECRET_KEY"`
+	S3TLS       bool   `env:"KYBER_S3_TLS" default:"true"`
 	// BaseDomain enables workspaces on subdomains (<slug>.<BaseDomain>, ADR-0004); empty = single-tenant.
 	BaseDomain string `env:"KYBER_BASE_DOMAIN"`
 	// AdminEmails (comma-separated) administer the default workspace: they publish workspace-wide
@@ -64,9 +72,9 @@ func (c Config) String() string {
 	if c.RedisURL != "" {
 		redisURL = redact(c.RedisURL)
 	}
-	return fmt.Sprintf("addr=%s database=%s redis=%s cookie_secure=%t session_purge_every=%s public_url=%s google=%t telegram=%t",
+	return fmt.Sprintf("addr=%s database=%s redis=%s cookie_secure=%t session_purge_every=%s public_url=%s google=%t telegram=%t attachments=%s",
 		c.Addr, redact(c.DatabaseURL), redisURL, c.CookieSecure, c.SessionPurgeEvery, c.PublicURL,
-		c.GoogleClientID != "" && c.GoogleClientSecret != "", c.TelegramBotToken != "")
+		c.GoogleClientID != "" && c.GoogleClientSecret != "", c.TelegramBotToken != "", c.attachments())
 }
 
 func redact(raw string) string {
@@ -78,4 +86,12 @@ func redact(raw string) string {
 		return "(unparseable)"
 	}
 	return u.Redacted()
+}
+
+// attachments names the file store (never its credentials).
+func (c Config) attachments() string {
+	if c.S3Bucket != "" {
+		return "s3://" + c.S3Endpoint + "/" + c.S3Bucket
+	}
+	return c.AttachmentsDir
 }

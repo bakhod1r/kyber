@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.59.0
+  version: 0.60.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -284,6 +284,50 @@ paths:
       description: Remove a file (its uploader, or a project administrator).
       responses:
         "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/me/tokens:
+    get:
+      operationId: listTokens
+      description: Your personal access tokens, newest first (secrets are never shown again). Not available to token-authenticated requests.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/PersonalToken" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createToken
+      description: >-
+        Create a personal access token (ADR-0012) for scripts and AI assistants (Authorization - Bearer kpat_...).
+        expires_in_days 1-365, or 0 for a token that never expires. The secret is returned only in this response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [name], properties: { name: { type: string }, expires_in_days: { type: integer, minimum: 0, maximum: 365 } } }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/PersonalToken" }
+                  - { type: object, required: [token], properties: { token: { type: string } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/me/tokens/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    delete:
+      operationId: revokeToken
+      description: Revoke one of your tokens; it stops authenticating at once.
+      responses:
+        "204": { description: Revoked }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -3529,6 +3573,15 @@ components:
         body: { type: string }
         by: { type: string }
         at: { type: string, format: date-time }
+    PersonalToken:
+      type: object
+      required: [id, name, created_at, expires_at, last_used_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: [string, "null"], format: date-time }
+        last_used_at: { type: [string, "null"], format: date-time }
     Attachment:
       type: object
       required: [id, issue_key, name, content_type, size, sha256, uploaded_by, uploaded_at, inline, url]

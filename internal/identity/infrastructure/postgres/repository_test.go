@@ -98,3 +98,16 @@ func TestConnectContract(t *testing.T) {
 	}
 	externaltest.RunConnect(t, r, user)
 }
+
+func TestTokensContract(t *testing.T) {
+	ctx := context.Background()
+	r := postgres.NewRepository(dbtest.New(t))
+	ids := []domain.UserID{"30000000-0000-4000-8000-0000000000a1", "30000000-0000-4000-8000-0000000000a2"}
+	for i, id := range ids {
+		u, _ := domain.NewUser(id, domain.Email(string(rune('a'+i))+"@tok.uz"), "U", "")
+		if err := r.Create(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	externaltest.RunTokens(t, r, ids[0], ids[1])
+}

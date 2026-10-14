@@ -54,7 +54,8 @@ sends `X-Accel-Buffering: no` for nginx; keep read timeouts above the 25-second 
 
 Chat files and huddle recordings are kept under `KYBER_FILES_DIR` (one file per message id, two levels deep).
 Back the directory up together with the database. Without it, files live in memory and vanish on restart (fine
-for a demo). With several replicas, put the directory on shared storage — or wait for the S3 adapter.
+for a demo). With several replicas, use S3/MinIO: when `KYBER_S3_BUCKET` (and the other `KYBER_S3_*` settings) are
+set, chat files and recordings go to the same bucket as issue attachments, under the `chat/` prefix (S82).
 
 ## Recording transcripts (optional)
 

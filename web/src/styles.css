@@ -561,3 +561,6 @@ label.button { cursor: pointer; }
 .chat-clip-preview { width: 160px; border-radius: 6px; background: #000; }
 .chat-bookmarks ul { list-style: none; padding: 0; margin: 0 0 6px; gap: 6px; flex-wrap: wrap; }
 .chat-bookmarks li { display: inline-flex; align-items: center; }
+
+/* Access tokens */
+.secret { display: block; overflow-wrap: anywhere; padding: 0.5rem; margin: 0.25rem 0; }

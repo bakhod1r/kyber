@@ -1,0 +1,25 @@
+# Sprint 13 — Finishing touches for chat and huddles
+
+Source: product request (2026-10-14, "plan qil va boshla"): the items left open by Sprints 11–12. Planned first, then
+built DDD + TDD (contract tests on memory and PostgreSQL, acceptance tests on every backend, Playwright e2e).
+
+- ✅ **S82 Chat files on S3** — main now has an S3/MinIO blob adapter for issue attachments (`KYBER_S3_*`). Chat
+  files and huddle recordings use the same store when it is configured (one bucket, a `chat/` prefix), so several
+  replicas share them. AC: with S3 set, upload → download works on another replica; without it, unchanged.
+  **Done:** `platform/blob/s3` (contract `blob/blobtest`, fake S3 in tests); `KYBER_S3_*` → chat files under
+  `chat/` in the attachments bucket.
+- **S83 One realtime stream** — the app opens two SSE streams (`/api/v1/stream` for chat/calls, main's
+  `/api/v1/events` for boards). Serve main's events over the chat stream as well and let the web app open one.
+  AC: one EventSource per tab; board live updates and chat both still arrive; `/api/v1/events` stays for
+  compatibility.
+- **S84 Bot users with tokens** — main added personal access tokens. A workspace admin creates a bot (a user that
+  cannot sign in) and gets a token for it; the bot posts to channels it was invited to through the normal API.
+  AC: bots show with a 🤖 badge; a bot never gets notifications by email/Telegram; tokens shown once.
+- **S85 Drag to reorder sidebar sections** — my sections in my own order (drag a section header). AC: per user;
+  new sections go last.
+- **S86 Comments on whiteboard elements and doc lines** — select an element (or a doc paragraph) and comment;
+  comments show as a pin; mentions notify. AC: only people who may read the board/doc see them.
+- **S87 Recording summaries (optional)** — when an OpenAI-compatible chat model is configured (`KYBER_LLM_URL`),
+  a recording's transcript also gets a short summary. Off by default; nothing leaves the server without it.
+
+Order: S82 → S83 (infrastructure first), then S84, S85, S86, S87.

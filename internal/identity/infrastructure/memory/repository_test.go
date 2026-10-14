@@ -24,3 +24,7 @@ func TestOTPContract(t *testing.T) { externaltest.RunOTP(t, memory.NewRepository
 func TestConnectContract(t *testing.T) {
 	externaltest.RunConnect(t, memory.NewRepository(), "u-1")
 }
+
+func TestTokensContract(t *testing.T) {
+	externaltest.RunTokens(t, memory.NewRepository(), "u-1", "u-2")
+}

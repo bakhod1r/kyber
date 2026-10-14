@@ -2,14 +2,20 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/johannesboyne/gofakes3"
+	"github.com/johannesboyne/gofakes3/backend/s3mem"
+
+	blobs3 "github.com/bakhod1r/kyber/internal/platform/blob/s3"
 	"github.com/bakhod1r/kyber/internal/server"
 )
 
@@ -732,4 +738,34 @@ func TestIncomingWebhooks(t *testing.T) {
 		code, b = lead.do("DELETE", "/api/v1/webhooks/"+hook["id"].(string), nil)
 		expect(t, code, 204, b)
 	})
+}
+
+// S82: chat files on S3 — one replica uploads, another serves it.
+func TestChatFilesOnS3(t *testing.T) {
+	backend := s3mem.New()
+	if err := backend.CreateBucket("kyber"); err != nil {
+		t.Fatal(err)
+	}
+	fake := httptest.NewServer(gofakes3.New(backend).Server())
+	t.Cleanup(fake.Close)
+	store, err := blobs3.New(context.Background(), blobs3.Config{Endpoint: strings.TrimPrefix(fake.URL, "http://"), Bucket: "kyber",
+		Region: "us-east-1", AccessKey: "k", SecretKey: "s", Prefix: "chat/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "files"})
+		code, m := lead.chatUpload(ch["id"].(string), "notes.txt", []byte("hello from s3"), true, nil)
+		expect(t, code, 201, m)
+		if _, err := backend.HeadObject("kyber", "chat/"+m["id"].(string)); err != nil {
+			t.Fatalf("not in the bucket: %v", err)
+		}
+		res := lead.raw("GET", m["file"].(map[string]any)["url"].(string), nil, nil)
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != 200 || string(body) != "hello from s3" {
+			t.Fatalf("download = %d %q", res.StatusCode, body)
+		}
+	}, server.WithChatFiles(store))
 }

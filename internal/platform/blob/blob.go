@@ -18,7 +18,7 @@ var (
 	ErrInvalidKey = errors.New("invalid blob key")
 )
 
-// Store is the port; adapters: disk (self-hosted), memory (dev and tests). An S3/MinIO adapter fits the same port.
+// Store is the port; adapters: disk (self-hosted), memory (dev and tests), s3 (S3/MinIO, several replicas).
 type Store interface {
 	Put(ctx context.Context, key string, r io.Reader) error
 	Open(ctx context.Context, key string) (io.ReadCloser, error) // ErrNotFound
@@ -26,6 +26,9 @@ type Store interface {
 }
 
 var validKey = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+// ValidKey: keys are ids (letters, digits, - and _), never paths.
+func ValidKey(key string) bool { return validKey.MatchString(key) }
 
 type Memory struct {
 	mu    sync.Mutex

@@ -28,6 +28,6 @@ through ad-hoc prompts.
 ## Consequences
 
 - Assistants can work on issues without new permissions or a separate credential type.
-- Long-lived personal access tokens and OAuth for MCP clients are follow-ups; today the token is a
-  session token and expires with it.
+- Personal access tokens (ADR-0012) give MCP clients long-lived credentials; OAuth for MCP
+  clients is a follow-up.
 - New tools are a few lines in `internal/server/mcp.go`, tested through the full HTTP stack.
