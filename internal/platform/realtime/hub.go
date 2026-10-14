@@ -32,7 +32,15 @@ type sub struct {
 	closed   bool
 }
 
+// Sink is another way events reach users (S88: the MQTT broker's per-user topics); it also knows who
+// is connected through it.
+type Sink interface {
+	PublishTo(ws string, users []string, typ string, data []byte)
+	Online(ws string, users []string) []string
+}
+
 type Hub struct {
+	sink Sink
 	mu   sync.Mutex
 	next uint64
 	ring []addressed
@@ -86,11 +94,17 @@ func (h *Hub) deliver(s *sub, e Event) {
 	}
 }
 
+// Forward also hands every published event to sink. Call it before the hub is used.
+func (h *Hub) Forward(sink Sink) { h.sink = sink }
+
 // Publish sends an event (data as JSON) to every open tab of the given users in ws.
 func (h *Hub) Publish(ws string, users []string, typ string, data any) error {
 	b, err := json.Marshal(data)
 	if err != nil {
 		return err
+	}
+	if h.sink != nil {
+		h.sink.PublishTo(ws, users, typ, b)
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -112,9 +126,14 @@ func (h *Hub) Publish(ws string, users []string, typ string, data any) error {
 
 // Online lists which of users have an open stream in ws (in the given order).
 func (h *Hub) Online(ws string, users []string) []string {
+	on := map[string]bool{}
+	if h.sink != nil {
+		for _, u := range h.sink.Online(ws, users) {
+			on[u] = true
+		}
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	on := map[string]bool{}
 	for s := range h.subs {
 		if s.ws == ws {
 			on[s.user] = true

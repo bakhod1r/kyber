@@ -180,7 +180,7 @@ export function remindPresets(now: Date): { label: string; at: Date }[] {
   ];
 }
 
-/** Events on the realtime stream (GET /api/v1/stream). Stream messages carry no issue previews. */
+/** Events on the realtime stream (the user's MQTT topic, S88). Stream messages carry no issue previews. */
 export type ChatEvent =
   | { type: "message.posted" | "message.edited" | "message.deleted" | "message.reacted" | "message.pinned"; message: Omit<Message, "issues"> & { issues?: IssuePreview[] } }
   | { type: "typing"; conversation_id: string; user_id: string }

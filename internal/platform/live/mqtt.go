@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,12 @@ import (
 // Topic is where a project's hints are published: kyber/<workspace>/projects/<KEY>/events.
 func Topic(workspace, project string) string {
 	return "kyber/" + workspace + "/projects/" + project + "/events"
+}
+
+// UserTopic is where one user's own events go (S88: chat, calls, whiteboards):
+// kyber/<workspace>/users/<user>/events, payload {"type","data"}.
+func UserTopic(workspace, user string) string {
+	return "kyber/" + workspace + "/users/" + user + "/events"
 }
 
 // CanBrowse reports whether user may see project of the workspace in ctx (the composition root
@@ -79,6 +86,36 @@ func (b *Broker) Close() error { return b.srv.Close() }
 func (b *Broker) Publish(c Change) {
 	payload, _ := json.Marshal(c)
 	_ = b.srv.Publish(Topic(c.Workspace, c.Project), payload, false, 0)
+}
+
+// PublishTo delivers an event to the given users' own topics on this replica (S88).
+func (b *Broker) PublishTo(workspace string, users []string, typ string, data []byte) {
+	payload, _ := json.Marshal(struct {
+		Type string          `json:"type"`
+		Data json.RawMessage `json:"data"`
+	}{typ, data})
+	for _, u := range users {
+		_ = b.srv.Publish(UserTopic(workspace, u), payload, false, 0)
+	}
+}
+
+// Online lists which of users have a client connected in workspace (in the given order).
+func (b *Broker) Online(workspace string, users []string) []string {
+	b.mu.Lock()
+	on := map[string]bool{}
+	for _, id := range b.who {
+		if id.workspace == workspace {
+			on[id.user] = true
+		}
+	}
+	b.mu.Unlock()
+	out := []string{}
+	for _, u := range users {
+		if on[u] && !slices.Contains(out, u) {
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 // Broadcast publishes to this process only (a single replica, or dev mode).
@@ -202,6 +239,10 @@ func (h *hook) OnACLCheck(cl *mqtt.Client, topic string, write bool) bool {
 	id := h.b.who[cl] // unknown clients get the zero identity, which matches no workspace
 	h.b.mu.Unlock()
 	parts := strings.Split(topic, "/")
+	if len(parts) == 5 && parts[0] == "kyber" && parts[2] == "users" && parts[4] == "events" {
+		// S88: own events only; "+" may stand for the workspace and the user, every delivery is concrete.
+		return (parts[1] == id.workspace || parts[1] == "+") && (parts[3] == "+" || (parts[3] == id.user && id.user != ""))
+	}
 	if len(parts) != 5 || parts[0] != "kyber" || parts[2] != "projects" || parts[4] != "events" ||
 		(parts[1] != id.workspace && parts[1] != "+") || parts[3] == "#" || parts[3] == "" {
 		return false

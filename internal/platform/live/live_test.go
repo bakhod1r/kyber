@@ -219,3 +219,42 @@ func TestOnEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// S88: chat, calls and whiteboards reach a user on their own topic; nobody else receives it, even with
+// wildcards, and nobody may subscribe to another user's topic by name.
+func TestUserTopics(t *testing.T) {
+	b := broker(t)
+	addr := freeAddr(t)
+	if err := b.ListenTCP(addr); err != nil {
+		t.Fatal(err)
+	}
+	opts := func(pass string) *paho.ClientOptions {
+		return paho.NewClientOptions().AddBroker("tcp://" + addr).SetClientID("cli").SetUsername(ws).SetPassword(pass)
+	}
+	filter := live.UserTopic("+", "+")
+	ann, _ := subscribe(t, opts("ann-token"), filter)
+	ben, benc := subscribe(t, opts("ben-token"), filter)
+	if got := b.Online(ws, []string{"ben", "carl", "ann"}); strings.Join(got, ",") != "ben,ann" {
+		t.Fatalf("online = %v", got)
+	}
+
+	b.PublishTo(ws, []string{"ann"}, "chat.message", []byte(`{"body":"hi"}`))
+	b.PublishTo(other, []string{"ben"}, "chat.message", []byte(`{}`))
+	m := ann.next(t)
+	if m.Topic() != live.UserTopic(ws, "ann") || string(m.Payload()) != `{"type":"chat.message","data":{"body":"hi"}}` {
+		t.Fatalf("event = %s %s", m.Topic(), m.Payload())
+	}
+	ann.none(t)
+	ben.none(t)
+
+	for _, f := range []string{live.UserTopic(ws, "ann"), live.UserTopic(other, "ben"), "kyber/" + ws + "/users/#", live.UserTopic(ws, "")} {
+		tok := benc.Subscribe(f, 0, nil)
+		tok.WaitTimeout(3 * time.Second)
+		if st, ok := tok.(*paho.SubscribeToken); !ok || st.Result()[f] < 0x80 {
+			t.Errorf("ben subscribed to %q", f)
+		}
+	}
+	if got, _ := subscribe(t, opts("ben-token"), live.UserTopic(ws, "ben")); got == nil {
+		t.Fatal("own topic refused")
+	}
+}
