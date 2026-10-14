@@ -586,4 +586,10 @@ export const ru: Record<MessageKey, string> = {
   "📅": "📅",
   "Reschedule": "Перенести",
   "Reschedule {title}": "Перенести «{title}»",
+  "Reactions": "Реакции",
+  "{emoji} reacted by {count}": "{emoji}: реакций — {count}",
+  "Add reaction": "Добавить реакцию",
+  "React with {emoji}": "Отреагировать {emoji}",
+  "Also viewing": "Сейчас смотрят",
+  "Also viewing:": "Сейчас смотрят:",
 };

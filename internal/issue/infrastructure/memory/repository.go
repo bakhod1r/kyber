@@ -160,3 +160,16 @@ func (r *Repository) OutboxMeta() []outbox.Meta {
 	defer r.mu.Unlock()
 	return append([]outbox.Meta(nil), r.outAt...)
 }
+
+// keyOf finds the key of the issue with this id in the request's workspace.
+func (r *Repository) keyOf(ctx context.Context, id domain.IssueID) (domain.IssueKey, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	prefix := slot(ctx, "")
+	for k, is := range r.byKey {
+		if is.ID() == id && strings.HasPrefix(k, prefix) {
+			return is.Key(), nil
+		}
+	}
+	return domain.IssueKey{}, domain.ErrCommentNotFound
+}

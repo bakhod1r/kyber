@@ -2,6 +2,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { NavLink, useParams, useSearchParams } from "react-router-dom";
 import { projectUseCases } from "../contexts/project/application";
+import { identityUseCases } from "../contexts/identity/application";
 import { Members } from "../contexts/project/ui/Members";
 import { IssueFocus } from "../contexts/focus/ui/Focus";
 import { Backlog } from "../contexts/agile/ui/Backlog";
@@ -31,6 +32,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
   const t = useT();
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
+  const me = useQuery({ queryKey: ["me"], queryFn: identityUseCases.me });
   const project = projects.data?.find((p) => p.key === key);
   // The open issue lives in the URL (?issue=KEY-1), so notifications and links can deep-link to it.
   const [params, setParams] = useSearchParams();
@@ -99,7 +101,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         <Members projectKey={key} />
       </div>
       {open && (
-        <IssuePanel issueKey={open} projectKey={key} onClose={() => setOpen(null)} onOpen={setOpen} extensions={<IssueFocus issueKey={open} />} />
+        <IssuePanel issueKey={open} projectKey={key} me={me.data?.id} onClose={() => setOpen(null)} onOpen={setOpen} extensions={<IssueFocus issueKey={open} />} />
       )}
     </div>
   );

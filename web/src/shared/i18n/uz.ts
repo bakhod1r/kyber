@@ -586,4 +586,10 @@ export const uz: Record<MessageKey, string> = {
   "📅": "📅",
   "Reschedule": "Vaqtini o‘zgartirish",
   "Reschedule {title}": "{title} vaqtini o‘zgartirish",
+  "Reactions": "Reaksiyalar",
+  "{emoji} reacted by {count}": "{emoji}: {count} ta reaksiya",
+  "Add reaction": "Reaksiya qo‘shish",
+  "React with {emoji}": "{emoji} bilan javob berish",
+  "Also viewing": "Hozir ko‘rmoqda",
+  "Also viewing:": "Hozir ko‘rmoqda:",
 };

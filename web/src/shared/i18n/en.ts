@@ -584,6 +584,12 @@ export const en = {
   "📅": "📅",
   "Reschedule": "Reschedule",
   "Reschedule {title}": "Reschedule {title}",
+  "Reactions": "Reactions",
+  "{emoji} reacted by {count}": "{emoji} reacted by {count}",
+  "Add reaction": "Add reaction",
+  "React with {emoji}": "React with {emoji}",
+  "Also viewing": "Also viewing",
+  "Also viewing:": "Also viewing:",
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -68,13 +68,13 @@ describe("IssuePanel (KYB-S17)", () => {
   });
 
   it("AC3: lists and adds comments", async () => {
-    const comments = [{ id: "c-1", author_id: "u-ali", author_name: "Ali Valiyev", body: "First!", created_at: "2026-01-01T10:00:00Z" }];
+    const comments = [{ id: "c-1", author_id: "u-ali", author_name: "Ali Valiyev", body: "First!", created_at: "2026-01-01T10:00:00Z", reactions: [] }];
     const calls = mockApi({
       "GET /api/v1/issues/KYB-1": { status: 200, body: base },
       "GET /api/v1/projects/KYB/members": { status: 200, body: members },
       "GET /api/v1/issues/KYB-1/comments": () => ({ status: 200, body: { items: comments } }),
       "POST /api/v1/issues/KYB-1/comments": () => {
-        comments.push({ id: "c-2", author_id: "u-bob", author_name: "Bob", body: "On it", created_at: "2026-01-01T11:00:00Z" });
+        comments.push({ id: "c-2", author_id: "u-bob", author_name: "Bob", body: "On it", created_at: "2026-01-01T11:00:00Z", reactions: [] });
         return { status: 201, body: comments[1] };
       },
     });
