@@ -25,6 +25,8 @@ type ListFilter struct {
 	Parent *IssueID // children of this issue
 	// FixVersion selects the issues planned into this version.
 	FixVersion *VersionID
+	// Label selects the issues carrying this label.
+	Label *Label
 }
 
 // KeyAllocator hands out the next sequential key of a project (ACL to the Project context).

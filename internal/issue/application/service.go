@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/issue/domain"
@@ -224,6 +225,7 @@ type ListQuery struct {
 	Status     string
 	Sprint     string
 	FixVersion string
+	Label      string
 }
 
 func (s *Service) List(ctx context.Context, actor, project string, q ListQuery) ([]*domain.Issue, error) {
@@ -246,11 +248,31 @@ func (s *Service) List(ctx context.Context, actor, project string, q ListQuery) 
 		v := domain.VersionID(q.FixVersion)
 		f.FixVersion = &v
 	}
+	if q.Label != "" {
+		l := domain.Label(q.Label)
+		f.Label = &l
+	}
 	list, err := s.issues.ListByProject(ctx, project, f)
 	if err != nil {
 		return nil, err
 	}
 	return s.visible(ctx, actor, project, list)
+}
+
+// ProjectLabels lists the labels used on the project's issues the actor can see, sorted (for autocomplete).
+func (s *Service) ProjectLabels(ctx context.Context, actor, project string) ([]string, error) {
+	list, err := s.List(ctx, actor, project, ListQuery{})
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, is := range list {
+		for _, l := range is.Labels() {
+			out = append(out, string(l))
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out), nil
 }
 
 // visible drops the issues the actor may not see (issue security levels, ADR-0003): every list

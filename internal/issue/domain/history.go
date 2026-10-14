@@ -30,7 +30,7 @@ func (IssueChanged) EventName() string { return "issue.changed" }
 func (i *Issue) Snapshot() Snapshot {
 	return Snapshot{ID: i.id, Key: i.key, Title: i.title, Type: i.typ, Status: i.status, Description: i.description,
 		Priority: i.priority, Assignee: i.assignee, Reporter: i.reporter, Estimate: i.estimate, Rank: i.rank, Sprint: i.sprint,
-		Parent: i.parent, ParentKey: i.parentKey, Security: i.security, Resolution: i.resolution, FixVersions: slices.Clone(i.fixVersions), Time: i.time, StartDate: i.start, DueDate: i.due, Fields: maps.Clone(i.fields), Version: i.version}
+		Parent: i.parent, ParentKey: i.parentKey, Security: i.security, Resolution: i.resolution, FixVersions: slices.Clone(i.fixVersions), Labels: slices.Clone(i.labels), Time: i.time, StartDate: i.start, DueDate: i.due, Fields: maps.Clone(i.fields), Version: i.version}
 }
 
 func (i *Issue) markBaseline() {
@@ -71,6 +71,7 @@ func (i *Issue) Changelog(by UserID) (IssueChanged, bool) {
 	add("security", b.Security, a.Security)
 	add("resolution", string(b.Resolution), string(a.Resolution))
 	add("fix_versions", joinVersions(b.FixVersions), joinVersions(a.FixVersions))
+	add("labels", joinLabels(b.Labels), joinLabels(a.Labels))
 	add("original_estimate", durationOrEmpty(b.Time.Original), durationOrEmpty(a.Time.Original))
 	add("remaining_estimate", durationOrEmpty(b.Time.Remaining), durationOrEmpty(a.Time.Remaining))
 	add("time_spent", durationOrEmpty(b.Time.Spent), durationOrEmpty(a.Time.Spent))

@@ -37,6 +37,7 @@ export const issueGateway = {
   setWorkflow: (key: string, wf: Workflow) => request<Workflow>("PUT", `/api/v1/projects/${seg(key)}/workflow`, wf),
   transition: (issueKey: string, to: Status) =>
     request<Issue>("POST", `/api/v1/issues/${seg(issueKey)}/transitions`, { to }),
+  projectLabels: (key: string) => request<List<string>>("GET", `/api/v1/projects/${seg(key)}/labels`).then((r) => r.items),
   issue: (issueKey: string) => request<Issue>("GET", `/api/v1/issues/${seg(issueKey)}`),
   editIssue: (issueKey: string, patch: IssuePatch) => request<Issue>("PATCH", `/api/v1/issues/${seg(issueKey)}`, patch),
   comments: (issueKey: string) => request<List<Comment>>("GET", `/api/v1/issues/${seg(issueKey)}/comments`).then((r) => r.items),

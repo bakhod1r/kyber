@@ -42,6 +42,7 @@ type Issue struct {
 	Priority             string
 	Assignee, Reporter   string // user ids
 	Sprints, FixVersions []string
+	Labels               []string
 	Resolution           string
 	Parent               string // parent key
 	Points               *float64
@@ -156,7 +157,7 @@ var fields = map[string]fieldDef{
 	"type": {"type", kEnum}, "issuetype": {"type", kEnum}, "status": {"status", kEnum},
 	"statuscategory": {"statuscategory", kEnum}, "priority": {"priority", kEnum},
 	"assignee": {"assignee", kEnum}, "reporter": {"reporter", kEnum}, "sprint": {"sprint", kEnum},
-	"fixversion": {"fixversion", kEnum}, "resolution": {"resolution", kEnum}, "parent": {"parent", kEnum},
+	"fixversion": {"fixversion", kEnum}, "labels": {"labels", kEnum}, "label": {"labels", kEnum}, "resolution": {"resolution", kEnum}, "parent": {"parent", kEnum},
 	"summary": {"summary", kText}, "description": {"description", kText}, "text": {"text", kText},
 	"startdate": {"startdate", kDate}, "start date": {"startdate", kDate},
 	"duedate": {"duedate", kDate}, "due date": {"duedate", kDate}, "due": {"duedate", kDate},
@@ -471,6 +472,8 @@ func values(is *Issue, field string) []string {
 		return is.Sprints
 	case "fixversion":
 		return is.FixVersions
+	case "labels":
+		return is.Labels
 	case "resolution":
 		return one(is.Resolution)
 	case "parent":

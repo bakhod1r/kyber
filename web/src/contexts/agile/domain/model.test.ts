@@ -58,8 +58,8 @@ describe("swimlanes", () => {
 });
 
 describe("board filters", () => {
-  const i = (key: string, title: string, type: string, assignee_id: string | null, parent_key: string | null, fix_versions: string[] = []) => ({ key, title, type, assignee_id, parent_key, fix_versions });
-  const list = [i("A-1", "Login form", "story", "u-1", "A-9", ["v1"]), i("A-2", "Crash", "bug", null, null), i("A-3", "Logout", "task", "u-2", "A-9", ["v2"])];
+  const i = (key: string, title: string, type: string, assignee_id: string | null, parent_key: string | null, fix_versions: string[] = [], labels: string[] = []) => ({ key, title, type, assignee_id, parent_key, fix_versions, labels });
+  const list = [i("A-1", "Login form", "story", "u-1", "A-9", ["v1"], ["ui"]), i("A-2", "Crash", "bug", null, null, [], ["ui", "backend"]), i("A-3", "Logout", "task", "u-2", "A-9", ["v2"])];
   const keys = (f: Partial<BoardFilter>) => filterBoard(list, { ...NO_BOARD_FILTER, ...f }).map((x) => x.key);
   it("filters by text, assignee, version, epic and type together", () => {
     expect(keys({})).toEqual(["A-1", "A-2", "A-3"]);
@@ -70,11 +70,14 @@ describe("board filters", () => {
     expect(keys({ versions: ["v2"] })).toEqual(["A-3"]);
     expect(keys({ epics: [""] })).toEqual(["A-2"]);
     expect(keys({ epics: ["A-9"], types: ["story"] })).toEqual(["A-1"]);
+    expect(keys({ labels: ["backend"] })).toEqual(["A-2"]);
+    expect(keys({ labels: ["ui"], types: ["bug"] })).toEqual(["A-2"]);
   });
   it("knows when a filter is on and toggles values", () => {
     expect(boardFilterActive(NO_BOARD_FILTER)).toBe(false);
     expect(boardFilterActive({ ...NO_BOARD_FILTER, text: "  " })).toBe(false);
     expect(boardFilterActive({ ...NO_BOARD_FILTER, types: ["bug"] })).toBe(true);
+    expect(boardFilterActive({ ...NO_BOARD_FILTER, labels: ["ui"] })).toBe(true);
     expect(toggle(["a"], "b")).toEqual(["a", "b"]);
     expect(toggle(["a", "b"], "a")).toEqual(["b"]);
   });

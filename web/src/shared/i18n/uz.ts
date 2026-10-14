@@ -179,6 +179,8 @@ export const uz: Record<MessageKey, string> = {
   "Filter saved": "Filtr saqlandi",
   "Filters": "Filtrlar",
   "Fix versions": "Tuzatish versiyalari",
+  "Labels": "Yorliqlar",
+  "Label": "Yorliq",
   "Focus": "Fokus",
   "Focus history": "Fokus tarixi",
   "Focus on {key}": "{key} ga fokus",

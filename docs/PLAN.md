@@ -219,45 +219,50 @@ Qoidalar:
 Har bir milestone `awesome-agents` zanjiri bo'yicha o'tadi: `/design` → implement → `/review` → `/ship`.
 
 ### M0 — Poydevor (1-hafta)
-- [ ] ADR-0001…0005 (§6) — *architecture-team*
-- [ ] Monorepo skeleti, `Makefile`, `golangci-lint`, `pre-commit` — *platform-team*
-- [ ] CI (GitHub Actions): lint, test, build, `govulncheck`, `npm audit`, CodeQL — *platform / security*
-- [ ] `docker-compose.yml` (postgres, minio, mailpit), dev hot-reload (`air` + Vite proxy)
-- [ ] OpenAPI skeleti + codegen pipeline; `/healthz`, `/readyz`, `/metrics`
-- [ ] README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY.md, issue/PR shablonlari
+- [x] ADR'lar — `docs/adr/0002…0015` (ADR-0001 alohida yozilmagan; qarorlar §6 va ADR-0002…0005 da)
+- [x] `Makefile`, `golangci-lint` (`make lint`) — `pre-commit` o'rniga CI va `make lint`
+- [x] CI (GitHub Actions): lint, test, build, `govulncheck`, CodeQL (`.github/workflows/`)
+- [ ] `docker-compose.yml` ga minio va mailpit; dev hot-reload (`air`) — hozir faqat postgres
+- [x] OpenAPI 3.1 (`api/openapi.yaml`) + contract test; `/healthz`, `/readyz`, `/metrics`
+- [x] README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY.md, issue/PR shablonlari
 
-### M1 — v0.1 MVP (2–5 hafta)
-- [ ] F1 Auth (signup, login, logout, sessiya, PAT) + threat model — *backend + security*
-- [ ] F2/F3 Workspace, Project, a'zolar, RBAC (F14 basic)
-- [ ] F4 Issue CRUD, kalit generatsiyasi, sub-task, labels
-- [ ] F5 Default workflow (To Do → In Progress → Done) — data-driven, hardcode emas
-- [ ] F6 Kanban board, drag & drop, optimistic update + `version` conflict handling
-- [ ] F8 Comments, F9 Activity log, F12 in-app notifications
-- [ ] F11 Oddiy filterlar (assignee, status, type, label, text)
-- [ ] Frontend: shell, auth, board, issue detail, project settings
-- [ ] e2e: "signup → project → issue → board'da ko'chirish → comment" — *quality-team*
-- [ ] **Release v0.1.0**: Docker image (distroless, multi-arch), GoReleaser — *release-team*
+### M1 — v0.1 MVP
+- [x] F1 Auth (signup, login, logout, sessiya, PAT — ADR-0012) + threat model
+- [x] F2/F3 Workspace, Project, a'zolar, RBAC (ADR-0003, ADR-0004)
+- [x] F4 Issue CRUD, kalit generatsiyasi, sub-task, **labels** (migratsiya 0078)
+- [x] F5 Default workflow — data-driven (`WorkflowDef`), loyihaga moslanadi
+- [x] F6 Kanban board, drag & drop, optimistic update + `version` conflict
+- [x] F8 Comments (+ reaksiyalar), F9 Activity log, F12 in-app notifications
+- [x] F11 Board filtrlari: matn, assignee, version, epic, type, label; quick filters
+- [x] Frontend: shell, auth, board (Jira toolbar), issue detail, project settings
+- [x] e2e: Playwright, 35 ssenariy (`web/e2e`, `make e2e`)
+- [ ] **Release v0.1.0** tegi — `release.yml` + GoReleaser tayyor, teg hali qo'yilmagan
 
-### M2 — v0.5 Beta (6–11 hafta)
-- [ ] F7 Backlog, Sprint, Scrum board, LexoRank
-- [ ] F5 Workflow editor (status/transition CRUD, vizual)
-- [ ] F4 Custom fields (text, number, select, date, user)
-- [ ] F10 Link turlari, Epic → children
-- [ ] F11 **KQL**: lexer → parser (AST) → parametrlangan SQL; autocomplete endpoint
-- [ ] F15 Realtime board (WebSocket), F12 email + watchers, F13 attachments
-- [ ] F17 Webhooks (HMAC imzo, retry), F1 OIDC
-- [ ] F16 Burndown; F19 uz/ru
-- [ ] Load test (k6): 10k issue, 50 RPS → p95 < 100 ms
+### M2 — v0.5 Beta
+- [x] F7 Backlog, Sprint, Scrum board, LexoRank
+- [~] F5 Workflow editor: status/transition CRUD bor; **vizual (graf) muharrir yo'q**
+- [x] F4 Custom fields (text, number, select, date)
+- [x] F10 Link turlari, Epic → children, timeline
+- [x] F11 **JQL**: lexer → parser (AST) → baholash; UI'da autocomplete (maydon/operator/qiymat/label)
+  - [ ] parametrlangan SQL'ga kompilyatsiya (hozir xotirada baholanadi)
+- [x] F15 Realtime — MQTT (ADR-0013; chat SSE→MQTT ko'chirildi), F12 email/Telegram + watchers, F13 attachments (local/S3)
+- [x] F17 Webhooks (HMAC imzo, outbox retry — ADR-0014), F1 OIDC + GitHub sign-in (ADR-0015)
+- [x] F16 Burndown, velocity; F19 i18n — 25 til (en/uz/ru to'liq), RTL; 10 tema, wallpaperlar
+- [~] Load test: `loadtest/api.js` (k6) bor; p95 natijasi hali o'lchanib hujjatlanmagan
 
-### M3 — v1.0 (12–16 hafta)
-- [ ] Saved filters, swimlanes, quick filters, CFD/velocity
-- [ ] Permission schemes, issue-level security; audit log UI
-- [ ] F18 Jira import (CSV/JSON); F17 GitHub integratsiya (commit `KYB-12` → link)
-- [ ] Helm chart, backup/restore hujjati, upgrade yo'riqnomasi
-- [ ] Pentest + `/audit`, `/ship` gate; docs sayt (Docusaurus / VitePress)
-- [ ] **Release v1.0.0** + launch (HN, Reddit r/selfhosted, Product Hunt)
+### M3 — v1.0
+- [x] Saved filters, swimlanes, quick filters, velocity
+  - [ ] CFD (cumulative flow) va control chart
+- [x] Permission schemes, issue-level security; audit log UI; RLS (ADR-0010)
+- [x] F18 Jira import (CSV); F17 GitHub integratsiya (commit/PR `KYB-12` → Development paneli)
+- [x] Helm chart (`deploy/helm/kyber`), backup/restore (`docs/operations/backup.md`)
+  - [ ] upgrade yo'riqnomasi
+- [ ] Pentest + `/audit`, `/ship` gate; docs sayt
+- [ ] SAML/SCIM, MCP OAuth 2.1, umumiy API rate limiting
+- [ ] **Release v1.0.0** + launch
 
----
+Qo'shimcha (rejadan tashqari, bajarilgan): chat, qo'ng'iroqlar/huddle, yozib olish, whiteboard, docs, forms,
+goals, announcements, meetings (time table, time zone), pomodoro/focus, MCP server (11 tool), Telegram bot.
 
 ## 5. Agentlar bilan ishlash tartibi (awesome-agents)
 

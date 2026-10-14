@@ -177,6 +177,8 @@ export const en = {
   "Filter saved": "Filter saved",
   "Filters": "Filters",
   "Fix versions": "Fix versions",
+  "Labels": "Labels",
+  "Label": "Label",
   "Focus": "Focus",
   "Focus history": "Focus history",
   "Focus on {key}": "Focus on {key}",

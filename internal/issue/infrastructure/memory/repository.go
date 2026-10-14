@@ -82,7 +82,8 @@ func (r *Repository) ListByProject(ctx context.Context, project string, f domain
 			(f.Status != nil && is.Status() != *f.Status) ||
 			(f.Sprint != nil && is.Sprint() != *f.Sprint) ||
 			(f.Parent != nil && is.Parent() != *f.Parent) ||
-			(f.FixVersion != nil && !is.HasFixVersion(*f.FixVersion)) {
+			(f.FixVersion != nil && !is.HasFixVersion(*f.FixVersion)) ||
+			(f.Label != nil && !is.HasLabel(*f.Label)) {
 			continue
 		}
 		out = append(out, &is)

@@ -42,6 +42,7 @@ describe("IssuePanel (KYB-S17)", () => {
       version: 3, title: "Login v2", description: "Steps", priority: "high", assignee_id: "u-bob", estimate: null,
       security_level: "confidential",
       fix_versions: [],
+      labels: [],
     });
     expect(await within(dialog).findByText("Saved")).toBeInTheDocument();
   });
@@ -176,5 +177,22 @@ describe("Story points in the issue panel (KYB-S28 AC3)", () => {
     await userEvent.click(within(group).getByLabelText("0.9"));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(calls.find((c) => c.key === "PATCH /api/v1/issues/KYB-1")?.body).toMatchObject({ fix_versions: ["v-1"] }));
+  });
+
+  it("labels the issue, suggesting the project's labels", async () => {
+    const calls = mockApi({
+      "GET /api/v1/issues/KYB-1": { status: 200, body: { ...base, labels: ["ui"] } },
+      "GET /api/v1/projects/KYB/members": { status: 200, body: members },
+      "GET /api/v1/issues/KYB-1/comments": { status: 200, body: { items: [] } },
+      "GET /api/v1/projects/KYB/labels": { status: 200, body: { items: ["backend", "ui"] } },
+      "PATCH /api/v1/issues/KYB-1": { status: 200, body: { ...base, version: 4 } },
+    });
+    renderWithProviders(<IssuePanel issueKey="KYB-1" projectKey="KYB" onClose={vi.fn()} />);
+    const input = await screen.findByLabelText("Labels");
+    expect(input).toHaveValue("ui");
+    await waitFor(() => expect(document.querySelector('datalist option[value="backend"]')).not.toBeNull());
+    await userEvent.type(input, " backend");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "PATCH /api/v1/issues/KYB-1")?.body).toMatchObject({ labels: ["backend", "ui"] }));
   });
 });

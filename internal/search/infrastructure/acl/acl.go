@@ -82,6 +82,9 @@ func (a Issues) Facts(ctx context.Context, actor, project string) ([]domain.Issu
 		for _, v := range is.FixVersions() {
 			f.FixVersions = append(f.FixVersions, string(v))
 		}
+		for _, l := range is.Labels() {
+			f.Labels = append(f.Labels, string(l))
+		}
 		if p := is.ParentKey(); p.Number() > 0 {
 			f.Parent = p.String()
 		}

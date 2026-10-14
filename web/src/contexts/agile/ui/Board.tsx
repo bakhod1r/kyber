@@ -307,6 +307,7 @@ function BoardToolbar({
   const set = (patch: Partial<BoardFilter>) => onFilter({ ...filter, ...patch });
   const epics = issues.filter((i) => i.type === "epic");
   const types = [...new Set(issues.map((i) => i.type))];
+  const labels = [...new Set(issues.flatMap((i) => i.labels ?? []))].sort();
   const enc = encodeURIComponent(projectKey);
   return (
     <div className="board-toolbar" role="toolbar" aria-label={t("Board filters")}>
@@ -343,7 +344,7 @@ function BoardToolbar({
           ?
         </button>
       </div>
-      <MultiPick label={t("Version")} aria={t("Filter by {name}", { name: t("Version") })} onOpen={onVersionsOpen} options={versions.map((v) => ({ id: v.name, label: v.name }))} value={filter.versions} onChange={(versions) => set({ versions })} />
+      <MultiPick label={t("Version")} aria={t("Filter by {name}", { name: t("Version") })} onOpen={onVersionsOpen} options={versions.map((v) => ({ id: v.id, label: v.name }))} value={filter.versions} onChange={(versions) => set({ versions })} />
       <MultiPick
         label={t("Epic")}
         aria={t("Filter by {name}", { name: t("Epic") })}
@@ -352,6 +353,7 @@ function BoardToolbar({
         onChange={(epics) => set({ epics })}
       />
       <MultiPick label={t("Type")} aria={t("Filter by kind")} options={types.map((ty) => ({ id: ty, label: ty }))} value={filter.types} onChange={(types) => set({ types })} />
+      <MultiPick label={t("Label")} aria={t("Filter by {name}", { name: t("Label") })} options={labels.map((l) => ({ id: l, label: l }))} value={filter.labels} onChange={(labels) => set({ labels })} />
       {boardFilterActive(filter) && (
         <button type="button" className="ghost" onClick={() => onFilter(NO_BOARD_FILTER)}>
           {t("Clear filters")}

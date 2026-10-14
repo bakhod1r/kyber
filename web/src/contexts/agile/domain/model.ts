@@ -99,15 +99,15 @@ export function swimlanes<T extends { assignee_id: string | null; parent_key?: s
 }
 
 /** The board toolbar's filters (Jira): text, assignees ("" = unassigned), fix versions, epics
- * ("" = no epic) and types. Empty lists do not filter. */
-export type BoardFilter = { text: string; assignees: string[]; versions: string[]; epics: string[]; types: string[] };
-export const NO_BOARD_FILTER: BoardFilter = { text: "", assignees: [], versions: [], epics: [], types: [] };
+ * ("" = no epic), types and labels. Empty lists do not filter. */
+export type BoardFilter = { text: string; assignees: string[]; versions: string[]; epics: string[]; types: string[]; labels: string[] };
+export const NO_BOARD_FILTER: BoardFilter = { text: "", assignees: [], versions: [], epics: [], types: [], labels: [] };
 
 export function boardFilterActive(f: BoardFilter): boolean {
-  return f.text.trim() !== "" || f.assignees.length + f.versions.length + f.epics.length + f.types.length > 0;
+  return f.text.trim() !== "" || f.assignees.length + f.versions.length + f.epics.length + f.types.length + f.labels.length > 0;
 }
 
-type Filterable = { key: string; title: string; type: string; assignee_id: string | null; parent_key?: string | null; fix_versions?: string[] };
+type Filterable = { key: string; title: string; type: string; assignee_id: string | null; parent_key?: string | null; fix_versions?: string[]; labels?: string[] };
 
 /** filterBoard keeps the issues matching every active filter; text matches key or title. */
 export function filterBoard<T extends Filterable>(issues: T[], f: BoardFilter): T[] {
@@ -118,7 +118,8 @@ export function filterBoard<T extends Filterable>(issues: T[], f: BoardFilter): 
       (f.assignees.length === 0 || f.assignees.includes(i.assignee_id ?? "")) &&
       (f.versions.length === 0 || (i.fix_versions ?? []).some((v) => f.versions.includes(v))) &&
       (f.epics.length === 0 || f.epics.includes(i.parent_key ?? "")) &&
-      (f.types.length === 0 || f.types.includes(i.type)),
+      (f.types.length === 0 || f.types.includes(i.type)) &&
+      (f.labels.length === 0 || (i.labels ?? []).some((l) => f.labels.includes(l))),
   );
 }
 

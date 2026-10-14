@@ -172,6 +172,38 @@ func Run(t *testing.T, newRepo Factory) {
 		}
 	})
 
+	t.Run("labels persist and filter", func(t *testing.T) {
+		repo, _ := newRepo(t)
+		a, b := mk(t, 1, "Both"), mk(t, 2, "UI")
+		if err := a.Relabel([]string{"ui", "backend"}); err != nil {
+			t.Fatal(err)
+		}
+		_ = b.Relabel([]string{"ui"})
+		for _, is := range []*domain.Issue{a, b, mk(t, 3, "None")} {
+			if err := repo.Save(ctx, is, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, _ := repo.ByKey(ctx, a.Key())
+		if l := got.Labels(); len(l) != 2 || l[0] != "backend" || l[1] != "ui" {
+			t.Fatalf("labels = %v", l)
+		}
+		ui, be, none := domain.Label("ui"), domain.Label("backend"), domain.Label("nope")
+		for l, want := range map[*domain.Label]string{&ui: "KYB-1,KYB-2", &be: "KYB-1", &none: ""} {
+			list, err := repo.ListByProject(ctx, "KYB", domain.ListFilter{Label: l})
+			if err != nil || keys(list) != want {
+				t.Errorf("filter %s = %s %v", *l, keys(list), err)
+			}
+		}
+		_ = got.Relabel(nil)
+		if err := repo.Save(ctx, got, nil); err != nil {
+			t.Fatal(err)
+		}
+		if again, _ := repo.ByKey(ctx, a.Key()); len(again.Labels()) != 0 {
+			t.Fatalf("after clearing = %v", again.Labels())
+		}
+	})
+
 	t.Run("time tracking persists", func(t *testing.T) {
 		repo, _ := newRepo(t)
 		is := mk(t, 1, "Timed")

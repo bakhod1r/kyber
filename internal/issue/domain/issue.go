@@ -4,6 +4,7 @@ import (
 	"errors"
 	"maps"
 	"math"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -109,6 +110,7 @@ type Issue struct {
 	security    string
 	resolution  Resolution
 	fixVersions []VersionID
+	labels      []Label
 	time        TimeTracking
 	start, due  Date // planned schedule ("" = open)
 	fields      map[FieldID]string
@@ -154,6 +156,7 @@ type Snapshot struct {
 	Security    string   // issue security level ("" = visible to everyone who can browse the project)
 	Resolution  Resolution
 	FixVersions []VersionID
+	Labels      []Label
 	Time        TimeTracking
 	StartDate   Date
 	DueDate     Date
@@ -170,6 +173,7 @@ func Rehydrate(s Snapshot) *Issue {
 		description: s.Description, priority: s.Priority, assignee: s.Assignee, reporter: s.Reporter, estimate: s.Estimate, rank: s.Rank, sprint: s.Sprint,
 		parent: s.Parent, parentKey: s.ParentKey, security: s.Security, resolution: s.Resolution, time: s.Time, start: s.StartDate, due: s.DueDate, fields: maps.Clone(s.Fields), version: s.Version}
 	is.PlanForVersions(s.FixVersions)
+	is.labels = slices.Compact(slices.Sorted(slices.Values(s.Labels)))
 	is.markBaseline()
 	return is
 }

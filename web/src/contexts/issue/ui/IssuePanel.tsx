@@ -11,13 +11,13 @@ import { CommentReactions } from "./CommentReactions";
 import { MentionTextarea } from "./MentionTextarea";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useId, useState } from "react";
-import { issueUseCases, type Issue, PRIORITIES, type Priority, RESOLUTIONS, type Resolution } from "../application";
+import { issueUseCases, type Issue, parseLabels, PRIORITIES, type Priority, RESOLUTIONS, type Resolution } from "../application";
 import { ApiError } from "../../../shared/http";
 import { agileUseCases } from "../../agile/application";
 import { projectUseCases } from "../../project/application";
 import { useT } from "../../../shared/i18n/i18n";
 
-type Draft = { title: string; description: string; priority: Priority; assignee: string; estimate: string; confidential: boolean; resolution: Resolution | ""; fixVersions: string[] };
+type Draft = { title: string; description: string; priority: Priority; assignee: string; estimate: string; confidential: boolean; resolution: Resolution | ""; fixVersions: string[]; labels: string };
 
 const toDraft = (i: Issue): Draft => ({
   title: i.title,
@@ -28,6 +28,7 @@ const toDraft = (i: Issue): Draft => ({
   confidential: i.security_level === "confidential",
   resolution: i.resolution ?? "",
   fixVersions: i.fix_versions ?? [],
+  labels: (i.labels ?? []).join(" "),
 });
 
 export function IssuePanel({
@@ -53,6 +54,8 @@ export function IssuePanel({
   const issue = useQuery({ queryKey: ["issue", issueKey], queryFn: () => issueUseCases.issue(issueKey) });
   const members = useQuery({ queryKey: ["members", projectKey], queryFn: () => projectUseCases.members(projectKey) });
   const versions = useQuery({ queryKey: ["versions", projectKey], queryFn: () => agileUseCases.versions(projectKey) });
+  const projectLabels = useQuery({ queryKey: ["labels", projectKey], queryFn: () => issueUseCases.projectLabels(projectKey) });
+  const labelsId = useId();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
@@ -80,10 +83,12 @@ export function IssuePanel({
         security_level: d.confidential ? "confidential" : "",
         ...(d.resolution ? { resolution: d.resolution } : {}),
         fix_versions: d.fixVersions,
+        labels: parseLabels(d.labels),
       }),
     onSuccess: (updated) => {
       qc.setQueryData(["issue", issueKey], updated);
       setNotice({ kind: "ok", text: t("Saved") });
+      void qc.invalidateQueries({ queryKey: ["labels", projectKey] });
       return qc.invalidateQueries({ queryKey: ["issues", projectKey] });
     },
     onError: (err) => {
@@ -175,6 +180,15 @@ export function IssuePanel({
                 </select>
               </label>
             )}
+            <label>
+              {t("Labels")}
+              <input list={labelsId} value={draft.labels} placeholder="ui backend" onChange={(e) => setDraft({ ...draft, labels: e.target.value })} />
+              <datalist id={labelsId}>
+                {(projectLabels.data ?? []).map((l) => (
+                  <option key={l} value={l} />
+                ))}
+              </datalist>
+            </label>
             {(versions.data ?? []).some((v) => v.state !== "archived" || draft.fixVersions.includes(v.id)) && (
               <fieldset className="fix-versions">
                 <legend>{t("Fix versions")}</legend>

@@ -25,6 +25,7 @@ func New(svc *application.Service, log *slog.Logger) *Handler { return &Handler{
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/projects/{key}/issues", h.create)
 	mux.HandleFunc("GET /api/v1/projects/{key}/issues", h.list)
+	mux.HandleFunc("GET /api/v1/projects/{key}/labels", h.projectLabels)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}", h.get)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/transitions", h.transition)
 	mux.HandleFunc("PATCH /api/v1/issues/{issueKey}", h.edit)
@@ -69,6 +70,7 @@ type issueDTO struct {
 	Security    string            `json:"security_level"`
 	Resolution  string            `json:"resolution"`
 	FixVersions []string          `json:"fix_versions"`
+	Labels      []string          `json:"labels"`
 	Time        timeDTO           `json:"time_tracking"`
 	Fields      map[string]string `json:"custom_fields"`
 	StartDate   *string           `json:"start_date"`
@@ -79,7 +81,7 @@ type issueDTO struct {
 func toDTO(is *domain.Issue) issueDTO {
 	d := issueDTO{ID: string(is.ID()), Key: is.Key().String(), Title: is.Title(), Type: string(is.Type()),
 		Status: string(is.Status()), Description: is.Description(), Priority: string(is.Priority()),
-		Rank: string(is.Rank()), Security: is.SecurityLevel(), Resolution: string(is.Resolution()), FixVersions: fixVersions(is), Time: timeOut(is.TimeTracking()), Fields: fieldsOut(is), Version: is.Version()}
+		Rank: string(is.Rank()), Security: is.SecurityLevel(), Resolution: string(is.Resolution()), FixVersions: fixVersions(is), Labels: labels(is), Time: timeOut(is.TimeTracking()), Fields: fieldsOut(is), Version: is.Version()}
 	if start, due := is.Schedule(); start != "" || due != "" {
 		d.StartDate, d.DueDate = dateOut(start), dateOut(due)
 	}
@@ -113,7 +115,7 @@ func codeFor(err error) (string, bool) {
 	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidTitle), errors.Is(err, domain.ErrInvalidIssueType),
 		errors.Is(err, domain.ErrInvalidPriority), errors.Is(err, domain.ErrDescriptionTooLong),
 		errors.Is(err, domain.ErrInvalidCommentBody), errors.Is(err, application.ErrInvalidAssignee), errors.Is(err, errMissingVersion),
-		errors.Is(err, application.ErrInvalidSprint), errors.Is(err, application.ErrInvalidAnchor), errors.Is(err, domain.ErrInvalidEstimate),
+		errors.Is(err, application.ErrInvalidSprint), errors.Is(err, application.ErrInvalidAnchor), errors.Is(err, domain.ErrInvalidEstimate), errors.Is(err, domain.ErrInvalidLabel),
 		errors.Is(err, domain.ErrInvalidWorkflow), errors.Is(err, domain.ErrUnknownStatus),
 		errors.Is(err, application.ErrInvalidSecurityLevel), errors.Is(err, domain.ErrInvalidResolution), errors.Is(err, application.ErrInvalidVersion),
 		errors.Is(err, domain.ErrInvalidDuration), errors.Is(err, domain.ErrInvalidWorklog),
@@ -193,7 +195,7 @@ func (h *Handler) transition(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	list, err := h.svc.List(r.Context(), auth.Actor(r.Context()), r.PathValue("key"),
-		application.ListQuery{Status: r.URL.Query().Get("status"), Sprint: r.URL.Query().Get("sprint"), FixVersion: r.URL.Query().Get("fix_version")})
+		application.ListQuery{Status: r.URL.Query().Get("status"), Sprint: r.URL.Query().Get("sprint"), FixVersion: r.URL.Query().Get("fix_version"), Label: r.URL.Query().Get("label")})
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
@@ -203,6 +205,19 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		items = append(items, toDTO(is))
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// projectLabels lists the labels used in the project (autocomplete).
+func (h *Handler) projectLabels(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.ProjectLabels(r.Context(), auth.Actor(r.Context()), r.PathValue("key"))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	if list == nil {
+		list = []string{}
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": list})
 }
 
 var errMissingVersion = errors.New("version is required")
@@ -221,6 +236,7 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		Security    *string           `json:"security_level"`
 		Resolution  *string           `json:"resolution"`
 		FixVersions *[]string         `json:"fix_versions"`
+		Labels      *[]string         `json:"labels"`
 		Original    *string           `json:"original_estimate"`
 		Remaining   *string           `json:"remaining_estimate"`
 		Fields      map[string]string `json:"custom_fields"`
@@ -235,7 +251,7 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, h.log, errMissingVersion, codeFor)
 		return
 	}
-	cmd := application.EditIssue{Version: *in.Version, Title: in.Title, Description: in.Description, Priority: in.Priority, Security: in.Security, Resolution: in.Resolution, FixVersions: in.FixVersions,
+	cmd := application.EditIssue{Version: *in.Version, Title: in.Title, Description: in.Description, Priority: in.Priority, Security: in.Security, Resolution: in.Resolution, FixVersions: in.FixVersions, Labels: in.Labels,
 		OriginalEstimate: in.Original, RemainingEstimate: in.Remaining, Fields: in.Fields, StartDate: in.StartDate, DueDate: in.DueDate}
 	if in.AssigneeID != nil {
 		cmd.AssigneeSet = true
@@ -389,6 +405,14 @@ func fixVersions(is *domain.Issue) []string {
 	out := []string{}
 	for _, v := range is.FixVersions() {
 		out = append(out, string(v))
+	}
+	return out
+}
+
+func labels(is *domain.Issue) []string {
+	out := []string{}
+	for _, l := range is.Labels() {
+		out = append(out, string(l))
 	}
 	return out
 }

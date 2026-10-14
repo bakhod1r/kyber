@@ -2111,6 +2111,22 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/labels:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listProjectLabels
+      summary: Labels used on the project's issues (autocomplete).
+      responses:
+        "200":
+          description: Sorted, distinct.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: { items: { type: array, items: { type: string } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/issues:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -2122,6 +2138,7 @@ paths:
           description: A sprint id, or `backlog` for issues in no sprint.
           schema: { type: string }
         - { name: fix_version, in: query, description: "Issues planned into this version.", schema: { type: string } }
+        - { name: label, in: query, description: "Issues carrying this label.", schema: { type: string } }
       responses:
         "200": { description: Ordered by backlog rank., content: { application/json: { schema: { $ref: "#/components/schemas/IssueList" } } } }
         "401": { $ref: "#/components/responses/Error" }
@@ -2175,6 +2192,7 @@ paths:
                 parent_key: { type: [string, "null"], description: "Move under this epic/issue; null removes the parent (not for sub-tasks)." }
                 resolution: { $ref: "#/components/schemas/Resolution" }
                 fix_versions: { type: array, items: { type: string }, description: "Replaces the fix versions (unarchived versions of the project)." }
+                labels: { type: array, maxItems: 50, items: { type: string, minLength: 1, maxLength: 100 }, description: "Replaces the labels (no spaces or commas)." }
                 original_estimate: { type: string, description: "Jira-style duration (1w 2d 3h 30m; 1d = 8h, 1w = 5d); empty clears. While nothing is logged the remaining estimate follows it." }
                 remaining_estimate: { type: string, description: "Jira-style duration; empty sets zero." }
                 custom_fields: { type: object, additionalProperties: { type: string }, description: "Field id → value (number, YYYY-MM-DD date, one of a select field's options, or text); empty clears." }
@@ -4251,7 +4269,7 @@ components:
     Priority: { type: string, enum: [lowest, low, medium, high, highest] }
     Issue:
       type: object
-      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, security_level, resolution, fix_versions, time_tracking, custom_fields, version]
+      required: [id, key, title, type, status, description, priority, assignee_id, reporter_id, sprint_id, estimate, rank, parent_key, security_level, resolution, fix_versions, labels, time_tracking, custom_fields, version]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -4268,6 +4286,7 @@ components:
         rank: { type: string, description: Fractional backlog rank; compare byte-wise. }
         parent_key: { type: [string, "null"], description: "The epic of a story/task/bug, or the issue a sub-task belongs to." }
         fix_versions: { type: array, items: { type: string }, description: "Ids of the versions (releases) the issue is planned to ship in." }
+        labels: { type: array, items: { type: string }, description: "Free-form tags, sorted." }
         time_tracking: { $ref: "#/components/schemas/TimeTracking" }
         custom_fields: { type: object, additionalProperties: { type: string }, description: "Custom field values by field id (show those of the project's current fields)." }
         resolution:

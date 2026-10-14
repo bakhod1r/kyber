@@ -66,4 +66,5 @@ Migration numbers are reserved per item so parallel work does not collide.
 | F6 ✅ | Generic OIDC + GitHub sign-in | KYBER_OIDC_* (any provider), GitHub OAuth; SAML/SCIM later | — |
 | F7 ✅ | Board swimlanes | by assignee / epic / none | — |
 | F8 ✅ | MCP: more tools + OAuth | transition_issue, assign_issue, list_sprints, get_comments, update_issue; OAuth 2.1 later | — |
-| F9 | Sync docs/PLAN.md checkboxes; recheck F5 workflow editor | docs | — |
+| F9 ✅ | Sync docs/PLAN.md checkboxes; recheck F5 workflow editor | docs (visual editor still open) | — |
+| F10 ✅ | Labels + JQL autocomplete | issue labels, `labels` in JQL, board Label filter, JQL combobox | 0078 |

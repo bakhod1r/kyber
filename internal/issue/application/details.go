@@ -25,6 +25,7 @@ type EditIssue struct {
 	Security    *string   // security level ("" = visible to everyone who can browse); nil leaves it unchanged
 	Resolution  *string   // a resolved issue's resolution; nil leaves it unchanged
 	FixVersions *[]string // replaces the fix versions; nil leaves them unchanged
+	Labels      *[]string // replaces the labels; nil leaves them unchanged
 	// OriginalEstimate / RemainingEstimate are durations like "1d 4h" ("" clears); nil leaves them.
 	OriginalEstimate  *string
 	RemainingEstimate *string
@@ -116,6 +117,11 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 			ids[n] = domain.VersionID(v)
 		}
 		is.PlanForVersions(ids)
+	}
+	if cmd.Labels != nil {
+		if err := is.Relabel(*cmd.Labels); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.setFields(ctx, is, cmd.Fields); err != nil {
 		return nil, err

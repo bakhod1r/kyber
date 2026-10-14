@@ -61,4 +61,21 @@ describe("SearchPage", () => {
     await userEvent.click(await screen.findByRole("button", { name: "sprint in openSprints() AND statusCategory != done" }));
     await waitFor(() => expect(screen.getByText("2 issues")).toBeInTheDocument());
   });
+
+  it("autocompletes JQL fields and the project's labels", async () => {
+    mockApi({
+      "GET /api/v1/search?jql=": { status: 200, body: { total: 0, items: [] } },
+      "GET /api/v1/filters": { status: 200, body: { items: [] } },
+      "GET /api/v1/projects/KYB/labels": { status: 200, body: { items: ["backend", "ui"] } },
+    });
+    renderWithProviders(<SearchPage />);
+    const input = screen.getByRole("combobox", { name: "JQL" });
+    await userEvent.type(input, "project = KYB AND lab");
+    await userEvent.click(await screen.findByRole("option", { name: "labels" }));
+    expect(input).toHaveValue("project = KYB AND labels ");
+    await userEvent.type(input, "= ");
+    expect(await screen.findByRole("option", { name: "backend" })).toBeInTheDocument();
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    expect(input).toHaveValue("project = KYB AND labels = ui ");
+  });
 });

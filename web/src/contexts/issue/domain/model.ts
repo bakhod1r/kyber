@@ -27,6 +27,8 @@ export type Issue = {
   /** How a resolved issue ended; "" while it is not in a Done status. */
   resolution?: "" | Resolution;
   fix_versions?: string[];
+  /** Free-form tags, sorted. */
+  labels?: string[];
   time_tracking?: TimeTracking;
   custom_fields?: Record<string, string>;
   /** Planned start and due dates (YYYY-MM-DD) for the timeline. */
@@ -51,6 +53,7 @@ export type IssuePatch = {
   security_level?: "" | "confidential";
   resolution?: Resolution;
   fix_versions?: string[];
+  labels?: string[];
   original_estimate?: string;
   remaining_estimate?: string;
   custom_fields?: Record<string, string>;
@@ -208,4 +211,9 @@ export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Splits what the user typed into labels (spaces or commas separate them), sorted and distinct. */
+export function parseLabels(raw: string): string[] {
+  return [...new Set(raw.split(/[\s,]+/).filter(Boolean))].sort();
 }

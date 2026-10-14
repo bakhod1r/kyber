@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useId, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { EXAMPLE_QUERIES, type Filter, searchUseCases } from "../application";
+import { completeJql, EXAMPLE_QUERIES, type Filter, queryProject, searchUseCases } from "../application";
 import { useT } from "../../../shared/i18n/i18n";
 
 /** SearchPage: JQL search across the projects you can see, with saved filters (Jira's issue navigator). */
@@ -46,7 +46,7 @@ export function SearchPage() {
       <form className="row" onSubmit={onSearch}>
         <label className="grow">
           {t("JQL")}
-          <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t("project = KYB AND status != Done ORDER BY priority DESC")} />
+          <JqlInput value={draft} onChange={setDraft} placeholder={t("project = KYB AND status != Done ORDER BY priority DESC")} />
         </label>
         <button type="submit">{t("Search")}</button>
       </form>
@@ -136,5 +136,68 @@ export function SearchPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+/** JqlInput: the JQL box with autocomplete (fields, operators, values, keywords) as an ARIA combobox. */
+function JqlInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  const listId = useId();
+  const [focused, setFocused] = useState(false);
+  const [active, setActive] = useState(-1);
+  const project = queryProject(value);
+  const labels = useQuery({ queryKey: ["labels", project], queryFn: () => searchUseCases.projectLabels(project), enabled: project !== "", retry: false });
+  const completion = completeJql(value, { labels: labels.data ?? [], project: project ? [project] : [] });
+  const open = focused && completion.options.length > 0;
+  const change = (v: string) => {
+    onChange(v);
+    setActive(-1);
+  };
+  function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (!open) return;
+    const n = completion.options.length;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((a) => (e.key === "ArrowDown" ? (a + 1) % n : (a - 1 + n) % n));
+    } else if ((e.key === "Enter" || e.key === "Tab") && active >= 0) {
+      e.preventDefault();
+      change(completion.apply(completion.options[active]!));
+    } else if (e.key === "Escape") {
+      setFocused(false);
+    }
+  }
+  return (
+    <span className="jql-input">
+      <input
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => change(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onKeyDown={onKeyDown}
+      />
+      {open && (
+        <ul role="listbox" id={listId} className="jql-suggestions">
+          {completion.options.map((o, n) => (
+            <li
+              key={o}
+              id={`${listId}-${n}`}
+              role="option"
+              aria-selected={n === active}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                change(completion.apply(o));
+              }}
+            >
+              {o}
+            </li>
+          ))}
+        </ul>
+      )}
+    </span>
   );
 }

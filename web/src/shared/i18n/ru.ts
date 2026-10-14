@@ -179,6 +179,8 @@ export const ru: Record<MessageKey, string> = {
   "Filter saved": "Фильтр сохранён",
   "Filters": "Фильтры",
   "Fix versions": "Исправить в версиях",
+  "Labels": "Метки",
+  "Label": "Метка",
   "Focus": "Фокус",
   "Focus history": "История фокуса",
   "Focus on {key}": "Фокус на {key}",

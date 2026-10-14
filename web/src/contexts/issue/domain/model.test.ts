@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initials, type Issue, planTimeline } from "./model";
+import { initials, type Issue, parseLabels, planTimeline } from "./model";
 
 const base: Issue = {
   id: "", key: "", title: "", type: "task", status: "todo", description: "", priority: "medium",
@@ -42,4 +42,12 @@ describe("initials", () => {
     ["Ana Maria Lopez", "AL"],
     ["", "?"],
   ])("%s → %s", (name, want) => expect(initials(name)).toBe(want));
+});
+
+describe("parseLabels", () => {
+  it.each([
+    ["ui backend ui", ["backend", "ui"]],
+    ["  a,b  c ", ["a", "b", "c"]],
+    ["", []],
+  ])("%s", (raw, want) => expect(parseLabels(raw)).toEqual(want));
 });
