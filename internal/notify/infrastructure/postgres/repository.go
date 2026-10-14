@@ -18,10 +18,10 @@ func NewRepository(pool *pgxpool.Pool) *Repository { return &Repository{pool: po
 
 func (r *Repository) Add(ctx context.Context, n domain.Notification) error {
 	_, err := r.pool.Exec(ctx, `INSERT INTO notifications (id, recipient_id, workspace_id, kind, issue_key, issue_title, actor_name,
-		excerpt, source_event, created_at, project_key, conversation_id, conversation_name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		excerpt, source_event, created_at, project_key, conversation_id, conversation_name, page_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		ON CONFLICT (source_event, recipient_id) DO NOTHING`,
 		string(n.ID), string(n.Recipient), n.Workspace, string(n.Kind), n.IssueKey, n.IssueTitle, n.ActorName, n.Excerpt, n.SourceEvent, n.CreatedAt, n.Project,
-		n.ConversationID, n.ConversationName)
+		n.ConversationID, n.ConversationName, n.PageID)
 	return err
 }
 
@@ -33,7 +33,7 @@ func (r *Repository) ListFor(ctx context.Context, in domain.Inbox, unreadOnly bo
 		return nil, nil
 	}
 	rows, err := r.pool.Query(ctx, `SELECT id::text, recipient_id::text, workspace_id::text, kind, issue_key, issue_title, actor_name,
-		excerpt, source_event, created_at, read_at, project_key, conversation_id, conversation_name FROM notifications
+		excerpt, source_event, created_at, read_at, project_key, conversation_id, conversation_name, page_id FROM notifications
 		WHERE recipient_id = $1 AND workspace_id = $4 AND (NOT $2 OR read_at IS NULL) ORDER BY created_at DESC, id LIMIT $3`,
 		string(in.User), unreadOnly, limit, in.Workspace)
 	if err != nil {
@@ -43,7 +43,7 @@ func (r *Repository) ListFor(ctx context.Context, in domain.Inbox, unreadOnly bo
 		var n domain.Notification
 		var readAt *time.Time
 		err := row.Scan(&n.ID, &n.Recipient, &n.Workspace, &n.Kind, &n.IssueKey, &n.IssueTitle, &n.ActorName, &n.Excerpt,
-			&n.SourceEvent, &n.CreatedAt, &readAt, &n.Project, &n.ConversationID, &n.ConversationName)
+			&n.SourceEvent, &n.CreatedAt, &readAt, &n.Project, &n.ConversationID, &n.ConversationName, &n.PageID)
 		if readAt != nil {
 			n.ReadAt = *readAt
 		}

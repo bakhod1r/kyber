@@ -113,4 +113,11 @@ describe("i18n", () => {
     expect(document.documentElement.dir).toBe("rtl");
     expect(document.documentElement.lang).toBe("ar");
   });
+
+  it("covers chat, huddles and whiteboards in Uzbek and Russian (S94)", () => {
+    expect(translate("uz", "Start huddle")).toBe("Huddle boshlash");
+    expect(translate("ru", "Zoom in")).toBe("Увеличить");
+    expect(translate("uz", "{n} replies", { n: 3 })).toBe("3 ta javob");
+    expect(translate("de", "Start huddle")).toBe("Start huddle"); // other languages fall back to English
+  });
 });

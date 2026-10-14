@@ -47,7 +47,8 @@ type Notification struct {
 	// ConversationID is set for a mention in chat (IssueKey empty); ConversationName is the channel ("" for a DM).
 	ConversationID   string
 	ConversationName string
-	Project          string // the announced project ("" = the workspace); announcements only
+	Project          string // the announced project ("" = the workspace); announcements and doc comments
+	PageID           string // the commented doc page (KindDoc, S95)
 	ActorName        string
 	Excerpt          string
 	SourceEvent      int64

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type PointerEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { type MessageKey, msg, useT } from "../../../shared/i18n/i18n";
 import { issueUseCases } from "../../issue/application";
 import { projectUseCases } from "../../project/application";
 import {
@@ -13,18 +14,21 @@ const W = 1600;
 const H = 900;
 const PAGE = { w: W, h: H };
 type Tool = "select" | "hand" | "eraser" | Kind;
-const TOOLS: { tool: Tool; label: string; icon: string }[] = [
-  { tool: "select", label: "Select", icon: "↖" },
-  { tool: "hand", label: "Hand", icon: "✋" },
-  { tool: "rect", label: "Rectangle", icon: "▭" },
-  { tool: "ellipse", label: "Ellipse", icon: "◯" },
-  { tool: "arrow", label: "Arrow", icon: "→" },
-  { tool: "line", label: "Line", icon: "／" },
-  { tool: "freehand", label: "Pen", icon: "✎" },
-  { tool: "text", label: "Text", icon: "T" },
-  { tool: "sticky", label: "Sticky note", icon: "🗒" },
-  { tool: "eraser", label: "Eraser", icon: "⌫" },
+const TOOLS: { tool: Tool; label: MessageKey; icon: string }[] = [
+  { tool: "select", label: msg("Select"), icon: "↖" },
+  { tool: "hand", label: msg("Hand"), icon: "✋" },
+  { tool: "rect", label: msg("Rectangle"), icon: "▭" },
+  { tool: "ellipse", label: msg("Ellipse"), icon: "◯" },
+  { tool: "arrow", label: msg("Arrow"), icon: "→" },
+  { tool: "line", label: msg("Line"), icon: "／" },
+  { tool: "freehand", label: msg("Pen"), icon: "✎" },
+  { tool: "text", label: msg("Text"), icon: "T" },
+  { tool: "sticky", label: msg("Sticky note"), icon: "🗒" },
+  { tool: "eraser", label: msg("Eraser"), icon: "⌫" },
 ];
+/** Template names shown in the picker (the domain keeps its own English labels). */
+const TEMPLATE_LABELS: Record<Template, MessageKey> = { retro: msg("Retrospective"), kanban: msg("Kanban"), swot: msg("SWOT") };
+const STROKE_LABELS: Record<1 | 2 | 3, MessageKey> = { 1: msg("Thin"), 2: msg("Medium"), 3: msg("Bold") };
 const CURSOR_COLORS = ["#e11d48", "#7c3aed", "#0891b2", "#ca8a04", "#059669"];
 
 /**
@@ -32,6 +36,7 @@ const CURSOR_COLORS = ["#e11d48", "#7c3aed", "#0891b2", "#ca8a04", "#059669"];
  * text and sticky notes, with everyone's changes and cursors live. Slotted into the chat by the app shell.
  */
 export function Whiteboards({ conversationId, me, names }: { conversationId: string; me: string; names: Map<string, string> }) {
+  const t = useT();
   const qc = useQueryClient();
   const [open, setOpen] = useState<string | null>(null);
   const [shown, setShown] = useState(false);
@@ -45,27 +50,27 @@ export function Whiteboards({ conversationId, me, names }: { conversationId: str
       return qc.invalidateQueries({ queryKey: ["whiteboards", conversationId] });
     },
   });
-  if (!shown) return <button className="ghost" onClick={() => setShown(true)}>Whiteboards</button>;
+  if (!shown) return <button className="ghost" onClick={() => setShown(true)}>{t("Whiteboards")}</button>;
   if (open) return <Board id={open} me={me} names={names} onClose={() => setOpen(null)} />;
   const submit = (e: FormEvent) => {
     e.preventDefault();
     create.mutate();
   };
   return (
-    <section className="wb-list panel" aria-label="Whiteboards">
+    <section className="wb-list panel" aria-label={t("Whiteboards")}>
       <header className="row">
-        <h2>Whiteboards</h2>
-        <button className="ghost" aria-label="Close whiteboards" onClick={() => setShown(false)}>✕</button>
+        <h2>{t("Whiteboards")}</h2>
+        <button className="ghost" aria-label={t("Close whiteboards")} onClick={() => setShown(false)}>✕</button>
       </header>
       <ul>
-        {list.data?.length === 0 && <li className="muted">No whiteboards yet.</li>}
+        {list.data?.length === 0 && <li className="muted">{t("No whiteboards yet.")}</li>}
         {list.data?.map((b) => (
-          <li key={b.id}><button className="link" onClick={() => setOpen(b.id)}>{b.title}</button> <span className="muted">by {names.get(b.created_by) ?? "someone"}</span></li>
+          <li key={b.id}><button className="link" onClick={() => setOpen(b.id)}>{b.title}</button> <span className="muted">{t("by {name}", { name: names.get(b.created_by) ?? t("someone") })}</span></li>
         ))}
       </ul>
       <form onSubmit={submit} className="row">
-        <input aria-label="Whiteboard title" placeholder="Architecture" value={title} onChange={(e) => setTitle(e.target.value)} required />
-        <button>New whiteboard</button>
+        <input aria-label={t("Whiteboard title")} placeholder={t("Architecture")} value={title} onChange={(e) => setTitle(e.target.value)} required />
+        <button>{t("New whiteboard")}</button>
       </form>
       {create.error && <p role="alert" className="error">{create.error.message}</p>}
     </section>
@@ -113,12 +118,13 @@ function Label({ e }: { e: Element }) {
 
 /** S90: handles on the one selected element — eight to resize a box, one per end of a line or arrow. */
 function Handles({ e, zoom }: { e: Element; zoom: number }) {
+  const t = useT();
   const r = 6 / zoom;
   if (e.kind === "line" || e.kind === "arrow") {
     return (
       <g>
         {[0, e.points.length - 1].map((i) => (
-          <circle key={i} data-handle={`end-${i}`} aria-label={i === 0 ? "Line start" : "Line end"} className="wb-handle" cx={e.x + e.points[i]!.x} cy={e.y + e.points[i]!.y} r={r} />
+          <circle key={i} data-handle={`end-${i}`} aria-label={i === 0 ? t("Line start") : t("Line end")} className="wb-handle" cx={e.x + e.points[i]!.x} cy={e.y + e.points[i]!.y} r={r} />
         ))}
       </g>
     );
@@ -130,7 +136,7 @@ function Handles({ e, zoom }: { e: Element; zoom: number }) {
   return (
     <g>
       {HANDLES.map((h) => (
-        <rect key={h} data-handle={h} aria-label={`Resize ${h}`} className={`wb-handle wb-handle-${h}`}
+        <rect key={h} data-handle={h} aria-label={t("Resize {handle}", { handle: h })} className={`wb-handle wb-handle-${h}`}
           x={e.x + at[h][0] * e.w - r} y={e.y + at[h][1] * e.h - r} width={2 * r} height={2 * r} />
       ))}
     </g>
@@ -139,6 +145,7 @@ function Handles({ e, zoom }: { e: Element; zoom: number }) {
 
 /** Types an element's text in place over the canvas: Enter (Shift+Enter for a new line) or leaving saves, Escape cancels. */
 function TextEditor({ e, view, onDone }: { e: Element; view: View; onDone: (text: string | null) => void }) {
+  const t = useT();
   const done = useRef(false);
   const finish = (text: string | null) => {
     if (done.current) return;
@@ -147,8 +154,8 @@ function TextEditor({ e, view, onDone }: { e: Element; view: View; onDone: (text
   };
   const pct = (v: number, of: number) => `${(v / of) * 100}%`;
   return (
-    <textarea className={`wb-editor ${e.kind === "sticky" ? "sticky" : ""}`} aria-label={e.kind === "sticky" ? "Sticky note text" : "Text"} autoFocus
-      defaultValue={e.text} placeholder={e.kind === "sticky" ? "Sticky note" : "Type…"}
+    <textarea className={`wb-editor ${e.kind === "sticky" ? "sticky" : ""}`} aria-label={e.kind === "sticky" ? t("Sticky note text") : t("Text")} autoFocus
+      defaultValue={e.text} placeholder={e.kind === "sticky" ? t("Sticky note") : t("Type…")}
       style={{ left: `${onScreen(view, PAGE, e).left}%`, top: `${onScreen(view, PAGE, e).top}%`, width: pct(Math.max(e.w, 120) * view.zoom, W),
         minHeight: pct(Math.max(e.h, 34) * view.zoom, H), fontSize: `${view.zoom}em`, color: e.kind === "sticky" ? undefined : e.color }}
       onKeyDown={(k) => {
@@ -169,6 +176,7 @@ export function WhiteboardBoard(props: { id: string; me: string; names: Map<stri
 
 /** S86: the comments on the selected element; anyone in the conversation adds one, its author removes it. */
 function ElementComments({ board, element, me, names }: { board: string; element: string; me: string; names: Map<string, string> }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ["whiteboard", "comments", board];
   const list = useQuery({ queryKey: key, queryFn: () => whiteboardUseCases.comments(board) });
@@ -178,26 +186,27 @@ function ElementComments({ board, element, me, names }: { board: string; element
   const remove = useMutation({ mutationFn: (id: string) => whiteboardUseCases.removeComment(id), onSuccess: done });
   const mine = (list.data ?? []).filter((c) => c.element_id === element);
   return (
-    <aside className="wb-comments panel" aria-label="Element comments">
-      <h3>💬 Comments</h3>
-      {mine.length === 0 && <p className="muted">No comments yet.</p>}
+    <aside className="wb-comments panel" aria-label={t("Element comments")}>
+      <h3>💬 {t("Comments")}</h3>
+      {mine.length === 0 && <p className="muted">{t("No comments yet.")}</p>}
       <ul>
         {mine.map((c) => (
           <li key={c.id}>
-            <b>{c.author_id === me ? "You" : (names.get(c.author_id) ?? "Someone")}</b> {c.body}{" "}
-            {c.author_id === me && <button className="ghost" onClick={() => remove.mutate(c.id)}>Remove</button>}
+            <b>{c.author_id === me ? t("You") : (names.get(c.author_id) ?? t("Someone"))}</b> {c.body}{" "}
+            {c.author_id === me && <button className="ghost" onClick={() => remove.mutate(c.id)}>{t("Remove")}</button>}
           </li>
         ))}
       </ul>
       <form className="row" onSubmit={(e) => { e.preventDefault(); add.mutate(); }}>
-        <input aria-label="Comment" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Comment… (@email to mention)" maxLength={2000} />
-        <button disabled={!body.trim()}>Comment</button>
+        <input aria-label={t("Comment")} value={body} onChange={(e) => setBody(e.target.value)} placeholder={t("Comment… (@email to mention)")} maxLength={2000} />
+        <button disabled={!body.trim()}>{t("Comment")}</button>
       </form>
     </aside>
   );
 }
 
 function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<string, string>; onClose?: () => void }) {
+  const t = useT();
   const wb = useWhiteboard(id, me);
   const qc = useQueryClient();
   const comments = useQuery({ queryKey: ["whiteboard", "comments", id], queryFn: () => whiteboardUseCases.comments(id) });
@@ -561,73 +570,73 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
   const shapes = ordered(shown);
   const cursorColor = (u: string) => CURSOR_COLORS[[...u].reduce((n, c) => n + c.charCodeAt(0), 0) % CURSOR_COLORS.length];
   return (
-    <section className="wb panel" aria-label={`Whiteboard ${wb.board?.title ?? ""}`}>
+    <section className="wb panel" aria-label={t("Whiteboard {title}", { title: wb.board?.title ?? "" })}>
       <header className="wb-bar">
         <b>{wb.board?.title}</b>
-        <div role="toolbar" aria-label="Drawing tools" className="row">
-          {TOOLS.map((t) => (
-            <button key={t.tool} className={tool === t.tool ? "active" : "ghost"} aria-pressed={tool === t.tool} aria-label={t.label} title={t.label}
-              onClick={() => setTool(t.tool)}>{t.icon}</button>
+        <div role="toolbar" aria-label={t("Drawing tools")} className="row">
+          {TOOLS.map((x) => (
+            <button key={x.tool} className={tool === x.tool ? "active" : "ghost"} aria-pressed={tool === x.tool} aria-label={t(x.label)} title={t(x.label)}
+              onClick={() => setTool(x.tool)}>{x.icon}</button>
           ))}
         </div>
-        <div className="row" role="group" aria-label="Style">
+        <div className="row" role="group" aria-label={t("Style")}>
           {([1, 2, 3] as const).map((w) => (
             <button key={w} className={(style.stroke || 2) === w ? "active" : "ghost"} aria-pressed={(style.stroke || 2) === w}
-              aria-label={["Thin", "Medium", "Bold"][w - 1]} title={["Thin", "Medium", "Bold"][w - 1]} onClick={() => applyStyle({ stroke: w })}>
+              aria-label={t(STROKE_LABELS[w])} title={t(STROKE_LABELS[w])} onClick={() => applyStyle({ stroke: w })}>
               <span className="wb-weight" style={{ height: w === 1 ? 1 : w === 2 ? 3 : 6 }} />
             </button>
           ))}
-          <button className={style.fill ? "active" : "ghost"} aria-pressed={!!style.fill} aria-label="Fill" title="Fill shapes" onClick={() => applyStyle({ fill: !style.fill })}>◼</button>
-          <button className={style.dashed ? "active" : "ghost"} aria-pressed={!!style.dashed} aria-label="Dashed" title="Dashed lines" onClick={() => applyStyle({ dashed: !style.dashed })}>┄</button>
+          <button className={style.fill ? "active" : "ghost"} aria-pressed={!!style.fill} aria-label={t("Fill")} title={t("Fill shapes")} onClick={() => applyStyle({ fill: !style.fill })}>◼</button>
+          <button className={style.dashed ? "active" : "ghost"} aria-pressed={!!style.dashed} aria-label={t("Dashed")} title={t("Dashed lines")} onClick={() => applyStyle({ dashed: !style.dashed })}>┄</button>
         </div>
         {selection.some((x) => x.kind === "sticky") && (
-          <div className="row" role="radiogroup" aria-label="Sticky colour">
+          <div className="row" role="radiogroup" aria-label={t("Sticky colour")}>
             {STICKY_COLORS.map((c) => (
-              <button key={c} role="radio" aria-checked={selection.every((x) => x.kind !== "sticky" || x.color === c)} aria-label={`Sticky ${c}`}
+              <button key={c} role="radio" aria-checked={selection.every((x) => x.kind !== "sticky" || x.color === c)} aria-label={t("Sticky {color}", { color: c })}
                 className="wb-swatch" style={{ background: c }} onClick={() => recolorNotes(c)} />
             ))}
           </div>
         )}
-        <div className="row" role="radiogroup" aria-label="Color">
+        <div className="row" role="radiogroup" aria-label={t("Color")}>
           {COLORS.map((c) => (
-            <button key={c} role="radio" aria-checked={color === c} aria-label={`Color ${c}`} className="wb-swatch" style={{ background: c }} onClick={() => recolor(c)} />
+            <button key={c} role="radio" aria-checked={color === c} aria-label={t("Color {color}", { color: c })} className="wb-swatch" style={{ background: c }} onClick={() => recolor(c)} />
           ))}
         </div>
         <div className="row">
-          <select aria-label="Insert template" value="" onChange={(e) => e.target.value && insertTemplate(e.target.value as Template)}>
-            <option value="">Template…</option>
-            {TEMPLATES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          <select aria-label={t("Insert template")} value="" onChange={(e) => e.target.value && insertTemplate(e.target.value as Template)}>
+            <option value="">{t("Template…")}</option>
+            {TEMPLATES.map((x) => <option key={x.id} value={x.id}>{t(TEMPLATE_LABELS[x.id])}</option>)}
           </select>
-          <button className="ghost" onClick={wb.undo} disabled={!wb.canUndo}>Undo</button>
-          <button className="ghost" onClick={wb.redo} disabled={!wb.canRedo}>Redo</button>
-          {sel && editable(sel) && <button className="ghost" onClick={editText}>Edit text</button>}
+          <button className="ghost" onClick={wb.undo} disabled={!wb.canUndo}>{t("Undo")}</button>
+          <button className="ghost" onClick={wb.redo} disabled={!wb.canRedo}>{t("Redo")}</button>
+          {sel && editable(sel) && <button className="ghost" onClick={editText}>{t("Edit text")}</button>}
           {sel?.kind === "sticky" && sel.text.trim() && !linkedIssue(sel.text) && (projects.data?.length ?? 0) > 0 && (
-            <select aria-label="Create issue from sticky note" value="" onChange={(e) => e.target.value && toIssue.mutate({ note: sel, key: e.target.value })}>
-              <option value="">Create issue in…</option>
+            <select aria-label={t("Create issue from sticky note")} value="" onChange={(e) => e.target.value && toIssue.mutate({ note: sel, key: e.target.value })}>
+              <option value="">{t("Create issue in…")}</option>
               {projects.data?.map((p) => <option key={p.key} value={p.key}>{p.key} — {p.name}</option>)}
             </select>
           )}
           {sel?.kind === "sticky" && linkedIssue(sel.text) && (
-            <Link to={`/projects/${linkedIssue(sel.text)!.split("-")[0]}?issue=${linkedIssue(sel.text)}`}>Open {linkedIssue(sel.text)}</Link>
+            <Link to={`/projects/${linkedIssue(sel.text)!.split("-")[0]}?issue=${linkedIssue(sel.text)}`}>{t("Open {key}", { key: linkedIssue(sel.text)! })}</Link>
           )}
-          {selection.length > 1 && <span className="muted">{selection.length} selected</span>}
-          {selection.length > 0 && <button className="ghost" onClick={() => addCopies(selection, 24)} title="Ctrl+D">Duplicate</button>}
-          {selection.length > 0 && <button className="ghost" onClick={remove}>Delete</button>}
+          {selection.length > 1 && <span className="muted">{t("{n} selected", { n: selection.length })}</span>}
+          {selection.length > 0 && <button className="ghost" onClick={() => addCopies(selection, 24)} title="Ctrl+D">{t("Duplicate")}</button>}
+          {selection.length > 0 && <button className="ghost" onClick={remove}>{t("Delete")}</button>}
           {selection.length > 0 && (
             <>
-              <button className="ghost" aria-label="Bring to front" title="Bring to front (Ctrl+])"
+              <button className="ghost" aria-label={t("Bring to front")} title={t("Bring to front (Ctrl+])")}
                 onClick={() => wb.changeAll(toFront(selection, wb.elements).map((element) => ({ op: "update", element })))}>⬆</button>
-              <button className="ghost" aria-label="Send to back" title="Send to back (Ctrl+[)"
+              <button className="ghost" aria-label={t("Send to back")} title={t("Send to back (Ctrl+[)")}
                 onClick={() => wb.changeAll(toBack(selection, wb.elements).map((element) => ({ op: "update", element })))}>⬇</button>
             </>
           )}
-          <button className="ghost" onClick={() => void exportAs("svg")}>Export SVG</button>
-          <button className="ghost" onClick={() => void exportAs("png")}>Export PNG</button>
-          {onClose && <button className="ghost" aria-label="Close whiteboard" onClick={onClose}>✕</button>}
+          <button className="ghost" onClick={() => void exportAs("svg")}>{t("Export SVG")}</button>
+          <button className="ghost" onClick={() => void exportAs("png")}>{t("Export PNG")}</button>
+          {onClose && <button className="ghost" aria-label={t("Close whiteboard")} onClick={onClose}>✕</button>}
         </div>
       </header>
       <div className="wb-stage">
-      <svg ref={svg} role="img" aria-label="Canvas" viewBox={viewBox(view, PAGE)} className={`wb-canvas tool-${tool}`} xmlns="http://www.w3.org/2000/svg"
+      <svg ref={svg} role="img" aria-label={t("Canvas")} viewBox={viewBox(view, PAGE)} className={`wb-canvas tool-${tool}`} xmlns="http://www.w3.org/2000/svg"
         onPointerDown={down} onPointerMove={move} onPointerUp={up}
         onDoubleClick={() => editText()}>
         <defs>
@@ -646,27 +655,27 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
         {sel && !editing && <Handles e={sel} zoom={view.zoom} />}
         {selection.length > 1 && (() => {
           const b = bounds(selection)!;
-          return <rect x={b.x - 6} y={b.y - 6} width={b.w + 12} height={b.h + 12} fill="none" stroke="#2563eb" strokeDasharray="6 4" pointerEvents="none" aria-label="Selection" />;
+          return <rect x={b.x - 6} y={b.y - 6} width={b.w + 12} height={b.h + 12} fill="none" stroke="#2563eb" strokeDasharray="6 4" pointerEvents="none" aria-label={t("Selection")} />;
         })()}
         {marquee && <rect x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h} fill="#2563eb22" stroke="#2563eb" pointerEvents="none" />}
         {shapes.filter((e) => counts.has(e.id)).map((e) => (
-          <g key={`c-${e.id}`} pointerEvents="none" aria-label={`${counts.get(e.id)} comments on an element`}>
+          <g key={`c-${e.id}`} pointerEvents="none" aria-label={t("{n} comments on an element", { n: counts.get(e.id) ?? 0 })}>
             <circle cx={e.x + Math.max(e.w, 0) + 6} cy={e.y - 6} r={12} fill="#2563eb" />
             <text x={e.x + Math.max(e.w, 0) + 6} y={e.y - 1} fontSize={13} fill="#fff" textAnchor="middle">{counts.get(e.id)}</text>
           </g>
         ))}
         {Object.entries(wb.cursors).filter(([, c]) => Date.now() - c.at < 10_000).map(([u, c]) => (
-          <g key={u} transform={`translate(${c.x} ${c.y})`} pointerEvents="none" aria-label={`${names.get(u) ?? "Someone"}'s cursor`}>
+          <g key={u} transform={`translate(${c.x} ${c.y})`} pointerEvents="none" aria-label={t("{name}'s cursor", { name: names.get(u) ?? t("Someone") })}>
             <path d="M0 0 L0 18 L5 13 L12 13 Z" fill={cursorColor(u)} />
-            <text x={14} y={22} fontSize={14} fill={cursorColor(u)}>{names.get(u) ?? "Someone"}</text>
+            <text x={14} y={22} fontSize={14} fill={cursorColor(u)}>{names.get(u) ?? t("Someone")}</text>
           </g>
         ))}
       </svg>
-      <div className="wb-zoom" role="group" aria-label="Zoom">
-        <button className="ghost" aria-label="Zoom out" onClick={() => zoomBy(0.8)}>−</button>
-        <button className="ghost" aria-label="Reset zoom" title="Reset to 100%" onClick={() => zoomBy(1 / view.zoom)}>{Math.round(view.zoom * 100)}%</button>
-        <button className="ghost" aria-label="Zoom in" onClick={() => zoomBy(1.25)}>+</button>
-        <button className="ghost" aria-label="Fit to content" title="Fit (Shift+1)" onClick={() => setView(fit(Object.values(wb.elements), PAGE))}>⤢</button>
+      <div className="wb-zoom" role="group" aria-label={t("Zoom")}>
+        <button className="ghost" aria-label={t("Zoom out")} onClick={() => zoomBy(0.8)}>−</button>
+        <button className="ghost" aria-label={t("Reset zoom")} title={t("Reset to 100%")} onClick={() => zoomBy(1 / view.zoom)}>{Math.round(view.zoom * 100)}%</button>
+        <button className="ghost" aria-label={t("Zoom in")} onClick={() => zoomBy(1.25)}>+</button>
+        <button className="ghost" aria-label={t("Fit to content")} title={t("Fit (Shift+1)")} onClick={() => setView(fit(Object.values(wb.elements), PAGE))}>⤢</button>
       </div>
       {editing && <TextEditor key={editing.element.id} e={editing.element} view={view} onDone={finishEditing} />}
       </div>
