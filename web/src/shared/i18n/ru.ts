@@ -584,4 +584,6 @@ export const ru: Record<MessageKey, string> = {
   "© Kyber contributors · MIT License": "© Участники Kyber · Лицензия MIT",
   "· shared": "· общий",
   "📅": "📅",
+  "Reschedule": "Перенести",
+  "Reschedule {title}": "Перенести «{title}»",
 };

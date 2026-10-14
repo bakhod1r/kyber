@@ -94,6 +94,19 @@ func (r *Repository) Respond(_ context.Context, m *domain.Meeting, u domain.User
 	return nil
 }
 
+func (r *Repository) Reschedule(ctx context.Context, m *domain.Meeting) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	stored, ok := r.meetings[m.ID]
+	if !ok {
+		return domain.ErrMeetingNotFound
+	}
+	stored.Title, stored.Start, stored.End, stored.Reminded = m.Title, m.Start, m.End, false
+	r.meetings[m.ID] = stored
+	r.record(ctx, m)
+	return nil
+}
+
 func (r *Repository) DueForReminder(_ context.Context, from, to time.Time) ([]*domain.Meeting, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

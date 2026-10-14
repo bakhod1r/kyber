@@ -7,6 +7,8 @@ import "context"
 type Prefs struct {
 	Email    bool
 	Telegram bool
+	// TimeZone is the user's IANA zone (sent by their browser) for times in messages; "" = UTC.
+	TimeZone string
 }
 
 func DefaultPrefs() Prefs { return Prefs{Email: true, Telegram: true} }

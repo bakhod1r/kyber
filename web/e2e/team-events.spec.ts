@@ -27,4 +27,16 @@ test("team event for a project", async ({ page }) => {
   const table = page.getByRole("list", { name: "Meetings" });
   await expect(table.getByText("Sprint review")).toBeVisible();
   await expect(table.getByText(key, { exact: true })).toBeVisible();
+
+  // The organizer reschedules it; times are shown in the browser's zone with its name.
+  const zone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  await expect(table.getByText(`15:00 – 15:30 (${zone})`, { exact: false })).toBeVisible();
+  await table.getByRole("button", { name: "Reschedule Sprint review" }).click();
+  const form = table.getByRole("form", { name: "Reschedule Sprint review" });
+  await form.getByLabel("Title").fill("Sprint review (moved)");
+  await form.getByLabel("Starts").fill(local.slice(0, 11) + "16:30");
+  await form.getByRole("button", { name: "Save" }).click();
+  await expect(table.getByText("Sprint review (moved)")).toBeVisible();
+  await expect(table.getByText(`16:30 – 17:00 (${zone})`, { exact: false })).toBeVisible();
+  await expect(form).toBeHidden();
 });

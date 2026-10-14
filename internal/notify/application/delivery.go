@@ -144,6 +144,9 @@ func (s *Service) Settings(ctx context.Context, user string) (Settings, error) {
 }
 
 func (s *Service) SetPrefs(ctx context.Context, user string, p domain.Prefs) error {
+	if err := domain.CheckTimeZone(p.TimeZone); err != nil {
+		return err
+	}
 	return s.d.Prefs.SetPrefs(ctx, domain.UserID(user), p)
 }
 

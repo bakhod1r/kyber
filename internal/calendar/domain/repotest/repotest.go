@@ -95,6 +95,22 @@ func Run(t *testing.T, r domain.Repository) {
 		t.Fatal("reminded flag not stored")
 	}
 
+	// Rescheduling moves the meeting and lets the reminder go out again for the new time.
+	rv, _ = r.ByID(ctx, review.ID)
+	if err := rv.Reschedule("Review (moved)", t0.Add(5*time.Hour), t0.Add(6*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Reschedule(ctx, rv); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := r.ByID(ctx, review.ID); got.Title != "Review (moved)" || !got.Start.Equal(t0.Add(5*time.Hour)) || !got.End.Equal(t0.Add(6*time.Hour)) ||
+		got.Reminded || got.Responses[Dev] != domain.Maybe || len(got.Attendees) != 3 {
+		t.Fatalf("rescheduled = %+v", got)
+	}
+	if due, _ := r.DueForReminder(ctx, t0.Add(4*time.Hour), t0.Add(6*time.Hour)); len(due) != 1 || due[0].ID != review.ID {
+		t.Fatalf("due after reschedule = %v", due)
+	}
+
 	st, _ := r.ByID(ctx, standup.ID)
 	st.Cancel(Lead)
 	if err := r.Cancel(ctx, st); err != nil {
@@ -102,7 +118,7 @@ func Run(t *testing.T, r domain.Repository) {
 	}
 	gone := &domain.Meeting{ID: "not-a-uuid"}
 	for _, err := range []error{r.Cancel(ctx, st), func() error { _, err := r.ByID(ctx, standup.ID); return err }(),
-		func() error { _, err := r.ByID(ctx, "not-a-uuid"); return err }(), r.Cancel(ctx, gone), r.Respond(ctx, st, Dev)} {
+		func() error { _, err := r.ByID(ctx, "not-a-uuid"); return err }(), r.Cancel(ctx, gone), r.Respond(ctx, st, Dev), r.Reschedule(ctx, st), r.Reschedule(ctx, gone)} {
 		if !errors.Is(err, domain.ErrMeetingNotFound) {
 			t.Fatalf("missing err = %v", err)
 		}

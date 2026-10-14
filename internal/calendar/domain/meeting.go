@@ -46,11 +46,9 @@ func NewMeeting(id MeetingID, ws WorkspaceID, title string, start, end time.Time
 // members (attendees are then those members, resolved by the application). Everyone invited is
 // told through the Scheduled event.
 func PlanMeeting(id MeetingID, ws WorkspaceID, title string, start, end time.Time, organizer UserID, attendees []UserID, aud Audience) (*Meeting, error) {
-	if title = strings.TrimSpace(title); title == "" {
-		return nil, ErrEmptyTitle
-	}
-	if start.IsZero() || !end.After(start) || end.Sub(start) > MaxDuration {
-		return nil, ErrInvalidTime
+	title, err := validTime(title, start, end)
+	if err != nil {
+		return nil, err
 	}
 	if aud.Scope == "" {
 		aud.Scope = ScopePeople
@@ -64,6 +62,29 @@ func PlanMeeting(id MeetingID, ws WorkspaceID, title string, start, end time.Tim
 		Attendees: slices.Compact(all), Audience: aud, Responses: map[UserID]Response{}}
 	m.events = append(m.events, Scheduled{m.facts(), m.Organizer})
 	return m, nil
+}
+
+// validTime checks a meeting's title and time; it returns the trimmed title.
+func validTime(title string, start, end time.Time) (string, error) {
+	if title = strings.TrimSpace(title); title == "" {
+		return "", ErrEmptyTitle
+	}
+	if start.IsZero() || !end.After(start) || end.Sub(start) > MaxDuration {
+		return "", ErrInvalidTime
+	}
+	return title, nil
+}
+
+// Reschedule moves the meeting (and may rename it); the attendees are told through the
+// Rescheduled event and reminded again before the new start.
+func (m *Meeting) Reschedule(title string, start, end time.Time) error {
+	title, err := validTime(title, start, end)
+	if err != nil {
+		return err
+	}
+	m.Title, m.Start, m.End, m.Reminded = title, start.UTC(), end.UTC(), false
+	m.events = append(m.events, Rescheduled{m.facts(), m.Organizer})
+	return nil
 }
 
 // Blocks reports whether the meeting keeps u busy at some point in [from, to).
@@ -85,6 +106,9 @@ type Repository interface {
 	ForUser(ctx context.Context, u UserID, from, to time.Time) ([]*Meeting, error)
 	// Respond stores u's answer from m.Responses.
 	Respond(ctx context.Context, m *Meeting, u UserID) error
+	// Reschedule stores m's title and time, clears its reminder and writes Rescheduled;
+	// ErrMeetingNotFound if it is gone.
+	Reschedule(ctx context.Context, m *Meeting) error
 	// DueForReminder lists meetings of every workspace starting in [from, to) not yet reminded.
 	DueForReminder(ctx context.Context, from, to time.Time) ([]*Meeting, error)
 	// SaveReminder marks m reminded and writes its Reminder; ErrAlreadyReminded if it was.

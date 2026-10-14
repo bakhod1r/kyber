@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -83,5 +84,36 @@ func TestMeetingEmailAndGroupPost(t *testing.T) {
 	// Meetings of chosen people or the whole workspace are not posted to project groups.
 	if err := g.OnProjectEvent(context.Background(), msg(26, "meeting.scheduled", strings.Replace(scheduled, `"project":"KYB",`, "", 1))); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMeetingTextInTheRecipientsTimeZone(t *testing.T) {
+	ctx := context.Background()
+	s, deliveries, prefs := deliverySetup(domain.ChannelEmail)
+	_ = prefs.SetPrefs(ctx, "bob", domain.Prefs{Email: true, Telegram: true, TimeZone: "Asia/Tashkent"})
+	if err := s.OnMeetingEvent(ctx, msg(27, "meeting.rescheduled", scheduled)); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, d := range deliveries.All() {
+		got[d.To] = d.Subject
+	}
+	if got["bob@x.uz"] != "[KYB] Sprint review — Moved to Sat 17 Oct, 20:00–21:00 Asia/Tashkent" ||
+		got["carol@x.uz"] != "[KYB] Sprint review — Moved to Sat 17 Oct, 15:00–16:00 UTC" || len(got) != 2 {
+		t.Fatalf("subjects = %q", got)
+	}
+}
+
+func TestTimeZoneSetting(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := deliverySetup()
+	if err := s.SetPrefs(ctx, "bob", domain.Prefs{TimeZone: "Mars/Base"}); !errors.Is(err, domain.ErrInvalidTimeZone) {
+		t.Fatalf("err = %v", err)
+	}
+	if err := s.SetPrefs(ctx, "bob", domain.Prefs{Email: true, TimeZone: "Europe/Berlin"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Settings(ctx, "bob"); got.TimeZone != "Europe/Berlin" {
+		t.Fatalf("settings = %+v", got)
 	}
 }

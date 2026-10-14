@@ -582,6 +582,8 @@ export const en = {
   "© Kyber contributors · MIT License": "© Kyber contributors · MIT License",
   "· shared": "· shared",
   "📅": "📅",
+  "Reschedule": "Reschedule",
+  "Reschedule {title}": "Reschedule {title}",
 } as const;
 
 export type MessageKey = keyof typeof en;

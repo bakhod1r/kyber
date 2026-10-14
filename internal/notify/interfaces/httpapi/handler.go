@@ -68,11 +68,12 @@ func (h *Handler) unlinkGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 type settingsDTO struct {
-	Email             bool `json:"email"`
-	Telegram          bool `json:"telegram"`
-	EmailAvailable    bool `json:"email_available"`
-	TelegramAvailable bool `json:"telegram_available"`
-	TelegramConnected bool `json:"telegram_connected"`
+	Email             bool   `json:"email"`
+	Telegram          bool   `json:"telegram"`
+	EmailAvailable    bool   `json:"email_available"`
+	TelegramAvailable bool   `json:"telegram_available"`
+	TelegramConnected bool   `json:"telegram_connected"`
+	TimeZone          string `json:"time_zone"`
 }
 
 func (h *Handler) settings(w http.ResponseWriter, r *http.Request) {
@@ -82,13 +83,14 @@ func (h *Handler) settings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, settingsDTO{Email: s.Email, Telegram: s.Telegram, EmailAvailable: s.EmailAvailable,
-		TelegramAvailable: s.TelegramAvailable, TelegramConnected: s.TelegramConnected})
+		TelegramAvailable: s.TelegramAvailable, TelegramConnected: s.TelegramConnected, TimeZone: s.TimeZone})
 }
 
 func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Email    *bool `json:"email"`
-		Telegram *bool `json:"telegram"`
+		Email    *bool   `json:"email"`
+		Telegram *bool   `json:"telegram"`
+		TimeZone *string `json:"time_zone"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
@@ -106,6 +108,9 @@ func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Telegram != nil {
 		p.Telegram = *in.Telegram
+	}
+	if in.TimeZone != nil {
+		p.TimeZone = *in.TimeZone
 	}
 	if err := h.svc.SetPrefs(r.Context(), actor, p); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
@@ -136,6 +141,8 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeForbidden, true
 	case errors.Is(err, application.ErrGroupsDisabled):
 		return httpx.CodeProviderDisabled, true
+	case errors.Is(err, domain.ErrInvalidTimeZone):
+		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrChatNotLinked):
 		return httpx.CodeNotFound, true
 	}
