@@ -9,7 +9,7 @@ export const USER_TOPIC = "kyber/+/users/+/events";
 
 /** The part of an MQTT client the stream uses (mqtt.js in browsers; a fake in tests). */
 export type StreamClient = {
-  subscribe(topic: string): unknown;
+  subscribe(topic: string | string[], done?: (err: Error | null) => void): unknown;
   on(event: "message", listener: (topic: string, payload: Uint8Array) => void): unknown;
   on(event: "connect", listener: () => void): unknown;
   end(force?: boolean): unknown;
@@ -26,7 +26,7 @@ async function browserClient(): Promise<StreamClient> {
   return mqtt.connect(liveURL(window.location), {
     clientId: `web-${crypto.randomUUID()}`,
     reconnectPeriod: 2000,
-    resubscribe: true,
+    resubscribe: false, // we subscribe on every connect ourselves, to know when the subscriptions are active
   });
 }
 
@@ -74,8 +74,12 @@ function open(): Promise<StreamClient | undefined> {
         return undefined;
       }
       c.on("message", dispatch);
+      // On every (re)connect: subscribe again and only then tell listeners to reload. Reloading earlier would leave
+      // a gap: an event published before the broker granted the subscription would be neither loaded nor delivered.
       c.on("connect", () => {
-        for (const fn of [...connected]) fn();
+        c.subscribe([...filters.keys()], (err) => {
+          if (!err) for (const fn of [...connected]) fn();
+        });
       });
       for (const filter of filters.keys()) c.subscribe(filter);
       ready = c;
