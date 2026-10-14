@@ -32,7 +32,8 @@ func Run(t *testing.T, r domain.Repository) {
 		t.Fatalf("list = %v %v (newest first)", list, err)
 	}
 
-	box := domain.Element{ID: "e-1", Kind: domain.KindRect, X: 1.5, Y: 2, W: 100, H: 40, Text: "API", Color: "#112233"}
+	box := domain.Element{ID: "e-1", Kind: domain.KindRect, X: 1.5, Y: 2, W: 100, H: 40, Text: "API", Color: "#112233",
+		Stroke: domain.StrokeBold, Fill: true, Dashed: true, Z: -2.5}
 	line := domain.Element{ID: "e-2", Kind: domain.KindArrow, X: 0, Y: 0, Points: []domain.Point{{X: 0, Y: 0}, {X: 50, Y: 25.5}}}
 	res := b.Apply(Lead, []domain.Op{{Kind: domain.OpAdd, Element: box}, {Kind: domain.OpAdd, Element: line}}, t0)
 	if err := r.Save(ctx, b.ID, res); err != nil {
@@ -43,7 +44,7 @@ func Run(t *testing.T, r domain.Repository) {
 		t.Fatalf("ByID = %+v %v", got, err)
 	}
 	e1 := got.Elements["e-1"]
-	if e1.X != 1.5 || e1.Text != "API" || e1.Color != "#112233" || e1.Version != 1 || e1.UpdatedBy != Lead || !e1.UpdatedAt.Equal(t0) {
+	if e1.X != 1.5 || e1.Text != "API" || e1.Color != "#112233" || e1.Stroke != domain.StrokeBold || !e1.Fill || !e1.Dashed || e1.Z != -2.5 || e1.Version != 1 || e1.UpdatedBy != Lead || !e1.UpdatedAt.Equal(t0) {
 		t.Fatalf("e-1 = %+v", e1)
 	}
 	if e2 := got.Elements["e-2"]; len(e2.Points) != 2 || e2.Points[1] != (domain.Point{X: 50, Y: 25.5}) {

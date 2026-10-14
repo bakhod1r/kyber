@@ -68,15 +68,20 @@ describe("shared stream (S88: MQTT)", () => {
     expect(fake.ended).toBe(true);
   });
 
-  it("tells listeners whenever the connection (re)connects, so they reload what they may have missed", async () => {
+  it("tells listeners whenever the connection (re)connects, once its subscriptions are active", async () => {
     const fake = new FakeStreamClient();
+    fake.holdAcks = true;
     setStreamConnector(fake.connector());
     let n = 0;
     const stopListen = onConnect(() => n++);
     const stop = subscribe(["typing"], () => {});
     await flush();
     fake.connect();
-    fake.connect(); // a reconnect
+    expect(n).toBe(0); // events sent before the broker granted the subscription would be missed: reload only after
+    fake.ack();
+    expect(n).toBe(1);
+    fake.connect(); // a reconnect subscribes again
+    fake.ack();
     expect(n).toBe(2);
     stopListen();
     fake.connect();

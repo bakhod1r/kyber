@@ -5,6 +5,9 @@ import { type StreamClient, USER_TOPIC } from "../stream";
 export class FakeStreamClient implements StreamClient {
   connects = 0;
   topics: string[] = [];
+  /** holdAcks keeps SUBSCRIBE acknowledgements until ack() (the broker's SUBACK). */
+  holdAcks = false;
+  private pending: (() => void)[] = [];
   ended = false;
   private onMessage: ((topic: string, payload: Uint8Array) => void) | undefined;
   private onConnected: (() => void) | undefined;
@@ -16,8 +19,14 @@ export class FakeStreamClient implements StreamClient {
       return Promise.resolve<StreamClient>(this);
     };
   }
-  subscribe(topic: string) {
-    this.topics.push(topic);
+  subscribe(topic: string | string[], done?: (err: Error | null) => void) {
+    this.topics.push(...(Array.isArray(topic) ? topic : [topic]));
+    if (!done) return;
+    if (this.holdAcks) this.pending.push(() => done(null));
+    else done(null);
+  }
+  ack() {
+    for (const f of this.pending.splice(0)) f();
   }
   on(event: "message" | "connect", listener: ((topic: string, payload: Uint8Array) => void) | (() => void)) {
     if (event === "message") this.onMessage = listener as (topic: string, payload: Uint8Array) => void;

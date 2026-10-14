@@ -3,7 +3,7 @@
 // others' changes and cursors from the stream.
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applyLocal, type Element, type Elements, inverse, newer, type Op, reconcile } from "../domain/model";
+import { applyLocal, type Element, type Elements, inverseAll, newer, type Op, reconcile } from "../domain/model";
 import { onWhiteboardEvents, whiteboardGateway } from "../infrastructure/gateway";
 
 export * from "../domain/model";
@@ -25,8 +25,8 @@ export function useWhiteboard(id: string, me: string) {
   const [error, setError] = useState<string>();
   const confirmed = useRef<Elements>({}); // what the server has, for the versions our next ops are based on
   const queue = useRef<Promise<unknown>>(Promise.resolve());
-  const undo = useRef<Op[]>([]);
-  const redo = useRef<Op[]>([]);
+  const undo = useRef<Op[][]>([]); // S90: one step per batch (a whole selection moves back together)
+  const redo = useRef<Op[][]>([]);
   const [, bump] = useState(0);
 
   useEffect(() => {
@@ -76,23 +76,30 @@ export function useWhiteboard(id: string, me: string) {
     [id, setEls],
   );
 
-  const change = useCallback(
-    (op: Op) => {
-      undo.current.push(inverse(op, current.current[op.element.id]));
+  /** Applies several changes as one step of undo. */
+  const changeAll = useCallback(
+    (ops: Op[]) => {
+      if (ops.length === 0) return;
+      undo.current.push(inverseAll(ops, current.current));
       redo.current = [];
-      setEls(applyLocal(current.current, op));
-      send(op);
+      for (const op of ops) {
+        setEls(applyLocal(current.current, op));
+        send(op);
+      }
       bump((n) => n + 1);
     },
     [send, setEls],
   );
+  const change = useCallback((op: Op) => changeAll([op]), [changeAll]);
 
-  const step = (from: { current: Op[] }, to: { current: Op[] }) => {
-    const op = from.current.pop();
-    if (!op) return;
-    to.current.push(inverse(op, current.current[op.element.id]));
-    setEls(applyLocal(current.current, op));
-    send(op);
+  const step = (from: { current: Op[][] }, to: { current: Op[][] }) => {
+    const ops = from.current.pop();
+    if (!ops) return;
+    to.current.push(inverseAll(ops, current.current));
+    for (const op of ops) {
+      setEls(applyLocal(current.current, op));
+      send(op);
+    }
     bump((n) => n + 1);
   };
 
@@ -104,6 +111,7 @@ export function useWhiteboard(id: string, me: string) {
     cursors,
     error,
     change,
+    changeAll,
     undo: () => step(undo, redo),
     redo: () => step(redo, undo),
     canUndo: undo.current.length > 0,

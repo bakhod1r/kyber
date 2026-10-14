@@ -500,7 +500,10 @@ a.user:hover { text-decoration: underline; }
 .wb-swatch[aria-checked="true"] { border-color: var(--text, #000); }
 .wb-canvas { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; touch-action: none; background: #fff; display: block; }
 .wb-canvas.tool-select { cursor: default; }
-.wb-canvas:not(.tool-select) { cursor: crosshair; }
+.wb-canvas:not(.tool-select):not(.tool-hand):not(.tool-eraser) { cursor: crosshair; }
+.wb-canvas.tool-eraser { cursor: cell; }
+.wb-canvas.tool-hand { cursor: grab; }
+.wb-canvas.tool-hand:active { cursor: grabbing; }
 
 /* Present to everyone (S60) */
 .huddle-presentation { margin: 0 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg, #fff); }
@@ -541,6 +544,16 @@ a.user:hover { text-decoration: underline; }
 .attachment-thumb { width: 2.5rem; height: 2.5rem; object-fit: cover; border-radius: 4px; }
 label.button { cursor: pointer; }
 .wb-stage { position: relative; margin-top: 8px; }
+.wb-stage { overflow: hidden; }
+.wb-zoom { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 2px; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 8px; padding: 2px; box-shadow: 0 1px 4px rgb(0 0 0 / 0.12); }
+.wb-zoom button { min-width: 2.2rem; }
+.wb-weight { display: inline-block; width: 16px; background: currentColor; border-radius: 3px; vertical-align: middle; }
+.wb-handle { fill: #fff; stroke: #2563eb; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.wb-handle-n, .wb-handle-s { cursor: ns-resize; }
+.wb-handle-e, .wb-handle-w { cursor: ew-resize; }
+.wb-handle-nw, .wb-handle-se { cursor: nwse-resize; }
+.wb-handle-ne, .wb-handle-sw { cursor: nesw-resize; }
+circle.wb-handle { cursor: move; }
 .wb-editor { position: absolute; resize: none; font: inherit; font-size: 16px; padding: 6px 8px; border: 2px solid var(--accent, #2563eb); border-radius: 6px; background: #fff; z-index: 2; box-sizing: border-box; }
 .wb-editor.sticky { background: #fde68a; }
 .chat-activity { padding: 0 16px; }
