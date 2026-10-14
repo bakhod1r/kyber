@@ -226,6 +226,7 @@ type deps struct {
 	chatWorkflows chatdomain.Workflows
 	webhooks      chatdomain.Webhooks
 	bots          chatdomain.Bots
+	sectionOrders chatdomain.SectionOrders
 	calls         calldomain.Repository
 	whiteboards   wbdomain.Repository
 	chatStore     blob.Store // chat files on S3 (S82)
@@ -346,7 +347,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
-		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), bots: chatmemory.NewBots(), calls: callRepo, whiteboards: wbmemory.NewRepository(),
+		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), bots: chatmemory.NewBots(), sectionOrders: chatmemory.NewSectionOrders(), calls: callRepo, whiteboards: wbmemory.NewRepository(),
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, ready: func(context.Context) error { return nil },
 	}
@@ -394,7 +395,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
-		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), scheduled: chatpg.NewScheduled(pool), reminders: chatpg.NewReminders(pool), userGroups: chatpg.NewGroups(pool), chatPrefs: chatpg.NewPrefs(pool), bookmarks: chatpg.NewBookmarks(pool), chatWorkflows: chatpg.NewWorkflows(pool), webhooks: chatpg.NewWebhooks(pool), bots: chatpg.NewBots(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool),
+		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), scheduled: chatpg.NewScheduled(pool), reminders: chatpg.NewReminders(pool), userGroups: chatpg.NewGroups(pool), chatPrefs: chatpg.NewPrefs(pool), bookmarks: chatpg.NewBookmarks(pool), chatWorkflows: chatpg.NewWorkflows(pool), webhooks: chatpg.NewWebhooks(pool), bots: chatpg.NewBots(pool), sectionOrders: chatpg.NewSectionOrders(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
@@ -480,7 +481,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 		log.Warn("KYBER_FILES_DIR not set: chat files are kept in memory and lost on restart")
 		d.chatBlobs = blob.NewMemory()
 	}
-	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved, Statuses: d.statuses, Scheduled: d.scheduled, Reminders: d.reminders, Groups: d.userGroups, Prefs: d.chatPrefs, Projects: chatacl.NewProjects(projects), Transcriber: d.transcriber, Bookmarks: d.bookmarks, Workflows: d.chatWorkflows, Webhooks: d.webhooks, Directory: chatacl.NewMembers(workspaces, d.users),
+	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved, Statuses: d.statuses, Scheduled: d.scheduled, Reminders: d.reminders, Groups: d.userGroups, Prefs: d.chatPrefs, Projects: chatacl.NewProjects(projects), Transcriber: d.transcriber, Bookmarks: d.bookmarks, Workflows: d.chatWorkflows, Webhooks: d.webhooks, SectionOrders: d.sectionOrders, Directory: chatacl.NewMembers(workspaces, d.users),
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	chat.WithIssues(chatacl.NewIssues(issues))
 	calendar.WithConversations(calendaracl.NewConversations(chat)) // meetings in a channel's huddle (S76)

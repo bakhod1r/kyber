@@ -122,4 +122,16 @@ test("activity shows mentions and unread conversations", async ({ browser }) => 
   const res = await fetch(hookUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "build #42 passed" }) });
   expect(res.status).toBe(204);
   await expect(a.getByRole("article", { name: /Webhook/ })).toContainText("CI: build #42 passed");
+
+  // S85: Bobur drags his "Later" section above "Alpha"; the order stays after a reload.
+  const second = await ali.call("POST", "/api/v1/channels", { name: `alpha-${id}` });
+  await bobur.call("POST", `/api/v1/conversations/${second.id}/join`);
+  await bobur.call("PUT", `/api/v1/conversations/${second.id}/prefs`, { level: "mentions", section: "Alpha" });
+  await b.goto("/chat");
+  const titles = () => b.getByRole("navigation", { name: "Conversations" }).locator("section h2").allTextContents();
+  await expect.poll(async () => (await titles()).slice(0, 2).map((t) => t.replace("↑", "").trim())).toEqual(["Alpha", "Later"]);
+  await b.getByRole("heading", { name: /^Later/ }).dragTo(b.getByRole("heading", { name: /^Alpha/ }));
+  await expect.poll(async () => (await titles()).slice(0, 2).map((t) => t.replace("↑", "").trim())).toEqual(["Later", "Alpha"]);
+  await b.reload();
+  await expect.poll(async () => (await titles()).slice(0, 2).map((t) => t.replace("↑", "").trim())).toEqual(["Later", "Alpha"]);
 });

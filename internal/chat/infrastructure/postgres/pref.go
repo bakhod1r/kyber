@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -45,4 +46,27 @@ func (r *Prefs) Of(ctx context.Context, c domain.ConversationID) ([]*domain.Pref
 		return []*domain.Pref{}, nil
 	}
 	return r.query(ctx, `conversation_id = $1`, string(c))
+}
+
+// SectionOrders stores section orders (S85).
+type SectionOrders struct{ pool *pgxpool.Pool }
+
+func NewSectionOrders(pool *pgxpool.Pool) *SectionOrders { return &SectionOrders{pool: pool} }
+
+func (r *SectionOrders) PutOrder(ctx context.Context, ws domain.WorkspaceID, u domain.UserID, order []string) error {
+	_, err := r.pool.Exec(ctx, `INSERT INTO chat_section_orders (workspace_id, user_id, sections) VALUES ($1, $2, $3)
+		ON CONFLICT (workspace_id, user_id) DO UPDATE SET sections = $3`, string(ws), string(u), order)
+	return err
+}
+
+func (r *SectionOrders) Order(ctx context.Context, ws domain.WorkspaceID, u domain.UserID) ([]string, error) {
+	if !id.Valid(string(ws)) || !id.Valid(string(u)) {
+		return []string{}, nil
+	}
+	var out []string
+	err := r.pool.QueryRow(ctx, `SELECT sections FROM chat_section_orders WHERE workspace_id = $1 AND user_id = $2`, string(ws), string(u)).Scan(&out)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return []string{}, nil
+	}
+	return out, err
 }

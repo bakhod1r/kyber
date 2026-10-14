@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.61.0
+  version: 0.62.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1394,6 +1394,21 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/chat/sections:
+    get:
+      operationId: getSectionOrder
+      description: The order of my own sidebar sections (S85); empty until set (sections then sort by name).
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SectionOrder" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+    put:
+      operationId: setSectionOrder
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SectionOrder" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SectionOrder" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/chat/saved:
     get:
@@ -3210,6 +3225,10 @@ components:
         updated_by: { type: string }
         updated_at: { type: string, format: date-time }
         deleted: { type: boolean }
+    SectionOrder:
+      type: object
+      required: [order]
+      properties: { order: { type: array, items: { type: string }, maxItems: 50 } }
     Bot:
       type: object
       required: [user_id, name, created_by, created_at]

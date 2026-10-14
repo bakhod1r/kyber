@@ -21,8 +21,10 @@ built DDD + TDD (contract tests on memory and PostgreSQL, acceptance tests on ev
   `CreateBot` (no password, `…@bots.kyber.invalid`, a non-expiring PAT), migration 0069; 🤖 status; Notify never
   mails `.invalid` addresses (also fixes mail to Google/Telegram placeholder addresses). "🤖 Bots" in Activity and
   an Invite picker in channel settings. API 0.61.0.
-- **S85 Drag to reorder sidebar sections** — my sections in my own order (drag a section header). AC: per user;
+- ✅ **S85 Drag to reorder sidebar sections** — my sections in my own order (drag a section header). AC: per user;
   new sections go last.
+  **Done:** `GET/PUT /chat/sections` (migration 0070); drag a section header onto another (or ↑ for keyboards);
+  unordered sections follow by name. API 0.62.0.
 - **S86 Comments on whiteboard elements and doc lines** — select an element (or a doc paragraph) and comment;
   comments show as a pin; mentions notify. AC: only people who may read the board/doc see them.
 - **S87 Recording summaries (optional)** — when an OpenAI-compatible chat model is configured (`KYBER_LLM_URL`),

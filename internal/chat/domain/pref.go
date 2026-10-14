@@ -47,3 +47,30 @@ type Prefs interface {
 	// Of lists everyone's settings for a conversation.
 	Of(ctx context.Context, c ConversationID) ([]*Pref, error)
 }
+
+// ErrInvalidOrder: at most 50 section names of at most 40 characters each.
+var ErrInvalidOrder = errors.New("a section order is at most 50 names of at most 40 characters")
+
+// SectionOrder is the order of someone's own sidebar sections (S85); validated and without duplicates.
+func SectionOrder(names []string) ([]string, error) {
+	if len(names) > 50 {
+		return nil, ErrInvalidOrder
+	}
+	out := []string{}
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n == "" || utf8.RuneCountInString(n) > 40 {
+			return nil, ErrInvalidOrder
+		}
+		if !slices.Contains(out, n) {
+			out = append(out, n)
+		}
+	}
+	return out, nil
+}
+
+// SectionOrders stores each person's section order per workspace.
+type SectionOrders interface {
+	PutOrder(ctx context.Context, ws WorkspaceID, u UserID, order []string) error
+	Order(ctx context.Context, ws WorkspaceID, u UserID) ([]string, error) // empty when never set
+}

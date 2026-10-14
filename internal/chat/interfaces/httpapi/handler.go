@@ -56,6 +56,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/bots", h.createBot)
 	mux.HandleFunc("PUT /api/v1/conversations/{id}/prefs", h.setPref)
 	mux.HandleFunc("GET /api/v1/chat/prefs", h.prefs)
+	mux.HandleFunc("GET /api/v1/chat/sections", h.sectionOrder)
+	mux.HandleFunc("PUT /api/v1/chat/sections", h.setSectionOrder)
 	mux.HandleFunc("POST /api/v1/groups", h.createGroup)
 	mux.HandleFunc("PATCH /api/v1/groups/{id}", h.updateGroup)
 	mux.HandleFunc("DELETE /api/v1/groups/{id}", h.deleteGroup)
@@ -117,7 +119,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeChatForbidden, true
 	case errors.Is(err, domain.ErrInvalidName), errors.Is(err, domain.ErrInvalidBody), errors.Is(err, domain.ErrDMSize),
 		errors.Is(err, app.ErrNotWorkspaceMember), errors.Is(err, errBadLimit), errors.Is(err, domain.ErrNestedThread),
-		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle), errors.Is(err, domain.ErrInvalidPref), errors.Is(err, domain.ErrInvalidProject), errors.Is(err, domain.ErrInvalidBookmark), errors.Is(err, domain.ErrTooManyBookmarks), errors.Is(err, domain.ErrInvalidWorkflow), errors.Is(err, domain.ErrInvalidWebhook):
+		errors.Is(err, domain.ErrInvalidEmoji), errors.Is(err, app.ErrQueryTooShort), errors.Is(err, domain.ErrInvalidFile), errors.Is(err, domain.ErrInvalidReminder), errors.Is(err, domain.ErrInvalidStatus), errors.Is(err, domain.ErrInvalidSchedule), errors.Is(err, domain.ErrInvalidHandle), errors.Is(err, domain.ErrInvalidPref), errors.Is(err, domain.ErrInvalidOrder), errors.Is(err, domain.ErrInvalidProject), errors.Is(err, domain.ErrInvalidBookmark), errors.Is(err, domain.ErrTooManyBookmarks), errors.Is(err, domain.ErrInvalidWorkflow), errors.Is(err, domain.ErrInvalidWebhook):
 		return httpx.CodeValidation, true
 	case errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeBadRequest, true
@@ -1197,4 +1199,30 @@ func (h *Handler) createBot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, toBot(b, token))
+}
+
+func (h *Handler) sectionOrder(w http.ResponseWriter, r *http.Request) {
+	order, err := h.svc.SectionOrder(r.Context(), auth.Actor(r.Context()))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"order": order})
+}
+
+// setSectionOrder: {"order": ["Work", "Team"]} (S85).
+func (h *Handler) setSectionOrder(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Order []string `json:"order"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	order, err := h.svc.SetSectionOrder(r.Context(), auth.Actor(r.Context()), in.Order)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"order": order})
 }

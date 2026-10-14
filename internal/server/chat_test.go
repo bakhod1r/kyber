@@ -800,3 +800,19 @@ func TestBots(t *testing.T) {
 		}
 	}, server.WithSiteAdmins("boss@x.uz"))
 }
+
+// S85: my section order.
+func TestSectionOrder(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		code, b := lead.do("GET", "/api/v1/chat/sections", nil)
+		expect(t, code, 200, b)
+		code, b = lead.do("PUT", "/api/v1/chat/sections", map[string]any{"order": []string{"Work", "Team"}})
+		expect(t, code, 200, b)
+		code, b = lead.do("PUT", "/api/v1/chat/sections", map[string]any{"order": []string{""}})
+		expect(t, code, 422, b)
+		if _, g := lead.do("GET", "/api/v1/chat/sections", nil); len(g["order"].([]any)) != 2 {
+			t.Fatalf("order = %v", g)
+		}
+	})
+}

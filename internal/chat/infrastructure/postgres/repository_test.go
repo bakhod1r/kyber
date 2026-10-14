@@ -67,3 +67,7 @@ func TestWebhooksContract(t *testing.T) {
 }
 
 func TestBotsContract(t *testing.T) { repotest.RunBots(t, postgres.NewBots(dbtest.New(t))) }
+
+func TestSectionOrdersContract(t *testing.T) {
+	repotest.RunSectionOrders(t, postgres.NewSectionOrders(dbtest.New(t)))
+}

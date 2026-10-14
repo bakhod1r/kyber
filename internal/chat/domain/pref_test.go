@@ -23,3 +23,13 @@ func TestConversationPref(t *testing.T) {
 		t.Fatalf("default level = %q", def.Level)
 	}
 }
+
+func TestSectionOrder(t *testing.T) {
+	got, err := domain.SectionOrder([]string{" Work ", "Team", "Work"})
+	if err != nil || len(got) != 2 || got[0] != "Work" || got[1] != "Team" {
+		t.Fatalf("order = %v %v", got, err)
+	}
+	if _, err := domain.SectionOrder([]string{""}); !errors.Is(err, domain.ErrInvalidOrder) {
+		t.Fatalf("empty name = %v", err)
+	}
+}

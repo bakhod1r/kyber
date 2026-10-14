@@ -108,9 +108,10 @@ type Deps struct {
 	Workflows     domain.Workflows         // optional: channel automations (S80)
 	Webhooks      domain.Webhooks          // optional: incoming webhooks (S81)
 	Bots          domain.Bots              // optional: bot users (S84)
+	SectionOrders domain.SectionOrders     // optional: my order of sidebar sections (S85)
 	BotMaker      BotMaker
 	Workspace     Workspace
-	Directory     Directory                // optional: names for workflow welcomes
+	Directory     Directory // optional: names for workflow welcomes
 	Members       Members
 	NewID         func() string
 	Now           func() time.Time
@@ -1665,4 +1666,17 @@ func (s *Service) BotsIn(ctx context.Context, actor string) ([]*domain.Bot, erro
 		return nil, err
 	}
 	return s.d.Bots.In(ctx, domain.WorkspaceID(ws))
+}
+
+// SetSectionOrder saves the order of the actor's own sidebar sections (S85).
+func (s *Service) SetSectionOrder(ctx context.Context, actor string, names []string) ([]string, error) {
+	order, err := domain.SectionOrder(names)
+	if err != nil {
+		return nil, err
+	}
+	return order, s.d.SectionOrders.PutOrder(ctx, domain.WorkspaceID(tenant.Workspace(ctx)), domain.UserID(actor), order)
+}
+
+func (s *Service) SectionOrder(ctx context.Context, actor string) ([]string, error) {
+	return s.d.SectionOrders.Order(ctx, domain.WorkspaceID(tenant.Workspace(ctx)), domain.UserID(actor))
 }

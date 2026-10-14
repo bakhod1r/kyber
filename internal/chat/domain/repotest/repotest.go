@@ -732,3 +732,19 @@ func RunBots(t *testing.T, bots domain.Bots) {
 		t.Fatalf("other workspace = %+v", l)
 	}
 }
+
+// RunSectionOrders checks section orders (S85).
+func RunSectionOrders(t *testing.T, s domain.SectionOrders) {
+	ctx := context.Background()
+	if got, err := s.Order(ctx, WS, Lead); err != nil || len(got) != 0 {
+		t.Fatalf("never set = %v %v", got, err)
+	}
+	_ = s.PutOrder(ctx, WS, Lead, []string{"Work", "Archive"})
+	_ = s.PutOrder(ctx, WS, Lead, []string{"Archive", "Work", "Team"})
+	if got, _ := s.Order(ctx, WS, Lead); len(got) != 3 || got[0] != "Archive" || got[2] != "Team" {
+		t.Fatalf("order = %v", got)
+	}
+	if got, _ := s.Order(ctx, WS, Dev); len(got) != 0 {
+		t.Fatalf("Dev's = %v", got)
+	}
+}

@@ -44,3 +44,5 @@ func TestWebhooksContract(t *testing.T) {
 }
 
 func TestBotsContract(t *testing.T) { repotest.RunBots(t, memory.NewBots()) }
+
+func TestSectionOrdersContract(t *testing.T) { repotest.RunSectionOrders(t, memory.NewSectionOrders()) }

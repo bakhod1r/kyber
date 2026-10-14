@@ -564,3 +564,4 @@ label.button { cursor: pointer; }
 
 /* Access tokens */
 .secret { display: block; overflow-wrap: anywhere; padding: 0.5rem; margin: 0.25rem 0; }
+.draggable-section { cursor: grab; }

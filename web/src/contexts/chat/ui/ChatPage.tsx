@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, canManage, type ChannelWorkflow, type ChatEvent, localTime, utcMinute, type ConversationPrefs, type Level, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, COMMAND_HELP, clipName, type ClipKind, type ClipRecorder, MAX_CLIP_MS, type Message, parseCommand, startClip, parseRemind, type SlashCommand, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
+  applyEvent, canManage, type ChannelWorkflow, type ChatEvent, localTime, utcMinute, type ConversationPrefs, type Level, moveSection, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, COMMAND_HELP, clipName, type ClipKind, type ClipRecorder, MAX_CLIP_MS, type Message, parseCommand, startClip, parseRemind, type SlashCommand, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
 } from "../application";
 
 const PAGE = 50;
@@ -681,6 +681,18 @@ function Sidebar({ conversations, current, title, names, me }: {
   const [naming, setNaming] = useState<string | null>(null); // conversation getting a new section
   const [sectionName, setSectionName] = useState("");
   const known = [...new Set((prefs.data ?? []).map((p) => p.section).filter(Boolean))].sort();
+  // S85: my order of sections; drag a header onto another (or ↑) to move it before that one.
+  const order = useQuery({ queryKey: ["chat", "sections"], queryFn: chatUseCases.sectionOrder });
+  const [dragging, setDragging] = useState<string | null>(null);
+  const saveOrder = useMutation({
+    mutationFn: chatUseCases.setSectionOrder,
+    onSuccess: (o) => qc.setQueryData(["chat", "sections"], o),
+  });
+  const reorder = (from: string, to: string) => {
+    if (from === to) return;
+    const current = sections(conversations, prefs.data ?? [], order.data ?? []).map((x) => x.title).filter((t) => known.includes(t));
+    saveOrder.mutate(moveSection(current, from, to));
+  };
   const item = (c: Conversation) => {
     const p = prefOf(c.id);
     const muted = p.level === "muted";
@@ -743,9 +755,17 @@ function Sidebar({ conversations, current, title, names, me }: {
         </ul>
       )}
       <Link to="/chat" className={`chat-activity-link ${current ? "" : "active"}`} aria-current={current ? undefined : "page"}>🔔 Activity</Link>
-      {sections(conversations, prefs.data ?? []).map((sec) => (
-        <section key={sec.title} aria-label={sec.title}>
-          <h2>{sec.title}</h2>
+      {sections(conversations, prefs.data ?? [], order.data ?? []).map((sec, i, all) => (
+        <section key={sec.title} aria-label={sec.title}
+          onDragOver={(e) => { if (dragging && known.includes(sec.title)) e.preventDefault(); }}
+          onDrop={(e) => { e.preventDefault(); if (dragging) reorder(dragging, sec.title); setDragging(null); }}>
+          <h2 draggable={known.includes(sec.title)} onDragStart={() => setDragging(sec.title)} onDragEnd={() => setDragging(null)}
+            className={known.includes(sec.title) ? "draggable-section" : ""}>
+            {sec.title}
+            {known.includes(sec.title) && i > 0 && known.includes(all[i - 1]!.title) && (
+              <button className="ghost" aria-label={`Move ${sec.title} up`} onClick={() => reorder(sec.title, all[i - 1]!.title)}>↑</button>
+            )}
+          </h2>
           <ul>{sec.items.map(item)}</ul>
         </section>
       ))}

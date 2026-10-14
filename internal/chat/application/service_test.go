@@ -935,7 +935,9 @@ func (w *botWorld) MakeBot(_ context.Context, name string) (string, string, erro
 	w.n++
 	return fmt.Sprintf("bot-%d", w.n), "kpat_secret", nil
 }
-func (w *botWorld) Administers(_ context.Context, ws, user string) (bool, error) { return w.admins[user], nil }
+func (w *botWorld) Administers(_ context.Context, ws, user string) (bool, error) {
+	return w.admins[user], nil
+}
 func (w *botWorld) Join(_ context.Context, ws, user string) error {
 	w.joined = append(w.joined, ws+"/"+user)
 	return nil
@@ -961,5 +963,22 @@ func TestBots(t *testing.T) {
 	}
 	if list, _ := svc.BotsIn(ctx, "dev"); len(list) != 1 || list[0].Name != "CI" {
 		t.Fatalf("bots = %+v", list)
+	}
+}
+
+// S85: my order of sidebar sections.
+func TestSectionOrderUseCase(t *testing.T) {
+	repo := memory.NewRepository()
+	svc := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), SectionOrders: memory.NewSectionOrders(),
+		Members: members{"lead": {"w1"}}, NewID: func() string { return "x" }, Now: time.Now})
+	ctx := tenant.With(context.Background(), "w1")
+	if _, err := svc.SetSectionOrder(ctx, "lead", []string{"Work", " Team ", "Work"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := svc.SectionOrder(ctx, "lead"); len(got) != 2 || got[1] != "Team" {
+		t.Fatalf("order = %v", got)
+	}
+	if _, err := svc.SetSectionOrder(ctx, "lead", []string{""}); !errors.Is(err, domain.ErrInvalidOrder) {
+		t.Fatalf("invalid = %v", err)
 	}
 }

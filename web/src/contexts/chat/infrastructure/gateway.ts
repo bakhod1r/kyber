@@ -67,6 +67,8 @@ export const chatGateway = {
   removeWebhook: (id: string) => request<undefined>("DELETE", `/api/v1/webhooks/${seg(id)}`),
   bots: () => request<List<Bot>>("GET", "/api/v1/bots").then((r) => r.items),
   createBot: (name: string) => request<Bot>("POST", "/api/v1/bots", { name }),
+  sectionOrder: () => request<{ order: string[] }>("GET", "/api/v1/chat/sections").then((r) => r.order),
+  setSectionOrder: (order: string[]) => request<{ order: string[] }>("PUT", "/api/v1/chat/sections", { order }).then((r) => r.order),
   search: (q: string) => request<List<Message>>("GET", `/api/v1/chat/search?q=${encodeURIComponent(q)}`).then((r) => r.items),
   /** Uploads a file as a message (raw body; the header satisfies the CSRF guard for cookie sessions). */
   upload: async (id: string, file: Blob, name: string): Promise<Message> => {
