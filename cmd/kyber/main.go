@@ -97,7 +97,7 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		TelegramBot: cfg.TelegramBotName,
 	})
 	common := append([]server.Option{social, server.WithContext(ctx), server.WithBaseDomain(cfg.BaseDomain), server.WithSiteAdmins(cfg.AdminEmails),
-		server.WithPublicURL(cfg.PublicURL), server.WithAttachmentsDir(cfg.AttachmentsDir)}, telegramBot(cfg)...)
+		server.WithPublicURL(cfg.PublicURL), server.WithAttachmentsDir(cfg.AttachmentsDir), server.WithMQTTAddr(cfg.MQTTAddr)}, telegramBot(cfg)...)
 	if cfg.S3Bucket != "" {
 		blobs, err := blobs3.New(ctx, blobs3.Config{Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, Region: cfg.S3Region,
 			AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, TLS: cfg.S3TLS})

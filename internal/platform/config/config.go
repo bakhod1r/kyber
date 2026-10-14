@@ -27,6 +27,9 @@ type Config struct {
 	S3AccessKey string `env:"KYBER_S3_ACCESS_KEY"`
 	S3SecretKey string `env:"KYBER_S3_SECRET_KEY"`
 	S3TLS       bool   `env:"KYBER_S3_TLS" default:"true"`
+	// MQTTAddr also serves plain MQTT (e.g. ":1883") for external clients: username = workspace id,
+	// password = personal access token (ADR-0013). Browsers use MQTT over WebSocket at /api/v1/mqtt.
+	MQTTAddr string `env:"KYBER_MQTT_ADDR"`
 	// BaseDomain enables workspaces on subdomains (<slug>.<BaseDomain>, ADR-0004); empty = single-tenant.
 	BaseDomain string `env:"KYBER_BASE_DOMAIN"`
 	// AdminEmails (comma-separated) administer the default workspace: they publish workspace-wide

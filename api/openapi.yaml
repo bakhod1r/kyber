@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.40.0
+  version: 0.41.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1605,20 +1605,17 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
-  /api/v1/events:
+  /api/v1/mqtt:
     get:
-      operationId: liveEvents
+      operationId: liveMQTT
       description: |
-        Server-Sent Events stream of change hints for the caller's workspace (ADR-0008). An `event: change`
-        carries only `{"project","event"}` for projects the caller may browse, never content; clients refetch
-        through the API. `event: resync` means hints were dropped (refetch everything). Comments keep the
-        connection alive every 25 s; `retry: 3000` sets the reconnect delay.
+        MQTT 3.1.1/5 over WebSocket (subprotocol `mqtt`, binary frames; ADR-0013), authenticated like any API call
+        (session cookie from the same origin, or Bearer token). Clients only subscribe, to
+        `kyber/<workspace>/projects/<KEY or +>/events`; each message is `{"project","event"}` for projects the caller
+        may browse (checked per delivery), never content — clients refetch through the API. Plain MQTT clients can
+        connect to KYBER_MQTT_ADDR with username = workspace id and password = a personal access token.
       responses:
-        "200":
-          description: The event stream (never ends on its own)
-          content:
-            text/event-stream:
-              schema: { type: string }
+        "101": { description: Switching to MQTT over WebSocket }
         "401": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/announcements:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]

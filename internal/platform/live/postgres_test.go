@@ -11,20 +11,23 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/live"
 )
 
-// A change broadcast on one replica reaches the hub of another through NOTIFY.
+// sink records what reaches this replica.
+type sink chan live.Change
+
+func (s sink) Publish(c live.Change) { s <- c }
+
+// A change broadcast on one replica reaches the broker of another through NOTIFY.
 func TestPostgresCrossesReplicas(t *testing.T) {
 	pool := dbtest.New(t)
 	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
-	sender := live.NewPostgres(pool, live.NewHub(), quiet)
-	hub := live.NewHub()
-	receiver := live.NewPostgres(pool, hub, quiet)
+	sender := live.NewPostgres(pool, make(sink, 1), quiet)
+	sub := make(sink, 100)
+	receiver := live.NewPostgres(pool, sub, quiet)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { receiver.Listen(ctx); close(done) }()
 	defer func() { cancel(); <-done }()
 
-	sub, stop := live.Subscribe(hub, "w-1")
-	defer stop()
 	deadline := time.After(5 * time.Second)
 	for {
 		// LISTEN starts asynchronously: resend until the receiver hears one.
@@ -49,7 +52,7 @@ func TestPostgresListenerRetriesUntilCancelled(t *testing.T) {
 	pool := dbtest.New(t)
 	pool.Close() // every Acquire fails
 	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
-	l := live.NewPostgres(pool, live.NewHub(), quiet)
+	l := live.NewPostgres(pool, make(sink, 1), quiet)
 	live.SetRetry(l, time.Millisecond)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()

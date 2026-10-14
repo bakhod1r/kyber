@@ -12,11 +12,14 @@ require (
 	github.com/bakhod1r/jitterx v0.1.2
 	github.com/bakhod1r/oneenv v1.9.2
 	github.com/coreos/go-oidc/v3 v3.21.0
+	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/getkin/kin-openapi v0.149.0
 	github.com/go-jose/go-jose/v4 v4.1.5
+	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/johannesboyne/gofakes3 v1.2.0
 	github.com/minio/minio-go/v7 v7.4.1
+	github.com/mochi-mqtt/server/v2 v2.7.9
 	github.com/redis/go-redis/v9 v9.22.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
 	go.opentelemetry.io/otel v1.47.0

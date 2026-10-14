@@ -58,7 +58,7 @@ Migration numbers are reserved per item so parallel work does not collide.
 
 | # | Item | Scope | Migration |
 |---|---|---|---|
-| F1 | MQTT everywhere (ADR-0013) | embedded broker (mochi-mqtt); browser over WebSocket at /api/v1/mqtt; optional TCP listener with PATs; per-message project authorization; replaces SSE | — |
+| F1 ✅ | MQTT everywhere (ADR-0013) | embedded broker (mochi-mqtt); browser over WebSocket at /api/v1/mqtt; optional TCP listener with PATs; per-message project authorization; replaces SSE | — |
 | F2 | i18n (en/uz/ru) | web UI strings through a typed dictionary; language picker; Accept-Language for API problems | — |
 | F3 | Meetings: reschedule + time zones | PUT /meetings/{id} (re-notifies), user time zone preference, display in it | 0050 |
 | F4 | Comment reactions + presence | emoji reactions on comments; who is viewing an issue (over MQTT) | 0051 |
