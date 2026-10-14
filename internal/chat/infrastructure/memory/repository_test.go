@@ -42,3 +42,5 @@ func TestWorkflowsContract(t *testing.T) {
 func TestWebhooksContract(t *testing.T) {
 	repotest.RunWebhooks(t, memory.NewRepository(), memory.NewWebhooks())
 }
+
+func TestBotsContract(t *testing.T) { repotest.RunBots(t, memory.NewBots()) }

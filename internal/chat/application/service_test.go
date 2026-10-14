@@ -923,3 +923,43 @@ func TestWebhooks(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// botWorld fakes Identity (making bots) and Workspace (admins, joining).
+type botWorld struct {
+	admins map[string]bool
+	joined []string
+	n      int
+}
+
+func (w *botWorld) MakeBot(_ context.Context, name string) (string, string, error) {
+	w.n++
+	return fmt.Sprintf("bot-%d", w.n), "kpat_secret", nil
+}
+func (w *botWorld) Administers(_ context.Context, ws, user string) (bool, error) { return w.admins[user], nil }
+func (w *botWorld) Join(_ context.Context, ws, user string) error {
+	w.joined = append(w.joined, ws+"/"+user)
+	return nil
+}
+
+// S84: workspace admins make bots; a bot joins the workspace and shows 🤖.
+func TestBots(t *testing.T) {
+	repo := memory.NewRepository()
+	w := &botWorld{admins: map[string]bool{"lead": true}}
+	statuses := memory.NewStatuses()
+	svc := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Bots: memory.NewBots(), BotMaker: w, Workspace: w, Statuses: statuses,
+		Members: members{"lead": {"w1"}, "dev": {"w1"}, "bot-1": {"w1"}}, NewID: func() string { return "x" }, Now: time.Now})
+	ctx := tenant.With(context.Background(), "w1")
+	if _, _, err := svc.CreateBot(ctx, "dev", "CI"); !errors.Is(err, domain.ErrNotManager) {
+		t.Fatalf("non-admin = %v", err)
+	}
+	b, token, err := svc.CreateBot(ctx, "lead", "CI")
+	if err != nil || token != "kpat_secret" || b.User != "bot-1" || len(w.joined) != 1 || w.joined[0] != "w1/bot-1" {
+		t.Fatalf("bot = %+v %q %v %v", b, token, err, w.joined)
+	}
+	if st, _ := svc.Statuses(ctx, "dev", []string{"bot-1"}); st["bot-1"].Emoji != "🤖" {
+		t.Fatalf("status = %+v", st)
+	}
+	if list, _ := svc.BotsIn(ctx, "dev"); len(list) != 1 || list[0].Name != "CI" {
+		t.Fatalf("bots = %+v", list)
+	}
+}

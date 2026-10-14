@@ -20,8 +20,10 @@ function usePeople() {
   const lists = useQueries({
     queries: (projects.data ?? []).map((p) => ({ queryKey: ["members", p.key], queryFn: () => projectUseCases.members(p.key) })),
   });
+  const bots = useQuery({ queryKey: ["chat", "bots"], queryFn: chatUseCases.bots });
   const names = new Map<string, string>();
   for (const q of lists) for (const m of q.data ?? []) names.set(m.user_id, m.name);
+  for (const b of bots.data ?? []) names.set(b.user_id, b.name); // S84
   return names;
 }
 
@@ -261,6 +263,55 @@ function IssueFromMessage({ m, onDone }: { m: Message; onDone: (m: Message) => v
   );
 }
 
+/** Invite someone (or a bot) into the channel. */
+function InviteMember({ c, names, onDone }: { c: Conversation; names: Map<string, string>; onDone: () => void }) {
+  const invite = useMutation({ mutationFn: (u: string) => chatUseCases.invite(c.id, u), onSuccess: onDone });
+  const others = [...names].filter(([u]) => !c.member_ids.includes(u));
+  if (others.length === 0) return null;
+  return (
+    <label>
+      Invite{" "}
+      <select aria-label="Invite to channel" value="" onChange={(e) => e.target.value && invite.mutate(e.target.value)}>
+        <option value="">Someone…</option>
+        {others.map(([u, n]) => <option key={u} value={u}>{n}</option>)}
+      </select>
+      {invite.error && <span role="alert" className="error"> {invite.error.message}</span>}
+    </label>
+  );
+}
+
+/** S84: bots — another system's user that posts through the API with its own token (shown once). */
+function Bots() {
+  const qc = useQueryClient();
+  const list = useQuery({ queryKey: ["chat", "bots"], queryFn: chatUseCases.bots });
+  const [name, setName] = useState("");
+  const [shown, setShown] = useState<{ name: string; token: string } | null>(null);
+  const create = useMutation({
+    mutationFn: () => chatUseCases.createBot(name),
+    onSuccess: (b) => { setShown({ name: b.name, token: b.token ?? "" }); setName(""); void qc.invalidateQueries({ queryKey: ["chat", "bots"] }); },
+  });
+  return (
+    <>
+      <h2>🤖 Bots</h2>
+      <ul aria-label="Bots">{(list.data ?? []).map((b) => <li key={b.user_id}>{b.name}</li>)}</ul>
+      {shown && (
+        <div className="panel" role="status" aria-label="Bot token">
+          <p>Token for <b>{shown.name}</b> — copy it now, it is not shown again. Invite the bot to channels, then:</p>
+          <input readOnly value={shown.token} aria-label="Bot token value" style={{ width: "100%" }} onFocus={(e) => e.currentTarget.select()} />
+          <pre className="muted">{`curl -X POST -H 'Authorization: Bearer ${shown.token}' -H 'Content-Type: application/json' \\
+  -d '{"body":"Build passed"}' ${window.location.origin}/api/v1/conversations/<channel id>/messages`}</pre>
+          <button className="ghost" onClick={() => setShown(null)}>Done</button>
+        </div>
+      )}
+      <form className="row" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
+        <input aria-label="Bot name" placeholder="CI" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
+        <button disabled={!name.trim()}>Add bot</button>
+      </form>
+      {create.error && <p role="alert" className="error">{create.error.message}</p>}
+    </>
+  );
+}
+
 /** S81: incoming webhooks — other systems (CI, monitoring) post here through a secret URL, shown once. */
 function Webhooks({ c }: { c: Conversation }) {
   const qc = useQueryClient();
@@ -415,6 +466,7 @@ function ChannelSettings({ c, me, names }: { c: Conversation; me: string; names:
       {manager && <Workflows c={c} />}
       {manager && <Webhooks c={c} />}
       {!manager && c.project_key && <p className="muted">📋 Posts news of {c.project_key}</p>}
+      {!c.archived && c.member && <InviteMember c={c} names={names} onDone={() => void done()} />}
       <ul aria-label="Channel members">
         {c.member_ids.map((u) => (
           <li key={u}>
@@ -592,6 +644,7 @@ function Activity({ conversations, title, activity, names, me }: {
         </ul>
       )}
       <Groups names={names} me={me} />
+      <Bots />
     </section>
   );
 }

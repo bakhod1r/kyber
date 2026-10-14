@@ -65,3 +65,5 @@ func TestWebhooksContract(t *testing.T) {
 	pool := dbtest.New(t)
 	repotest.RunWebhooks(t, postgres.NewRepository(pool), postgres.NewWebhooks(pool))
 }
+
+func TestBotsContract(t *testing.T) { repotest.RunBots(t, postgres.NewBots(dbtest.New(t))) }

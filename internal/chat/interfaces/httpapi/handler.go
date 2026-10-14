@@ -52,6 +52,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/chat/saved", h.saved)
 	mux.HandleFunc("PUT /api/v1/me/status", h.setStatus)
 	mux.HandleFunc("GET /api/v1/groups", h.groups)
+	mux.HandleFunc("GET /api/v1/bots", h.bots)
+	mux.HandleFunc("POST /api/v1/bots", h.createBot)
 	mux.HandleFunc("PUT /api/v1/conversations/{id}/prefs", h.setPref)
 	mux.HandleFunc("GET /api/v1/chat/prefs", h.prefs)
 	mux.HandleFunc("POST /api/v1/groups", h.createGroup)
@@ -1153,4 +1155,46 @@ func (h *Handler) hook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type botDTO struct {
+	UserID    string    `json:"user_id"`
+	Name      string    `json:"name"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	// Token is shown once, when the bot is made.
+	Token string `json:"token,omitempty"`
+}
+
+func toBot(b *domain.Bot, token string) botDTO {
+	return botDTO{UserID: string(b.User), Name: b.Name, CreatedBy: string(b.CreatedBy), CreatedAt: b.CreatedAt, Token: token}
+}
+
+func (h *Handler) bots(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.BotsIn(r.Context(), auth.Actor(r.Context()))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	out := make([]botDTO, len(list))
+	for i, b := range list {
+		out[i] = toBot(b, "")
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+func (h *Handler) createBot(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	b, token, err := h.svc.CreateBot(r.Context(), auth.Actor(r.Context()), in.Name)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, toBot(b, token))
 }

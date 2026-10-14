@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.60.0
+  version: 0.61.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1373,6 +1373,28 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ConversationPrefs" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+  /api/v1/bots:
+    get:
+      operationId: listBots
+      description: The workspace's bot users (S84).
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Bot" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createBot
+      description: |
+        A workspace admin makes a bot: a user that never signs in, with a personal access token (returned once) to call
+        the API — e.g. post to the channels it is invited to. It shows a 🤖 status and is never emailed.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string } } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Bot" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/chat/saved:
     get:
       operationId: listSavedMessages
@@ -3188,6 +3210,15 @@ components:
         updated_by: { type: string }
         updated_at: { type: string, format: date-time }
         deleted: { type: boolean }
+    Bot:
+      type: object
+      required: [user_id, name, created_by, created_at]
+      properties:
+        user_id: { type: string }
+        name: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        token: { type: string, description: "The bot's access token; only when it is made." }
     Webhook:
       type: object
       required: [id, name, created_by, created_at]

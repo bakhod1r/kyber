@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter, parseRemind, seen, sections, type Conversation, parseCommand, utcMinute, localTime } from "./model";
+import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter, parseRemind, seen, sections, type Conversation, parseCommand, utcMinute, localTime, moveSection } from "./model";
 
 const msg = (id: string, body: string, extra: Partial<Message> = {}): Message => ({
   id, conversation_id: "c-1", author_id: "u-1", body, created_at: "2026-10-13T09:00:00Z", edited_at: null, deleted: false,
@@ -132,5 +132,21 @@ describe("workflow times (S80)", () => {
   it("round-trips a local time through UTC", () => {
     expect(localTime(utcMinute("09:30"))).toBe("09:30");
     expect(localTime(utcMinute("23:45"))).toBe("23:45");
+  });
+});
+
+describe("section order (S85)", () => {
+  const c = (id: string): Conversation => ({ id, kind: "channel", name: id, topic: "", private: false, member_ids: [], member: true, unread: 0, created_at: "" });
+  const prefs = [
+    { conversation_id: "a", level: "mentions" as const, section: "Work" },
+    { conversation_id: "b", level: "mentions" as const, section: "Archive" },
+    { conversation_id: "d", level: "mentions" as const, section: "Team" },
+  ];
+  it("follows my order, then names", () => {
+    expect(sections([c("a"), c("b"), c("d")], prefs, ["Work"]).map((s) => s.title)).toEqual(["Work", "Archive", "Team", "Channels", "Direct messages"]);
+  });
+  it("moves a section before another", () => {
+    expect(moveSection(["Archive", "Team", "Work"], "Work", "Archive")).toEqual(["Work", "Archive", "Team"]);
+    expect(moveSection(["Archive", "Team"], "New", "nowhere")).toEqual(["Archive", "Team", "New"]);
   });
 });

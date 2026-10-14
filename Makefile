@@ -33,11 +33,11 @@ run:
 	go run ./cmd/kyber
 
 screenshots: web build ## regenerates the README screenshots in docs/assets from a seeded in-memory server
-	@KYBER_ADDR=:18080 KYBER_COOKIE_SECURE=false KYBER_ATTACHMENTS_DIR=$$(mktemp -d) ./bin/kyber > screenshots.log 2>&1 & pid=$$!; \
+	@KYBER_ADDR=:18080 KYBER_COOKIE_SECURE=false KYBER_ADMIN_EMAILS=admin@e2e.test KYBER_ATTACHMENTS_DIR=$$(mktemp -d) ./bin/kyber > screenshots.log 2>&1 & pid=$$!; \
 	sleep 1; KYBER_URL=http://localhost:18080 node web/scripts/screenshots.mjs; rc=$$?; kill $$pid; exit $$rc
 
 e2e: build ## runs Playwright against a fresh in-memory server on :18080
-	@KYBER_ADDR=:18080 KYBER_COOKIE_SECURE=false KYBER_ATTACHMENTS_DIR=$$(mktemp -d) ./bin/kyber > e2e.log 2>&1 & pid=$$!; \
+	@KYBER_ADDR=:18080 KYBER_COOKIE_SECURE=false KYBER_ADMIN_EMAILS=admin@e2e.test KYBER_ATTACHMENTS_DIR=$$(mktemp -d) ./bin/kyber > e2e.log 2>&1 & pid=$$!; \
 	sleep 1; KYBER_E2E_URL=http://localhost:18080 npm --prefix web run e2e; rc=$$?; kill $$pid; exit $$rc
 
 docker:

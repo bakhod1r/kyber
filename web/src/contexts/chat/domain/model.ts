@@ -75,16 +75,27 @@ export function parseCommand(input: string): SlashCommand | null {
 export type Level = "all" | "mentions" | "muted";
 export type ConversationPrefs = { conversation_id: string; level: Level; section: string };
 
-/** Sidebar sections (S71): my named sections (sorted), then the default Channels and Direct messages lists. */
-export function sections(convs: Conversation[], prefs: ConversationPrefs[]): { title: string; items: Conversation[] }[] {
+/**
+ * Sidebar sections (S71): my named sections — in my order (S85), any not in it by name after — then the
+ * default Channels and Direct messages lists.
+ */
+export function sections(convs: Conversation[], prefs: ConversationPrefs[], order: string[] = []): { title: string; items: Conversation[] }[] {
   const sectionOf = new Map(prefs.map((p) => [p.conversation_id, p.section]));
-  const named = [...new Set(prefs.map((p) => p.section).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const rank = (t: string) => (order.includes(t) ? order.indexOf(t) : order.length);
+  const named = [...new Set(prefs.map((p) => p.section).filter(Boolean))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
   const rest = convs.filter((c) => !sectionOf.get(c.id));
   return [
     ...named.map((title) => ({ title, items: convs.filter((c) => sectionOf.get(c.id) === title) })).filter((s) => s.items.length > 0),
     { title: "Channels", items: rest.filter((c) => c.kind === "channel") },
     { title: "Direct messages", items: rest.filter((c) => c.kind === "dm") },
   ];
+}
+
+/** Moves section `from` before section `to` (drag and drop, S85). */
+export function moveSection(order: string[], from: string, to: string): string[] {
+  const rest = order.filter((x) => x !== from);
+  const at = rest.indexOf(to);
+  return at < 0 ? [...rest, from] : [...rest.slice(0, at), from, ...rest.slice(at)];
 }
 
 /** A user group (S70): @handle notifies its members. */
@@ -106,6 +117,9 @@ export function localTime(utc: number, today = new Date()): string {
   const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), Math.floor(utc / 60), utc % 60));
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
+
+/** A workspace's bot user (S84); token only right after making it. */
+export type Bot = { user_id: string; name: string; created_by: string; created_at: string; token?: string };
 
 /** An incoming webhook (S81); url (with its secret) only right after making or rotating it. */
 export type Webhook = { id: string; name: string; created_by: string; created_at: string; url?: string };

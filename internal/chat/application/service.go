@@ -25,6 +25,17 @@ import (
 
 var ErrQueryTooShort = errors.New("search for at least 2 characters")
 
+// BotMaker makes a bot user with a token (Identity): returns its id and the token, shown once.
+type BotMaker interface {
+	MakeBot(ctx context.Context, name string) (user, token string, err error)
+}
+
+// Workspace answers who administers a workspace and adds members (Workspace context).
+type Workspace interface {
+	Administers(ctx context.Context, workspace, user string) (bool, error)
+	Join(ctx context.Context, workspace, user string) error
+}
+
 // Directory gives people's display names (Identity).
 type Directory interface {
 	DisplayName(ctx context.Context, user string) (string, error)
@@ -96,6 +107,9 @@ type Deps struct {
 	Bookmarks     domain.Bookmarks         // optional: docs and links in a conversation's header (S79)
 	Workflows     domain.Workflows         // optional: channel automations (S80)
 	Webhooks      domain.Webhooks          // optional: incoming webhooks (S81)
+	Bots          domain.Bots              // optional: bot users (S84)
+	BotMaker      BotMaker
+	Workspace     Workspace
 	Directory     Directory                // optional: names for workflow welcomes
 	Members       Members
 	NewID         func() string
@@ -1606,4 +1620,49 @@ func (s *Service) PostViaWebhook(ctx context.Context, secret, text string) (*dom
 	}
 	s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *m})
 	return m, nil
+}
+
+// CreateBot: a workspace admin makes a bot (S84); it joins the workspace, shows 🤖 and posts with its token,
+// returned once. Invite it to channels like anyone else.
+func (s *Service) CreateBot(ctx context.Context, actor, name string) (*domain.Bot, string, error) {
+	ws := tenant.Workspace(ctx)
+	ok, err := s.d.Workspace.Administers(ctx, ws, actor)
+	if err != nil {
+		return nil, "", err
+	}
+	if !ok {
+		return nil, "", domain.ErrNotManager
+	}
+	user, token, err := s.d.BotMaker.MakeBot(ctx, name)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := s.d.Workspace.Join(ctx, ws, user); err != nil {
+		return nil, "", err
+	}
+	b := &domain.Bot{Workspace: domain.WorkspaceID(ws), User: domain.UserID(user), Name: strings.TrimSpace(name), CreatedBy: domain.UserID(actor), CreatedAt: s.d.Now()}
+	if err := s.d.Bots.Add(ctx, b); err != nil {
+		return nil, "", err
+	}
+	if s.d.Statuses != nil {
+		if st, err := domain.NewStatus(b.Workspace, b.User, "🤖", "Bot", time.Time{}, time.Time{}, s.d.Now()); err == nil {
+			_ = s.d.Statuses.Put(ctx, st)
+		}
+	}
+	return b, token, nil
+}
+
+// WithBots enables bots: Identity makes them, the Workspace context admits them.
+func (s *Service) WithBots(bots domain.Bots, maker BotMaker, ws Workspace) *Service {
+	s.d.Bots, s.d.BotMaker, s.d.Workspace = bots, maker, ws
+	return s
+}
+
+// BotsIn lists the workspace's bots for its members.
+func (s *Service) BotsIn(ctx context.Context, actor string) ([]*domain.Bot, error) {
+	ws, err := s.workspaceMember(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	return s.d.Bots.In(ctx, domain.WorkspaceID(ws))
 }

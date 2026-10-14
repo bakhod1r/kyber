@@ -8,6 +8,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/chat/application"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
 	issuedomain "github.com/bakhod1r/kyber/internal/issue/domain"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
 )
 
@@ -78,4 +79,53 @@ func NewProjects(src ProjectReader) Projects { return Projects{src: src} }
 func (p Projects) CanBrowse(ctx context.Context, user, key string) (bool, error) {
 	_, err := p.src.Get(ctx, projectdomain.UserID(user), key)
 	return err == nil, nil
+}
+
+// BotIdentity is Identity's bot maker.
+type BotIdentity interface {
+	CreateBot(ctx context.Context, name string) (*identitydomain.User, string, error)
+}
+
+// BotMaker makes bot users through Identity (S84).
+type BotMaker struct{ src BotIdentity }
+
+func NewBotMaker(src BotIdentity) BotMaker { return BotMaker{src: src} }
+
+func (b BotMaker) MakeBot(ctx context.Context, name string) (string, string, error) {
+	u, token, err := b.src.CreateBot(ctx, name)
+	if err != nil {
+		return "", "", err
+	}
+	return string(u.ID()), token, nil
+}
+
+// WorkspaceRoles is the Workspace context's view of admins and members.
+type WorkspaceRoles interface {
+	Administers(ctx context.Context, workspace, user string) (bool, error)
+	Join(ctx context.Context, workspace, user string) error
+}
+
+// Workspace: a workspace's owners and admins administer it; the default workspace (single-tenant) has no roles,
+// so its site admins (KYBER_ADMIN_EMAILS) do.
+type Workspace struct {
+	roles     WorkspaceRoles
+	siteAdmin func(ctx context.Context, user string) (bool, error)
+}
+
+func NewWorkspace(roles WorkspaceRoles, siteAdmin func(ctx context.Context, user string) (bool, error)) Workspace {
+	return Workspace{roles: roles, siteAdmin: siteAdmin}
+}
+
+func (w Workspace) Administers(ctx context.Context, workspace, user string) (bool, error) {
+	if ok, err := w.roles.Administers(ctx, workspace, user); err != nil || ok {
+		return ok, err
+	}
+	if workspace == tenant.Default {
+		return w.siteAdmin(ctx, user)
+	}
+	return false, nil
+}
+
+func (w Workspace) Join(ctx context.Context, workspace, user string) error {
+	return w.roles.Join(ctx, workspace, user)
 }

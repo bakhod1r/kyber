@@ -769,3 +769,34 @@ func TestChatFilesOnS3(t *testing.T) {
 		}
 	}, server.WithChatFiles(store))
 }
+
+// S84: a site admin makes a bot; it posts with its token to a channel it was invited to and is never mailed.
+func TestBots(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		boss := anon.signedIn("boss@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		code, b := dev.do("POST", "/api/v1/bots", map[string]string{"name": "CI"})
+		expect(t, code, 403, b)
+		code, bot := boss.do("POST", "/api/v1/bots", map[string]string{"name": "CI"})
+		expect(t, code, 201, bot)
+		token := bot["token"].(string)
+		if !strings.HasPrefix(token, "kpat_") {
+			t.Fatalf("token = %q", token)
+		}
+		_, ch := boss.do("POST", "/api/v1/channels", map[string]any{"name": "builds", "private": true})
+		code, b = boss.do("POST", "/api/v1/conversations/"+ch["id"].(string)+"/members", map[string]string{"user_id": bot["user_id"].(string)})
+		expect(t, code, 204, b)
+		ci := &client{t: t, srv: anon.srv, host: anon.host, token: token}
+		code, m := ci.do("POST", "/api/v1/conversations/"+ch["id"].(string)+"/messages", map[string]string{"body": "build #7 passed"})
+		expect(t, code, 201, m)
+		if m["author_id"] != bot["user_id"] {
+			t.Fatalf("author = %v", m)
+		}
+		if _, l := dev.do("GET", "/api/v1/bots", nil); len(l["items"].([]any)) != 1 || l["items"].([]any)[0].(map[string]any)["token"] != nil {
+			t.Fatalf("bots (no tokens) = %v", l)
+		}
+		if _, st := dev.do("GET", "/api/v1/chat/statuses?user_id="+bot["user_id"].(string), nil); st["items"].([]any)[0].(map[string]any)["emoji"] != "🤖" {
+			t.Fatalf("status = %v", st)
+		}
+	}, server.WithSiteAdmins("boss@x.uz"))
+}

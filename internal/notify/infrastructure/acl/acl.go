@@ -5,6 +5,7 @@ package acl
 import (
 	"context"
 	"errors"
+	"strings"
 
 	accessapp "github.com/bakhod1r/kyber/internal/access/application"
 	accessdomain "github.com/bakhod1r/kyber/internal/access/domain"
@@ -131,6 +132,9 @@ func (c Contacts) Email(ctx context.Context, user string) (string, error) {
 	}
 	if err != nil {
 		return "", err
+	}
+	if strings.HasSuffix(string(u.Email()), ".invalid") { // placeholders: Google/Telegram accounts, bots (S84)
+		return "", nil
 	}
 	return string(u.Email()), nil
 }

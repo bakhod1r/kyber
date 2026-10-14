@@ -14,9 +14,13 @@ built DDD + TDD (contract tests on memory and PostgreSQL, acceptance tests on ev
   compatibility.
   **Done:** `live.Hub.Follow` + realtime `Feed`s: `/api/v1/stream` also carries `change`/`resync` hints (same browse
   check); the web app's live updates listen on the shared stream — e2e shows no `/api/v1/events` request.
-- **S84 Bot users with tokens** — main added personal access tokens. A workspace admin creates a bot (a user that
+- ✅ **S84 Bot users with tokens** — main added personal access tokens. A workspace admin creates a bot (a user that
   cannot sign in) and gets a token for it; the bot posts to channels it was invited to through the normal API.
   AC: bots show with a 🤖 badge; a bot never gets notifications by email/Telegram; tokens shown once.
+  **Done:** `GET/POST /api/v1/bots` (workspace owners/admins; site admins in the default workspace); Identity's
+  `CreateBot` (no password, `…@bots.kyber.invalid`, a non-expiring PAT), migration 0069; 🤖 status; Notify never
+  mails `.invalid` addresses (also fixes mail to Google/Telegram placeholder addresses). "🤖 Bots" in Activity and
+  an Invite picker in channel settings. API 0.61.0.
 - **S85 Drag to reorder sidebar sections** — my sections in my own order (drag a section header). AC: per user;
   new sections go last.
 - **S86 Comments on whiteboard elements and doc lines** — select an element (or a doc paragraph) and comment;

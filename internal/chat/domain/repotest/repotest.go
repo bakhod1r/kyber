@@ -712,3 +712,23 @@ func RunWebhooks(t *testing.T, r domain.Repository, hooks domain.Webhooks) {
 		}
 	}
 }
+
+// RunBots checks the bot list (S84).
+func RunBots(t *testing.T, bots domain.Bots) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)
+	for i, name := range []string{"CI", "Monitoring"} {
+		b := &domain.Bot{Workspace: WS, User: domain.UserID(fmt.Sprintf("7b000000-0000-4000-8000-%012d", i+1)), Name: name, CreatedBy: Lead,
+			CreatedAt: t0.Add(time.Duration(i) * time.Minute)}
+		if err := bots.Add(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := bots.In(ctx, WS)
+	if err != nil || len(list) != 2 || list[0].Name != "CI" || list[1].CreatedBy != Lead || !list[1].CreatedAt.Equal(t0.Add(time.Minute)) {
+		t.Fatalf("In = %+v %v", list, err)
+	}
+	if l, _ := bots.In(ctx, "00000000-0000-4000-8000-000000000009"); len(l) != 0 {
+		t.Fatalf("other workspace = %+v", l)
+	}
+}
