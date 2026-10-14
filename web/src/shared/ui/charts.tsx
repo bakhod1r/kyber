@@ -2,6 +2,7 @@
 // hairline solid grid, legend for >= 2 series, crosshair tooltip on lines, and a
 // table view for every chart. Colors come from validated CSS tokens (--viz-*).
 import { type PointerEvent, type ReactNode, useId, useState } from "react";
+import { useT } from "../i18n/i18n";
 
 export type Slot = 1 | 2 | "muted";
 const stroke = (slot: Slot) => (slot === "muted" ? "var(--viz-muted)" : `var(--viz-${slot})`);
@@ -19,6 +20,7 @@ export function niceMax(v: number): number {
 const shortDate = (d: Date) => d.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 
 function Figure({ title, caption, legend, table, children }: { title: string; caption?: ReactNode; legend?: ReactNode; table: ReactNode; children: ReactNode }) {
+  const t = useT();
   const id = useId();
   return (
     <figure className="chart" aria-labelledby={id}>
@@ -27,7 +29,7 @@ function Figure({ title, caption, legend, table, children }: { title: string; ca
       {children}
       {caption && <figcaption className="muted">{caption}</figcaption>}
       <details className="chart-table">
-        <summary>Show data table</summary>
+        <summary>{t("Show data table")}</summary>
         {table}
       </details>
     </figure>
@@ -35,8 +37,9 @@ function Figure({ title, caption, legend, table, children }: { title: string; ca
 }
 
 function Legend({ items }: { items: { name: string; slot: Slot }[] }) {
+  const t = useT();
   return (
-    <ul className="legend" aria-label="Legend">
+    <ul className="legend" aria-label={t("Legend")}>
       {items.map((s) => (
         <li key={s.name}>
           <svg width="16" height="8" aria-hidden="true">
@@ -64,7 +67,8 @@ function vbar(x: number, base: number, w: number, h: number) {
 export type BarItem = { label: string; value: number; extra?: number };
 
 /** One series, so no legend: the category labels carry identity. */
-export function BarList({ title, items, valueLabel = "Issues", extraLabel, caption }: { title: string; items: BarItem[]; valueLabel?: string; extraLabel?: string; caption?: ReactNode }) {
+export function BarList({ title, items, valueLabel, extraLabel, caption }: { title: string; items: BarItem[]; valueLabel?: string; extraLabel?: string; caption?: ReactNode }) {
+  const t = useT();
   const max = niceMax(Math.max(0, ...items.map((i) => i.value)));
   const W = 320, rowH = 32, barH = 16;
   return (
@@ -74,7 +78,7 @@ export function BarList({ title, items, valueLabel = "Issues", extraLabel, capti
       table={
         <table>
           <thead>
-            <tr><th>Category</th><th>{valueLabel}</th>{extraLabel && <th>{extraLabel}</th>}</tr>
+            <tr><th>{t("Category")}</th><th>{valueLabel ?? t("Issues")}</th>{extraLabel && <th>{extraLabel}</th>}</tr>
           </thead>
           <tbody>
             {items.map((i) => (
@@ -85,7 +89,7 @@ export function BarList({ title, items, valueLabel = "Issues", extraLabel, capti
       }
     >
       {items.length === 0 ? (
-        <p className="muted">No issues yet.</p>
+        <p className="muted">{t("No issues yet.")}</p>
       ) : (
         <div className="barlist">
           {items.map((i) => {
@@ -111,7 +115,8 @@ export type Series = { name: string; slot: Slot; points: { x: Date; y: number }[
 const VW = 800, VH = 260, M = { top: 12, right: 44, bottom: 28, left: 40 };
 
 /** Line chart with a crosshair tooltip. Step series hold their value until the next point. */
-export function LineChart({ title, series: raw, caption, xMax, yLabel = "Value" }: { title: string; series: Series[]; caption?: ReactNode; xMax?: Date; yLabel?: string }) {
+export function LineChart({ title, series: raw, caption, xMax, yLabel }: { title: string; series: Series[]; caption?: ReactNode; xMax?: Date; yLabel?: string }) {
+  const t = useT();
   const [hover, setHover] = useState<number | null>(null);
   // Drop malformed points rather than failing the whole chart.
   const series = raw.map((s) => ({ ...s, points: s.points.filter((p) => !Number.isNaN(p.x.getTime()) && Number.isFinite(p.y)) }));
@@ -165,7 +170,7 @@ export function LineChart({ title, series: raw, caption, xMax, yLabel = "Value" 
       table={
         <table>
           <thead>
-            <tr><th>Date</th>{series.map((s) => <th key={s.name}>{s.name}</th>)}</tr>
+            <tr><th>{t("Date")}</th>{series.map((s) => <th key={s.name}>{s.name}</th>)}</tr>
           </thead>
           <tbody>
             {xs.map((t) => (
@@ -182,7 +187,7 @@ export function LineChart({ title, series: raw, caption, xMax, yLabel = "Value" 
       }
     >
       <div className="plot-wrap">
-        <svg viewBox={`0 0 ${VW} ${VH}`} className="plot" role="img" aria-label={`${title}: ${yLabel} over time`}>
+        <svg viewBox={`0 0 ${VW} ${VH}`} className="plot" role="img" aria-label={t("{title}: {label} over time", { title, label: yLabel ?? t("Value") })}>
           {ticks.map((v) => (
             <g key={v}>
               <line x1={M.left} x2={VW - M.right} y1={sy(v)} y2={sy(v)} className="grid" />
@@ -230,7 +235,9 @@ export function LineChart({ title, series: raw, caption, xMax, yLabel = "Value" 
 }
 
 /** Grouped columns (two series), e.g. committed vs completed per sprint. */
-export function GroupedBars({ title, categories, series, unit = "points" }: { title: string; categories: string[]; series: { name: string; slot: Slot; values: number[] }[]; unit?: string }) {
+export function GroupedBars({ title, categories, series, unit: unitProp }: { title: string; categories: string[]; series: { name: string; slot: Slot; values: number[] }[]; unit?: string }) {
+  const t = useT();
+  const unit = unitProp ?? t("points");
   const max = niceMax(Math.max(0, ...series.flatMap((s) => s.values)));
   const H = 220, base = H - 24, top = 12, colW = 22, gap = 2;
   const groupW = series.length * colW + (series.length - 1) * gap;
@@ -242,7 +249,7 @@ export function GroupedBars({ title, categories, series, unit = "points" }: { ti
       legend={<Legend items={series} />}
       table={
         <table>
-          <thead><tr><th>Sprint</th>{series.map((s) => <th key={s.name}>{s.name} ({unit})</th>)}</tr></thead>
+          <thead><tr><th>{t("Sprint")}</th>{series.map((s) => <th key={s.name}>{s.name} ({unit})</th>)}</tr></thead>
           <tbody>
             {categories.map((c, i) => (
               <tr key={c}><td>{c}</td>{series.map((s) => <td key={s.name}>{fmt(s.values[i] ?? 0)}</td>)}</tr>
@@ -251,7 +258,7 @@ export function GroupedBars({ title, categories, series, unit = "points" }: { ti
         </table>
       }
     >
-      <svg viewBox={`0 0 ${W} ${H}`} className="plot" role="img" aria-label={`${title}: ${series.map((s) => s.name).join(" and ")} per sprint`}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="plot" role="img" aria-label={t("{title}: {series} per sprint", { title, series: series.map((s) => s.name).join(t(" and ")) })}>
         <line x1={0} x2={W} y1={base} y2={base} className="grid" />
         {categories.map((c, i) => {
           const off = (W - slotW * categories.length) / 2;

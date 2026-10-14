@@ -3,14 +3,15 @@ import { useEffect, useState } from "react";
 import { accessUseCases, type GrantKind, type PermissionGrants } from "../application";
 import { ApiError } from "../../../shared/http";
 import { projectUseCases } from "../../project/application";
+import { msg, type MessageKey, useT } from "../../../shared/i18n/i18n";
 
 /** Holders shown as columns; individual users are listed per permission. */
-const COLUMNS: { kind: GrantKind; value: string; label: string }[] = [
-  { kind: "role", value: "admin", label: "Admin" },
-  { kind: "role", value: "member", label: "Member" },
-  { kind: "role", value: "viewer", label: "Viewer" },
-  { kind: "reporter", value: "", label: "Reporter" },
-  { kind: "assignee", value: "", label: "Assignee" },
+const COLUMNS: { kind: GrantKind; value: string; label: MessageKey }[] = [
+  { kind: "role", value: "admin", label: msg("Admin") },
+  { kind: "role", value: "member", label: msg("Member") },
+  { kind: "role", value: "viewer", label: msg("Viewer") },
+  { kind: "reporter", value: "", label: msg("Reporter") },
+  { kind: "assignee", value: "", label: msg("Assignee") },
 ];
 
 /** Admins must keep these, so the project cannot lock its admins out (the API enforces it too). */
@@ -20,6 +21,7 @@ const label = (p: string) => p.charAt(0) + p.slice(1).toLowerCase().replaceAll("
 
 /** PermissionScheme: the project's permission scheme editor (project admins). */
 export function PermissionScheme({ projectKey }: { projectKey: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ["permissions", projectKey];
   const scheme = useQuery({ queryKey: key, queryFn: () => accessUseCases.permissions(projectKey), retry: false });
@@ -37,15 +39,15 @@ export function PermissionScheme({ projectKey }: { projectKey: string }) {
     },
     onError: (err: Error) => setNotice({ kind: "error" as const, text: err.message }),
   });
-  const save = useMutation({ mutationFn: (p: PermissionGrants[]) => accessUseCases.setPermissions(projectKey, p), ...done("Saved") });
-  const reset = useMutation({ mutationFn: () => accessUseCases.resetPermissions(projectKey), ...done("Reset to the default scheme") });
+  const save = useMutation({ mutationFn: (p: PermissionGrants[]) => accessUseCases.setPermissions(projectKey, p), ...done(t("Saved")) });
+  const reset = useMutation({ mutationFn: () => accessUseCases.resetPermissions(projectKey), ...done(t("Reset to the default scheme")) });
 
   if (scheme.isPending || !draft) {
     if (scheme.isError) {
       const forbidden = scheme.error instanceof ApiError && scheme.error.status === 403;
-      return <p className="muted">{forbidden ? "Only project admins can change permissions." : scheme.error.message}</p>;
+      return <p className="muted">{forbidden ? t("Only project admins can change permissions.") : scheme.error.message}</p>;
     }
-    return <p className="muted">Loading…</p>;
+    return <p className="muted">{t("Loading…")}</p>;
   }
 
   const has = (p: PermissionGrants, kind: GrantKind, value: string) => p.grants.some((g) => g.kind === kind && g.value === value);
@@ -59,22 +61,22 @@ export function PermissionScheme({ projectKey }: { projectKey: string }) {
   const name = (id: string) => members.data?.find((m) => m.user_id === id)?.name ?? id;
 
   return (
-    <section className="permissions panel" aria-label="Permissions">
-      <h2>Permissions</h2>
+    <section className="permissions panel" aria-label={t("Permissions")}>
+      <h2>{t("Permissions")}</h2>
       <p className="muted">
-        {scheme.data?.custom ? "This project has its own permission scheme." : "This project uses the default permission scheme."} Reporter and
-        Assignee apply to the issue at hand.
+        {scheme.data?.custom ? t("This project has its own permission scheme.") : t("This project uses the default permission scheme.")}{" "}
+        {t("Reporter and Assignee apply to the issue at hand.")}
       </p>
       <table className="perm-table">
         <thead>
           <tr>
-            <th scope="col">Permission</th>
+            <th scope="col">{t("Permission")}</th>
             {COLUMNS.map((c) => (
               <th scope="col" key={c.label}>
-                {c.label}
+                {t(c.label)}
               </th>
             ))}
-            <th scope="col">Users</th>
+            <th scope="col">{t("Users")}</th>
           </tr>
         </thead>
         <tbody>
@@ -87,7 +89,7 @@ export function PermissionScheme({ projectKey }: { projectKey: string }) {
                   <td key={c.label}>
                     <input
                       type="checkbox"
-                      aria-label={`${label(p.permission)}: ${c.label}`}
+                      aria-label={`${label(p.permission)}: ${t(c.label)}`}
                       checked={has(p, c.kind, c.value)}
                       disabled={locked}
                       onChange={() => toggle(p.permission, c.kind, c.value)}
@@ -103,18 +105,18 @@ export function PermissionScheme({ projectKey }: { projectKey: string }) {
                       key={g.value}
                       type="button"
                       className="ghost chip"
-                      aria-label={`Remove ${name(g.value)} from ${label(p.permission)}`}
+                      aria-label={t("Remove {name} from {permission}", { name: name(g.value), permission: label(p.permission) })}
                       onClick={() => toggle(p.permission, "user", g.value)}
                     >
                       {name(g.value)} ×
                     </button>
                   ))}
                 <select
-                  aria-label={`Add a user to ${label(p.permission)}`}
+                  aria-label={t("Add a user to {permission}", { permission: label(p.permission) })}
                   value=""
                   onChange={(e) => e.target.value && toggle(p.permission, "user", e.target.value)}
                 >
-                  <option value="">+ user</option>
+                  <option value="">{t("+ user")}</option>
                   {members.data
                     ?.filter((m) => !has(p, "user", m.user_id))
                     .map((m) => (
@@ -136,11 +138,11 @@ export function PermissionScheme({ projectKey }: { projectKey: string }) {
         )}
         {scheme.data?.custom && (
           <button type="button" className="ghost" onClick={() => reset.mutate()} disabled={reset.isPending}>
-            Reset to default
+            {t("Reset to default")}
           </button>
         )}
         <button type="button" onClick={() => save.mutate(draft)} disabled={save.isPending}>
-          Save permissions
+          {t("Save permissions")}
         </button>
       </div>
     </section>

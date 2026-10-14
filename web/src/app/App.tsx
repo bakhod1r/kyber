@@ -14,6 +14,7 @@ import { AccessTokens } from "../contexts/identity/ui/AccessTokens";
 import { ProjectsPage } from "../contexts/project/ui/ProjectsPage";
 import { identityUseCases } from "../contexts/identity/application";
 import { SearchPage } from "../contexts/search/ui/SearchPage";
+import { useT } from "../shared/i18n/i18n";
 
 export const ME = ["me"];
 
@@ -26,8 +27,9 @@ function useMe() {
 }
 
 function RequireUser({ children }: { children: ReactNode }) {
+  const t = useT();
   const me = useMe();
-  if (me.isPending) return <p className="muted center">Loading…</p>;
+  if (me.isPending) return <p className="muted center">{t("Loading…")}</p>;
   if (me.isError) return <p role="alert" className="error center">{me.error.message}</p>;
   if (!me.data) return <Navigate to="/login" replace />;
   return <Layout user={me.data}>{children}</Layout>;
@@ -35,8 +37,9 @@ function RequireUser({ children }: { children: ReactNode }) {
 
 /** "/" is the landing page for visitors and the project list for signed-in users. */
 function Home() {
+  const t = useT();
   const me = useMe();
-  if (me.isPending) return <p className="muted center">Loading…</p>;
+  if (me.isPending) return <p className="muted center">{t("Loading…")}</p>;
   if (me.isError) return <p role="alert" className="error center">{me.error.message}</p>;
   if (!me.data) return <LandingPage />;
   return (

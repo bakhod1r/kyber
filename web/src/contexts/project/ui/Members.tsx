@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { projectUseCases, type Role } from "../application";
+import { useT } from "../../../shared/i18n/i18n";
 
 /** Members: the project's people and their roles (project admins change them). */
 export function Members({ projectKey }: { projectKey: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const members = useQuery({ queryKey: ["members", projectKey], queryFn: () => projectUseCases.members(projectKey) });
   const [email, setEmail] = useState("");
@@ -23,7 +25,7 @@ export function Members({ projectKey }: { projectKey: string }) {
 
   return (
     <aside className="panel members">
-      <h2>Members</h2>
+      <h2>{t("Members")}</h2>
       <ul>
         {members.data?.map((m) => (
           <li key={m.user_id}>
@@ -33,19 +35,19 @@ export function Members({ projectKey }: { projectKey: string }) {
       </ul>
       <form onSubmit={onSubmit}>
         <label>
-          Invite by email
+          {t("Invite by email")}
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </label>
         <label>
-          Role
+          {t("Role")}
           <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            <option value="member">member</option>
-            <option value="viewer">viewer</option>
-            <option value="admin">admin</option>
+            <option value="member">{t("member")}</option>
+            <option value="viewer">{t("viewer")}</option>
+            <option value="admin">{t("admin")}</option>
           </select>
         </label>
         <button type="submit" disabled={invite.isPending}>
-          Invite
+          {t("Invite")}
         </button>
         {invite.isError && (
           <p role="alert" className="error">

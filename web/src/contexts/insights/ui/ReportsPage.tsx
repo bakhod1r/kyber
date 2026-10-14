@@ -5,11 +5,13 @@ import { BarList, GroupedBars, LineChart, StatTile, fmt } from "../../../shared/
 import { agileUseCases } from "../../agile/application";
 import { insightsUseCases } from "../application";
 import { issueUseCases } from "../../issue/application";
+import { msg, type MessageKey, type Translate, useT } from "../../../shared/i18n/i18n";
 
-const STATUS: Record<string, string> = { todo: "To Do", in_progress: "In Progress", done: "Done" };
-const title = (k: string) => STATUS[k] ?? k.charAt(0).toUpperCase() + k.slice(1);
+const STATUS: Record<string, MessageKey> = { todo: msg("To Do"), in_progress: msg("In Progress"), done: msg("Done") };
+const title = (t: Translate, k: string) => { const s = STATUS[k]; return s ? t(s) : k.charAt(0).toUpperCase() + k.slice(1); };
 
 export function Reports({ projectKey }: { projectKey: string }) {
+  const t = useT();
   const [days, setDays] = useState(30);
   const summary = useQuery({ queryKey: ["reports", projectKey, "summary"], queryFn: () => insightsUseCases.reportSummary(projectKey) });
   const cvr = useQuery({
@@ -21,75 +23,77 @@ export function Reports({ projectKey }: { projectKey: string }) {
   const focus = sprints.data?.find((s) => s.state === "active") ?? sprints.data?.find((s) => s.state === "closed");
   const burndown = useQuery({ queryKey: ["reports", "burndown", focus?.id], queryFn: () => insightsUseCases.burndown(focus!.id), enabled: !!focus });
   const workflow = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => issueUseCases.workflow(projectKey) });
-  const statusName = (k: string) => workflow.data?.statuses.find((st) => st.id === k)?.name ?? title(k);
+  const statusName = (k: string) => workflow.data?.statuses.find((st) => st.id === k)?.name ?? title(t, k);
   const velocity = useQuery({ queryKey: ["reports", projectKey, "velocity"], queryFn: () => insightsUseCases.reportVelocity(projectKey) });
 
-  if (summary.isPending) return <p className="muted">Loading reports…</p>;
+  if (summary.isPending) return <p className="muted">{t("Loading reports…")}</p>;
   if (summary.isError) return <p role="alert" className="error">{summary.error.message}</p>;
   const s = summary.data;
-  const cycleDays = s.cycle_time.count ? `${(s.cycle_time.median_hours / 24).toFixed(1)} days` : "—";
+  const cycleDays = s.cycle_time.count ? t("{n} days", { n: (s.cycle_time.median_hours / 24).toFixed(1) }) : "—";
 
   return (
     <div className="reports viz-root">
       <div className="filters">
         <label>
-          Date range
+          {t("Date range")}
           <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
-            <option value={7}>Last 7 days</option>
-            <option value={30}>Last 30 days</option>
-            <option value={90}>Last 90 days</option>
+            <option value={7}>{t("Last 7 days")}</option>
+            <option value={30}>{t("Last 30 days")}</option>
+            <option value={90}>{t("Last 90 days")}</option>
           </select>
         </label>
       </div>
 
-      <section aria-label="Key figures" className="stats">
-        <StatTile label="Open issues" value={fmt(s.open)} hint={`of ${fmt(s.total)} total`} />
-        <StatTile label="Done" value={fmt(s.done)} hint={s.total ? `${Math.round((s.done / s.total) * 100)}% complete` : undefined} />
-        <StatTile label="Open story points" value={fmt(s.open_points)} hint={`of ${fmt(s.total_points)} estimated`} />
-        <StatTile label="Unassigned" value={fmt(s.unassigned)} />
-        <StatTile label="Median cycle time" value={cycleDays} hint={s.cycle_time.count ? `${s.cycle_time.count} issues, last 30 days` : "no completed issues yet"} />
+      <section aria-label={t("Key figures")} className="stats">
+        <StatTile label={t("Open issues")} value={fmt(s.open)} hint={t("of {n} total", { n: fmt(s.total) })} />
+        <StatTile label={t("Done")} value={fmt(s.done)} hint={s.total ? t("{n}% complete", { n: Math.round((s.done / s.total) * 100) }) : undefined} />
+        <StatTile label={t("Open story points")} value={fmt(s.open_points)} hint={t("of {n} estimated", { n: fmt(s.total_points) })} />
+        <StatTile label={t("Unassigned")} value={fmt(s.unassigned)} />
+        <StatTile label={t("Median cycle time")} value={cycleDays} hint={s.cycle_time.count ? t("{n} issues, last 30 days", { n: s.cycle_time.count }) : t("no completed issues yet")} />
       </section>
 
       <div className="charts-grid">
-        <BarList title="Issues by status" items={s.by_status.map((c) => ({ label: statusName(c.key), value: c.count, extra: c.points }))} extraLabel="Points" />
-        <BarList title="Issues by type" items={s.by_type.map((c) => ({ label: title(c.key), value: c.count, extra: c.points }))} extraLabel="Points" />
-        <BarList title="Issues by priority" items={s.by_priority.map((c) => ({ label: title(c.key), value: c.count, extra: c.points }))} extraLabel="Points" />
-        <BarList title="Workload (open issues)" items={s.workload.map((w) => ({ label: w.name, value: w.count, extra: w.points }))} extraLabel="Points" />
+        <BarList title={t("Issues by status")} items={s.by_status.map((c) => ({ label: statusName(c.key), value: c.count, extra: c.points }))} extraLabel={t("Points")} />
+        <BarList title={t("Issues by type")} items={s.by_type.map((c) => ({ label: title(t, c.key), value: c.count, extra: c.points }))} extraLabel={t("Points")} />
+        <BarList title={t("Issues by priority")} items={s.by_priority.map((c) => ({ label: title(t, c.key), value: c.count, extra: c.points }))} extraLabel={t("Points")} />
+        <BarList title={t("Workload (open issues)")} items={s.workload.map((w) => ({ label: w.name, value: w.count, extra: w.points }))} extraLabel={t("Points")} />
       </div>
 
       {cvr.data && (
         <LineChart
-          title="Created vs resolved"
-          yLabel="cumulative issues"
-          caption={`Cumulative issues created and resolved over the last ${days} days. A widening gap means work arrives faster than it is finished.`}
+          title={t("Created vs resolved")}
+          yLabel={t("cumulative issues")}
+          caption={t("Cumulative issues created and resolved over the last {n} days. A widening gap means work arrives faster than it is finished.", { n: days })}
           series={[
-            { name: "Created", slot: 1, points: cvr.data.days.map((d) => ({ x: new Date(`${d.date}T00:00:00Z`), y: d.cum_created })) },
-            { name: "Resolved", slot: 2, points: cvr.data.days.map((d) => ({ x: new Date(`${d.date}T00:00:00Z`), y: d.cum_resolved })) },
+            { name: t("Created"), slot: 1, points: cvr.data.days.map((d) => ({ x: new Date(`${d.date}T00:00:00Z`), y: d.cum_created })) },
+            { name: t("Resolved"), slot: 2, points: cvr.data.days.map((d) => ({ x: new Date(`${d.date}T00:00:00Z`), y: d.cum_resolved })) },
           ]}
         />
       )}
 
       {!focus && sprints.isSuccess && (
         <section className="chart empty">
-          <h3>Burndown</h3>
-          <p className="muted">Start a sprint to see its burndown.</p>
+          <h3>{t("Burndown")}</h3>
+          <p className="muted">{t("Start a sprint to see its burndown.")}</p>
         </section>
       )}
       {burndown.data && burndown.data.samples.length > 0 && (
         <LineChart
-          title={`Burndown — ${burndown.data.sprint.name}`}
-          yLabel="remaining story points"
+          title={t("Burndown — {name}", { name: burndown.data.sprint.name })}
+          yLabel={t("remaining story points")}
           xMax={burndown.data.sprint.ends_at ? new Date(burndown.data.sprint.ends_at) : undefined}
           caption={
             <>
-              Remaining story points from {fmt(burndown.data.start_points)} at the start ({burndown.data.start_issues} issues).{" "}
-              Scope added after start: {fmt(burndown.data.added_points)} points ({burndown.data.added_issues} {burndown.data.added_issues === 1 ? "issue" : "issues"}).
-              {burndown.data.removed_issues > 0 && ` Removed: ${burndown.data.removed_issues}.`}
+              {t("Remaining story points from {points} at the start ({n} issues).", { points: fmt(burndown.data.start_points), n: burndown.data.start_issues })}{" "}
+              {burndown.data.added_issues === 1
+                ? t("Scope added after start: {points} points ({n} issue).", { points: fmt(burndown.data.added_points), n: 1 })
+                : t("Scope added after start: {points} points ({n} issues).", { points: fmt(burndown.data.added_points), n: burndown.data.added_issues })}
+              {burndown.data.removed_issues > 0 && ` ${t("Removed: {n}.", { n: burndown.data.removed_issues })}`}
             </>
           }
           series={[
-            { name: "Remaining", slot: 1, step: true, points: burndown.data.samples.map((p) => ({ x: new Date(p.at), y: p.remaining_points })) },
-            { name: "Ideal", slot: "muted", points: burndown.data.ideal.map((p) => ({ x: new Date(p.at), y: p.remaining_points })) },
+            { name: t("Remaining"), slot: 1, step: true, points: burndown.data.samples.map((p) => ({ x: new Date(p.at), y: p.remaining_points })) },
+            { name: t("Ideal"), slot: "muted", points: burndown.data.ideal.map((p) => ({ x: new Date(p.at), y: p.remaining_points })) },
           ]}
         />
       )}
@@ -97,17 +101,17 @@ export function Reports({ projectKey }: { projectKey: string }) {
       <SprintReport projectKey={projectKey} />
       {velocity.data && velocity.data.sprints.length === 0 && (
         <section className="chart empty">
-          <h3>Velocity</h3>
-          <p className="muted">Complete a sprint to see velocity.</p>
+          <h3>{t("Velocity")}</h3>
+          <p className="muted">{t("Complete a sprint to see velocity.")}</p>
         </section>
       )}
       {velocity.data && velocity.data.sprints.length > 0 && (
         <GroupedBars
-          title="Velocity"
+          title={t("Velocity")}
           categories={velocity.data.sprints.map((v) => v.name)}
           series={[
-            { name: "Committed", slot: 1, values: velocity.data.sprints.map((v) => v.committed_points) },
-            { name: "Completed", slot: 2, values: velocity.data.sprints.map((v) => v.completed_points) },
+            { name: t("Committed"), slot: 1, values: velocity.data.sprints.map((v) => v.committed_points) },
+            { name: t("Completed"), slot: 2, values: velocity.data.sprints.map((v) => v.completed_points) },
           ]}
         />
       )}

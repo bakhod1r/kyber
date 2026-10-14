@@ -2,10 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Markdown } from "../../../shared/ui/Markdown";
 import { announcementUseCases } from "../application";
+import { useT } from "../../../shared/i18n/i18n";
 
 /** Announcements of a project, or of the whole workspace (projectKey null): admins publish, everyone
  * in it is notified and reads the feed here. */
 export function Announcements({ projectKey }: { projectKey: string | null }) {
+  const t = useT();
   const qc = useQueryClient();
   const queryKey = ["announcements", projectKey ?? ""];
   const feed = useQuery({ queryKey, queryFn: () => announcementUseCases.announcements(projectKey) });
@@ -25,25 +27,25 @@ export function Announcements({ projectKey }: { projectKey: string | null }) {
     e.preventDefault();
     publish.mutate();
   };
-  const label = projectKey ? "Announcements" : "Workspace announcements";
+  const label = projectKey ? t("Announcements") : t("Workspace announcements");
   return (
     <section className="announcements" aria-label={label}>
       <div className="row between">
         <h2>{label}</h2>
         {!writing && (
           <button type="button" onClick={() => setWriting(true)}>
-            New announcement
+            {t("New announcement")}
           </button>
         )}
       </div>
       {writing && (
         <form className="announcement-form" onSubmit={submit}>
           <label>
-            Headline
+            {t("Headline")}
             <input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} />
           </label>
           <label>
-            Message (Markdown)
+            {t("Message (Markdown)")}
             <textarea rows={5} value={body} onChange={(e) => setBody(e.target.value)} maxLength={10000} />
           </label>
           {publish.isError && (
@@ -53,10 +55,10 @@ export function Announcements({ projectKey }: { projectKey: string | null }) {
           )}
           <div className="row">
             <button type="submit" disabled={publish.isPending}>
-              Publish to everyone
+              {t("Publish to everyone")}
             </button>
             <button type="button" className="ghost" onClick={() => setWriting(false)}>
-              Cancel
+              {t("Cancel")}
             </button>
           </div>
         </form>
@@ -66,7 +68,7 @@ export function Announcements({ projectKey }: { projectKey: string | null }) {
           {(feed.error as Error).message}
         </p>
       )}
-      {feed.data?.length === 0 && <p className="muted">No announcements yet.</p>}
+      {feed.data?.length === 0 && <p className="muted">{t("No announcements yet.")}</p>}
       <ul className="announcement-feed">
         {feed.data?.map((a) => (
           <li key={a.id}>

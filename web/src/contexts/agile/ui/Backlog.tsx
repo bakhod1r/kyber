@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type DragEvent, type FormEvent, useState } from "react";
 import { agileUseCases, type Sprint } from "../application";
 import { issueUseCases, type Issue } from "../../issue/application";
+import { useT } from "../../../shared/i18n/i18n";
 
 const DRAG_TYPE = "application/x-kyber-issue";
 
@@ -9,6 +10,7 @@ type Section = { id: string | null; title: string; sprint?: Sprint };
 type Target = { section: string | null; beforeKey?: string };
 
 export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (issueKey: string) => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const sprints = useQuery({ queryKey: ["sprints", projectKey], queryFn: () => agileUseCases.sprints(projectKey) });
   const issues = useQuery({ queryKey: ["issues", projectKey, "all"], queryFn: () => issueUseCases.issues(projectKey) });
@@ -53,9 +55,12 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
     },
     onSuccess: (c, { moveTo }) =>
       setNotice(
-        `${c.sprint.name} completed: ${c.completed} done, ${c.returned} carried over to ${
-          sprints.data?.find((s) => s.id === moveTo)?.name ?? "the backlog"
-        }.`,
+        t("{sprint} completed: {done} done, {returned} carried over to {to}.", {
+          sprint: c.sprint.name,
+          done: c.completed,
+          returned: c.returned,
+          to: sprints.data?.find((s) => s.id === moveTo)?.name ?? t("the backlog"),
+        }),
       ),
     onError: (err) => setError(err.message),
     onSettled: refresh,
@@ -70,14 +75,14 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
     if (issue) move.mutate({ issue, to });
   }
 
-  if (sprints.isPending || issues.isPending) return <p className="muted">Loading backlog…</p>;
+  if (sprints.isPending || issues.isPending) return <p className="muted">{t("Loading backlog…")}</p>;
   if (issues.isError) return <p role="alert" className="error">{issues.error.message}</p>;
 
   const open = (sprints.data ?? []).filter((s) => s.state !== "closed");
   const hasActive = open.some((s) => s.state === "active");
   const sections: Section[] = [
     ...open.map((s) => ({ id: s.id, title: s.name, sprint: s })),
-    { id: null, title: "Backlog" },
+    { id: null, title: t("Backlog") },
   ];
 
   return (
@@ -105,7 +110,7 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
                   {sec.title} {sec.sprint && <span className={`state state-${sec.sprint.state}`}>{sec.sprint.state}</span>}
                   <span className="count">{rows.length}</span>
                   {rows.some((i) => i.estimate !== null) && (
-                    <span className="count">{fmt(rows.reduce((sum, i) => sum + (i.estimate ?? 0), 0))} pts</span>
+                    <span className="count">{fmt(rows.reduce((sum, i) => sum + (i.estimate ?? 0), 0))} {t("pts")}</span>
                   )}
                 </h2>
                 {sec.sprint?.goal && <p className="muted goal">{sec.sprint.goal}</p>}
@@ -119,9 +124,9 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
               {sec.sprint?.state === "active" && (
                 <span className="row">
                   <label>
-                    Unfinished issues to
+                    {t("Unfinished issues to")}
                     <select value={carryTo} onChange={(e) => setCarryTo(e.target.value)}>
-                      <option value="">Backlog</option>
+                      <option value="">{t("Backlog")}</option>
                       {sprints.data
                         ?.filter((s) => s.state === "planned")
                         .map((s) => (
@@ -132,13 +137,13 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
                     </select>
                   </label>
                   <button type="button" disabled={complete.isPending} onClick={() => complete.mutate({ id: sec.sprint!.id, moveTo: carryTo })}>
-                    Complete sprint
+                    {t("Complete sprint")}
                   </button>
                 </span>
               )}
             </header>
             <ul className="backlog-rows">
-              {rows.length === 0 && <li className="empty muted">Drag issues here</li>}
+              {rows.length === 0 && <li className="empty muted">{t("Drag issues here")}</li>}
               {rows.map((i) => (
                 <li
                   key={i.id}
@@ -156,8 +161,8 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
                     {i.title}
                   </button>
                   <span className={`status status-${i.status}`}>{i.status.replace("_", " ")}</span>
-                  <span className={`prio prio-${i.priority}`} aria-label={`Priority: ${i.priority}`} />
-                  <span className="points" aria-label={i.estimate === null ? "Not estimated" : `Story points: ${fmt(i.estimate)}`}>
+                  <span className={`prio prio-${i.priority}`} aria-label={t("Priority: {priority}", { priority: i.priority })} />
+                  <span className="points" aria-label={i.estimate === null ? t("Not estimated") : t("Story points: {points}", { points: fmt(i.estimate) })}>
                     {i.estimate === null ? "–" : fmt(i.estimate)}
                   </span>
                   <small className="key">{i.key}</small>
@@ -175,22 +180,24 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 function StartSprint({ disabled, onStart }: { disabled: boolean; onStart: (endDate: string) => void }) {
+  const t = useT();
   // Jira asks for the sprint length on start; two weeks is the default.
   const [end, setEnd] = useState(() => new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10));
   return (
     <div className="start-sprint">
       <label>
-        End date
+        {t("End date")}
         <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
       </label>
-      <button type="button" disabled={disabled} title={disabled ? "Complete the active sprint first" : undefined} onClick={() => onStart(end)}>
-        Start sprint
+      <button type="button" disabled={disabled} title={disabled ? t("Complete the active sprint first") : undefined} onClick={() => onStart(end)}>
+        {t("Start sprint")}
       </button>
     </div>
   );
 }
 
 function CreateSprint({ projectKey }: { projectKey: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
@@ -208,17 +215,17 @@ function CreateSprint({ projectKey }: { projectKey: string }) {
   }
   return (
     <form className="panel inline create-sprint" onSubmit={onSubmit}>
-      <h2>New sprint</h2>
+      <h2>{t("New sprint")}</h2>
       <label>
-        Sprint name
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sprint 1" maxLength={100} required />
+        {t("Sprint name")}
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Sprint 1")} maxLength={100} required />
       </label>
       <label>
-        Goal
-        <input value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="What should this sprint achieve?" />
+        {t("Goal")}
+        <input value={goal} onChange={(e) => setGoal(e.target.value)} placeholder={t("What should this sprint achieve?")} />
       </label>
       <button type="submit" disabled={create.isPending}>
-        Create sprint
+        {t("Create sprint")}
       </button>
       {create.isError && <p role="alert" className="error">{create.error.message}</p>}
     </form>

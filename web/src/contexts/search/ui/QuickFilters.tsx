@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { projectQuery, QUICK_FILTERS, searchUseCases } from "../application";
+import { useT } from "../../../shared/i18n/i18n";
 
 export type QuickFilterState = { quick: string[]; saved: string };
 
@@ -17,6 +18,7 @@ export function QuickFilters({
   onChange: (v: QuickFilterState) => void;
   onKeys: (keys: Set<string> | null) => void;
 }) {
+  const t = useT();
   const filters = useQuery({ queryKey: ["filters"], queryFn: searchUseCases.filters });
   const active = value.quick.length > 0 || value.saved !== "";
   const jql = projectQuery(projectKey, value.quick, value.saved);
@@ -28,7 +30,7 @@ export function QuickFilters({
   const toggle = (id: string) =>
     onChange({ ...value, quick: value.quick.includes(id) ? value.quick.filter((q) => q !== id) : [...value.quick, id] });
   return (
-    <div className="quick-filters row" role="group" aria-label="Quick filters">
+    <div className="quick-filters row" role="group" aria-label={t("Quick filters")}>
       {QUICK_FILTERS.map((f) => (
         <button key={f.id} type="button" className="ghost chip" aria-pressed={value.quick.includes(f.id)} onClick={() => toggle(f.id)}>
           {f.label}
@@ -36,9 +38,9 @@ export function QuickFilters({
       ))}
       {(filters.data ?? []).length > 0 && (
         <label>
-          Saved filter
+          {t("Saved filter")}
           <select value={value.saved} onChange={(e) => onChange({ ...value, saved: e.target.value })}>
-            <option value="">None</option>
+            <option value="">{t("None")}</option>
             {filters.data?.map((f) => (
               <option key={f.id} value={f.jql}>
                 {f.name}
@@ -49,7 +51,7 @@ export function QuickFilters({
       )}
       {active && (
         <button type="button" className="ghost" onClick={() => onChange({ quick: [], saved: "" })}>
-          Clear filters
+          {t("Clear filters")}
         </button>
       )}
       {matches.isError && <span role="alert" className="error">{matches.error.message}</span>}

@@ -4,6 +4,7 @@ import { agileUseCases, type BoardColumn } from "../application";
 import { issueUseCases, DEFAULT_WORKFLOW, ISSUE_TYPES, type Issue, type IssueType, type Status } from "../../issue/application";
 import { projectUseCases, type Member } from "../../project/application";
 import { announceIssueDone } from "../../../shared/events";
+import { useT } from "../../../shared/i18n/i18n";
 
 const DRAG_TYPE = "application/x-kyber-issue";
 
@@ -22,6 +23,7 @@ export function Board({
   /** Quick filters (composed by the app): only these issues show; null shows all. */
   visibleKeys?: Set<string> | null;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   // With an active sprint the board shows only that sprint (Scrum); otherwise every issue (Kanban).
   const sprints = useQuery({ queryKey: ["sprints", projectKey], queryFn: () => agileUseCases.sprints(projectKey) });
@@ -85,7 +87,7 @@ export function Board({
     if (issue && to && !col.statuses.includes(issue.status)) move.mutate({ key, to });
   }
 
-  if (sprints.isPending || issues.isPending || boards.isPending || workflow.isPending) return <p className="muted">Loading board…</p>;
+  if (sprints.isPending || issues.isPending || boards.isPending || workflow.isPending) return <p className="muted">{t("Loading board…")}</p>;
   if (issues.isError) return <p role="alert" className="error">{issues.error.message}</p>;
 
   return (
@@ -98,8 +100,8 @@ export function Board({
       )}
       {boards.data && boards.data.length > 1 && (
         <label className="board-picker">
-          Board{" "}
-          <select aria-label="Board" value={board?.id} onChange={(e) => setBoardId(e.target.value)}>
+          {t("Board")}{" "}
+          <select aria-label={t("Board")} value={board?.id} onChange={(e) => setBoardId(e.target.value)}>
             {boards.data.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
@@ -116,7 +118,7 @@ export function Board({
             disabled={toggleBacklog.isPending}
             onChange={(e) => toggleBacklog.mutate(e.target.checked)}
           />
-          Kanban backlog
+          {t("Kanban backlog")}
         </label>
       )}
       <QuickAdd projectKey={projectKey} sprintId={active?.id} />
@@ -143,7 +145,7 @@ export function Board({
             >
               <h2>
                 {col.name}{" "}
-                <span className="count" title={col.max > 0 ? "Issues / WIP limit" : undefined}>
+                <span className="count" title={col.max > 0 ? t("Issues / WIP limit") : undefined}>
                   {col.max > 0 ? `${cards.length} / ${col.max}` : cards.length}
                 </span>
               </h2>
@@ -159,7 +161,7 @@ export function Board({
                 >
                   <div className="card-head">
                     <span className={`type type-${i.type}`}>{i.type}</span>
-                    <span className={`prio prio-${i.priority}`} aria-label={`Priority: ${i.priority}`} title={`Priority: ${i.priority}`} />
+                    <span className={`prio prio-${i.priority}`} aria-label={t("Priority: {priority}", { priority: i.priority })} title={t("Priority: {priority}", { priority: i.priority })} />
                   </div>
                   <button type="button" className="card-open" onClick={() => onOpen?.(i.key)}>
                     {i.title}
@@ -179,9 +181,9 @@ export function Board({
         })}
       </div>
       {kanbanBacklog && (
-        <section aria-label="Kanban backlog" className="kanban-backlog panel">
+        <section aria-label={t("Kanban backlog")} className="kanban-backlog panel">
           <h2>
-            Backlog <span className="count">{waiting.length}</span>
+            {t("Backlog")} <span className="count">{waiting.length}</span>
           </h2>
           <ul className="child-list">
             {waiting.map((i) => (
@@ -193,10 +195,10 @@ export function Board({
                 <button
                   type="button"
                   className="ghost"
-                  aria-label={`Select ${i.key} for development`}
+                  aria-label={t("Select {key} for development", { key: i.key })}
                   onClick={() => selectTo && move.mutate({ key: i.key, to: selectTo })}
                 >
-                  Select for development
+                  {t("Select for development")}
                 </button>
               </li>
             ))}
@@ -210,6 +212,7 @@ export function Board({
 // QuickAdd creates an issue; during an active sprint it joins that sprint (as in Jira),
 // otherwise it would land in the backlog and vanish from the sprint board.
 function QuickAdd({ projectKey, sprintId }: { projectKey: string; sprintId?: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
   const [type, setType] = useState<IssueType>("task");
@@ -228,8 +231,8 @@ function QuickAdd({ projectKey, sprintId }: { projectKey: string; sprintId?: str
 
   return (
     <form className="quick-add" onSubmit={submit}>
-      <input aria-label="New issue title" placeholder="What needs to be done?" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <select aria-label="Type" value={type} onChange={(e) => setType(e.target.value as IssueType)}>
+      <input aria-label={t("New issue title")} placeholder={t("What needs to be done?")} value={title} onChange={(e) => setTitle(e.target.value)} />
+      <select aria-label={t("Type")} value={type} onChange={(e) => setType(e.target.value as IssueType)}>
         {ISSUE_TYPES.map((t) => (
           <option key={t} value={t}>
             {t}
@@ -237,7 +240,7 @@ function QuickAdd({ projectKey, sprintId }: { projectKey: string; sprintId?: str
         ))}
       </select>
       <button type="submit" disabled={create.isPending}>
-        Add issue
+        {t("Add issue")}
       </button>
       {create.isError && (
         <span role="alert" className="error">

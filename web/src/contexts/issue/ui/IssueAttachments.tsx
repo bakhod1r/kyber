@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { formatSize, issueUseCases, maxAttachmentSize } from "../application";
+import { useT } from "../../../shared/i18n/i18n";
 
 /** IssueAttachments: files on the issue — upload, open, remove (C5). */
 export function IssueAttachments({ issueKey }: { issueKey: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ["attachments", issueKey];
   const input = useRef<HTMLInputElement>(null);
@@ -23,7 +25,7 @@ export function IssueAttachments({ issueKey }: { issueKey: string }) {
     if (input.current) input.current.value = "";
     if (!file) return;
     if (file.size > maxAttachmentSize) {
-      setTooBig(`${file.name} is ${formatSize(file.size)}; the limit is ${formatSize(maxAttachmentSize)}.`);
+      setTooBig(t("{name} is {size}; the limit is {limit}.", { name: file.name, size: formatSize(file.size), limit: formatSize(maxAttachmentSize) }));
       return;
     }
     setTooBig("");
@@ -32,12 +34,12 @@ export function IssueAttachments({ issueKey }: { issueKey: string }) {
 
   const error = tooBig || attach.error?.message || remove.error?.message;
   return (
-    <section className="attachments" aria-label="Attachments">
+    <section className="attachments" aria-label={t("Attachments")}>
       <div className="row">
-        <h4>Attachments</h4>
+        <h4>{t("Attachments")}</h4>
         <label className="ghost button">
-          {attach.isPending ? "Uploading…" : "Attach file"}
-          <input ref={input} type="file" hidden disabled={attach.isPending} aria-label="Attach file" onChange={(e) => pick(e.target.files)} />
+          {attach.isPending ? t("Uploading…") : t("Attach file")}
+          <input ref={input} type="file" hidden disabled={attach.isPending} aria-label={t("Attach file")} onChange={(e) => pick(e.target.files)} />
         </label>
       </div>
       {error && (
@@ -54,7 +56,7 @@ export function IssueAttachments({ issueKey }: { issueKey: string }) {
                 {a.name}
               </a>
               <span className="muted">{formatSize(a.size)}</span>
-              <button type="button" className="ghost" aria-label={`Remove ${a.name}`} disabled={remove.isPending} onClick={() => remove.mutate(a.id)}>
+              <button type="button" className="ghost" aria-label={t("Remove {name}", { name: a.name })} disabled={remove.isPending} onClick={() => remove.mutate(a.id)}>
                 ×
               </button>
             </li>
