@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { type Issue, issueUseCases } from "../application";
+import { useT } from "../../../shared/i18n/i18n";
 
 /** IssueTimeTracking: Jira's time tracking — estimates, logged time and the worklog list. */
 export function IssueTimeTracking({ issue }: { issue: Issue }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = issue.key;
   const worklogs = useQuery({ queryKey: ["worklogs", key], queryFn: () => issueUseCases.worklogs(key), refetchInterval: 5000 });
@@ -42,32 +44,32 @@ export function IssueTimeTracking({ issue }: { issue: Issue }) {
     if (spent.trim()) log.mutate();
   }
   return (
-    <section className="time-tracking" aria-label="Time tracking">
-      <h3>Time tracking</h3>
-      <meter min={0} max={total} value={tt?.spent_seconds ?? 0} aria-label="Time logged" />
+    <section className="time-tracking" aria-label={t("Time tracking")}>
+      <h3>{t("Time tracking")}</h3>
+      <meter min={0} max={total} value={tt?.spent_seconds ?? 0} aria-label={t("Time logged")} />
       <p className="muted">
-        Logged {tt?.spent || "0m"} · Remaining {tt?.remaining || "0m"} · Estimate {tt?.original || "none"}
+        {t("Logged {spent} · Remaining {remaining} · Estimate {estimate}", { spent: tt?.spent || "0m", remaining: tt?.remaining || "0m", estimate: tt?.original || t("none") })}
       </p>
       <div className="row">
         <label>
-          Original estimate
-          <input value={estimate} placeholder="e.g. 1d 4h" onChange={(e) => setEstimate(e.target.value)} />
+          {t("Original estimate")}
+          <input value={estimate} placeholder={t("e.g. 1d 4h")} onChange={(e) => setEstimate(e.target.value)} />
         </label>
         <button type="button" className="ghost" disabled={saveEstimate.isPending} onClick={() => saveEstimate.mutate()}>
-          Set estimate
+          {t("Set estimate")}
         </button>
       </div>
       <form className="row" onSubmit={onLog}>
         <label>
-          Time spent
-          <input value={spent} placeholder="e.g. 1h 30m" onChange={(e) => setSpent(e.target.value)} />
+          {t("Time spent")}
+          <input value={spent} placeholder={t("e.g. 1h 30m")} onChange={(e) => setSpent(e.target.value)} />
         </label>
         <label>
-          Worklog comment
+          {t("Worklog comment")}
           <input value={comment} onChange={(e) => setComment(e.target.value)} maxLength={2000} />
         </label>
         <button type="submit" disabled={log.isPending || !spent.trim()}>
-          Log work
+          {t("Log work")}
         </button>
       </form>
       {error && (
@@ -76,15 +78,15 @@ export function IssueTimeTracking({ issue }: { issue: Issue }) {
         </p>
       )}
       {(worklogs.data?.length ?? 0) > 0 && (
-        <ul aria-label="Worklogs" className="child-list">
+        <ul aria-label={t("Worklogs")} className="child-list">
           {worklogs.data?.map((w) => (
             <li key={w.id}>
               <span>
                 <strong>{w.spent}</strong> {w.author_name} · {new Date(w.started).toLocaleDateString()}
                 {w.comment && <> — {w.comment}</>}
               </span>
-              <button type="button" className="ghost" aria-label={`Delete worklog ${w.spent} by ${w.author_name}`} onClick={() => remove.mutate(w.id)}>
-                Delete
+              <button type="button" className="ghost" aria-label={t("Delete worklog {spent} by {name}", { spent: w.spent, name: w.author_name })} onClick={() => remove.mutate(w.id)}>
+                {t("Delete")}
               </button>
             </li>
           ))}

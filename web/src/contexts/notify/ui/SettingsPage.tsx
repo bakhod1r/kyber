@@ -2,11 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { notifyUseCases, type NotificationSettings } from "../application";
 import { identityUseCases } from "../../identity/application";
+import { useT } from "../../../shared/i18n/i18n";
 
 const KEY = ["notification-settings"];
 
 /** SettingsPage: where notifications go besides the in-app inbox (email, Telegram). */
 export function SettingsPage() {
+  const t = useT();
   const qc = useQueryClient();
   const [link, setLink] = useState<string | null>(null);
   const settings = useQuery({
@@ -27,46 +29,44 @@ export function SettingsPage() {
     },
   });
 
-  if (settings.isPending) return <p className="muted">Loading settings…</p>;
+  if (settings.isPending) return <p className="muted">{t("Loading settings…")}</p>;
   if (settings.isError) return <p role="alert" className="error">{settings.error.message}</p>;
   const s = settings.data;
   return (
     <section className="settings panel">
-      <h1>Notifications</h1>
-      <p className="muted">You always see notifications in Kyber. Choose where else they should reach you.</p>
+      <h1>{t("Notifications")}</h1>
+      <p className="muted">{t("You always see notifications in Kyber. Choose where else they should reach you.")}</p>
 
-      <h2>Email</h2>
+      <h2>{t("Email")}</h2>
       {s.email_available ? (
         <label className="switch">
-          <input type="checkbox" checked={s.email} onChange={(e) => save.mutate({ email: e.target.checked })} /> Email me about
-          assignments, comments and mentions
+          <input type="checkbox" checked={s.email} onChange={(e) => save.mutate({ email: e.target.checked })} /> {t("Email me about assignments, comments and mentions")}
         </label>
       ) : (
-        <p className="muted">Email is not configured on this server (ask an administrator to set KYBER_SMTP_HOST).</p>
+        <p className="muted">{t("Email is not configured on this server (ask an administrator to set KYBER_SMTP_HOST).")}</p>
       )}
 
-      <h2>Telegram</h2>
-      {!s.telegram_available && <p className="muted">Telegram is not configured on this server.</p>}
+      <h2>{t("Telegram")}</h2>
+      {!s.telegram_available && <p className="muted">{t("Telegram is not configured on this server.")}</p>}
       {s.telegram_available && (
         <>
           <p>
-            Status: <strong className={s.telegram_connected ? "ok" : "muted"}>{s.telegram_connected ? "Connected" : "Not connected"}</strong>
+            {t("Status:")} <strong className={s.telegram_connected ? "ok" : "muted"}>{s.telegram_connected ? t("Connected") : t("Not connected")}</strong>
           </p>
           {s.telegram_connected ? (
             <label className="switch">
-              <input type="checkbox" checked={s.telegram} onChange={(e) => save.mutate({ telegram: e.target.checked })} /> Send my
-              notifications to Telegram
+              <input type="checkbox" checked={s.telegram} onChange={(e) => save.mutate({ telegram: e.target.checked })} /> {t("Send my notifications to Telegram")}
             </label>
           ) : (
             <>
               <button type="button" onClick={() => connect.mutate()} disabled={connect.isPending}>
-                Connect Telegram
+                {t("Connect Telegram")}
               </button>
               {link && (
                 <p className="muted">
-                  Press <b>Start</b> in the bot. The link works once, for 10 minutes.{" "}
+                  {t("Press")} <b>{t("Start")}</b> {t("in the bot. The link works once, for 10 minutes.")}{" "}
                   <a href={link} target="_blank" rel="noopener noreferrer">
-                    Open the bot again
+                    {t("Open the bot again")}
                   </a>
                 </p>
               )}

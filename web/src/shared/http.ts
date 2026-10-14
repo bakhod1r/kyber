@@ -1,4 +1,8 @@
 // Package-wide HTTP client: JSON requests, RFC 9457 problems as ApiError.
+import { currentLanguage } from "./i18n/i18n";
+
+/** Every request names the UI language, so server problem titles come back in it. */
+const lang = () => ({ "Accept-Language": currentLanguage() });
 /** RFC 9457 problem details as returned by the API (application/problem+json). */
 export type Problem = { type: string; title: string; status: number; code: string; detail?: string; numeric_code?: number };
 
@@ -22,7 +26,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   const res = await fetch(path, {
     method,
     credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...lang() },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return decode<T>(res);
@@ -43,13 +47,13 @@ async function decode<T>(res: Response): Promise<T> {
 export async function upload<T>(path: string, file: File): Promise<T> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(path, { method: "POST", credentials: "same-origin", headers: { "X-Kyber-Request": "1" }, body: form });
+  const res = await fetch(path, { method: "POST", credentials: "same-origin", headers: { "X-Kyber-Request": "1", ...lang() }, body: form });
   return decode<T>(res);
 }
 
 /** requestText fetches a text body (release notes are Markdown). */
 export async function requestText(path: string): Promise<string> {
-  const res = await fetch(path, { credentials: "same-origin" });
+  const res = await fetch(path, { credentials: "same-origin", headers: lang() });
   const text = await res.text();
   if (!res.ok) {
     const data: unknown = text ? JSON.parse(text) : undefined;

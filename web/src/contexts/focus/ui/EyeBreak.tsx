@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LIBRARY, positionAt, stepAt, timeline } from "./exercises";
+import { useT } from "../../../shared/i18n/i18n";
 
 const TL = timeline(LIBRARY);
 const R = 110; // how far the guide travels from the centre (SVG units)
@@ -24,6 +25,7 @@ function Iris({ closed }: { closed: boolean }) {
 
 /** Full-screen guided eye break after a Pomodoro (KYB-S50). */
 export function EyeBreak({ onClose }: { onClose: (how: "done" | "skipped") => void }) {
+  const tr = useT();
   const [t, setT] = useState(0);
   const started = useRef(Date.now());
   const close = useRef(onClose);
@@ -46,12 +48,12 @@ export function EyeBreak({ onClose }: { onClose: (how: "done" | "skipped") => vo
   const closed = at?.step.direction === "closed";
   const blinking = at?.step.direction === "blink" && Math.floor(t * 2) % 2 === 1;
   return (
-    <div className="eye-break" role="dialog" aria-modal="true" aria-label="Eye break">
+    <div className="eye-break" role="dialog" aria-modal="true" aria-label={tr("Eye break")}>
       {done ? (
         <div className="eye-done">
-          <h2>Well done — your eyes thank you</h2>
+          <h2>{tr("Well done — your eyes thank you")}</h2>
           <button type="button" autoFocus onClick={() => onClose("done")}>
-            Back to work
+            {tr("Back to work")}
           </button>
         </div>
       ) : (
@@ -66,9 +68,9 @@ export function EyeBreak({ onClose }: { onClose: (how: "done" | "skipped") => vo
           <p role="status" aria-live="polite" className="eye-say">
             {at?.step.instruction}
           </p>
-          <progress max={TL.total} value={t} aria-label="Break progress" />
+          <progress max={TL.total} value={t} aria-label={tr("Break progress")} />
           <button type="button" className="ghost" onClick={() => onClose("skipped")}>
-            Skip break
+            {tr("Skip break")}
           </button>
         </>
       )}

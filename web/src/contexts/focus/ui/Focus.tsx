@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { focusUseCases, type FocusSession } from "../application";
 import { EyeBreak } from "./EyeBreak";
 import { onIssueDone } from "../../../shared/events";
+import { useT } from "../../../shared/i18n/i18n";
 
 const FOCUS = ["focus"];
 const mmss = (s: number) => `${String(Math.floor(Math.max(0, s) / 60)).padStart(2, "0")}:${String(Math.max(0, s) % 60).padStart(2, "0")}`;
@@ -65,6 +66,7 @@ function useFocusActions() {
 
 /** The running Pomodoro in the top bar: countdown plus pause / resume / stop (KYB-S41). */
 export function FocusTimer() {
+  const t = useT();
   const { done } = useFocusActions();
   const q = useQuery({ queryKey: FOCUS, queryFn: focusUseCases.focus, refetchInterval: 30_000 });
   const [pomodoro, setPomodoro] = usePomodoroMode();
@@ -106,14 +108,14 @@ export function FocusTimer() {
     <>
       <button
         className={`ghost pomodoro-toggle${pomodoro ? " on" : ""}`}
-        aria-label="Pomodoro mode"
+        aria-label={t("Pomodoro mode")}
         aria-pressed={pomodoro}
-        title={pomodoro ? "Pomodoro mode is on" : "Pomodoro mode is off"}
+        title={pomodoro ? t("Pomodoro mode is on") : t("Pomodoro mode is off")}
         onClick={() => setPomodoro(!pomodoro)}
       >
         🍅
       </button>
-      <button className="ghost eye-button" aria-label="Eye break" title="Eye break" onClick={() => setEyes(true)}>
+      <button className="ghost eye-button" aria-label={t("Eye break")} title={t("Eye break")} onClick={() => setEyes(true)}>
         👁
       </button>
     </>
@@ -121,7 +123,7 @@ export function FocusTimer() {
   const breakScreen = (
     <>
       {ask && (
-        <div role="alertdialog" aria-label="Eye exercise" aria-describedby="eye-ask" className="panel eye-ask">
+        <div role="alertdialog" aria-label={t("Eye exercise")} aria-describedby="eye-ask" className="panel eye-ask">
           <p id="eye-ask">
             <b>{ask}</b> is done. Rest your eyes with a one-minute exercise?
           </p>
@@ -132,10 +134,10 @@ export function FocusTimer() {
                 setEyes(true);
               }}
             >
-              Start exercise
+              {t("Start exercise")}
             </button>
             <button className="ghost" onClick={() => setAsk(null)}>
-              Not now
+              {t("Not now")}
             </button>
           </div>
         </div>
@@ -152,20 +154,20 @@ export function FocusTimer() {
     );
   return (
     <div className={`focus-timer ${s.state}`}>
-      <span role="timer" aria-label={`Focus on ${s.issue_key}`}>
+      <span role="timer" aria-label={t("Focus on {key}", { key: s.issue_key })}>
         <span aria-hidden="true">🍅</span> {s.issue_key} <b>{mmss(left)}</b>
       </span>
       {running ? (
         <button className="ghost" onClick={() => act.mutate("pause")}>
-          Pause
+          {t("Pause")}
         </button>
       ) : (
         <button className="ghost" onClick={() => act.mutate("resume")}>
-          Resume
+          {t("Resume")}
         </button>
       )}
       <button className="ghost" onClick={() => act.mutate("stop")}>
-        Stop
+        {t("Stop")}
       </button>
       {act.isError && <span role="alert" className="error">{act.error.message}</span>}
       {eyeButton}
@@ -176,6 +178,7 @@ export function FocusTimer() {
 
 /** Start a Pomodoro on an issue and see its focus history (work log). */
 export function IssueFocus({ issueKey }: { issueKey: string }) {
+  const t = useT();
   const { done } = useFocusActions();
   const log = useQuery({ queryKey: ["issue-focus", issueKey], queryFn: () => focusUseCases.issueFocus(issueKey) });
   const current = useQuery({ queryKey: FOCUS, queryFn: focusUseCases.focus });
@@ -183,22 +186,22 @@ export function IssueFocus({ issueKey }: { issueKey: string }) {
   const [pomodoro] = usePomodoroMode();
   const busy = Boolean(current.data);
   return (
-    <section className="issue-focus" aria-label="Focus">
-      <h3>Focus</h3>
-      {!pomodoro && <p className="muted">Pomodoro mode is off. Turn it on with 🍅 in the top bar.</p>}
+    <section className="issue-focus" aria-label={t("Focus")}>
+      <h3>{t("Focus")}</h3>
+      {!pomodoro && <p className="muted">{t("Pomodoro mode is off. Turn it on with 🍅 in the top bar.")}</p>}
       <div className="row" hidden={!pomodoro}>
         {[25, 15, 50].map((m) => (
           <button key={m} type="button" className={m === 25 ? "" : "ghost"} disabled={start.isPending || busy} onClick={() => start.mutate(m)}>
-            Focus {m} min
+            {t("Focus {n} min", { n: m })}
           </button>
         ))}
       </div>
-      {busy && <p className="muted">A focus session is running ({current.data?.issue_key}); stop it in the top bar to start another.</p>}
+      {busy && <p className="muted">{t("A focus session is running ({key}); stop it in the top bar to start another.", { key: current.data?.issue_key ?? "" })}</p>}
       {start.isError && <p role="alert" className="error">{start.error.message}</p>}
       {log.data && log.data.items.length > 0 && (
         <>
-          <p className="muted">Total focus: {minutes(log.data.total_focused_seconds)}</p>
-          <ul aria-label="Focus history" className="focus-log">
+          <p className="muted">{t("Total focus: {time}", { time: minutes(log.data.total_focused_seconds) })}</p>
+          <ul aria-label={t("Focus history")} className="focus-log">
             {log.data.items.map((s) => (
               <li key={s.id}>
                 <time dateTime={s.started_at}>{new Date(s.started_at).toLocaleString()}</time> · {minutes(s.focused_seconds)} ·{" "}

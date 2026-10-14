@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { blankQuestion, type Form, FORM_ISSUE_TYPES, type FormInput, type FormIssueType, formUseCases, missingAnswers, type Question } from "../application";
+import { useT } from "../../../shared/i18n/i18n";
 
 type Mode = { kind: "list" } | { kind: "design"; form: Form | null } | { kind: "fill"; form: Form };
 
 /** Forms: intake forms of the project; filling one in creates an issue (Jira's Forms). */
 export function Forms({ projectKey, onOpen }: { projectKey: string; onOpen: (issueKey: string) => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const listKey = ["forms", projectKey];
   const forms = useQuery({ queryKey: listKey, queryFn: () => formUseCases.forms(projectKey) });
@@ -20,8 +22,8 @@ export function Forms({ projectKey, onOpen }: { projectKey: string; onOpen: (iss
   const remove = useMutation({ mutationFn: (f: Form) => formUseCases.deleteForm(f.id), onSuccess: back, onError: (e: Error) => setError(e.message) });
 
   return (
-    <section className="forms" aria-label="Forms">
-      <h2>Forms</h2>
+    <section className="forms" aria-label={t("Forms")}>
+      <h2>{t("Forms")}</h2>
       {error && (
         <p role="alert" className="error">
           {error}
@@ -29,7 +31,7 @@ export function Forms({ projectKey, onOpen }: { projectKey: string; onOpen: (iss
       )}
       {created && (
         <p role="status">
-          Created{" "}
+          {t("Created")}{" "}
           <button type="button" className="ghost" onClick={() => onOpen(created)}>
             {created}
           </button>
@@ -51,28 +53,28 @@ export function Forms({ projectKey, onOpen }: { projectKey: string; onOpen: (iss
       {mode.kind === "list" && (
         <>
           <button type="button" onClick={() => setMode({ kind: "design", form: null })}>
-            New form
+            {t("New form")}
           </button>
           {forms.isError && (
             <p role="alert" className="error">
               {(forms.error as Error).message}
             </p>
           )}
-          {forms.data?.length === 0 && <p className="muted">No forms yet. Project admins can add one so others can request work.</p>}
+          {forms.data?.length === 0 && <p className="muted">{t("No forms yet. Project admins can add one so others can request work.")}</p>}
           <ul className="form-list">
             {forms.data?.map((f) => (
               <li key={f.id} className="form-card">
-                <strong>{f.name}</strong> <span className="muted">creates a {f.issue_type}</span>
+                <strong>{f.name}</strong> <span className="muted">{t("creates a {type}", { type: f.issue_type })}</span>
                 {f.intro && <p className="muted">{f.intro}</p>}
                 <div className="row">
                   <button type="button" onClick={() => setMode({ kind: "fill", form: f })}>
-                    Fill in {f.name}
+                    {t("Fill in {name}", { name: f.name })}
                   </button>
                   <button type="button" className="ghost" onClick={() => setMode({ kind: "design", form: f })}>
-                    Edit {f.name}
+                    {t("Edit {name}", { name: f.name })}
                   </button>
                   <button type="button" className="ghost" onClick={() => remove.mutate(f)}>
-                    Delete {f.name}
+                    {t("Delete {name}", { name: f.name })}
                   </button>
                 </div>
               </li>
@@ -85,6 +87,7 @@ export function Forms({ projectKey, onOpen }: { projectKey: string; onOpen: (iss
 }
 
 function FormDesigner({ projectKey, form, onDone, onCancel }: { projectKey: string; form: Form | null; onDone: () => void; onCancel: () => void }) {
+  const t = useT();
   const [input, setInput] = useState<FormInput>({ name: form?.name ?? "", intro: form?.intro ?? "", issue_type: form?.issue_type ?? "task", questions: form?.questions ?? [] });
   const save = useMutation({
     mutationFn: () => (form ? formUseCases.redesignForm(form.id, form.version, input) : formUseCases.createForm(projectKey, input)),
@@ -97,17 +100,17 @@ function FormDesigner({ projectKey, form, onDone, onCancel }: { projectKey: stri
     save.mutate();
   };
   return (
-    <form className="form-designer" aria-label="Form design" onSubmit={submit}>
+    <form className="form-designer" aria-label={t("Form design")} onSubmit={submit}>
       <label>
-        Form name
+        {t("Form name")}
         <input value={input.name} onChange={(e) => setInput({ ...input, name: e.target.value })} required maxLength={80} />
       </label>
       <label>
-        Intro
+        {t("Intro")}
         <textarea rows={2} value={input.intro} onChange={(e) => setInput({ ...input, intro: e.target.value })} maxLength={2000} />
       </label>
       <label>
-        Creates
+        {t("Creates")}
         <select value={input.issue_type} onChange={(e) => setInput({ ...input, issue_type: e.target.value as FormIssueType })}>
           {FORM_ISSUE_TYPES.map((t) => (
             <option key={t.id} value={t.id}>
@@ -117,23 +120,23 @@ function FormDesigner({ projectKey, form, onDone, onCancel }: { projectKey: stri
         </select>
       </label>
       <fieldset>
-        <legend>Questions (a summary is always asked)</legend>
+        <legend>{t("Questions (a summary is always asked)")}</legend>
         {input.questions.map((q, i) => (
           <div key={i} className="row">
-            <input aria-label={`Question ${i + 1}`} value={q.label} onChange={(e) => setQuestion(i, { label: e.target.value })} maxLength={120} />
+            <input aria-label={t("Question {n}", { n: i + 1 })} value={q.label} onChange={(e) => setQuestion(i, { label: e.target.value })} maxLength={120} />
             <label>
-              <input type="checkbox" checked={q.required} onChange={(e) => setQuestion(i, { required: e.target.checked })} /> Required
+              <input type="checkbox" checked={q.required} onChange={(e) => setQuestion(i, { required: e.target.checked })} /> {t("Required")}
             </label>
             <label>
-              <input type="checkbox" checked={q.long} onChange={(e) => setQuestion(i, { long: e.target.checked })} /> Long answer
+              <input type="checkbox" checked={q.long} onChange={(e) => setQuestion(i, { long: e.target.checked })} /> {t("Long answer")}
             </label>
             <button type="button" className="ghost" onClick={() => setInput({ ...input, questions: input.questions.filter((_, j) => j !== i) })}>
-              Remove question {i + 1}
+              {t("Remove question {n}", { n: i + 1 })}
             </button>
           </div>
         ))}
         <button type="button" className="ghost" onClick={() => setInput({ ...input, questions: [...input.questions, blankQuestion()] })}>
-          Add question
+          {t("Add question")}
         </button>
       </fieldset>
       {save.isError && (
@@ -143,10 +146,10 @@ function FormDesigner({ projectKey, form, onDone, onCancel }: { projectKey: stri
       )}
       <div className="row">
         <button type="submit" disabled={save.isPending}>
-          Save form
+          {t("Save form")}
         </button>
         <button type="button" className="ghost" onClick={onCancel}>
-          Cancel
+          {t("Cancel")}
         </button>
       </div>
     </form>
@@ -154,6 +157,7 @@ function FormDesigner({ projectKey, form, onDone, onCancel }: { projectKey: stri
 }
 
 function FormFiller({ form, onDone, onCancel }: { form: Form; onDone: (issueKey: string) => void; onCancel: () => void }) {
+  const t = useT();
   const [summary, setSummary] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [missing, setMissing] = useState<string[]>([]);
@@ -169,7 +173,7 @@ function FormFiller({ form, onDone, onCancel }: { form: Form; onDone: (issueKey:
       <h3>{form.name}</h3>
       {form.intro && <p className="muted">{form.intro}</p>}
       <label>
-        Summary
+        {t("Summary")}
         <input value={summary} onChange={(e) => setSummary(e.target.value)} required maxLength={255} />
       </label>
       {form.questions.map((q) => {
@@ -185,7 +189,7 @@ function FormFiller({ form, onDone, onCancel }: { form: Form; onDone: (issueKey:
       })}
       {missing.length > 0 && (
         <p role="alert" className="error">
-          Please answer: {missing.join(", ")}
+          {t("Please answer: {list}", { list: missing.join(", ") })}
         </p>
       )}
       {send.isError && (
@@ -195,10 +199,10 @@ function FormFiller({ form, onDone, onCancel }: { form: Form; onDone: (issueKey:
       )}
       <div className="row">
         <button type="submit" disabled={send.isPending}>
-          Submit
+          {t("Submit")}
         </button>
         <button type="button" className="ghost" onClick={onCancel}>
-          Cancel
+          {t("Cancel")}
         </button>
       </div>
     </form>

@@ -3,11 +3,13 @@ import { type FormEvent, useState } from "react";
 import { audienceLabel, calendarUseCases, RESPONSES, type MeetingResponse, tally } from "../application";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
+import { useT } from "../../../shared/i18n/i18n";
 
 const fmt = (iso: string) => new Date(iso).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 /** The workspace time table (KYB-S42). During a meeting its attendees cannot start a Pomodoro. */
 export function MeetingsPage() {
+  const t = useT();
   const qc = useQueryClient();
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: () => calendarUseCases.meetings() });
   const me = useQuery({ queryKey: ["me"], queryFn: identityUseCases.me });
@@ -54,10 +56,10 @@ export function MeetingsPage() {
 
   return (
     <div className="meetings">
-      <h1>Time table</h1>
-      <p className="muted">Meetings for the next 7 days. While a meeting runs, its attendees cannot start a Pomodoro.</p>
-      <ul aria-label="Meetings" className="panel meeting-list">
-        {meetings.data?.length === 0 && <li className="muted">No meetings.</li>}
+      <h1>{t("Time table")}</h1>
+      <p className="muted">{t("Meetings for the next 7 days. While a meeting runs, its attendees cannot start a Pomodoro.")}</p>
+      <ul aria-label={t("Meetings")} className="panel meeting-list">
+        {meetings.data?.length === 0 && <li className="muted">{t("No meetings.")}</li>}
         {meetings.data?.map((m) => (
           <li key={m.id}>
             <b>{m.title}</b> · {fmt(m.starts_at)} – {new Date(m.ends_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ·{" "}
@@ -67,7 +69,7 @@ export function MeetingsPage() {
               {tally(m) && ` · ${tally(m)}`}
             </span>
             {me.data && m.attendee_ids.includes(me.data.id) && m.organizer_id !== me.data.id && (
-              <span className="rsvp" role="group" aria-label={`Answer ${m.title}`}>
+              <span className="rsvp" role="group" aria-label={t("Answer {title}", { title: m.title })}>
                 {RESPONSES.map((r) => (
                   <button
                     key={r.id}
@@ -82,43 +84,43 @@ export function MeetingsPage() {
               </span>
             )}
             {m.organizer_id === me.data?.id && (
-              <button className="ghost" aria-label={`Cancel ${m.title}`} onClick={() => cancel.mutate(m.id)}>
-                Cancel
+              <button className="ghost" aria-label={t("Cancel {title}", { title: m.title })} onClick={() => cancel.mutate(m.id)}>
+                {t("Cancel")}
               </button>
             )}
           </li>
         ))}
       </ul>
       <form className="panel" onSubmit={onSubmit}>
-        <h2>Schedule a meeting</h2>
+        <h2>{t("Schedule a meeting")}</h2>
         <label>
-          Title
+          {t("Title")}
           <input value={title} onChange={(e) => setTitle(e.target.value)} required />
         </label>
         <label>
-          Starts
+          {t("Starts")}
           <input type="datetime-local" value={starts} onChange={(e) => setStarts(e.target.value)} required />
         </label>
         <label>
-          Minutes
+          {t("Minutes")}
           <input type="number" min={5} max={480} value={mins} onChange={(e) => setMins(Number(e.target.value))} required />
         </label>
         <label>
-          Invite
+          {t("Invite")}
           <select value={invite} onChange={(e) => setInvite(e.target.value)}>
-            <option value="people">Chosen people</option>
+            <option value="people">{t("Chosen people")}</option>
             {projects.data?.map((p) => (
               <option key={p.key} value={`project:${p.key}`}>
-                Everyone in {p.key}
+                {t("Everyone in {key}", { key: p.key })}
               </option>
             ))}
-            <option value="workspace">Everyone in the workspace</option>
+            <option value="workspace">{t("Everyone in the workspace")}</option>
           </select>
         </label>
-        {invite !== "people" && <p className="muted">Everyone invited is notified now and reminded 15 minutes before it starts.</p>}
+        {invite !== "people" && <p className="muted">{t("Everyone invited is notified now and reminded 15 minutes before it starts.")}</p>}
         <fieldset hidden={invite !== "people"}>
-          <legend>Attendees</legend>
-          {people.size === 0 && <span className="muted">Only you — add people to a project to invite them.</span>}
+          <legend>{t("Attendees")}</legend>
+          {people.size === 0 && <span className="muted">{t("Only you — add people to a project to invite them.")}</span>}
           {[...people].map(([id, name]) => (
             <label key={id} className="check">
               <input
@@ -132,7 +134,7 @@ export function MeetingsPage() {
         </fieldset>
         {schedule.isError && <p role="alert" className="error">{schedule.error.message}</p>}
         <button type="submit" disabled={schedule.isPending}>
-          Schedule
+          {t("Schedule")}
         </button>
       </form>
     </div>

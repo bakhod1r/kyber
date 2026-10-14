@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { identityUseCases, type CreatedToken } from "../application";
+import { msg, type MessageKey, useT } from "../../../shared/i18n/i18n";
 
 const KEY = ["access-tokens"];
 
-const lifetimes = [
-  { days: 30, label: "30 days" },
-  { days: 90, label: "90 days" },
-  { days: 365, label: "1 year" },
-  { days: 0, label: "No expiry" },
+const lifetimes: { days: number; label: MessageKey }[] = [
+  { days: 30, label: msg("30 days") },
+  { days: 90, label: msg("90 days") },
+  { days: 365, label: msg("1 year") },
+  { days: 0, label: msg("No expiry") },
 ];
 
 function day(iso: string | null, none: string): string {
@@ -17,6 +18,7 @@ function day(iso: string | null, none: string): string {
 
 /** AccessTokens: personal access tokens for scripts and AI assistants (MCP). */
 export function AccessTokens() {
+  const t = useT();
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [days, setDays] = useState(90);
@@ -42,34 +44,34 @@ export function AccessTokens() {
 
   const error = create.error?.message || revoke.error?.message || tokens.error?.message;
   return (
-    <section className="settings panel" aria-label="Access tokens">
-      <h2>Access tokens</h2>
+    <section className="settings panel" aria-label={t("Access tokens")}>
+      <h2>{t("Access tokens")}</h2>
       <p className="muted">
-        Tokens let scripts and AI assistants (MCP) act as you. Send one as <code>Authorization: Bearer …</code>; revoke it when you stop using it.
+        Tokens let scripts and AI assistants (MCP) act as you. Send one as <code>{t("Authorization: Bearer …")}</code>; revoke it when you stop using it.
       </p>
       <form className="row" onSubmit={submit}>
-        <input aria-label="Token name" placeholder="e.g. Claude Code on my laptop" value={name} onChange={(e) => setName(e.target.value)} />
-        <select aria-label="Expires" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+        <input aria-label={t("Token name")} placeholder={t("e.g. Claude Code on my laptop")} value={name} onChange={(e) => setName(e.target.value)} />
+        <select aria-label={t("Expires")} value={days} onChange={(e) => setDays(Number(e.target.value))}>
           {lifetimes.map((l) => (
             <option key={l.days} value={l.days}>
-              {l.label}
+              {t(l.label)}
             </option>
           ))}
         </select>
         <button type="submit" disabled={create.isPending || name.trim() === ""}>
-          Create token
+          {t("Create token")}
         </button>
       </form>
       {created && (
         <div className="notice" role="status">
           <p>
-            Copy <strong>{created.name}</strong> now — it will not be shown again:
+            {t("Copy")} <strong>{created.name}</strong> {t("now — it will not be shown again:")}
           </p>
-          <code className="secret" aria-label="New token">
+          <code className="secret" aria-label={t("New token")}>
             {created.token}
           </code>
           <button type="button" className="ghost" onClick={() => void navigator.clipboard?.writeText(created.token)}>
-            Copy
+            {t("Copy")}
           </button>
         </div>
       )}
@@ -82,23 +84,23 @@ export function AccessTokens() {
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Created</th>
-              <th>Expires</th>
-              <th>Last used</th>
+              <th>{t("Name")}</th>
+              <th>{t("Created")}</th>
+              <th>{t("Expires")}</th>
+              <th>{t("Last used")}</th>
               <th />
             </tr>
           </thead>
           <tbody>
-            {tokens.data.map((t) => (
-              <tr key={t.id}>
-                <td>{t.name}</td>
-                <td>{day(t.created_at, "")}</td>
-                <td>{day(t.expires_at, "Never")}</td>
-                <td>{day(t.last_used_at, "Never")}</td>
+            {tokens.data.map((tok) => (
+              <tr key={tok.id}>
+                <td>{tok.name}</td>
+                <td>{day(tok.created_at, "")}</td>
+                <td>{day(tok.expires_at, t("Never"))}</td>
+                <td>{day(tok.last_used_at, t("Never"))}</td>
                 <td>
-                  <button type="button" className="ghost" aria-label={`Revoke ${t.name}`} disabled={revoke.isPending} onClick={() => revoke.mutate(t.id)}>
-                    Revoke
+                  <button type="button" className="ghost" aria-label={t("Revoke {name}", { name: tok.name })} disabled={revoke.isPending} onClick={() => revoke.mutate(tok.id)}>
+                    {t("Revoke")}
                   </button>
                 </td>
               </tr>

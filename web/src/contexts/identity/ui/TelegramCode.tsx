@@ -2,9 +2,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { identityUseCases } from "../application";
+import { useT } from "../../../shared/i18n/i18n";
 
 /** "Log in with Telegram code" (KYB-S40). Lives inside the login form, so no nested <form>. */
 export function TelegramCode() {
+  const t = useT();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [code, setCode] = useState("");
@@ -21,7 +23,7 @@ export function TelegramCode() {
     return (
       <>
         <button type="button" className="ghost social-telegram-code" disabled={start.isPending} onClick={() => start.mutate()}>
-          Log in with Telegram code
+          {t("Log in with Telegram code")}
         </button>
         {start.isError && <p role="alert" className="error">{start.error.message}</p>}
       </>
@@ -29,18 +31,18 @@ export function TelegramCode() {
   }
   const submit = () => code.trim().length === 6 && verify.mutate();
   return (
-    <div className="otp" role="group" aria-label="Telegram code">
+    <div className="otp" role="group" aria-label={t("Telegram code")}>
       <ol>
         <li>
           <a href={start.data.link} target="_blank" rel="noopener noreferrer">
-            Open the Kyber bot in Telegram
+            {t("Open the Kyber bot in Telegram")}
           </a>{" "}
-          and press <b>Start</b>.
+          {t("and press")} <b>{t("Start")}</b>.
         </li>
-        <li>Type the 6-digit code it sends you.</li>
+        <li>{t("Type the 6-digit code it sends you.")}</li>
       </ol>
       <label>
-        Code from Telegram
+        {t("Code from Telegram")}
         <input
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -58,7 +60,7 @@ export function TelegramCode() {
       </label>
       {verify.isError && <p role="alert" className="error">{verify.error.message}</p>}
       <button type="button" disabled={verify.isPending || code.length !== 6} onClick={submit}>
-        Verify code
+        {t("Verify code")}
       </button>
     </div>
   );

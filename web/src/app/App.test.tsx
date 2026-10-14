@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { AppRoutes } from "./App";
 import { mockApi, renderWithProviders } from "../shared/test/test-utils";
+import { I18nProvider } from "../shared/i18n/i18n";
+import { ru } from "../shared/i18n/ru";
 
 const me = { id: "u-1", email: "ali@x.uz", name: "Ali" };
 
@@ -117,5 +119,23 @@ describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
     await waitFor(() =>
       expect(calls.find((c) => c.key === "POST /api/v1/projects/KYB/members")?.body).toEqual({ email: "bob@x.uz", role: "viewer" }),
     );
+  });
+
+  it("switches the UI language from the header picker", async () => {
+    mockApi({
+      "GET /api/v1/me": { status: 200, body: me },
+      "GET /api/v1/projects": { status: 200, body: { items: [] } },
+    });
+    renderWithProviders(
+      <I18nProvider initial="en">
+        <AppRoutes />
+      </I18nProvider>,
+      "/",
+    );
+    expect(await screen.findByRole("button", { name: "Log out" })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Language" }), "ru");
+    expect(await screen.findByRole("button", { name: ru["Log out"] })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("ru");
+    localStorage.clear();
   });
 });
