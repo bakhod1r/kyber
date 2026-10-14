@@ -97,3 +97,32 @@ export function swimlanes<T extends { assignee_id: string | null; parent_key?: s
   const out = [...lanes].map(([id, items]) => ({ id, items }));
   return [...out.filter((l) => l.id !== ""), ...out.filter((l) => l.id === "")];
 }
+
+/** The board toolbar's filters (Jira): text, assignees ("" = unassigned), fix versions, epics
+ * ("" = no epic) and types. Empty lists do not filter. */
+export type BoardFilter = { text: string; assignees: string[]; versions: string[]; epics: string[]; types: string[] };
+export const NO_BOARD_FILTER: BoardFilter = { text: "", assignees: [], versions: [], epics: [], types: [] };
+
+export function boardFilterActive(f: BoardFilter): boolean {
+  return f.text.trim() !== "" || f.assignees.length + f.versions.length + f.epics.length + f.types.length > 0;
+}
+
+type Filterable = { key: string; title: string; type: string; assignee_id: string | null; parent_key?: string | null; fix_versions?: string[] };
+
+/** filterBoard keeps the issues matching every active filter; text matches key or title. */
+export function filterBoard<T extends Filterable>(issues: T[], f: BoardFilter): T[] {
+  const text = f.text.trim().toLowerCase();
+  return issues.filter(
+    (i) =>
+      (!text || i.key.toLowerCase().includes(text) || i.title.toLowerCase().includes(text)) &&
+      (f.assignees.length === 0 || f.assignees.includes(i.assignee_id ?? "")) &&
+      (f.versions.length === 0 || (i.fix_versions ?? []).some((v) => f.versions.includes(v))) &&
+      (f.epics.length === 0 || f.epics.includes(i.parent_key ?? "")) &&
+      (f.types.length === 0 || f.types.includes(i.type)),
+  );
+}
+
+/** toggle adds or removes one value of a multi-select filter. */
+export function toggle(list: string[], value: string): string[] {
+  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}

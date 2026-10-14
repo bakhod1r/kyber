@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // Attachments: a member attaches a file to an issue, downloads it and removes it.
 test("attach, download and remove a file", async ({ page }) => {
   const id = Date.now().toString(36).toUpperCase().slice(-5);
-  const key = `A${id}`.slice(0, 6);
+  const key = `Y${id}`.slice(0, 6);
   await page.goto("/signup");
   await page.getByLabel("Name").fill("File Keeper");
   await page.getByLabel("Email").fill(`files-${id.toLowerCase()}@example.com`);

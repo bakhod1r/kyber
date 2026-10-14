@@ -587,6 +587,14 @@ export const en = {
   "Swimlanes": "Swimlanes",
   "No epic": "No epic",
   "Epic": "Epic",
+  "Assignees": "Assignees",
+  "Board filters": "Board filters",
+  "Group": "Group",
+  "Search board": "Search board",
+  "Filter by {name}": "Filter by {name}",
+  "Filter by kind": "Filter by kind",
+  "Board insights": "Board insights",
+  "Configure board": "Configure board",
 } as const;
 
 export type MessageKey = keyof typeof en;

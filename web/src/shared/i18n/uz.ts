@@ -589,4 +589,12 @@ export const uz: Record<MessageKey, string> = {
   "Swimlanes": "Yo‘laklar",
   "No epic": "Epiksiz",
   "Epic": "Epik",
+  "Assignees": "Ijrochilar",
+  "Board filters": "Doska filtrlari",
+  "Group": "Guruhlash",
+  "Search board": "Doskadan qidirish",
+  "Filter by {name}": "{name} bo‘yicha filtr",
+  "Filter by kind": "Turi bo‘yicha filtr",
+  "Board insights": "Doska tahlili",
+  "Configure board": "Doskani sozlash",
 };

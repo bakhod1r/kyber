@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // D1/D2: Summary, List and quick filters on the active sprints board.
 test("summary, list and quick filters", async ({ page }) => {
   const id = Date.now().toString(36).toUpperCase().slice(-5);
-  const key = `V${id}`.slice(0, 6);
+  const key = `Q${id}`.slice(0, 6);
   await page.goto("/signup");
   await page.getByLabel("Name").fill("Viewer Of Things");
   await page.getByLabel("Email").fill(`views-${id.toLowerCase()}@example.com`);

@@ -589,4 +589,12 @@ export const ru: Record<MessageKey, string> = {
   "Swimlanes": "Дорожки",
   "No epic": "Без эпика",
   "Epic": "Эпик",
+  "Assignees": "Исполнители",
+  "Board filters": "Фильтры доски",
+  "Group": "Группировка",
+  "Search board": "Поиск по доске",
+  "Filter by {name}": "Фильтр: {name}",
+  "Filter by kind": "Фильтр по виду",
+  "Board insights": "Аналитика доски",
+  "Configure board": "Настроить доску",
 };
