@@ -223,7 +223,6 @@ Har bir milestone `awesome-agents` zanjiri bo'yicha o'tadi: `/design` → implem
 - [x] `Makefile`, `golangci-lint` (`make lint`) — `pre-commit` o'rniga CI va `make lint`
 - [x] CI (GitHub Actions): lint, test, build, `govulncheck`, CodeQL (`.github/workflows/`)
 - [x] `docker-compose.yml`: postgres, redis, coturn; `--profile dev` bilan minio (S3) va mailpit
-  - [ ] dev hot-reload (`air`)
 - [x] OpenAPI 3.1 (`api/openapi.yaml`) + contract test; `/healthz`, `/readyz`, `/metrics`
 - [x] README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY.md, issue/PR shablonlari
 
@@ -241,11 +240,11 @@ Har bir milestone `awesome-agents` zanjiri bo'yicha o'tadi: `/design` → implem
 
 ### M2 — v0.5 Beta
 - [x] F7 Backlog, Sprint, Scrum board, LexoRank
-- [~] F5 Workflow editor: status/transition CRUD bor; **vizual (graf) muharrir yo'q**
+- [x] F5 Workflow editor: status CRUD, vizual diagramma va o'tishlar matritsasi
 - [x] F4 Custom fields (text, number, select, date)
 - [x] F10 Link turlari, Epic → children, timeline
 - [x] F11 **JQL**: lexer → parser (AST) → baholash; UI'da autocomplete (maydon/operator/qiymat/label)
-  - [ ] parametrlangan SQL'ga kompilyatsiya (hozir xotirada baholanadi)
+  - [x] SQL pushdown: project/type/priority/labels shartlari bazada filtrlanadi, qolgani xotirada aniq baholanadi
 - [x] F15 Realtime — MQTT (ADR-0013; chat SSE→MQTT ko'chirildi), F12 email/Telegram + watchers, F13 attachments (local/S3)
 - [x] F17 Webhooks (HMAC imzo, outbox retry — ADR-0014), F1 OIDC + GitHub sign-in (ADR-0015)
 - [x] F16 Burndown, velocity; F19 i18n — 25 til (en/uz/ru to'liq), RTL; 10 tema, wallpaperlar
@@ -262,7 +261,7 @@ Har bir milestone `awesome-agents` zanjiri bo'yicha o'tadi: `/design` → implem
 - [ ] Pentest + `/audit`, `/ship` gate; docs sayt
 - [x] Umumiy API va upload rate limiting (foydalanuvchi bo'yicha, Redis bilan replikalararo)
 - [x] MCP OAuth 2.1 (ADR-0016: discovery, dynamic registration, PKCE, consent sahifasi)
-- [ ] SAML/SCIM
+- [x] SAML 2.0 sign-in va SCIM 2.0 provisioning (ADR-0017)
 - [ ] **Release v1.0.0** + launch
 
 Qo'shimcha (rejadan tashqari, bajarilgan): chat, qo'ng'iroqlar/huddle, yozib olish, whiteboard, docs, forms,

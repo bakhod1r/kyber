@@ -67,7 +67,7 @@ simulcast, dynacast, congestion control and multi-node, which option A would tak
 - The calls application layer has a `Rooms` port (`Ticket(room, user, now)`); `internal/call/infrastructure/livekit`
   implements it by signing a HS256 JWT with LiveKit's video grant (room join, publish, subscribe, data — never
   room admin) for one call's room, valid 15 minutes. No LiveKit SDK on the server; the secret stays in memory.
-- With `KYBER_LIVEKIT_URL`/`_KEY`/`_SECRET` set, **every new call is a room** (`calls.room`, migration 0084), up
+- With `KYBER_LIVEKIT_URL`/`_KEY`/`_SECRET` set, **every new call is a room** (`calls.room`, migration 0086), up
   to `MaxRoomParticipants = 50`; without them every call is a mesh (6), as before. A live call never switches
   mode (moving 6 browsers from mesh to SFU mid-call is fragile; an all-hands simply starts as a room).
 - `POST /api/v1/calls/{id}/room` gives a participant `{url, token, expires_at}` (409 for a mesh call or a

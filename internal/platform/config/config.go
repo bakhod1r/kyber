@@ -40,6 +40,16 @@ type Config struct {
 	// With KYBER_REDIS_URL the budget is shared by all replicas.
 	APIRateLimit    int `env:"KYBER_API_RATE_LIMIT" default:"1200"`
 	UploadRateLimit int `env:"KYBER_UPLOAD_RATE_LIMIT" default:"60"`
+	// SAML 2.0 sign-in (ADR-0017): the identity provider's metadata (URL or file), and the service
+	// provider's key and certificate (PEM files). Register <PublicURL>/api/v1/auth/saml/metadata at the IdP.
+	SAMLIDPMetadataURL  string `env:"KYBER_SAML_IDP_METADATA_URL"`
+	SAMLIDPMetadataFile string `env:"KYBER_SAML_IDP_METADATA_FILE"`
+	SAMLCertFile        string `env:"KYBER_SAML_CERT_FILE"`
+	SAMLKeyFile         string `env:"KYBER_SAML_KEY_FILE"`
+	SAMLName            string `env:"KYBER_SAML_NAME" default:"SAML"`
+	// SCIMToken enables SCIM 2.0 user provisioning at /scim/v2 (ADR-0017): the identity provider
+	// sends it as a Bearer token.
+	SCIMToken string `env:"KYBER_SCIM_TOKEN"`
 	// BaseDomain enables workspaces on subdomains (<slug>.<BaseDomain>, ADR-0004); empty = single-tenant.
 	BaseDomain string `env:"KYBER_BASE_DOMAIN"`
 	// AdminEmails (comma-separated) administer the default workspace: they publish workspace-wide

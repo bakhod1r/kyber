@@ -19,7 +19,7 @@ func WithExternalIdentities(ids domain.ExternalIdentities) Option {
 }
 
 var providerTitle = map[domain.Provider]string{domain.ProviderGoogle: "Google", domain.ProviderTelegram: "Telegram",
-	domain.ProviderOIDC: "SSO", domain.ProviderGitHub: "GitHub"}
+	domain.ProviderOIDC: "SSO", domain.ProviderGitHub: "GitHub", domain.ProviderSAML: "SAML"}
 
 // ExternalProfile is what an identity provider vouches for after verification by its adapter.
 type ExternalProfile struct {

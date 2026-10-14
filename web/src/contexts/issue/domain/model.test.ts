@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initials, type Issue, parseLabels, planTimeline } from "./model";
+import { initials, type Issue, parseLabels, planTimeline, canTransition, layoutWorkflow, toggleTransition, type Workflow } from "./model";
 
 const base: Issue = {
   id: "", key: "", title: "", type: "task", status: "todo", description: "", priority: "medium",
@@ -50,4 +50,35 @@ describe("parseLabels", () => {
     ["  a,b  c ", ["a", "b", "c"]],
     ["", []],
   ])("%s", (raw, want) => expect(parseLabels(raw)).toEqual(want));
+});
+
+describe("workflow transitions (visual editor)", () => {
+  const wf: Workflow = {
+    initial: "todo",
+    statuses: [
+      { id: "todo", name: "To Do", category: "todo" },
+      { id: "doing", name: "Doing", category: "in_progress" },
+      { id: "done", name: "Done", category: "done" },
+    ],
+    transitions: [],
+  };
+  it("treats no transitions as any-to-any", () => {
+    expect(canTransition(wf, "todo", "done")).toBe(true);
+    expect(canTransition(wf, "todo", "todo")).toBe(false);
+  });
+  it("turning one transition off makes the rest explicit", () => {
+    const off = toggleTransition(wf, "todo", "done");
+    expect(canTransition(off, "todo", "done")).toBe(false);
+    expect(off.transitions).toHaveLength(5);
+    const on = toggleTransition(off, "todo", "done");
+    expect(canTransition(on, "todo", "done")).toBe(true);
+    expect(on.transitions).toHaveLength(6);
+  });
+  it("lays statuses out in category columns", () => {
+    const pos = layoutWorkflow({ ...wf, statuses: [...wf.statuses, { id: "review", name: "Review", category: "in_progress" }] });
+    expect(pos.get("todo")!.x).toBeLessThan(pos.get("doing")!.x);
+    expect(pos.get("doing")!.x).toBe(pos.get("review")!.x);
+    expect(pos.get("review")!.y).toBeGreaterThan(pos.get("doing")!.y);
+    expect(pos.get("done")!.x).toBeGreaterThan(pos.get("review")!.x);
+  });
 });

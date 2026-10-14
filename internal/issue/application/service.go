@@ -226,6 +226,8 @@ type ListQuery struct {
 	Sprint     string
 	FixVersion string
 	Label      string
+	// Types, Priorities and LabelKeys keep issues matching any of their values (JQL pushdown).
+	Types, Priorities, LabelKeys []string
 }
 
 func (s *Service) List(ctx context.Context, actor, project string, q ListQuery) ([]*domain.Issue, error) {
@@ -252,6 +254,19 @@ func (s *Service) List(ctx context.Context, actor, project string, q ListQuery) 
 		l := domain.Label(q.Label)
 		f.Label = &l
 	}
+	if q.Types != nil {
+		f.Types = make([]domain.IssueType, len(q.Types))
+		for i, t := range q.Types {
+			f.Types[i] = domain.IssueType(t)
+		}
+	}
+	if q.Priorities != nil {
+		f.Priorities = make([]domain.Priority, len(q.Priorities))
+		for i, p := range q.Priorities {
+			f.Priorities[i] = domain.Priority(p)
+		}
+	}
+	f.LabelKeys = q.LabelKeys
 	list, err := s.issues.ListByProject(ctx, project, f)
 	if err != nil {
 		return nil, err

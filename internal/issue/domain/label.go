@@ -61,3 +61,8 @@ func joinLabels(ls []Label) string {
 	}
 	return strings.Join(s, ",")
 }
+
+// LabelKey is how queries compare labels: lower case, "-" and "'" dropped, spaces as "_".
+func LabelKey(s string) string {
+	return strings.NewReplacer(" ", "_", "-", "", "'", "").Replace(strings.ToLower(strings.TrimSpace(s)))
+}

@@ -14,6 +14,86 @@ security:
   - cookie: []
 
 paths:
+  /scim/v2/ServiceProviderConfig:
+    get:
+      operationId: getSCIMConfig
+      summary: SCIM 2.0 service provider configuration (ADR-0017). Bearer KYBER_SCIM_TOKEN.
+      security: []
+      responses:
+        "200": { description: Capabilities., content: { application/scim+json: { schema: { type: object, required: [schemas, patch, filter], properties: { schemas: { type: array, items: { type: string } }, patch: { type: object }, filter: { type: object } } } } } }
+        "401": { $ref: "#/components/responses/SCIMError" }
+  /scim/v2/Users:
+    get:
+      operationId: listSCIMUsers
+      summary: Users, paged; filter supports `userName eq "…"` only.
+      security: []
+      parameters:
+        - { name: filter, in: query, schema: { type: string } }
+        - { name: startIndex, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: count, in: query, schema: { type: integer, minimum: 0, maximum: 200 } }
+      responses:
+        "200":
+          description: A SCIM list response.
+          content:
+            application/scim+json:
+              schema:
+                type: object
+                required: [schemas, totalResults, startIndex, itemsPerPage, Resources]
+                properties:
+                  schemas: { type: array, items: { type: string } }
+                  totalResults: { type: integer }
+                  startIndex: { type: integer }
+                  itemsPerPage: { type: integer }
+                  Resources: { type: array, items: { $ref: "#/components/schemas/SCIMUser" } }
+        "400": { $ref: "#/components/responses/SCIMError" }
+        "401": { $ref: "#/components/responses/SCIMError" }
+    post:
+      operationId: createSCIMUser
+      summary: Provision a user (no password; signs in through single sign-on).
+      security: []
+      requestBody: { required: true, content: { application/scim+json: { schema: { type: object } }, application/json: { schema: { type: object } } } }
+      responses:
+        "201": { description: Created., content: { application/scim+json: { schema: { $ref: "#/components/schemas/SCIMUser" } } } }
+        "400": { $ref: "#/components/responses/SCIMError" }
+        "401": { $ref: "#/components/responses/SCIMError" }
+        "409": { $ref: "#/components/responses/SCIMError" }
+  /scim/v2/Users/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: getSCIMUser
+      security: []
+      responses:
+        "200": { description: The user., content: { application/scim+json: { schema: { $ref: "#/components/schemas/SCIMUser" } } } }
+        "401": { $ref: "#/components/responses/SCIMError" }
+        "404": { $ref: "#/components/responses/SCIMError" }
+    put:
+      operationId: replaceSCIMUser
+      summary: Replace the display name and active flag (the userName stays).
+      security: []
+      requestBody: { required: true, content: { application/scim+json: { schema: { type: object } }, application/json: { schema: { type: object } } } }
+      responses:
+        "200": { description: Updated., content: { application/scim+json: { schema: { $ref: "#/components/schemas/SCIMUser" } } } }
+        "400": { $ref: "#/components/responses/SCIMError" }
+        "401": { $ref: "#/components/responses/SCIMError" }
+        "404": { $ref: "#/components/responses/SCIMError" }
+    patch:
+      operationId: patchSCIMUser
+      summary: Replace `active` or the display name; deactivation signs the user out everywhere.
+      security: []
+      requestBody: { required: true, content: { application/scim+json: { schema: { type: object } }, application/json: { schema: { type: object } } } }
+      responses:
+        "200": { description: Updated., content: { application/scim+json: { schema: { $ref: "#/components/schemas/SCIMUser" } } } }
+        "400": { $ref: "#/components/responses/SCIMError" }
+        "401": { $ref: "#/components/responses/SCIMError" }
+        "404": { $ref: "#/components/responses/SCIMError" }
+    delete:
+      operationId: deleteSCIMUser
+      summary: Deprovision (deactivates; authorship is kept).
+      security: []
+      responses:
+        "204": { description: Deactivated. }
+        "401": { $ref: "#/components/responses/SCIMError" }
+        "404": { $ref: "#/components/responses/SCIMError" }
   /.well-known/oauth-protected-resource:
     get:
       operationId: getProtectedResourceMetadata
@@ -253,6 +333,7 @@ paths:
                 properties:
                   google: { type: boolean }
                   oidc: { type: [string, "null"], description: Button label of the generic OpenID Connect (SSO) provider; null when disabled. }
+                  saml: { type: [string, "null"], description: Button label of the SAML 2.0 identity provider (ADR-0017); null when disabled. }
                   github: { type: boolean }
                   telegram_bot: { type: [string, "null"], description: Bot username for the Telegram Login Widget; null when disabled. }
                   telegram_otp: { type: boolean, description: The bot sends one-time login codes. }
@@ -307,6 +388,38 @@ paths:
       responses:
         "302": { description: "Redirect to / when signed in, otherwise to /login?error=oidc_failed or oidc_email_taken" }
         "404": { description: SSO is not configured }
+  /api/v1/auth/saml/metadata:
+    get:
+      operationId: samlMetadata
+      security: []
+      description: The service provider's SAML metadata, to register at the identity provider (ADR-0017).
+      responses:
+        "200": { description: Metadata XML., content: { application/samlmetadata+xml: { schema: { type: string } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/saml/start:
+    get:
+      operationId: samlStart
+      security: []
+      description: Starts SAML sign-in (HTTP-Redirect binding); sets the `kyber_saml` cookie with the request id.
+      responses:
+        "302": { description: Redirect to the identity provider }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/saml/acs:
+    post:
+      operationId: samlACS
+      security: []
+      description: >-
+        Assertion consumer service (HTTP-POST binding). The response must be signed by the configured identity
+        provider and answer this browser's request; success sets the session cookie and redirects to `/`,
+        failure to `/login?error=saml_failed`.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: { type: object, required: [SAMLResponse], properties: { SAMLResponse: { type: string }, RelayState: { type: string } } }
+      responses:
+        "302": { description: Redirect to the app or back to the login page }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/auth/github/start:
     get:
       operationId: githubStart
@@ -3996,6 +4109,14 @@ components:
     SprintID: { name: id, in: path, required: true, schema: { type: string } }
     VersionID: { name: id, in: path, required: true, schema: { type: string } }
   responses:
+    SCIMError:
+      description: SCIM error (RFC 7644 §3.12).
+      content:
+        application/scim+json:
+          schema:
+            type: object
+            required: [schemas, status]
+            properties: { schemas: { type: array, items: { type: string } }, status: { type: string }, scimType: { type: string }, detail: { type: string } }
     OAuthResourceMetadata:
       description: The MCP endpoint and its authorization server.
       content:
@@ -4038,6 +4159,18 @@ components:
         application/json:
           schema: { type: object, required: [body], properties: { body: { type: string } } }
   schemas:
+    SCIMUser:
+      type: object
+      required: [schemas, id, userName, displayName, active]
+      properties:
+        schemas: { type: array, items: { type: string } }
+        id: { type: string }
+        userName: { type: string }
+        displayName: { type: string }
+        name: { type: object }
+        emails: { type: array, items: { type: object } }
+        active: { type: boolean }
+        meta: { type: object }
     Whiteboard:
       type: object
       required: [id, conversation_id, title, created_by, created_at]

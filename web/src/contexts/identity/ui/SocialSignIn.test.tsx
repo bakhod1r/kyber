@@ -52,9 +52,10 @@ describe("Sign in with Google and Telegram (KYB-S39)", () => {
   it("F6: shows single sign-on and GitHub buttons and explains their failures", async () => {
     mockApi({
       "GET /api/v1/me": anonymous,
-      "GET /api/v1/auth/providers": { status: 200, body: { google: false, oidc: "Okta", github: true, telegram_bot: null } },
+      "GET /api/v1/auth/providers": { status: 200, body: { google: false, oidc: "Okta", saml: "Corp AD", github: true, telegram_bot: null } },
     });
     renderWithProviders(<AppRoutes />, "/login?error=github_email_taken");
+    expect(await screen.findByRole("link", { name: "Continue with Corp AD" })).toHaveAttribute("href", "/api/v1/auth/saml/start");
     expect(await screen.findByRole("link", { name: "Continue with Okta" })).toHaveAttribute("href", "/api/v1/auth/oidc/start");
     expect(screen.getByRole("link", { name: "Continue with GitHub" })).toHaveAttribute("href", "/api/v1/auth/github/start");
     expect(screen.getByRole("alert")).toHaveTextContent("GitHub did not confirm it");

@@ -30,3 +30,7 @@ func TestTokensContract(t *testing.T) {
 }
 
 func TestOAuthContract(t *testing.T) { externaltest.RunOAuth(t, memory.NewRepository(), "u-1") }
+
+func TestDirectoryContract(t *testing.T) {
+	externaltest.RunDirectory(t, memory.NewRepository(), [3]domain.UserID{"d-1", "d-2", "d-3"})
+}

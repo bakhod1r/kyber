@@ -2,7 +2,11 @@
 package main
 
 import (
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
 	"github.com/bakhod1r/kyber/internal/attachment/infrastructure/blobs3"
+	"io"
 	"runtime/debug"
 	"strings"
 
@@ -13,6 +17,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/identity/infrastructure/github"
 	"github.com/bakhod1r/kyber/internal/identity/infrastructure/google"
 	"github.com/bakhod1r/kyber/internal/identity/infrastructure/oidcprovider"
+	samlsp "github.com/bakhod1r/kyber/internal/identity/infrastructure/saml"
 	"github.com/bakhod1r/kyber/internal/identity/infrastructure/telegram"
 	identityhttp "github.com/bakhod1r/kyber/internal/identity/interfaces/httpapi"
 	"github.com/bakhod1r/kyber/internal/notify/infrastructure/smtpmail"
@@ -102,7 +107,12 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 	callback := func(name string) string {
 		return strings.TrimRight(cfg.PublicURL, "/") + "/api/v1/auth/" + name + "/callback"
 	}
+	sp, err := samlSP(ctx, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
 	social := server.WithSocial(identityhttp.Social{
+		SAML: sp, SAMLName: cfg.SAMLName,
 		Google: google.New(google.Config{ClientID: cfg.GoogleClientID, ClientSecret: cfg.GoogleClientSecret, RedirectURL: callback("google")}),
 		OIDC: oidcprovider.New(oidcprovider.Config{Provider: identitydomain.ProviderOIDC, Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID,
 			ClientSecret: cfg.OIDCClientSecret, RedirectURL: callback("oidc"), RequireVerifiedEmail: true}),
@@ -115,7 +125,7 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		server.WithPublicURL(cfg.PublicURL), server.WithAttachmentsDir(cfg.AttachmentsDir), server.WithMQTTAddr(cfg.MQTTAddr),
 		server.WithICE(ice.Parse(cfg.ICEServers), cfg.TURNSecret),
 		server.WithWebhooks(cfg.WebhookAllowPrivate, 0), server.WithGitHubSecret(cfg.GitHubWebhookSecret),
-		server.WithRateLimits(cfg.APIRateLimit, cfg.UploadRateLimit)}, telegramBot(cfg)...)
+		server.WithRateLimits(cfg.APIRateLimit, cfg.UploadRateLimit), server.WithSCIMToken(cfg.SCIMToken)}, telegramBot(cfg)...)
 	if cfg.LiveKitURL != "" {
 		lk, err := livekit.New(livekit.Config{URL: cfg.LiveKitURL, Key: cfg.LiveKitKey, Secret: cfg.LiveKitSecret})
 		if err != nil {
@@ -242,4 +252,52 @@ func outboxCommand(log *slog.Logger, cfg *config.Config, args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// samlSP builds the SAML service provider when an identity provider is configured (ADR-0017).
+func samlSP(ctx context.Context, cfg *config.Config) (identityhttp.SAMLClient, error) {
+	if cfg.SAMLIDPMetadataURL == "" && cfg.SAMLIDPMetadataFile == "" {
+		return nil, nil
+	}
+	var md []byte
+	var err error
+	if cfg.SAMLIDPMetadataFile != "" {
+		md, err = os.ReadFile(cfg.SAMLIDPMetadataFile)
+	} else {
+		md, err = fetch(ctx, cfg.SAMLIDPMetadataURL)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("saml: identity provider metadata: %w", err)
+	}
+	pair, err := tls.LoadX509KeyPair(cfg.SAMLCertFile, cfg.SAMLKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("saml: KYBER_SAML_CERT_FILE / KYBER_SAML_KEY_FILE: %w", err)
+	}
+	key, ok := pair.PrivateKey.(*rsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("saml: the service provider key must be RSA")
+	}
+	cert, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil {
+		return nil, err
+	}
+	return samlsp.New(samlsp.Config{BaseURL: cfg.PublicURL, IDPMetadata: md, Key: key, Cert: cert})
+}
+
+func fetch(ctx context.Context, u string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GET %s: %s", u, res.Status)
+	}
+	return io.ReadAll(io.LimitReader(res.Body, 1<<20))
 }

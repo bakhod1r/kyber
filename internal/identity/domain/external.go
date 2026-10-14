@@ -15,11 +15,12 @@ const (
 	ProviderTelegram Provider = "telegram"
 	ProviderOIDC     Provider = "oidc"   // the installation's generic OpenID Connect provider (SSO)
 	ProviderGitHub   Provider = "github" // subject = GitHub's numeric user id
+	ProviderSAML     Provider = "saml"   // the installation's SAML identity provider; subject = NameID
 )
 
 func (p Provider) Valid() bool {
 	switch p {
-	case ProviderGoogle, ProviderTelegram, ProviderOIDC, ProviderGitHub:
+	case ProviderGoogle, ProviderTelegram, ProviderOIDC, ProviderGitHub, ProviderSAML:
 		return true
 	}
 	return false

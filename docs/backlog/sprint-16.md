@@ -7,7 +7,7 @@ acceptance tests, and a Playwright e2e against a real LiveKit server).
 
 - ✅ **S99 Room calls in the domain** — a call is a mesh (≤ 6) or a room on the media server (≤ 50); a room has no
   browser-to-browser signaling; only participants enter it. AC: limits per mode; persisted.
-  **Done:** `Call.Room`, `StartRoom`, `Limit`, `EnterRoom`; migration 0084; repository contract.
+  **Done:** `Call.Room`, `StartRoom`, `Limit`, `EnterRoom`; migration 0086; repository contract.
 - ✅ **S100 Room tickets** — `Rooms` port; with a media server new calls are rooms; `POST /calls/{id}/room` returns a
   short-lived LiveKit token for that room only (API 0.70.0). AC: outsiders 404, members not in the call 409,
   a mesh call 409; the secret never leaves the server.

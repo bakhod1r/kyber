@@ -691,3 +691,43 @@ func (q *Query) Run(issues []Issue, r Resolver) ([]Issue, error) {
 	})
 	return out, nil
 }
+
+// Narrow is what a query certainly requires, for the store to pre-filter (push down to SQL):
+// the values of top-level positive `=` / `IN` clauses on a few fields, normalised like the
+// evaluator compares them. nil = no constraint. The query itself still decides every match, so
+// a narrow may only ever be wider than the result.
+type Narrow struct {
+	Projects, Types, Priorities, Labels []string
+}
+
+// Narrow collects the conjuncts of the WHERE clause that are safe to push down.
+func (q *Query) Narrow() Narrow {
+	var n Narrow
+	var walk func(node)
+	walk = func(x node) {
+		switch c := x.(type) {
+		case and:
+			walk(c.l)
+			walk(c.r)
+		case clause:
+			if c.kind != kEnum || (c.op != "=" && c.op != "in") {
+				return
+			}
+			var vals []string
+			for _, v := range c.values {
+				if v.fn != "" || v.empty {
+					return
+				}
+				vals = append(vals, norm(v.text))
+			}
+			target := map[string]*[]string{"project": &n.Projects, "type": &n.Types, "priority": &n.Priorities, "labels": &n.Labels}[c.field]
+			if target != nil && *target == nil {
+				*target = vals
+			}
+		}
+	}
+	if q.where != nil {
+		walk(q.where)
+	}
+	return n
+}

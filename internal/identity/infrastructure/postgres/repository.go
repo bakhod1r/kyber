@@ -28,7 +28,7 @@ func (r *Repository) Create(ctx context.Context, u *domain.User) error {
 	return err
 }
 
-const userCols = `SELECT id::text, email, name, password_hash FROM users`
+const userCols = `SELECT id::text, email, name, password_hash, active FROM users`
 
 func (r *Repository) ByEmail(ctx context.Context, e domain.Email) (*domain.User, error) {
 	return scanUser(r.pool.QueryRow(ctx, userCols+` WHERE email = $1`, e.String()))
@@ -43,13 +43,14 @@ func (r *Repository) ByID(ctx context.Context, uid domain.UserID) (*domain.User,
 
 func scanUser(row pgx.Row) (*domain.User, error) {
 	var id, email, name, hash string
-	if err := row.Scan(&id, &email, &name, &hash); err != nil {
+	var active bool
+	if err := row.Scan(&id, &email, &name, &hash, &active); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrUserNotFound
 		}
 		return nil, err
 	}
-	return domain.NewUser(domain.UserID(id), domain.Email(email), name, hash)
+	return domain.RehydrateUser(domain.UserID(id), domain.Email(email), name, hash, active), nil
 }
 
 func (r *Repository) CreateSession(ctx context.Context, s domain.Session) error {

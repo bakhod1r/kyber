@@ -17,7 +17,8 @@ type fakes struct {
 	issues   map[string][]domain.Issue       // project → facts
 	sprints  map[string][]application.Sprint // project → sprints
 	versions map[string][]application.NamedID
-	fail     string // port to fail: projects, issues, sprints, versions, users
+	fail     string   // port to fail: projects, issues, sprints, versions, users
+	read     []string // projects whose facts were read, with the narrow passed
 }
 
 var boom = errors.New("boom")
@@ -28,10 +29,11 @@ func (f *fakes) Browsable(_ context.Context, actor string) ([]string, error) {
 	}
 	return f.projects[actor], nil
 }
-func (f *fakes) Facts(_ context.Context, _, project string) ([]domain.Issue, error) {
+func (f *fakes) Facts(_ context.Context, _, project string, n domain.Narrow) ([]domain.Issue, error) {
 	if f.fail == "issues" {
 		return nil, boom
 	}
+	f.read = append(f.read, fmt.Sprintf("%s%v", project, n.Types))
 	return f.issues[project], nil
 }
 func (f *fakes) CustomFields(_ context.Context, project string) (map[string]domain.CustomType, error) {
@@ -120,6 +122,19 @@ func TestSearch(t *testing.T) {
 		if _, err := s.Search(ctx, "u-ali", `assignee = "x@x.uz"`, 0); !errors.Is(err, boom) {
 			t.Errorf("%s failure: %v", port, err)
 		}
+	}
+}
+
+// JQL pushdown: a query naming projects reads only those, and passes its narrow to the store.
+func TestSearchPushdown(t *testing.T) {
+	s, f := setup()
+	f.read = nil
+	r, err := s.Search(context.Background(), "u-ali", "project = kyb AND type in (bug, story)", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(f.read) != "[KYB[bug story]]" {
+		t.Fatalf("read = %v (result %s)", f.read, keys(r))
 	}
 }
 

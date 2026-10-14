@@ -46,10 +46,11 @@ type Issues struct{ src IssueSource }
 
 func NewIssues(src IssueSource) Issues { return Issues{src: src} }
 
-// Facts lists the project's issues the actor may see (Browse and security levels are applied by
+// Facts lists the project's issues the actor may see, pre-filtered in the store by the query's
+// narrow, (Browse and security levels are applied by
 // Issue Tracking), as query facts. A project the actor may not browse yields nothing.
-func (a Issues) Facts(ctx context.Context, actor, project string) ([]domain.Issue, error) {
-	list, err := a.src.List(ctx, actor, project, issueapp.ListQuery{})
+func (a Issues) Facts(ctx context.Context, actor, project string, n domain.Narrow) ([]domain.Issue, error) {
+	list, err := a.src.List(ctx, actor, project, issueapp.ListQuery{Types: n.Types, Priorities: n.Priorities, LabelKeys: n.Labels})
 	if errors.Is(err, issueapp.ErrProjectNotFound) || errors.Is(err, issueapp.ErrForbidden) {
 		return nil, nil
 	}

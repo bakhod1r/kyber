@@ -217,6 +217,8 @@ type deps struct {
 	external      identitydomain.ExternalIdentities
 	tokens        identitydomain.PersonalTokens
 	oauth         identitydomain.OAuthStore
+	directory     identitydomain.Directory
+	scimToken     string
 	social        identityhttp.Social
 	otps          identitydomain.OTPChallenges
 	telegramBot   *telegram.Bot
@@ -313,6 +315,9 @@ func WithWebhooks(allowPrivate bool, every time.Duration) Option {
 func WithRateLimits(api, upload int) Option {
 	return func(d *deps) { d.apiRate, d.uploadRate = api, upload }
 }
+
+// WithSCIMToken enables SCIM 2.0 provisioning at /scim/v2 for the identity provider holding token.
+func WithSCIMToken(token string) Option { return func(d *deps) { d.scimToken = token } }
 
 func WithGitHubSecret(secret string) Option { return func(d *deps) { d.githubSecret = secret } }
 
@@ -415,7 +420,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
 		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), bots: chatmemory.NewBots(), sectionOrders: chatmemory.NewSectionOrders(), calls: callRepo, whiteboards: wbmemory.NewRepository(), wbComments: wbCommentRepo,
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(wbCommentRepo.Outbox, wbCommentRepo.OutboxMeta), events(docCommentRepo.Outbox, docCommentRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
-		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, ready: func(context.Context) error { return nil },
+		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
 		o(&d)
@@ -463,7 +468,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), scheduled: chatpg.NewScheduled(pool), reminders: chatpg.NewReminders(pool), userGroups: chatpg.NewGroups(pool), chatPrefs: chatpg.NewPrefs(pool), bookmarks: chatpg.NewBookmarks(pool), chatWorkflows: chatpg.NewWorkflows(pool), webhooks: chatpg.NewWebhooks(pool), bots: chatpg.NewBots(pool), sectionOrders: chatpg.NewSectionOrders(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool), wbComments: wbpg.NewComments(pool),
-		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, ready: pool.Ping, cookieSecure: cookieSecure,
+		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
 		o(&d)
@@ -647,7 +652,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	go remindMeetings(d.ctx, log, chat.SendDue, d.reminderEvery)      // scheduled messages (S67)
 	go remindMeetings(d.ctx, log, chat.RunWorkflows, d.reminderEvery) // channel workflows (S80)
 	go dispatchWebhooks(d.ctx, log, webhooks, d.webhookEvery)
-	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens), identityapp.WithOAuth(d.oauth)}
+	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens), identityapp.WithOAuth(d.oauth), identityapp.WithDirectory(d.directory)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
 	}
@@ -742,6 +747,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
+	auth.RegisterSCIM(mux, d.scimToken)
 	chatAPI.RegisterPublic(mux) // incoming webhooks (S81): the secret in the URL is the credential
 	webhookHTTP.RegisterPublic(mux)
 	mux.Handle("/api/v1/", auth.RequireAuth(d.rateLimit(log)(tenancy.RequireMember(audit.Record(problemFallback(otel.Routed(api)))))))

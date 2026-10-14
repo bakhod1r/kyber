@@ -42,6 +42,8 @@ var allowedUndocumented = map[string]bool{
 
 func (c *contract) load() error {
 	c.once.Do(func() {
+		openapi3filter.RegisterBodyDecoder("application/scim+json", openapi3filter.JSONBodyDecoder) // SCIM is JSON
+		openapi3filter.RegisterBodyDecoder("application/samlmetadata+xml", openapi3filter.PlainBodyDecoder)
 		loader := openapi3.NewLoader()
 		c.doc, c.err = loader.LoadFromFile("../../api/openapi.yaml")
 		if c.err != nil {

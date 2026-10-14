@@ -38,6 +38,7 @@ type Service struct {
 	botName  string
 	tokens   domain.PersonalTokens // nil = personal access tokens disabled
 	oauth    domain.OAuthStore     // nil = OAuth for MCP clients disabled
+	dir      domain.Directory      // nil = SCIM provisioning disabled
 }
 
 // Option customises the service.
@@ -118,14 +119,21 @@ func (s *Service) login(ctx context.Context, rawEmail, password string) (string,
 		s.hasher.Verify(s.dummy, password)
 		return "", ErrInvalidCredentials
 	}
-	if !s.hasher.Verify(u.PasswordHash(), password) {
+	if !s.hasher.Verify(u.PasswordHash(), password) || !u.Active() {
 		return "", ErrInvalidCredentials
 	}
 	return s.newSession(ctx, u.ID())
 }
 
 // newSession issues an opaque bearer token; only its SHA-256 hash is stored.
+// Every sign-in path (password, social, code) ends here, so a deactivated user gets no session.
 func (s *Service) newSession(ctx context.Context, user domain.UserID) (string, error) {
+	if _, err := s.activeUser(ctx, user); err != nil {
+		if errors.Is(err, ErrUnauthenticated) {
+			return "", ErrInvalidCredentials
+		}
+		return "", err
+	}
 	var raw [32]byte
 	_, _ = rand.Read(raw[:]) // never fails (Go 1.24+: crypto/rand.Read panics instead of erroring)
 	token := base64.RawURLEncoding.EncodeToString(raw[:])
@@ -149,8 +157,13 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User,
 	if !s.clock.Now().Before(sess.ExpiresAt) {
 		return nil, ErrUnauthenticated
 	}
-	u, err := s.users.ByID(ctx, sess.UserID)
-	if errors.Is(err, domain.ErrUserNotFound) {
+	return s.activeUser(ctx, sess.UserID)
+}
+
+// activeUser loads a signed-in user; a deleted or deactivated (SCIM) user is unauthenticated.
+func (s *Service) activeUser(ctx context.Context, id domain.UserID) (*domain.User, error) {
+	u, err := s.users.ByID(ctx, id)
+	if errors.Is(err, domain.ErrUserNotFound) || err == nil && !u.Active() {
 		return nil, ErrUnauthenticated
 	}
 	return u, err
