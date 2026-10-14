@@ -339,6 +339,122 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/webhooks:
+    parameters: [{ name: key, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: listProjectWebhooks
+      description: The project's outgoing webhooks, oldest first (project administrators). Secrets are never listed.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ProjectWebhook" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createProjectWebhook
+      description: >-
+        Add a webhook (project administrators). Matching project events are POSTed as JSON
+        {id, event, project, occurred_at, data} with X-Kyber-Event, X-Kyber-Delivery and
+        X-Kyber-Signature (sha256=<hex HMAC-SHA256 of the body>) headers; data carries identifiers only (ADR-0014).
+        The generated secret is returned only in this response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WebhookInput" }
+      responses:
+        "201":
+          description: Created (with its secret)
+          content: { application/json: { schema: { $ref: "#/components/schemas/ProjectWebhook" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/webhooks/{id}:
+    parameters:
+      - { name: key, in: path, required: true, schema: { type: string } }
+      - { name: id, in: path, required: true, schema: { type: string } }
+    put:
+      operationId: updateProjectWebhook
+      description: Change the URL, events and active flag (the secret stays).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WebhookInput" }
+      responses:
+        "200":
+          description: Updated
+          content: { application/json: { schema: { $ref: "#/components/schemas/ProjectWebhook" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteProjectWebhook
+      description: Remove the webhook and its delivery history.
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/webhooks/{id}/deliveries:
+    parameters:
+      - { name: key, in: path, required: true, schema: { type: string } }
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: listProjectWebhookDeliveries
+      description: The webhook's 20 latest deliveries, newest first. Failed attempts are retried with exponential backoff up to 8 times.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/WebhookDelivery" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/issues/{key}/development:
+    parameters: [{ name: key, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: listDevelopment
+      description: Commits and pull requests that mention the issue key, most recently updated first (needs browse on the issue).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/DevelopmentLink" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/integrations/github:
+    post:
+      operationId: githubWebhook
+      security: []
+      description: >-
+        GitHub webhook receiver (push and pull_request events; others are acknowledged and ignored). Authenticated by
+        X-Hub-Signature-256 with KYBER_GITHUB_WEBHOOK_SECRET instead of a session; 404 when that is not configured.
+        Issue keys in commit messages, PR titles and branch names become development links.
+      parameters:
+        - { name: X-GitHub-Event, in: header, required: false, schema: { type: string } }
+        - { name: X-Hub-Signature-256, in: header, required: false, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema: { type: object, required: [linked], properties: { linked: { type: integer, description: "Development links saved" } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/me/tokens:
     get:
       operationId: listTokens
@@ -3867,6 +3983,49 @@ components:
         uploaded_at: { type: string, format: date-time }
         inline: { type: boolean, description: "Browsers may show it in place (images, PDF)" }
         url: { type: string }
+    ProjectWebhook:
+      type: object
+      required: [id, project, url, events, active, created_by, created_at]
+      properties:
+        id: { type: string }
+        project: { type: string }
+        url: { type: string, description: "https, or http for localhost only" }
+        events: { type: array, items: { type: string }, description: 'Event names (e.g. issue.created) or "*" for all' }
+        active: { type: boolean }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        secret: { type: string, description: "HMAC-SHA256 signing key; only in the response that creates the webhook" }
+    WebhookInput:
+      type: object
+      required: [url, events]
+      properties:
+        url: { type: string }
+        events: { type: array, items: { type: string } }
+        active: { type: boolean, description: "Defaults to true" }
+    WebhookDelivery:
+      type: object
+      required: [id, event, status, attempts, last_status, last_error, created_at]
+      properties:
+        id: { type: string }
+        event: { type: string }
+        status: { type: string, enum: [pending, delivered, failed] }
+        attempts: { type: integer }
+        last_status: { type: integer, description: "HTTP status of the latest attempt (0 = no response)" }
+        last_error: { type: string }
+        created_at: { type: string, format: date-time }
+        next_at: { type: string, format: date-time, description: "Next attempt (pending only)" }
+        delivered_at: { type: string, format: date-time }
+    DevelopmentLink:
+      type: object
+      required: [kind, repo, ref, url, title, state, updated_at]
+      properties:
+        kind: { type: string, enum: [commit, pull_request] }
+        repo: { type: string }
+        ref: { type: string, description: "Commit SHA or pull request number" }
+        url: { type: string }
+        title: { type: string }
+        state: { type: string, description: "Pull requests: open, closed or merged" }
+        updated_at: { type: string, format: date-time }
     AdminMember:
       type: object
       required: [id, name, email, role]

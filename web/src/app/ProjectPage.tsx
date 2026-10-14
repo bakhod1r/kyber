@@ -21,6 +21,8 @@ import { Announcements } from "../contexts/announcement/ui/Announcements";
 import { Docs } from "../contexts/docs/ui/Docs";
 import { Forms } from "../contexts/form/ui/Forms";
 import { Goals } from "../contexts/goal/ui/Goals";
+import { Webhooks } from "../contexts/webhook/ui/Webhooks";
+import { Development } from "../contexts/webhook/ui/Development";
 import { Timeline } from "../contexts/issue/ui/Timeline";
 import { ProjectSummary } from "../contexts/insights/ui/ProjectSummary";
 import { IssueList } from "../contexts/search/ui/IssueList";
@@ -35,7 +37,7 @@ function ProjectDocs({ projectKey }: { projectKey: string }) {
 }
 import { useT } from "../shared/i18n/i18n";
 
-export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "docs" | "forms" | "announcements" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" }) {
+export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "docs" | "forms" | "announcements" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" | "webhooks" }) {
   const t = useT();
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
@@ -78,6 +80,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         <NavLink to={`/projects/${encodeURIComponent(key)}/fields`}>{t("Fields")}</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/permissions`}>{t("Permissions")}</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/notifications`}>{t("Notifications")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/webhooks`}>{t("Webhooks")}</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/import`}>{t("Import")}</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/audit`}>{t("Audit")}</NavLink>
       </nav>
@@ -105,10 +108,16 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         {view === "forms" && <Forms projectKey={key} onOpen={setOpen} />}
         {view === "permissions" && <PermissionScheme projectKey={key} />}
         {view === "notifications" && <TelegramGroups projectKey={key} />}
+        {view === "webhooks" && <Webhooks projectKey={key} />}
         <Members projectKey={key} />
       </div>
       {open && (
-        <IssuePanel issueKey={open} projectKey={key} me={me.data?.id} onClose={() => setOpen(null)} onOpen={setOpen} extensions={<IssueFocus issueKey={open} />} />
+        <IssuePanel issueKey={open} projectKey={key} me={me.data?.id} onClose={() => setOpen(null)} onOpen={setOpen} extensions={
+            <>
+              <Development issueKey={open} />
+              <IssueFocus issueKey={open} />
+            </>
+          } />
       )}
     </div>
   );

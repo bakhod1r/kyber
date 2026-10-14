@@ -42,3 +42,6 @@
 ./internal/attachment/application
 ./internal/attachment/infrastructure/memory
 ./internal/issue/infrastructure/livehints
+./internal/webhook/domain
+./internal/webhook/application
+./internal/webhook/infrastructure/memory

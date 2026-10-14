@@ -3,6 +3,8 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	attapp "github.com/bakhod1r/kyber/internal/attachment/application"
@@ -12,6 +14,13 @@ import (
 	attmemory "github.com/bakhod1r/kyber/internal/attachment/infrastructure/memory"
 	attpg "github.com/bakhod1r/kyber/internal/attachment/infrastructure/postgres"
 	atthttp "github.com/bakhod1r/kyber/internal/attachment/interfaces/httpapi"
+	whapp "github.com/bakhod1r/kyber/internal/webhook/application"
+	whdomain "github.com/bakhod1r/kyber/internal/webhook/domain"
+	whacl "github.com/bakhod1r/kyber/internal/webhook/infrastructure/acl"
+	"github.com/bakhod1r/kyber/internal/webhook/infrastructure/httpsend"
+	whmemory "github.com/bakhod1r/kyber/internal/webhook/infrastructure/memory"
+	whpg "github.com/bakhod1r/kyber/internal/webhook/infrastructure/postgres"
+	whhttp "github.com/bakhod1r/kyber/internal/webhook/interfaces/httpapi"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -188,6 +197,12 @@ type deps struct {
 	pages         docsdomain.Repository
 	docComments   docsdomain.Comments
 	attachments   attdomain.Repository
+	projectHooks  whdomain.Repository
+	whDeliveries  whdomain.DeliveryRepository
+	devLinks      whdomain.LinkRepository
+	webhookOpen   bool          // deliver to private/loopback addresses too (KYBER_WEBHOOK_ALLOW_PRIVATE)
+	webhookEvery  time.Duration // how often due webhook deliveries are sent (default 2s)
+	githubSecret  string
 	blobs         attapp.Blobs
 	forms         formdomain.Repository
 	announcements anndomain.Repository
@@ -279,6 +294,15 @@ func WithAttachmentsDir(dir string) Option { return func(d *deps) { d.blobs = bl
 // WithAttachmentStore stores uploaded files in blobs (e.g. an S3 bucket).
 func WithAttachmentStore(blobs attapp.Blobs) Option { return func(d *deps) { d.blobs = blobs } }
 
+// WithWebhooks configures outgoing webhooks: allowPrivate lets deliveries reach loopback and
+// private addresses (otherwise refused against SSRF); every is the dispatch interval (0 = 2s).
+func WithWebhooks(allowPrivate bool, every time.Duration) Option {
+	return func(d *deps) { d.webhookOpen, d.webhookEvery = allowPrivate, every }
+}
+
+// WithGitHubSecret enables POST /api/v1/integrations/github, verified with this shared secret.
+func WithGitHubSecret(secret string) Option { return func(d *deps) { d.githubSecret = secret } }
+
 func WithPublicURL(u string) Option { return func(d *deps) { d.publicURL = u } }
 
 // WithDispatchEvery sets how often email/Telegram deliveries are sent (default 5 s).
@@ -356,7 +380,9 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	versionRepo := agilememory.NewVersionRepository()
 	annRepo := annmemory.NewRepository()
 	meetingRepo := calendarmemory.NewRepository()
+	hooks := whmemory.NewStore()
 	d := deps{
+		projectHooks: hooks.Webhooks(), whDeliveries: hooks.Deliveries(), devLinks: hooks.Links(),
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), reactions: issuememory.NewReactionRepository(), worklogs: issuememory.NewWorklogRepository(), fields: issuememory.NewCustomFieldRepository(),
 		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: pageRepo, docComments: docCommentRepo, attachments: attmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
@@ -405,6 +431,7 @@ func StartJobs(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, purgeE
 func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts ...Option) http.Handler {
 	ids := identitypg.NewRepository(pool)
 	d := deps{
+		projectHooks: whpg.NewWebhooks(pool), whDeliveries: whpg.NewDeliveries(pool), devLinks: whpg.NewLinks(pool),
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), reactions: issuepg.NewReactionRepository(pool), worklogs: issuepg.NewWorklogRepository(pool), fields: issuepg.NewCustomFieldRepository(pool),
 		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), docComments: docspg.NewComments(pool), attachments: attpg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
@@ -579,6 +606,10 @@ func build(log *slog.Logger, d deps) http.Handler {
 	relay.HandleAll(live.OnEvent(hints, log))
 	// Presence is ephemeral and kept per replica (ADR-0013); the hint reaches every replica.
 	presence := issueapp.NewPresence(issues, issuememory.NewPresenceRegistry(), livehints.New(hints, log), time.Now)
+	webhooks := whapp.NewService(whapp.Deps{Webhooks: d.projectHooks, Deliveries: d.whDeliveries, Links: d.devLinks,
+		Projects: whacl.NewProjects(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), Issues: whacl.NewIssues(issues),
+		Sender: httpsend.New(d.webhookOpen, 10*time.Second), NewID: id.New, NewSecret: newSecret, Now: time.Now})
+	relay.HandleAll(webhooks.OnEvent)
 	if d.ctx == nil {
 		d.ctx = context.Background()
 	}
@@ -591,6 +622,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	go remindMeetings(d.ctx, log, chat.RemindDue, d.reminderEvery)    // saved messages (S65), /remind (S67)
 	go remindMeetings(d.ctx, log, chat.SendDue, d.reminderEvery)      // scheduled messages (S67)
 	go remindMeetings(d.ctx, log, chat.RunWorkflows, d.reminderEvery) // channel workflows (S80)
+	go dispatchWebhooks(d.ctx, log, webhooks, d.webhookEvery)
 	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
@@ -635,6 +667,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	formhttp.New(forms, log).Register(api)
 	agilehttp.New(agile, log).Register(api)
 	notifyhttp.New(notify, log).Register(api)
+	webhookHTTP := whhttp.New(webhooks, log, d.githubSecret)
+	webhookHTTP.Register(api)
 	insightshttp.New(insights, log).Register(api)
 	importerhttp.New(importer, log).Register(api)
 	tenancy.Register(api)
@@ -684,6 +718,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
 	chatAPI.RegisterPublic(mux) // incoming webhooks (S81): the secret in the URL is the credential
+	webhookHTTP.RegisterPublic(mux)
 	mux.Handle("/api/v1/", auth.RequireAuth(tenancy.RequireMember(audit.Record(problemFallback(otel.Routed(api))))))
 	mux.Handle("/", web.Handler(web.Dist()))
 	return otel.Middleware(observe(log, m, recoverer(log, tenancy.Resolve(otel.Routed(mux)))))
@@ -843,6 +878,38 @@ func dispatch(ctx context.Context, log *slog.Logger, notify *notifyapp.Service, 
 			}
 		}
 	}
+}
+
+// dispatchWebhooks sends due webhook deliveries until ctx ends.
+func dispatchWebhooks(ctx context.Context, log *slog.Logger, webhooks *whapp.Service, every time.Duration) {
+	if every == 0 {
+		every = 2 * time.Second
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			for {
+				n, err := webhooks.Dispatch(ctx)
+				if err != nil {
+					log.ErrorContext(ctx, "webhooks: dispatch failed", "err", err)
+				}
+				if err != nil || n == 0 {
+					break
+				}
+			}
+		}
+	}
+}
+
+// newSecret is a webhook's signing key: 32 random bytes, hex.
+func newSecret() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // botMessenger is the bot as a notify.Messenger (nil when no bot is configured).

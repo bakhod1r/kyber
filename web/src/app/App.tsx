@@ -96,6 +96,7 @@ export function AppRoutes() {
       <Route path="/chat" element={<RequireUser><ChatPage extras={extras} activity={<ChatMentions />} commands={runChatCommand} issueMaker={issueFromMessage} /></RequireUser>} />
       <Route path="/chat/:id" element={<RequireUser><ChatPage extras={extras} activity={<ChatMentions />} commands={runChatCommand} issueMaker={issueFromMessage} /></RequireUser>} />
       <Route path="/meetings" element={<RequireUser><Meetings /></RequireUser>} />
+      <Route path="/projects/:key/webhooks" element={<RequireUser><ProjectPage view="webhooks" /></RequireUser>} />
       <Route path="/search" element={<RequireUser><SearchPage /></RequireUser>} />
       <Route path="/settings" element={<RequireUser><SettingsPage /><AppearanceSettings /><AccessTokens /></RequireUser>} />
       <Route path="*" element={<Navigate to="/" replace />} />
