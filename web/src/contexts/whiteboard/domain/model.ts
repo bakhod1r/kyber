@@ -1,5 +1,5 @@
 // whiteboard: domain model — Zoom-style boards drawn together (S59). Pure types and rules, no I/O.
-export type Kind = "rect" | "ellipse" | "arrow" | "line" | "freehand" | "text" | "sticky";
+export type Kind = "rect" | "ellipse" | "arrow" | "line" | "freehand" | "text" | "sticky" | "image";
 export type Point = { x: number; y: number };
 export type Element = {
   id: string; kind: Kind; x: number; y: number; w: number; h: number; points: Point[]; text: string; color: string;
@@ -154,7 +154,8 @@ export function fit(els: Element[], page: { w: number; h: number }, margin = 40)
 
 /** S90: the eight handles that resize a box. */
 export type Handle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
-export const HANDLES: Handle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+/** Drawn in this order: "se" last, so it is on top (the one to grab) when a tiny element's handles overlap. */
+export const HANDLES: Handle[] = ["nw", "n", "ne", "e", "s", "sw", "w", "se"];
 export const MIN_SIZE = 8;
 
 /** resize drags handle h of a box by (dx, dy); the opposite side stays put and the box never turns inside out. */
@@ -223,7 +224,7 @@ export function look(e: Pick<Element, "kind" | "color" | "stroke" | "fill" | "da
 /** restyle applies a style to the elements it means something for (sticky notes and text have no stroke). */
 export function restyle(els: Element[], style: Pick<Element, "stroke" | "fill" | "dashed">): Element[] {
   return els
-    .filter((e) => e.kind !== "sticky" && e.kind !== "text")
+    .filter((e) => e.kind !== "sticky" && e.kind !== "text" && e.kind !== "image")
     .map((e) => {
       const fillable = e.kind === "rect" || e.kind === "ellipse";
       const next = { ...e, ...style };
@@ -277,3 +278,14 @@ export function toBack(sel: Element[], all: Elements): Element[] {
 
 /** S93: the elements an eraser stroke (board points) passes over. */
 export const erased = (els: Element[], path: Point[]): Element[] => els.filter((e) => path.some((p) => hit(e, p, 8)));
+
+/** S96: an image element shows a board picture; its text is the picture's id. */
+export const imageURL = (board: string, e: Pick<Element, "text">) =>
+  `/api/v1/whiteboards/${encodeURIComponent(board)}/images/${encodeURIComponent(e.text)}`;
+
+/** fitImage sizes a picture of natural size w×h to at most 480 on its longer side (smaller ones keep their size). */
+export function fitImage(w: number, h: number, max = 480): { w: number; h: number } {
+  if (w <= 0 || h <= 0) return { w: 320, h: 240 };
+  const k = Math.min(1, max / Math.max(w, h));
+  return { w: Math.round(w * k), h: Math.round(h * k) };
+}

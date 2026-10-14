@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.68.0
+  version: 0.69.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1874,6 +1874,32 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/whiteboards/{id}/images:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: uploadWhiteboardImage
+      description: >-
+        A member uploads a picture for the board (S96): the body is the image (PNG, JPEG, GIF or WebP, at most 10 MB;
+        SVG is refused). Show it with an element of kind image whose text is the returned id.
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+      responses:
+        "201":
+          description: Stored
+          content: { application/json: { schema: { type: object, required: [id, url], properties: { id: { type: string }, url: { type: string } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/whiteboards/{id}/images/{image}:
+    get:
+      operationId: getWhiteboardImage
+      description: A board's picture, for members of its conversation.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: image, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The image, content: { image/*: { schema: { type: string, format: binary } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/whiteboard-comments/{id}:
     delete:
       operationId: removeWhiteboardComment
@@ -3976,7 +4002,7 @@ components:
       required: [id, kind, x, y, w, h, points, text, color, version]
       properties:
         id: { type: string }
-        kind: { type: string, description: "rect, ellipse, arrow, line, freehand, text or sticky" }
+        kind: { type: string, description: "rect, ellipse, arrow, line, freehand, text, sticky or image (S96: text is the image id)" }
         x: { type: number }
         y: { type: number }
         w: { type: number }

@@ -55,7 +55,7 @@ const (
 	OpDelete OpKind = "delete"
 )
 
-var kinds = map[ElementKind]bool{KindRect: true, KindEllipse: true, KindArrow: true, KindLine: true, KindFreehand: true, KindText: true, KindSticky: true}
+var kinds = map[ElementKind]bool{KindRect: true, KindEllipse: true, KindArrow: true, KindLine: true, KindFreehand: true, KindText: true, KindSticky: true, KindImage: true}
 
 var (
 	color     = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
@@ -113,6 +113,8 @@ func (e Element) valid() error {
 		return bad("stroke")
 	case !coord(e.Z):
 		return bad("order")
+	case e.Kind == KindImage && (!elementID.MatchString(e.Text) || e.W <= 0 || e.H <= 0):
+		return bad("image")
 	}
 	for _, p := range e.Points {
 		if !coord(p.X) || !coord(p.Y) {

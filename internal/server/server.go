@@ -168,6 +168,7 @@ import (
 	wbapp "github.com/bakhod1r/kyber/internal/whiteboard/application"
 	wbdomain "github.com/bakhod1r/kyber/internal/whiteboard/domain"
 	wbacl "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/acl"
+	wbimages "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/images"
 	wbmemory "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/memory"
 	wbpg "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/postgres"
 	wbrealtime "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/realtime"
@@ -697,6 +698,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	chatAPI.Register(api)
 	rt.Register(api, 25*time.Second) // board hints go over MQTT (ADR-0013)
 	whiteboards := wbapp.NewService(wbapp.Deps{Boards: d.whiteboards, Comments: d.wbComments, Conversations: wbacl.NewConversations(chat),
+		Images:   wbimages.New(d.chatBlobs), // S96: pictures live with chat files
 		Notifier: wbrealtime.New(publish, func(e wbdomain.Element) any { return wbhttp.ToDTO(e) }), NewID: id.New, Now: time.Now})
 	wbhttp.New(whiteboards, log).Register(api)
 	m.Gauge("kyber_stream_connections", "Realtime streams open on this replica.", func() float64 { return float64(rt.Connections()) })

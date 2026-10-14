@@ -4,6 +4,7 @@ package application
 import (
 	"context"
 	"errors"
+	"io"
 	"slices"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 var (
 	ErrNoConversation = errors.New("conversation not found")
 	ErrNotAuthor      = errors.New("only its author can remove a comment")
+	ErrNoImages       = errors.New("images are not enabled")
 )
 
 // MaxOps bounds one request.
@@ -34,6 +36,12 @@ type Notifier interface {
 	Commented(ctx context.Context, to []string, c *domain.Comment, removed bool)
 }
 
+// Images stores the bytes of board pictures by key (S96). Open returns domain.ErrImageMissing for an unknown key.
+type Images interface {
+	Put(ctx context.Context, key string, r io.Reader) error
+	Open(ctx context.Context, key string) (io.ReadCloser, error)
+}
+
 type nobody struct{}
 
 func (nobody) Ops(context.Context, []string, domain.WhiteboardID, string, []domain.OpResult)   {}
@@ -43,6 +51,7 @@ func (nobody) Commented(context.Context, []string, *domain.Comment, bool)       
 type Deps struct {
 	Boards        domain.Repository
 	Comments      domain.Comments // optional: element comments (S86)
+	Images        Images          // optional: pictures on boards (S96)
 	Conversations Conversations
 	Notifier      Notifier // optional
 	NewID         func() string

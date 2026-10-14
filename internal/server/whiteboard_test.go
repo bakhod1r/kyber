@@ -1,6 +1,10 @@
 package server_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -93,5 +97,51 @@ func TestWhiteboardComments(t *testing.T) {
 		expect(t, code, 403, x)
 		code, x = lead.do("DELETE", "/api/v1/whiteboard-comments/"+c["id"].(string), nil)
 		expect(t, code, 204, x)
+	})
+}
+
+// S96: members upload a picture to a board, add an image element showing it, and read it back; others cannot.
+func TestWhiteboardImages(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		eve := anon.signedIn("eve@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "design"})
+		_, b := lead.do("POST", "/api/v1/conversations/"+ch["id"].(string)+"/whiteboards", map[string]string{"title": "Mockups"})
+		url := "/api/v1/whiteboards/" + b["id"].(string) + "/images"
+		png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{1}, 64)...)
+		send := func(c *client, body []byte) (int, map[string]any) {
+			req, _ := http.NewRequest("POST", c.srv.URL+url, bytes.NewReader(body))
+			req.Header.Set("Authorization", "Bearer "+c.token)
+			req.Header.Set("Content-Type", "application/octet-stream")
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer res.Body.Close()
+			spec.check(t, req, res)
+			var m map[string]any
+			_ = json.NewDecoder(res.Body).Decode(&m)
+			return res.StatusCode, m
+		}
+		code, img := send(lead, png)
+		expect(t, code, 201, img)
+		code, x := send(eve, png)
+		expect(t, code, 404, x)
+		code, x = send(lead, []byte("<svg xmlns='http://www.w3.org/2000/svg' onload='alert(1)'/>"))
+		expect(t, code, 422, x)
+
+		el := map[string]any{"id": "pic", "kind": "image", "x": 0, "y": 0, "w": 320, "h": 200, "text": img["id"], "points": []any{}, "version": 0}
+		code, r := lead.do("POST", "/api/v1/whiteboards/"+b["id"].(string)+"/ops", map[string]any{"ops": []any{map[string]any{"op": "add", "element": el}}})
+		expect(t, code, 200, r)
+
+		res := lead.raw("GET", img["url"].(string), nil, nil)
+		got, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != 200 || res.Header.Get("Content-Type") != "image/png" || res.Header.Get("X-Content-Type-Options") != "nosniff" || !bytes.Equal(got, png) {
+			t.Fatalf("read = %d %v", res.StatusCode, res.Header)
+		}
+		res = eve.raw("GET", img["url"].(string), nil, nil)
+		res.Body.Close()
+		expect(t, res.StatusCode, 404, nil)
 	})
 }

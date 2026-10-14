@@ -1,5 +1,5 @@
 // whiteboard: HTTP gateway and realtime events (infrastructure).
-import { request, seg, type List } from "../../../shared/http";
+import { ApiError, isProblem, request, seg, type List } from "../../../shared/http";
 import { subscribe } from "../../../shared/stream";
 import type { Element, ElementComment, Op, OpResult, Whiteboard } from "../domain/model";
 
@@ -8,6 +8,15 @@ export const whiteboardGateway = {
     request<List<Whiteboard>>("GET", `/api/v1/conversations/${seg(conversationId)}/whiteboards`).then((r) => r.items),
   create: (conversationId: string, title: string) => request<Whiteboard>("POST", `/api/v1/conversations/${seg(conversationId)}/whiteboards`, { title }),
   get: (id: string) => request<Whiteboard>("GET", `/api/v1/whiteboards/${seg(id)}`),
+  /** S96: uploads a picture (raw body; the header satisfies the CSRF guard for cookie sessions). */
+  uploadImage: async (id: string, file: Blob): Promise<{ id: string; url: string }> => {
+    const res = await fetch(`/api/v1/whiteboards/${seg(id)}/images`, {
+      method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream", "X-Kyber-Request": "1" }, body: file,
+    });
+    const data: unknown = await res.json().catch(() => undefined);
+    if (!res.ok) throw new ApiError(res.status, isProblem(data) ? data.detail || data.title : `upload failed (${res.status})`, isProblem(data) ? data.code : "");
+    return data as { id: string; url: string };
+  },
   apply: (id: string, ops: Op[]) => request<{ results: OpResult[] }>("POST", `/api/v1/whiteboards/${seg(id)}/ops`, { ops }).then((r) => r.results),
   comments: (id: string) => request<List<ElementComment>>("GET", `/api/v1/whiteboards/${seg(id)}/comments`).then((r) => r.items),
   comment: (id: string, elementId: string, body: string) =>
