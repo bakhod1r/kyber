@@ -1,21 +1,28 @@
 package live_test
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	paho "github.com/eclipse/paho.mqtt.golang"
+
 	"github.com/bakhod1r/kyber/internal/platform/auth"
 	"github.com/bakhod1r/kyber/internal/platform/live"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
+)
+
+const (
+	ws    = "00000000-0000-4000-8000-0000000000a1"
+	other = "00000000-0000-4000-8000-0000000000a2"
 )
 
 func TestFromMessage(t *testing.T) {
@@ -38,95 +45,164 @@ func TestFromMessage(t *testing.T) {
 	}
 }
 
-// stream opens the SSE handler as user in workspace ws and returns its lines.
-func stream(t *testing.T, h http.Handler, ws, user string) (<-chan string, func()) {
+// ann may browse KYB; ben may browse nothing. Tokens: "ann-token" (ann), "ben-token" (ben).
+func broker(t *testing.T) *live.Broker {
 	t.Helper()
+	revoked := map[string]bool{}
+	can := func(ctx context.Context, user, project string) bool {
+		w, _ := tenant.From(ctx)
+		return w == ws && user == "ann" && project == "KYB" && !revoked[user]
+	}
+	login := func(_ context.Context, workspace, token string) (string, error) {
+		if workspace != ws {
+			return "", errors.New("not a member")
+		}
+		user, ok := map[string]string{"ann-token": "ann", "ben-token": "ben"}[token]
+		if !ok {
+			return "", errors.New("bad token")
+		}
+		return user, nil
+	}
+	b, err := live.NewBroker(can, login, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = b.Close() })
+	return b
+}
+
+type received chan paho.Message
+
+// subscribe connects a client and subscribes to filter; it fails the test if the broker refuses.
+func subscribe(t *testing.T, opts *paho.ClientOptions, filter string) (received, paho.Client) {
+	t.Helper()
+	got := make(received, 10)
+	c := paho.NewClient(opts.SetConnectTimeout(3 * time.Second).SetAutoReconnect(false))
+	if tok := c.Connect(); !tok.WaitTimeout(3*time.Second) || tok.Error() != nil {
+		t.Fatalf("connect: %v", tok.Error())
+	}
+	t.Cleanup(func() { c.Disconnect(10) })
+	tok := c.Subscribe(filter, 0, func(_ paho.Client, m paho.Message) { got <- m })
+	if !tok.WaitTimeout(3*time.Second) || tok.Error() != nil {
+		t.Fatalf("subscribe: %v", tok.Error())
+	}
+	return got, c
+}
+
+func (r received) next(t *testing.T) paho.Message {
+	t.Helper()
+	select {
+	case m := <-r:
+		return m
+	case <-time.After(3 * time.Second):
+		t.Fatal("no message")
+		return nil
+	}
+}
+
+func (r received) none(t *testing.T) {
+	t.Helper()
+	select {
+	case m := <-r:
+		t.Fatalf("unexpected %s %s", m.Topic(), m.Payload())
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+func freeAddr(t *testing.T) string {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	return l.Addr().String()
+}
+
+// Browsers speak MQTT over WebSocket as the user of the authenticated request; only hints of
+// browsable projects are delivered.
+func TestWebSocketClientsGetBrowsableHints(t *testing.T) {
+	b := broker(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, r.WithContext(auth.WithActor(tenant.With(r.Context(), ws), user)))
+		user := r.Header.Get("X-User")
+		b.Handler().ServeHTTP(w, r.WithContext(auth.WithActor(tenant.With(r.Context(), ws), user)))
 	}))
-	ctx, cancel := context.WithCancel(context.Background())
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	defer srv.Close()
+	url := "ws" + strings.TrimPrefix(srv.URL, "http")
+	filter := live.Topic("+", "+") // browsers need not know the workspace id
+	ann, _ := subscribe(t, paho.NewClientOptions().AddBroker(url).SetClientID("web").SetHTTPHeaders(http.Header{"X-User": {"ann"}}), filter)
+	ben, _ := subscribe(t, paho.NewClientOptions().AddBroker(url).SetClientID("web").SetHTTPHeaders(http.Header{"X-User": {"ben"}}), filter)
+
+	b.Publish(live.Change{Workspace: ws, Project: "KYB", Event: "issue.created"})
+	b.Publish(live.Change{Workspace: ws, Project: "OPS", Event: "issue.created"})
+	b.Publish(live.Change{Workspace: other, Project: "KYB", Event: "issue.created"})
+	m := ann.next(t)
+	if m.Topic() != live.Topic(ws, "KYB") || string(m.Payload()) != `{"project":"KYB","event":"issue.created"}` {
+		t.Fatalf("hint = %s %s", m.Topic(), m.Payload())
+	}
+	ann.none(t)
+	ben.none(t)
+	if err := b.Broadcast(context.Background(), live.Change{Workspace: ws, Project: "KYB", Event: "issue.changed"}); err != nil {
+		t.Fatal(err)
+	}
+	if m := ann.next(t); !strings.Contains(string(m.Payload()), "issue.changed") {
+		t.Fatalf("broadcast = %s", m.Payload())
+	}
+}
+
+// Cross-site pages cannot open the socket with a visitor's cookie.
+func TestWebSocketRejectsOtherOrigins(t *testing.T) {
+	b := broker(t)
+	srv := httptest.NewServer(b.Handler())
+	defer srv.Close()
+	req, _ := http.NewRequest("GET", srv.URL, nil)
+	for k, v := range map[string]string{"Connection": "Upgrade", "Upgrade": "websocket", "Sec-WebSocket-Version": "13",
+		"Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==", "Sec-WebSocket-Protocol": "mqtt", "Origin": "https://evil.example"} {
+		req.Header.Set(k, v)
+	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ct := res.Header.Get("Content-Type"); ct != "text/event-stream" {
-		t.Fatalf("content type = %q", ct)
+	res.Body.Close()
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d", res.StatusCode)
 	}
-	lines := make(chan string, 100)
-	go func() {
-		sc := bufio.NewScanner(res.Body)
-		for sc.Scan() {
-			lines <- sc.Text()
-		}
-		close(lines)
-	}()
-	return lines, func() { cancel(); res.Body.Close(); srv.Close() }
 }
 
-// next waits for a line with prefix.
-func next(t *testing.T, lines <-chan string, prefix string) string {
-	t.Helper()
-	timeout := time.After(3 * time.Second)
-	for {
-		select {
-		case l, ok := <-lines:
-			if !ok {
-				t.Fatalf("stream ended waiting for %q", prefix)
-			}
-			if strings.HasPrefix(l, prefix) {
-				return l
-			}
-		case <-timeout:
-			t.Fatalf("no %q line", prefix)
+// Plain MQTT clients log in with workspace id + token; they cannot publish, subscribe outside
+// their workspace, or use multi-level wildcards.
+func TestTCPClients(t *testing.T) {
+	b := broker(t)
+	addr := freeAddr(t)
+	if err := b.ListenTCP(addr); err != nil {
+		t.Fatal(err)
+	}
+	opts := func(user, pass string) *paho.ClientOptions {
+		return paho.NewClientOptions().AddBroker("tcp://" + addr).SetClientID("cli").SetUsername(user).SetPassword(pass)
+	}
+	for _, bad := range [][2]string{{ws, "wrong"}, {other, "ann-token"}} {
+		c := paho.NewClient(opts(bad[0], bad[1]).SetAutoReconnect(false).SetConnectTimeout(3 * time.Second))
+		if tok := c.Connect(); tok.WaitTimeout(3*time.Second) && tok.Error() == nil {
+			t.Fatalf("login %v accepted", bad)
 		}
 	}
-}
-
-func waitSubscribers(t *testing.T, h *live.Hub, n int) {
-	t.Helper()
-	for deadline := time.Now().Add(3 * time.Second); h.Subscribers() != n; {
-		if time.Now().After(deadline) {
-			t.Fatalf("subscribers = %d, want %d", h.Subscribers(), n)
+	got, c := subscribe(t, opts(ws, "ann-token"), live.Topic(ws, "KYB"))
+	for _, filter := range []string{live.Topic(other, "+"), "kyber/#", "#", "kyber/" + ws + "/projects/#", live.Topic(ws, "")} {
+		tok := c.Subscribe(filter, 0, nil)
+		tok.WaitTimeout(3 * time.Second)
+		if st, ok := tok.(*paho.SubscribeToken); !ok || st.Result()[filter] < 0x80 {
+			t.Errorf("subscribed to %q", filter)
 		}
-		time.Sleep(5 * time.Millisecond)
 	}
-}
-
-func TestHandlerStreamsOnlyBrowsableProjects(t *testing.T) {
-	hub := live.NewHub()
-	can := func(_ context.Context, user, project string) bool { return project == "KYB" || user == "admin" }
-	h := hub.Handler(can, 20*time.Millisecond)
-	lines, stop := stream(t, h, "w-1", "dev")
-	defer stop()
-	next(t, lines, ": connected")
-	waitSubscribers(t, hub, 1)
-
-	_ = hub.Broadcast(context.Background(), live.Change{Workspace: "w-1", Project: "SECRET", Event: "issue.created"})
-	_ = hub.Broadcast(context.Background(), live.Change{Workspace: "w-2", Project: "KYB", Event: "issue.created"})
-	_ = hub.Broadcast(context.Background(), live.Change{Workspace: "w-1", Project: "KYB", Event: "issue.changed"})
-	next(t, lines, "event: change")
-	if data := next(t, lines, "data:"); data != `data: {"project":"KYB","event":"issue.changed"}` {
-		t.Fatalf("data = %s", data)
+	c.Publish(live.Topic(ws, "KYB"), 0, false, `{"project":"KYB","event":"forged"}`).WaitTimeout(time.Second)
+	b.Publish(live.Change{Workspace: ws, Project: "KYB", Event: "sprint.started"})
+	if m := got.next(t); !strings.Contains(string(m.Payload()), "sprint.started") {
+		t.Fatalf("got %s (a client publish must be dropped)", m.Payload())
 	}
-	next(t, lines, ": ping")
-	stop()
-	waitSubscribers(t, hub, 0)
-}
-
-func TestSlowSubscriberIsToldToResync(t *testing.T) {
-	hub := live.NewHub()
-	release := make(chan struct{})
-	can := func(context.Context, string, string) bool { <-release; return true }
-	lines, stop := stream(t, hub.Handler(can, time.Hour), "w-1", "dev")
-	defer stop()
-	next(t, lines, ": connected")
-	waitSubscribers(t, hub, 1)
-	for range 100 { // the handler is stuck in can: the buffer fills and overflows
-		hub.Publish(live.Change{Workspace: "w-1", Project: "KYB", Event: "e"})
+	got.none(t)
+	if err := b.ListenTCP(addr); err == nil {
+		t.Fatal("second listener with the same id accepted")
 	}
-	close(release)
-	next(t, lines, "event: resync")
 }
 
 type failing struct{}
@@ -134,139 +210,12 @@ type failing struct{}
 func (failing) Broadcast(context.Context, live.Change) error { return errors.New("db down") }
 
 func TestOnEvent(t *testing.T) {
-	hub := live.NewHub()
 	var logged strings.Builder
 	log := slog.New(slog.NewTextHandler(&logged, nil))
 	if err := live.OnEvent(failing{}, log)(context.Background(), outbox.Message{Name: "e", Payload: []byte(`{"key":"KYB-1"}`)}); err != nil || !strings.Contains(logged.String(), "db down") {
 		t.Fatalf("a failed hint must not fail the event: %v %q", err, logged.String())
 	}
-	if err := live.OnEvent(hub, log)(context.Background(), outbox.Message{Name: "e", Payload: []byte(`{}`)}); err != nil {
+	if err := live.OnEvent(failing{}, log)(context.Background(), outbox.Message{Name: "e", Payload: []byte(`{}`)}); err != nil {
 		t.Fatal(err)
-	}
-	_ = io.Discard
-}
-
-// noFlush is a writer without Flush: the stream cannot work and ends at once.
-type noFlush struct{ http.ResponseWriter }
-
-func TestHandlerNeedsAFlushableConnection(t *testing.T) {
-	hub := live.NewHub()
-	rec := httptest.NewRecorder()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	hub.Handler(func(context.Context, string, string) bool { return true }, time.Hour).
-		ServeHTTP(noFlush{rec}, httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx))
-	if hub.Subscribers() != 0 {
-		t.Fatal("subscriber left behind")
-	}
-}
-
-// brokenConn fails writes after ok of them succeed, like a client that went away.
-type brokenConn struct {
-	header      http.Header
-	ok          int
-	deadlineErr error
-}
-
-func (b *brokenConn) Header() http.Header { return b.header }
-func (b *brokenConn) WriteHeader(int)     {}
-func (b *brokenConn) Write(p []byte) (int, error) {
-	if b.ok == 0 {
-		return 0, errors.New("broken pipe")
-	}
-	b.ok--
-	return len(p), nil
-}
-func (b *brokenConn) FlushError() error                { return nil }
-func (b *brokenConn) SetWriteDeadline(time.Time) error { return b.deadlineErr }
-
-func TestHandlerStopsWhenTheClientIsGone(t *testing.T) {
-	all := func(context.Context, string, string) bool { return true }
-	for _, tc := range []struct {
-		name     string
-		conn     *brokenConn
-		publish  int
-		lagFirst bool
-	}{
-		{"deadline", &brokenConn{deadlineErr: errors.New("closed")}, 0, false},
-		{"connected", &brokenConn{ok: 0}, 0, false},
-		{"ping", &brokenConn{ok: 1}, 0, false},
-		{"change", &brokenConn{ok: 1}, 1, false},
-		{"resync", &brokenConn{ok: 2}, buffer + 5, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			hub := live.NewHub()
-			tc.conn.header = http.Header{}
-			heartbeat := time.Hour
-			if tc.name == "ping" {
-				heartbeat = time.Millisecond
-			}
-			can := all
-			release, entered := make(chan struct{}), make(chan struct{})
-			if tc.lagFirst { // hold the handler in its first check until the buffer overflowed
-				first := true
-				can = func(context.Context, string, string) bool {
-					if first {
-						first = false
-						close(entered)
-						<-release
-					}
-					return true
-				}
-			} else {
-				close(release)
-			}
-			done := make(chan struct{})
-			go func() {
-				hub.Handler(can, heartbeat).ServeHTTP(tc.conn, httptest.NewRequest(http.MethodGet, "/", nil).WithContext(tenant.With(context.Background(), "w-1")))
-				close(done)
-			}()
-			if tc.publish > 0 {
-				waitSubscribers(t, hub, 1)
-				if tc.lagFirst { // the handler takes one hint and waits in can; then the rest overflow
-					hub.Publish(live.Change{Workspace: "w-1", Project: "KYB", Event: "e"})
-					<-entered
-				}
-				for range tc.publish {
-					hub.Publish(live.Change{Workspace: "w-1", Project: "KYB", Event: "e"})
-				}
-				if tc.lagFirst {
-					close(release)
-				}
-			}
-			select {
-			case <-done:
-			case <-time.After(3 * time.Second):
-				t.Fatal("handler kept running for a gone client")
-			}
-		})
-	}
-}
-
-const buffer = 64
-
-// S83: Follow gives the same hints as the handler to another stream (the chat stream carries them).
-func TestFollowFiltersByBrowsing(t *testing.T) {
-	h := live.NewHub()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	hints := h.Follow(ctx, "u-1", "ws", func(_ context.Context, user, project string) bool { return project == "KYB" })
-	for h.Subscribers() == 0 {
-		time.Sleep(time.Millisecond)
-	}
-	h.Publish(live.Change{Workspace: "ws", Project: "SECRET", Event: "issue.created"})
-	h.Publish(live.Change{Workspace: "other", Project: "KYB", Event: "issue.created"})
-	h.Publish(live.Change{Workspace: "ws", Project: "KYB", Event: "issue.changed"})
-	select {
-	case got := <-hints:
-		if got.Type != "change" || string(got.Data) != `{"project":"KYB","event":"issue.changed"}` {
-			t.Fatalf("hint = %+v %s", got, got.Data)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("no hint")
-	}
-	cancel()
-	for h.Subscribers() != 0 {
-		time.Sleep(time.Millisecond)
 	}
 }

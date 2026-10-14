@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -11,15 +12,35 @@ import (
 func TestMeetingText(t *testing.T) {
 	start := time.Date(2026, 10, 17, 15, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
-		event, want string
+		event, zone, want string
 	}{
-		{"meeting.scheduled", "Sat 17 Oct, 15:00–16:00 UTC"},
-		{"meeting.cancelled", "Cancelled — was Sat 17 Oct, 15:00–16:00 UTC"},
-		{"meeting.reminder", "Starts at 15:00 UTC"},
-		{"meeting.other", ""},
+		{"meeting.scheduled", "", "Sat 17 Oct, 15:00–16:00 UTC"},
+		{"meeting.rescheduled", "", "Moved to Sat 17 Oct, 15:00–16:00 UTC"},
+		{"meeting.cancelled", "", "Cancelled — was Sat 17 Oct, 15:00–16:00 UTC"},
+		{"meeting.reminder", "", "Starts at 15:00 UTC"},
+		{"meeting.other", "", ""},
+		// In the recipient's time zone when known.
+		{"meeting.scheduled", "Asia/Tashkent", "Sat 17 Oct, 20:00–21:00 Asia/Tashkent"},
+		{"meeting.rescheduled", "America/New_York", "Moved to Sat 17 Oct, 11:00–12:00 America/New_York"},
+		{"meeting.reminder", "Asia/Tashkent", "Starts at 20:00 Asia/Tashkent"},
+		// An unknown zone falls back to UTC.
+		{"meeting.scheduled", "Mars/Base", "Sat 17 Oct, 15:00–16:00 UTC"},
 	} {
-		if got := domain.MeetingText(tc.event, start, start.Add(time.Hour)); got != tc.want {
-			t.Errorf("%s = %q", tc.event, got)
+		if got := domain.MeetingText(tc.event, start, start.Add(time.Hour), tc.zone); got != tc.want {
+			t.Errorf("%s %s = %q", tc.event, tc.zone, got)
+		}
+	}
+}
+
+func TestTimeZone(t *testing.T) {
+	for _, z := range []string{"", "UTC", "Asia/Tashkent", "Europe/Berlin"} {
+		if err := domain.CheckTimeZone(z); err != nil {
+			t.Errorf("%q: %v", z, err)
+		}
+	}
+	for _, z := range []string{"Mars/Base", "Local", "../../etc/passwd", strings.Repeat("A", 65)} {
+		if err := domain.CheckTimeZone(z); !errors.Is(err, domain.ErrInvalidTimeZone) {
+			t.Errorf("%q: %v", z, err)
 		}
 	}
 }

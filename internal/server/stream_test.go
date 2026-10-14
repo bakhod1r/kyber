@@ -131,25 +131,3 @@ func quietOf(t *testing.T, ch <-chan sse, event string) {
 		}
 	}
 }
-
-// S83: board hints (main's /api/v1/events) also arrive on the chat stream, only for projects one may browse.
-func TestStreamCarriesBoardHints(t *testing.T) {
-	forEachBackend(t, func(t *testing.T, anon *client) {
-		lead := anon.signedIn("lead@x.uz")
-		outsider := anon.signedIn("eve@x.uz")
-		lead.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
-		mine, theirs := lead.stream(""), outsider.stream("")
-		time.Sleep(200 * time.Millisecond) // both subscribed
-		lead.do("POST", "/api/v1/projects/KYB/issues", map[string]string{"title": "Login page", "type": "task"})
-		if e := next(t, mine, "change"); !strings.Contains(e.data, `"project":"KYB"`) || !strings.Contains(e.data, `"event":"issue.created"`) {
-			t.Fatalf("hint = %+v", e)
-		}
-		select {
-		case e := <-theirs:
-			if e.event == "change" {
-				t.Fatalf("outsider got a hint: %+v", e)
-			}
-		case <-time.After(500 * time.Millisecond):
-		}
-	})
-}

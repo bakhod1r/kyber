@@ -1,6 +1,6 @@
 # ADR-0008: Live updates over Server-Sent Events
 
-Status: accepted (2026-10-13)
+Status: superseded by ADR-0013 (2026-10-14)
 
 ## Context
 

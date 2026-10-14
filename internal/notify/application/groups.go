@@ -136,7 +136,7 @@ func (s *Service) OnProjectEvent(ctx context.Context, m outbox.Message) error {
 		ev, project = domain.ProjectEvent{Kind: domain.EventAnnouncement, Actor: actor, Title: e.Title, Text: e.Excerpt}, e.Project
 	}
 	if strings.HasPrefix(m.Name, "meeting.") && e.Project != "" {
-		ev, project = domain.ProjectEvent{Kind: domain.EventMeeting, Title: e.Title, Text: domain.MeetingText(m.Name, e.Start, e.End)}, e.Project
+		ev, project = domain.ProjectEvent{Kind: domain.EventMeeting, Title: e.Title, Text: domain.MeetingText(m.Name, e.Start, e.End, "")}, e.Project
 	}
 	if err != nil || project == "" {
 		return err

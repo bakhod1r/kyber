@@ -16,7 +16,8 @@ afterEach(() => vi.useRealTimers());
 
 describe("Pomodoro precision (stopwatch)", () => {
   it("counts down from the server deadline, ignoring a skewed client clock and sub-second remainders", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // Time stands still unless the test moves it, however slow the machine is.
+    vi.useFakeTimers();
     // The client clock is 1 hour ahead of the server; 90.4 s are left.
     vi.setSystemTime(new Date("2026-10-12T10:00:00.000Z"));
     mockApi({
@@ -26,7 +27,8 @@ describe("Pomodoro precision (stopwatch)", () => {
       },
     });
     renderWithProviders(<FocusTimer />);
-    const timer = await screen.findByRole("timer");
+    for (let i = 0; i < 20 && !screen.queryByRole("timer"); i++) await act(async () => vi.advanceTimersByTimeAsync(0)); // settle the fetch
+    const timer = screen.getByRole("timer");
     expect(timer).toHaveTextContent("01:31"); // ceil: a stopwatch never shows 0 before the end
     await act(async () => vi.advanceTimersByTime(400));
     expect(timer).toHaveTextContent("01:30");

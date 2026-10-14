@@ -14,6 +14,17 @@ describe("api client", () => {
     expect(calls[0]?.body).toEqual({ key: "KYB", name: "Kyber" });
   });
 
+  it("asks for problems in the chosen language", async () => {
+    localStorage.setItem("kyber.lang", "uz");
+    try {
+      const calls = mockApi({ "GET /api/v1/projects": { status: 200, body: { items: [] } } });
+      await projectUseCases.projects();
+      expect(calls[0]?.headers.get("Accept-Language")).toBe("uz");
+    } finally {
+      localStorage.removeItem("kyber.lang");
+    }
+  });
+
   it("surfaces RFC 9457 problems: detail as message, code for branching", async () => {
     mockApi({
       "POST /api/v1/issues/KYB-1/transitions": {

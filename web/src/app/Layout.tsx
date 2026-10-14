@@ -6,8 +6,11 @@ import { FocusTimer } from "../contexts/focus/ui/Focus";
 import { NotificationBell } from "../contexts/notify/ui/NotificationBell";
 import { useLive } from "../shared/live";
 import { adminUseCases } from "../contexts/admin/application";
+import { useT } from "../shared/i18n/i18n";
+import { LanguagePicker } from "../shared/i18n/LanguagePicker";
 
 export function Layout({ user, children }: { user: User; children: ReactNode }) {
+  const t = useT();
   const qc = useQueryClient();
   useLive();
   const admin = useQuery({ queryKey: ["admin", "access"], queryFn: adminUseCases.access, retry: false });
@@ -24,30 +27,31 @@ export function Layout({ user, children }: { user: User; children: ReactNode }) 
       <header className="topbar">
         <Link to="/" className="brand">
           <img src="/logo.svg" alt="" width={28} height={28} />
-          Kyber
+          {t("Kyber")}
         </Link>
         <Link to="/search" className="nav-link">
-          Search
+          {t("Search")}
         </Link>
         <Link to="/chat" className="nav-link">
           Chat
         </Link>
         <Link to="/meetings" className="nav-link">
-          Time table
+          {t("Time table")}
         </Link>
         {admin.data && (
           <Link to="/admin" className="nav-link">
-            Admin
+            {t("Admin")}
           </Link>
         )}
         <span className="spacer" />
         <FocusTimer />
         <NotificationBell />
-        <Link to="/settings" className="user" title="Notification settings">
+        <LanguagePicker />
+        <Link to="/settings" className="user" title={t("Notification settings")}>
           {user.name}
         </Link>
         <button className="ghost" onClick={() => logout.mutate()}>
-          Log out
+          {t("Log out")}
         </button>
       </header>
       <main className="page">{children}</main>

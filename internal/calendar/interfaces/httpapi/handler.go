@@ -26,6 +26,7 @@ func New(svc *application.Service, log *slog.Logger, now func() time.Time) *Hand
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/meetings", h.list)
 	mux.HandleFunc("POST /api/v1/meetings", h.create)
+	mux.HandleFunc("PUT /api/v1/meetings/{id}", h.reschedule)
 	mux.HandleFunc("DELETE /api/v1/meetings/{id}", h.cancel)
 	mux.HandleFunc("PUT /api/v1/meetings/{id}/response", h.respond)
 }
@@ -136,6 +137,25 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, toDTO(m))
+}
+
+func (h *Handler) reschedule(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Title    string    `json:"title"`
+		StartsAt time.Time `json:"starts_at"`
+		EndsAt   time.Time `json:"ends_at"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	m, err := h.svc.Reschedule(r.Context(), auth.Actor(r.Context()), r.PathValue("id"),
+		application.Change{Title: in.Title, Start: in.StartsAt, End: in.EndsAt})
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, toDTO(m))
 }
 
 func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {

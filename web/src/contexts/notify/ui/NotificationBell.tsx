@@ -2,21 +2,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { notificationTarget, notifyUseCases, type Notification } from "../application";
+import { msg, type MessageKey, useT } from "../../../shared/i18n/i18n";
 
-const VERB: Record<Notification["kind"], string> = {
-  assigned: "assigned you",
-  commented: "commented on",
-  mentioned: "mentioned you on",
-  transitioned: "changed the status of",
-  announcement: "announced",
-  meeting: "📅",
-  reminder: "⏰ Reminder",
-  message: "wrote",
-  doc: "mentioned you in a comment on",
+const VERB: Record<Notification["kind"], MessageKey> = {
+  assigned: msg("assigned you"),
+  commented: msg("commented on"),
+  mentioned: msg("mentioned you on"),
+  transitioned: msg("changed the status of"),
+  announcement: msg("announced"),
+  meeting: msg("📅"),
+  reminder: msg("⏰ Reminder"),
+  message: msg("wrote"),
+  doc: msg("mentioned you in a comment on"),
 };
 const where = (n: Notification) => (n.conversation_name ? `#${n.conversation_name}` : "a direct message");
 
 export function NotificationBell() {
+  const t = useT();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -51,7 +53,7 @@ export function NotificationBell() {
       <button
         type="button"
         className="ghost bell-button"
-        aria-label={unread > 0 ? `Notifications (${unread} unread)` : "Notifications"}
+        aria-label={unread > 0 ? t("Notifications ({n} unread)", { n: unread }) : t("Notifications")}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
@@ -61,22 +63,22 @@ export function NotificationBell() {
         {unread > 0 && <span className="badge">{unread > 99 ? "99+" : unread}</span>}
       </button>
       {open && (
-        <div role="dialog" aria-label="Notifications" className="panel bell-panel">
+        <div role="dialog" aria-label={t("Notifications")} className="panel bell-panel">
           <header>
-            <h2>Notifications</h2>
+            <h2>{t("Notifications")}</h2>
             {unread > 0 && (
               <button type="button" className="ghost" onClick={() => markAll.mutate()}>
-                Mark all as read
+                {t("Mark all as read")}
               </button>
             )}
           </header>
-          {inbox.data?.items.length === 0 && <p className="muted">You're all caught up.</p>}
+          {inbox.data?.items.length === 0 && <p className="muted">{t("You're all caught up.")}</p>}
           <ul>
             {inbox.data?.items.map((n) => (
               <li key={n.id}>
                 <button type="button" className={`note${n.read ? "" : " unread"}`} onClick={() => openIssue(n)}>
                   <span className="note-line">
-                    <strong>{n.actor_name}</strong> {n.conversation_id && n.kind === "mentioned" ? "mentioned you" : VERB[n.kind]} <span className="key">{n.conversation_id ? `${n.kind === "reminder" ? "from" : "in"} ${where(n)}` : n.kind === "doc" ? `«${n.issue_title}»` : n.kind === "announcement" || n.kind === "meeting" ? n.project_key || (n.kind === "meeting" ? n.excerpt : "📣") : n.issue_key}</span>
+                    <strong>{n.actor_name}</strong> {n.conversation_id && n.kind === "mentioned" ? t("mentioned you") : t(VERB[n.kind])} <span className="key">{n.conversation_id ? `${n.kind === "reminder" ? t("from") : t("in")} ${where(n)}` : n.kind === "doc" ? `«${n.issue_title}»` : n.kind === "announcement" || n.kind === "meeting" ? n.project_key || (n.kind === "meeting" ? n.excerpt : "📣") : n.issue_key}</span>
                   </span>
                   <span className="note-title">{n.issue_title}</span>
                   {n.excerpt && <span className="note-excerpt">{n.excerpt}</span>}

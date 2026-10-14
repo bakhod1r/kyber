@@ -2,9 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { EXAMPLE_QUERIES, type Filter, searchUseCases } from "../application";
+import { useT } from "../../../shared/i18n/i18n";
 
 /** SearchPage: JQL search across the projects you can see, with saved filters (Jira's issue navigator). */
 export function SearchPage() {
+  const t = useT();
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
   const jql = params.get("jql") ?? "";
@@ -26,8 +28,8 @@ export function SearchPage() {
     },
     onError: (err: Error) => setNotice({ kind: "error" as const, text: err.message }),
   });
-  const save = useMutation({ mutationFn: () => searchUseCases.createFilter({ name, jql: draft, shared }), ...done("Filter saved") });
-  const remove = useMutation({ mutationFn: (f: Filter) => searchUseCases.deleteFilter(f.id), ...done("Filter deleted") });
+  const save = useMutation({ mutationFn: () => searchUseCases.createFilter({ name, jql: draft, shared }), ...done(t("Filter saved")) });
+  const remove = useMutation({ mutationFn: (f: Filter) => searchUseCases.deleteFilter(f.id), ...done(t("Filter deleted")) });
 
   function onSearch(e: FormEvent) {
     e.preventDefault();
@@ -40,17 +42,17 @@ export function SearchPage() {
 
   return (
     <div className="search-page">
-      <h1>Search</h1>
+      <h1>{t("Search")}</h1>
       <form className="row" onSubmit={onSearch}>
         <label className="grow">
-          JQL
-          <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="project = KYB AND status != Done ORDER BY priority DESC" />
+          {t("JQL")}
+          <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t("project = KYB AND status != Done ORDER BY priority DESC")} />
         </label>
-        <button type="submit">Search</button>
+        <button type="submit">{t("Search")}</button>
       </form>
       {!jql && (
         <p className="muted">
-          Try:{" "}
+          {t("Try:")}{" "}
           {EXAMPLE_QUERIES.map((q) => (
             <button key={q} type="button" className="ghost chip" onClick={() => run(q)}>
               {q}
@@ -59,18 +61,18 @@ export function SearchPage() {
         </p>
       )}
       <div className="search-grid">
-        <aside className="panel" aria-label="Saved filters">
-          <h2>Filters</h2>
-          {(filters.data ?? []).length === 0 && <p className="muted">No saved filters yet.</p>}
+        <aside className="panel" aria-label={t("Saved filters")}>
+          <h2>{t("Filters")}</h2>
+          {(filters.data ?? []).length === 0 && <p className="muted">{t("No saved filters yet.")}</p>}
           <ul className="child-list">
             {filters.data?.map((f) => (
               <li key={f.id}>
                 <button type="button" className="ghost" onClick={() => run(f.jql)}>
                   {f.name}
-                  {f.shared && <span className="muted"> · shared</span>}
+                  {f.shared && <span className="muted"> {t("· shared")}</span>}
                 </button>
                 {f.mine && (
-                  <button type="button" className="ghost" aria-label={`Delete filter ${f.name}`} onClick={() => remove.mutate(f)}>
+                  <button type="button" className="ghost" aria-label={t("Delete filter {name}", { name: f.name })} onClick={() => remove.mutate(f)}>
                     ×
                   </button>
                 )}
@@ -79,15 +81,15 @@ export function SearchPage() {
           </ul>
           <form onSubmit={onSave}>
             <label>
-              Save this search as
+              {t("Save this search as")}
               <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
             </label>
             <label className="check">
               <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />
-              Share with the workspace
+              {t("Share with the workspace")}
             </label>
             <button type="submit" disabled={save.isPending || !name.trim()}>
-              Save filter
+              {t("Save filter")}
             </button>
           </form>
           {notice && (
@@ -96,7 +98,7 @@ export function SearchPage() {
             </p>
           )}
         </aside>
-        <section aria-label="Results">
+        <section aria-label={t("Results")}>
           {results.isError && (
             <p role="alert" className="error">
               {results.error.message}
@@ -104,15 +106,15 @@ export function SearchPage() {
           )}
           {results.data && (
             <>
-              <p className="muted">{results.data.total === 1 ? "1 issue" : `${results.data.total} issues`}</p>
+              <p className="muted">{results.data.total === 1 ? t("1 issue") : t("{n} issues", { n: results.data.total })}</p>
               <table className="versions-table">
                 <thead>
                   <tr>
-                    <th scope="col">Key</th>
-                    <th scope="col">Summary</th>
-                    <th scope="col">Type</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Priority</th>
+                    <th scope="col">{t("Key")}</th>
+                    <th scope="col">{t("Summary")}</th>
+                    <th scope="col">{t("Type")}</th>
+                    <th scope="col">{t("Status")}</th>
+                    <th scope="col">{t("Priority")}</th>
                   </tr>
                 </thead>
                 <tbody>

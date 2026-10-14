@@ -13,7 +13,7 @@ import (
 
 var (
 	ErrNotMember = errors.New("every attendee must be a member of the workspace")
-	ErrForbidden = errors.New("only the organizer can cancel a meeting")
+	ErrForbidden = errors.New("only the organizer can change or cancel a meeting")
 	ErrRange     = errors.New("the time table range must be between 1 minute and 62 days")
 	ErrInPast    = errors.New("a meeting cannot start in the past")
 )
@@ -201,16 +201,47 @@ func (s *Service) RemindDue(ctx context.Context) (int, error) {
 	return sent, nil
 }
 
-func (s *Service) Cancel(ctx context.Context, actor, id string) error {
+// Change is a meeting's new title and time.
+type Change struct {
+	Title      string
+	Start, End time.Time
+}
+
+// organized loads a meeting the actor organizes (ErrForbidden for other attendees; outsiders
+// cannot learn that it exists).
+func (s *Service) organized(ctx context.Context, actor, id string) (*domain.Meeting, error) {
 	m, err := s.visible(ctx, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if string(m.Organizer) != actor {
 		if !slices.Contains(m.Attendees, domain.UserID(actor)) {
-			return domain.ErrMeetingNotFound // outsiders cannot learn that it exists
+			return nil, domain.ErrMeetingNotFound
 		}
-		return ErrForbidden
+		return nil, ErrForbidden
+	}
+	return m, nil
+}
+
+// Reschedule moves the organizer's meeting to a new time (not in the past) and title.
+func (s *Service) Reschedule(ctx context.Context, actor, id string, in Change) (*domain.Meeting, error) {
+	if in.Start.Before(s.now().Add(-time.Minute)) {
+		return nil, ErrInPast
+	}
+	m, err := s.organized(ctx, actor, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.Reschedule(in.Title, in.Start, in.End); err != nil {
+		return nil, err
+	}
+	return m, s.repo.Reschedule(ctx, m)
+}
+
+func (s *Service) Cancel(ctx context.Context, actor, id string) error {
+	m, err := s.organized(ctx, actor, id)
+	if err != nil {
+		return err
 	}
 	m.Cancel(domain.UserID(actor))
 	return s.repo.Cancel(ctx, m)

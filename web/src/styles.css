@@ -65,6 +65,7 @@ label { display: grid; gap: 0.25rem; font-size: 0.85rem; color: var(--muted); }
 .brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 1.1rem; color: var(--text); }
 .spacer { flex: 1; }
 .user { color: var(--muted); }
+.lang-picker { width: auto; padding: 0.25rem 0.4rem; font-size: 0.85rem; }
 .page { padding: 1.5rem; max-width: 1400px; margin: 0 auto; }
 
 .auth { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
@@ -574,3 +575,7 @@ label.button { cursor: pointer; }
 .doc-para:hover .doc-pin.ghost { opacity: 1; }
 .doc-comments { margin: 4px 0 8px; }
 .doc-comments ul { list-style: none; padding: 0; }
+
+/* Swimlanes */
+.swimlane { margin-top: 1rem; }
+.swimlane > h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }

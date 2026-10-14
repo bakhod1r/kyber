@@ -13,7 +13,7 @@ func RunPrefs(t *testing.T, newRepo func(t *testing.T) domain.PrefsRepository) {
 	if p, err := repo.Prefs(ctx, Alice); err != nil || p != domain.DefaultPrefs() {
 		t.Fatalf("default = %+v, %v", p, err)
 	}
-	for _, want := range []domain.Prefs{{Email: false, Telegram: true}, {Email: true, Telegram: false}} {
+	for _, want := range []domain.Prefs{{Email: false, Telegram: true}, {Email: true, Telegram: false, TimeZone: "Asia/Tashkent"}, {Email: true, Telegram: true}} {
 		if err := repo.SetPrefs(ctx, Alice, want); err != nil {
 			t.Fatal(err)
 		}

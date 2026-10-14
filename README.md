@@ -48,6 +48,7 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 | `KYBER_ADDR` | `:8080` | Listen address |
 | `KYBER_ATTACHMENTS_DIR` | `./data/attachments` | Uploaded files (`<dir>/<workspace>/<id>`, at most 25 MiB each); back it up together with the database |
 | `KYBER_S3_BUCKET` · `KYBER_S3_ENDPOINT` · `KYBER_S3_REGION` · `KYBER_S3_ACCESS_KEY` · `KYBER_S3_SECRET_KEY` · `KYBER_S3_TLS` | — · `s3.amazonaws.com` · — · — · — · `true` | Store attachments in an existing S3/MinIO bucket instead of the directory (endpoint is `host[:port]`) |
+| `KYBER_MQTT_ADDR` | — | Also serve plain MQTT for integrations (e.g. `:1883`; username = workspace id, password = access token). Browsers use MQTT over WebSocket at `/api/v1/mqtt` (ADR-0013) |
 | `KYBER_DATABASE_URL` | — | PostgreSQL URL; unset = in-memory dev mode. Connect as a non-superuser role so row-level security (ADR-0010) applies |
 | `KYBER_REDIS_URL` | — | Optional; shares the login limiter across replicas (guard) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Enables OpenTelemetry tracing (OTLP/HTTP, e.g. `http://otel-collector:4318`); unset = tracing off. The standard `OTEL_*` variables apply (`OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_SDK_DISABLED`). See ADR-0006 |
@@ -86,13 +87,15 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/probl
 | GET | `/api/v1/sprints/{id}/burndown` | Remaining story points (step line) + ideal line |
 | GET | `/api/v1/notifications[?unread=true]` | Your notifications (assigned, commented, `@email` mentioned) + unread count |
 | POST | `/api/v1/notifications/{id}/read` · `/read-all` | Mark one · all as read |
+| GET · PUT | `/api/v1/me/notification-settings` | Email/Telegram channels and your IANA `time_zone` (meeting times in messages; UTC when unset) |
+| GET · POST | `/api/v1/meetings` | Your time table · schedule a meeting (people, a project or the workspace) |
+| PUT · DELETE | `/api/v1/meetings/{id}` | Reschedule (title/start/end, organizer only; attendees are told and reminded again) · cancel |
 | POST | `/api/v1/issues/{KEY-N}/transitions` | Move issue (`todo ⇄ in_progress ⇄ done`) |
 
 ## AI assistants (MCP)
 
 Kyber is a [Model Context Protocol](https://modelcontextprotocol.io) server at `POST /api/v1/mcp`
-(Streamable HTTP, ADR-0009). Tools: `list_projects`, `search_issues` (JQL), `get_issue`,
-`create_issue`, `add_comment`; each runs with your own permissions. Create a personal access token
+(Streamable HTTP, ADR-0009). Tools: `list_projects`, `search_issues` (JQL), `get_issue`, `create_issue`, `update_issue`, `transition_issue`, `assign_issue`, `add_comment`, `get_comments`, `list_members`, `list_sprints`; each runs with your own permissions. Create a personal access token
 in **Settings → Access tokens** (ADR-0012) and keep it out of shared config files:
 
 ```sh

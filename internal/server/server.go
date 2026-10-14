@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	attapp "github.com/bakhod1r/kyber/internal/attachment/application"
 	attdomain "github.com/bakhod1r/kyber/internal/attachment/domain"
@@ -139,6 +140,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/otel"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	"github.com/bakhod1r/kyber/internal/platform/realtime"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 	projectapp "github.com/bakhod1r/kyber/internal/project/application"
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
 	"github.com/bakhod1r/kyber/internal/project/infrastructure/identitydir"
@@ -199,6 +201,7 @@ type deps struct {
 	telegramBot   *telegram.Bot
 	mailer        notifyapp.Sender
 	publicURL     string
+	mqttAddr      string
 	dispatchEvery time.Duration
 	deliveries    notifydomain.DeliveryRepository
 	prefs         notifydomain.PrefsRepository
@@ -250,6 +253,9 @@ func WithContext(ctx context.Context) Option { return func(d *deps) { d.ctx = ct
 func WithReminderEvery(every time.Duration) Option { return func(d *deps) { d.reminderEvery = every } }
 
 // WithRelayEvery sets how often the outbox relay polls (default 1s).
+// WithMQTTAddr also accepts plain MQTT clients on addr (e.g. ":1883"; ADR-0013).
+func WithMQTTAddr(addr string) Option { return func(d *deps) { d.mqttAddr = addr } }
+
 func WithRelayEvery(every time.Duration) Option { return func(d *deps) { d.relayEvery = every } }
 
 // WithSocial enables sign-in with Google and/or Telegram.
@@ -502,7 +508,29 @@ func build(log *slog.Logger, d deps) http.Handler {
 	notify.WithGroupMentions(notifyacl.NewGroupMentions(chat))
 	notify.WithChatPrefs(chat)
 	relay := outbox.NewRelay(d.outbox, log)
-	hub := live.NewHub()
+	var identity *identityapp.Service // built below; the broker's Login runs only after startup
+	hub, err := live.NewBroker(func(ctx context.Context, user, project string) bool {
+		return projects.Authorize(ctx, projectdomain.UserID(user), project, projectdomain.PermRead) == nil
+	}, func(ctx context.Context, workspace, token string) (string, error) {
+		u, err := identity.Authenticate(ctx, token)
+		if err != nil {
+			return "", err
+		}
+		if workspace != tenant.Default {
+			if ok, err := workspaces.IsMember(ctx, workspace, string(u.ID())); err != nil || !ok {
+				return "", errors.Join(errors.New("not a member of the workspace"), err)
+			}
+		}
+		return string(u.ID()), nil
+	}, log)
+	if err != nil {
+		panic(fmt.Sprintf("mqtt broker: %v", err)) // only fails on programming errors (duplicate hook or listener ids)
+	}
+	if d.mqttAddr != "" {
+		if err := hub.ListenTCP(d.mqttAddr); err != nil {
+			panic(fmt.Sprintf("mqtt listener %s: %v", d.mqttAddr, err))
+		}
+	}
 	for _, name := range []string{"issue.created", "issue.transitioned", "issue.sprint_changed", "issue.estimated", "issue.imported"} {
 		relay.Handle(name, insights.OnIssueEvent)
 	}
@@ -515,7 +543,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	relay.Handle("issue.assigned", notify.OnIssueAssigned)
 	relay.Handle("announcement.published", notify.OnAnnouncement)
 	relay.Handle("announcement.published", notify.OnProjectEvent)
-	for _, name := range []string{"meeting.scheduled", "meeting.cancelled", "meeting.reminder"} {
+	for _, name := range []string{"meeting.scheduled", "meeting.rescheduled", "meeting.cancelled", "meeting.reminder"} {
 		relay.Handle(name, notify.OnMeetingEvent)
 		relay.Handle(name, notify.OnProjectEvent)
 	}
@@ -570,7 +598,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 		}
 		d.social.TelegramOTP = true
 	}
-	identity := identityapp.NewService(d.users, d.sessions, argon2.New(), systemClock{}, id.New, identityOpts...)
+	identity = identityapp.NewService(d.users, d.sessions, argon2.New(), systemClock{}, id.New, identityOpts...)
 	if d.telegramBot != nil {
 		d.telegramBot.HandleGroupStart(func(ctx context.Context, payload string, _ telegram.User, chat, title string) error {
 			return notify.OnGroupStart(ctx, payload, chat, title)
@@ -611,31 +639,12 @@ func build(log *slog.Logger, d deps) http.Handler {
 			Projects: adminacl.NewProjects(projects), DeadLetters: adminacl.NewDeadLetters(dead),
 		}), log).Register(api)
 	}
-	api.Handle("GET /api/v1/events", hub.Handler(func(ctx context.Context, user, project string) bool {
-		return projects.Authorize(ctx, projectdomain.UserID(user), project, projectdomain.PermRead) == nil
-	}, 25*time.Second))
+	api.Handle("GET /api/v1/mqtt", hub.Handler())
 	calendarhttp.New(calendar, log, time.Now).Register(api)
 	focushttp.New(focus, log, time.Now).Register(api)
 	chatAPI := chathttp.New(chat, log)
 	chatAPI.Register(api)
-	canBrowse := func(ctx context.Context, user, project string) bool {
-		return projects.Authorize(ctx, projectdomain.UserID(user), project, projectdomain.PermRead) == nil
-	}
-	// S83: board hints ride on the chat stream too, so a tab needs one connection (/api/v1/events stays).
-	rt.Register(api, 25*time.Second, func(ctx context.Context, ws, user string) <-chan realtime.Extra {
-		out := make(chan realtime.Extra)
-		go func() {
-			defer close(out)
-			for hint := range hub.Follow(ctx, user, ws, canBrowse) {
-				select {
-				case out <- realtime.Extra{Type: hint.Type, Data: hint.Data}:
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-		return out
-	})
+	rt.Register(api, 25*time.Second) // board hints go over MQTT (ADR-0013)
 	whiteboards := wbapp.NewService(wbapp.Deps{Boards: d.whiteboards, Comments: d.wbComments, Conversations: wbacl.NewConversations(chat),
 		Notifier: wbrealtime.New(publish, func(e wbdomain.Element) any { return wbhttp.ToDTO(e) }), NewID: id.New, Now: time.Now})
 	wbhttp.New(whiteboards, log).Register(api)
@@ -651,7 +660,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
 		auditacl.NewOwners(agile, d.boards, d.links), log)
 	audit.Register(api)
-	api.Handle("POST /api/v1/mcp", newMCP(projects, issues, search))
+	api.Handle("POST /api/v1/mcp", newMCP(projects, issues, search, agile))
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

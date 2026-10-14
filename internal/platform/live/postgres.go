@@ -19,16 +19,19 @@ type wire struct {
 	Event     string `json:"e"`
 }
 
+// Publisher delivers a change to this replica's clients (the Broker).
+type Publisher interface{ Publish(c Change) }
+
 // Postgres broadcasts through NOTIFY, so a change relayed on one replica reaches the streams of
 // every replica; Listen feeds this replica's hub.
 type Postgres struct {
 	pool  *pgxpool.Pool
-	hub   *Hub
+	hub   Publisher
 	log   *slog.Logger
 	retry time.Duration
 }
 
-func NewPostgres(pool *pgxpool.Pool, hub *Hub, log *slog.Logger) *Postgres {
+func NewPostgres(pool *pgxpool.Pool, hub Publisher, log *slog.Logger) *Postgres {
 	return &Postgres{pool: pool, hub: hub, log: log, retry: time.Second}
 }
 

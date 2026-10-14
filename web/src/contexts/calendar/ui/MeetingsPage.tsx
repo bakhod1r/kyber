@@ -1,21 +1,85 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { audienceLabel, calendarUseCases, RESPONSES, type MeetingResponse, tally } from "../application";
+import { audienceLabel, calendarUseCases, localInput, type Meeting, minutesOf, RESPONSES, type MeetingResponse, tally, when } from "../application";
 import { identityUseCases } from "../../identity/application";
+import { notifyUseCases } from "../../notify/application";
 import { projectUseCases } from "../../project/application";
+import { useT } from "../../../shared/i18n/i18n";
 
-const fmt = (iso: string) => new Date(iso).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+/** The browser's IANA time zone: meetings are shown in it and messages use it too. */
+const zone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/** RescheduleForm changes a meeting's title, start and length (organizer only). */
+function RescheduleForm({ m, onDone }: { m: Meeting; onDone: () => void }) {
+  const qc = useQueryClient();
+  const t = useT();
+  const [title, setTitle] = useState(m.title);
+  const [starts, setStarts] = useState(localInput(m.starts_at, zone()));
+  const [mins, setMins] = useState(minutesOf(m));
+  const save = useMutation({
+    mutationFn: () => {
+      const start = new Date(starts);
+      return calendarUseCases.rescheduleMeeting(m.id, {
+        title, starts_at: start.toISOString(), ends_at: new Date(start.getTime() + mins * 60_000).toISOString(),
+      });
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["meetings"] });
+      onDone();
+    },
+  });
+  return (
+    <form
+      aria-label={t("Reschedule {title}", { title: m.title })}
+      className="reschedule"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save.mutate();
+      }}
+    >
+      <label>
+        {t("Title")}
+        <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+      </label>
+      <label>
+        {t("Starts")}
+        <input type="datetime-local" value={starts} onChange={(e) => setStarts(e.target.value)} required />
+      </label>
+      <label>
+        {t("Minutes")}
+        <input type="number" min={5} max={480} value={mins} onChange={(e) => setMins(Number(e.target.value))} required />
+      </label>
+      {save.isError && <p role="alert" className="error">{save.error.message}</p>}
+      <button type="submit" disabled={save.isPending}>
+        {t("Save")}
+      </button>
+      <button type="button" className="ghost" onClick={onDone}>
+        {t("Close")}
+      </button>
+    </form>
+  );
+}
 
 /** A chat channel a meeting can happen in (S76); the app shell lists them. */
 export type HuddleChannel = { id: string; name: string };
 
 /** The workspace time table (KYB-S42). During a meeting its attendees cannot start a Pomodoro. */
 export function MeetingsPage({ channels = [] }: { channels?: HuddleChannel[] }) {
+  const t = useT();
   const qc = useQueryClient();
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: () => calendarUseCases.meetings() });
   const me = useQuery({ queryKey: ["me"], queryFn: identityUseCases.me });
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
+  // Remember the browser's zone so meeting emails and Telegram messages use it.
+  const settings = useQuery({ queryKey: ["notification-settings"], queryFn: notifyUseCases.notificationSettings });
+  const saveZone = useMutation({ mutationFn: (time_zone: string) => notifyUseCases.setNotificationSettings({ time_zone }) });
+  const savedZone = settings.data?.time_zone;
+  const { mutate: rememberZone } = saveZone;
+  useEffect(() => {
+    if (savedZone !== undefined && savedZone !== zone()) rememberZone(zone());
+  }, [savedZone, rememberZone]);
+  const [editing, setEditing] = useState<string | null>(null);
   const memberLists = useQueries({
     queries: (projects.data ?? []).map((p) => ({ queryKey: ["members", p.key], queryFn: () => projectUseCases.members(p.key) })),
   });
@@ -60,20 +124,20 @@ export function MeetingsPage({ channels = [] }: { channels?: HuddleChannel[] }) 
 
   return (
     <div className="meetings">
-      <h1>Time table</h1>
-      <p className="muted">Meetings for the next 7 days. While a meeting runs, its attendees cannot start a Pomodoro.</p>
-      <ul aria-label="Meetings" className="panel meeting-list">
-        {meetings.data?.length === 0 && <li className="muted">No meetings.</li>}
+      <h1>{t("Time table")}</h1>
+      <p className="muted">{t("Meetings for the next 7 days. While a meeting runs, its attendees cannot start a Pomodoro.")}</p>
+      <ul aria-label={t("Meetings")} className="panel meeting-list">
+        {meetings.data?.length === 0 && <li className="muted">{t("No meetings.")}</li>}
         {meetings.data?.map((m) => (
           <li key={m.id}>
-            <b>{m.title}</b> · {fmt(m.starts_at)} – {new Date(m.ends_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ·{" "}
+            <b>{m.title}</b> · <span>{when(m, zone())}</span> ·{" "}
             {audienceLabel(m) && <span className="badge-label">{audienceLabel(m)}</span>}{" "}
             <span className="muted">
               {m.attendee_ids.length} {m.attendee_ids.length === 1 ? "person" : "people"}
               {tally(m) && ` · ${tally(m)}`}
             </span>
             {me.data && m.attendee_ids.includes(me.data.id) && m.organizer_id !== me.data.id && (
-              <span className="rsvp" role="group" aria-label={`Answer ${m.title}`}>
+              <span className="rsvp" role="group" aria-label={t("Answer {title}", { title: m.title })}>
                 {RESPONSES.map((r) => (
                   <button
                     key={r.id}
@@ -91,52 +155,59 @@ export function MeetingsPage({ channels = [] }: { channels?: HuddleChannel[] }) 
               <Link className="button" to={`/chat/${m.conversation_id}?huddle=join`} aria-label={`Join the huddle of ${m.title}`}>🎧 Join huddle</Link>
             )}
             {m.organizer_id === me.data?.id && (
-              <button className="ghost" aria-label={`Cancel ${m.title}`} onClick={() => cancel.mutate(m.id)}>
-                Cancel
-              </button>
+              <>
+                <button className="ghost" aria-label={t("Reschedule {title}", { title: m.title })} aria-expanded={editing === m.id}
+                  onClick={() => setEditing(editing === m.id ? null : m.id)}>
+                  {t("Reschedule")}
+                </button>
+                <button className="ghost" aria-label={t("Cancel {title}", { title: m.title })} onClick={() => cancel.mutate(m.id)}>
+                  {t("Cancel")}
+                </button>
+              </>
             )}
+            {editing === m.id && <RescheduleForm m={m} onDone={() => setEditing(null)} />}
           </li>
         ))}
       </ul>
       <form className="panel" onSubmit={onSubmit}>
-        <h2>Schedule a meeting</h2>
+        <h2>{t("Schedule a meeting")}</h2>
         <label>
-          Title
+          {t("Title")}
           <input value={title} onChange={(e) => setTitle(e.target.value)} required />
         </label>
         <label>
-          Starts
+          {t("Starts")}
           <input type="datetime-local" value={starts} onChange={(e) => setStarts(e.target.value)} required />
         </label>
         <label>
-          Minutes
+          {t("Minutes")}
           <input type="number" min={5} max={480} value={mins} onChange={(e) => setMins(Number(e.target.value))} required />
         </label>
         <label>
-          Invite
+          {t("Invite")}
           <select value={invite} onChange={(e) => setInvite(e.target.value)}>
-            <option value="people">Chosen people</option>
+            <option value="people">{t("Chosen people")}</option>
             {projects.data?.map((p) => (
               <option key={p.key} value={`project:${p.key}`}>
-                Everyone in {p.key}
+                {t("Everyone in {key}", { key: p.key })}
               </option>
             ))}
-            <option value="workspace">Everyone in the workspace</option>
+            <option value="workspace">{t("Everyone in the workspace")}</option>
           </select>
         </label>
         {channels.length > 0 && (
           <label>
-            Huddle in
+            {t("Huddle in")}
             <select value={channel} onChange={(e) => setChannel(e.target.value)}>
-              <option value="">No huddle</option>
+              <option value="">{t("No huddle")}</option>
               {channels.map((c) => <option key={c.id} value={c.id}>#{c.name}</option>)}
             </select>
           </label>
         )}
-        {invite !== "people" && <p className="muted">Everyone invited is notified now and reminded 15 minutes before it starts.</p>}
+        {invite !== "people" && <p className="muted">{t("Everyone invited is notified now and reminded 15 minutes before it starts.")}</p>}
         <fieldset hidden={invite !== "people"}>
-          <legend>Attendees</legend>
-          {people.size === 0 && <span className="muted">Only you — add people to a project to invite them.</span>}
+          <legend>{t("Attendees")}</legend>
+          {people.size === 0 && <span className="muted">{t("Only you — add people to a project to invite them.")}</span>}
           {[...people].map(([id, name]) => (
             <label key={id} className="check">
               <input
@@ -150,7 +221,7 @@ export function MeetingsPage({ channels = [] }: { channels?: HuddleChannel[] }) 
         </fieldset>
         {schedule.isError && <p role="alert" className="error">{schedule.error.message}</p>}
         <button type="submit" disabled={schedule.isPending}>
-          Schedule
+          {t("Schedule")}
         </button>
       </form>
     </div>

@@ -21,7 +21,8 @@ through ad-hoc prompts.
   user: security levels, project roles and workspace isolation apply unchanged. Calls are audited
   like any other API request.
 - **Tools.** `list_projects`, `search_issues` (JQL, at most 50 results), `get_issue`,
-  `create_issue` (optional description), `add_comment`. A failing tool returns a result with
+  `create_issue` (optional description), `update_issue`, `transition_issue`, `assign_issue`,
+  `add_comment`, `get_comments`, `list_members`, `list_sprints` (2026-10-14). A failing tool returns a result with
   `isError: true` and the domain error's message, so the model can correct itself; protocol
   mistakes are JSON-RPC errors.
 

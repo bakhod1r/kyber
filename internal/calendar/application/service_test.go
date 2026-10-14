@@ -134,3 +134,33 @@ func TestMeetingInAHuddle(t *testing.T) {
 		t.Fatalf("meeting = %+v %v", m, err)
 	}
 }
+
+func TestReschedule(t *testing.T) {
+	s, ctx := setup()
+	m, _ := s.Schedule(ctx, "lead", application.Schedule{Title: "Retro", Start: t0.Add(time.Hour), End: t0.Add(2 * time.Hour), Attendees: []string{"dev"}})
+	in := application.Change{Title: "Retro v2", Start: t0.Add(3 * time.Hour), End: t0.Add(4 * time.Hour)}
+	for _, tc := range []struct {
+		ctx       context.Context
+		actor, id string
+		in        application.Change
+		want      error
+	}{
+		{ctx, "stranger", string(m.ID), in, domain.ErrMeetingNotFound},
+		{ctx, "dev", string(m.ID), in, application.ErrForbidden},
+		{tenant.With(context.Background(), "w-2"), "lead", string(m.ID), in, domain.ErrMeetingNotFound},
+		{ctx, "lead", "nope", in, domain.ErrMeetingNotFound},
+		{ctx, "lead", string(m.ID), application.Change{Title: "x", Start: t0.Add(-time.Hour), End: t0}, application.ErrInPast},
+		{ctx, "lead", string(m.ID), application.Change{Title: "", Start: t0, End: t0.Add(time.Hour)}, domain.ErrEmptyTitle},
+	} {
+		if _, err := s.Reschedule(tc.ctx, tc.actor, tc.id, tc.in); !errors.Is(err, tc.want) {
+			t.Errorf("%s: %v, want %v", tc.actor, err, tc.want)
+		}
+	}
+	got, err := s.Reschedule(ctx, "lead", string(m.ID), in)
+	if err != nil || got.Title != "Retro v2" || !got.Start.Equal(in.Start) {
+		t.Fatalf("reschedule = %+v %v", got, err)
+	}
+	if day, _ := s.Timetable(ctx, "dev", t0, t0.Add(24*time.Hour)); len(day) != 1 || !day[0].End.Equal(in.End) {
+		t.Fatalf("timetable = %v", day)
+	}
+}

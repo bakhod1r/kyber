@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useId, useLayoutEffect, useRef, useState } from "react";
 import type { Member } from "../../project/application";
+import { useT } from "../../../shared/i18n/i18n";
 
 type Props = {
   label: string;
@@ -25,6 +26,7 @@ function matches(m: Member, q: string) {
 
 /** A textarea that suggests project members after "@" (ARIA 1.2 combobox with a listbox popup). */
 export function MentionTextarea({ label, value, onChange, members, rows = 3, placeholder }: Props) {
+  const t = useT();
   const id = useId();
   const ref = useRef<HTMLTextAreaElement>(null);
   const [caret, setCaret] = useState(0);
@@ -114,7 +116,7 @@ export function MentionTextarea({ label, value, onChange, members, rows = 3, pla
         onFocus={() => setDismissedAt(null)}
       />
       {open && (
-        <ul id={listId} role="listbox" aria-label="Mention a member" className="mention-list">
+        <ul id={listId} role="listbox" aria-label={t("Mention a member")} className="mention-list">
           {options.map((m, i) => (
             <li
               key={m.user_id}

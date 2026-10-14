@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { agileUseCases, type Version } from "../application";
+import { useT } from "../../../shared/i18n/i18n";
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : "—");
 
 /** Releases: the project's versions (Jira's fix versions) — progress, release, archive, notes. */
 export function Releases({ projectKey }: { projectKey: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ["versions", projectKey];
   const versions = useQuery({ queryKey: key, queryFn: () => agileUseCases.versions(projectKey) });
@@ -25,23 +27,23 @@ export function Releases({ projectKey }: { projectKey: string }) {
     onSuccess: (v) => {
       setName("");
       setDate("");
-      return refresh(`${v.name} created`);
+      return refresh(t("{name} created", { name: v.name }));
     },
     onError: failed,
   });
   const release = useMutation({
     mutationFn: ({ v, moveTo }: { v: Version; moveTo: string }) => agileUseCases.releaseVersion(v.id, moveTo),
-    onSuccess: (r) => refresh(`${r.version.name} released${r.moved ? `; ${r.moved} unresolved moved on` : ""}`),
+    onSuccess: (r) => refresh(r.moved ? t("{name} released; {n} unresolved moved on", { name: r.version.name, n: r.moved }) : t("{name} released", { name: r.version.name })),
     onError: failed,
   });
   const step = useMutation({
     mutationFn: ({ v, to }: { v: Version; to: "unrelease" | "archive" | "restore" }) => agileUseCases.versionStep(v.id, to),
-    onSuccess: (v) => refresh(`${v.name} is ${v.state}`),
+    onSuccess: (v) => refresh(t("{name} is {state}", { name: v.name, state: v.state })),
     onError: failed,
   });
   const remove = useMutation({
     mutationFn: (v: Version) => agileUseCases.deleteVersion(v.id),
-    onSuccess: () => refresh("Version deleted"),
+    onSuccess: () => refresh(t("Version deleted")),
     onError: failed,
   });
 
@@ -50,23 +52,23 @@ export function Releases({ projectKey }: { projectKey: string }) {
     if (name.trim()) create.mutate();
   }
 
-  if (versions.isPending) return <p className="muted">Loading…</p>;
+  if (versions.isPending) return <p className="muted">{t("Loading…")}</p>;
   if (versions.isError) return <p role="alert" className="error">{versions.error.message}</p>;
   const unreleased = versions.data.filter((v) => v.state === "unreleased");
   return (
-    <section className="panel releases" aria-label="Releases">
-      <h2>Releases</h2>
+    <section className="panel releases" aria-label={t("Releases")}>
+      <h2>{t("Releases")}</h2>
       <form className="row" onSubmit={onCreate}>
         <label>
-          Version name
+          {t("Version name")}
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
         </label>
         <label>
-          Release date
+          {t("Release date")}
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </label>
         <button type="submit" disabled={create.isPending || !name.trim()}>
-          Create version
+          {t("Create version")}
         </button>
       </form>
       {notice && (
@@ -75,16 +77,16 @@ export function Releases({ projectKey }: { projectKey: string }) {
         </p>
       )}
       {versions.data.length === 0 ? (
-        <p className="muted">No versions yet. Create one and plan issues into it from the issue panel.</p>
+        <p className="muted">{t("No versions yet. Create one and plan issues into it from the issue panel.")}</p>
       ) : (
         <table className="versions-table">
           <thead>
             <tr>
-              <th scope="col">Version</th>
-              <th scope="col">Status</th>
-              <th scope="col">Progress</th>
-              <th scope="col">Release date</th>
-              <th scope="col">Actions</th>
+              <th scope="col">{t("Version")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col">{t("Progress")}</th>
+              <th scope="col">{t("Release date")}</th>
+              <th scope="col">{t("Actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -103,11 +105,11 @@ export function Releases({ projectKey }: { projectKey: string }) {
         </table>
       )}
       {notesOf && (
-        <section aria-label="Release notes" className="release-notes">
+        <section aria-label={t("Release notes")} className="release-notes">
           <div className="row">
-            <h3>Release notes — {notesOf.name}</h3>
+            <h3>{t("Release notes — {name}", { name: notesOf.name })}</h3>
             <button type="button" className="ghost" onClick={() => setNotesOf(null)}>
-              Close
+              {t("Close")}
             </button>
           </div>
           {notes.data !== undefined && <pre>{notes.data}</pre>}
@@ -133,6 +135,7 @@ function VersionRow({
   onDelete: () => void;
   onNotes: () => void;
 }) {
+  const t = useT();
   const [moveTo, setMoveTo] = useState("");
   const total = v.issues ?? 0;
   const done = v.done ?? 0;
@@ -141,8 +144,8 @@ function VersionRow({
       <th scope="row">{v.name}</th>
       <td>{v.state}</td>
       <td>
-        <meter min={0} max={Math.max(total, 1)} value={done} aria-label={`${v.name} progress`} /> {done}/{total} done
-        {(v.unresolved ?? 0) > 0 && <span className="muted"> · {v.unresolved} unresolved</span>}
+        <meter min={0} max={Math.max(total, 1)} value={done} aria-label={t("{name} progress", { name: v.name })} /> {t("{done}/{total} done", { done, total })}
+        {(v.unresolved ?? 0) > 0 && <span className="muted"> · {t("{n} unresolved", { n: v.unresolved ?? 0 })}</span>}
       </td>
       <td>{day(v.state === "released" ? v.released_at : v.release_date)}</td>
       <td className="row">
@@ -150,9 +153,9 @@ function VersionRow({
           <>
             {(v.unresolved ?? 0) > 0 && others.length > 0 && (
               <label>
-                Unresolved to
+                {t("Unresolved to")}
                 <select value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
-                  <option value="">Keep here</option>
+                  <option value="">{t("Keep here")}</option>
                   {others.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.name}
@@ -162,29 +165,29 @@ function VersionRow({
               </label>
             )}
             <button type="button" onClick={() => onRelease(moveTo)}>
-              Release {v.name}
+              {t("Release {name}", { name: v.name })}
             </button>
           </>
         )}
         {v.state === "released" && (
           <button type="button" className="ghost" onClick={() => onStep("unrelease")}>
-            Unrelease
+            {t("Unrelease")}
           </button>
         )}
         {v.state === "archived" ? (
           <button type="button" className="ghost" onClick={() => onStep("restore")}>
-            Restore
+            {t("Restore")}
           </button>
         ) : (
           <button type="button" className="ghost" onClick={() => onStep("archive")}>
-            Archive
+            {t("Archive")}
           </button>
         )}
         <button type="button" className="ghost" onClick={onNotes}>
-          Release notes
+          {t("Release notes")}
         </button>
-        <button type="button" className="ghost" aria-label={`Delete ${v.name}`} onClick={onDelete}>
-          Delete
+        <button type="button" className="ghost" aria-label={t("Delete {name}", { name: v.name })} onClick={onDelete}>
+          {t("Delete")}
         </button>
       </td>
     </tr>

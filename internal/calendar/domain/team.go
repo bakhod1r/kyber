@@ -72,6 +72,12 @@ type Scheduled struct {
 	Organizer UserID `json:"organizer"`
 }
 
+// Rescheduled tells the attendees the meeting's new title and time.
+type Rescheduled struct {
+	Facts
+	Organizer UserID `json:"organizer"`
+}
+
 type Cancelled struct {
 	Facts
 	By UserID `json:"by"`
@@ -80,9 +86,10 @@ type Cancelled struct {
 // Reminder goes to the attendees who did not decline.
 type Reminder struct{ Facts }
 
-func (Scheduled) EventName() string { return "meeting.scheduled" }
-func (Cancelled) EventName() string { return "meeting.cancelled" }
-func (Reminder) EventName() string  { return "meeting.reminder" }
+func (Scheduled) EventName() string   { return "meeting.scheduled" }
+func (Rescheduled) EventName() string { return "meeting.rescheduled" }
+func (Cancelled) EventName() string   { return "meeting.cancelled" }
+func (Reminder) EventName() string    { return "meeting.reminder" }
 
 // Respond records an attendee's answer.
 func (m *Meeting) Respond(u UserID, r Response) error {

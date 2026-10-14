@@ -10,7 +10,7 @@ export const notifyGateway = {
   markConversationRead: (conversationId: string) =>
     request<undefined>("POST", `/api/v1/notifications/read-all?conversation_id=${encodeURIComponent(conversationId)}`),
   notificationSettings: () => request<NotificationSettings>("GET", "/api/v1/me/notification-settings"),
-  setNotificationSettings: (patch: Partial<Pick<NotificationSettings, "email" | "telegram">>) =>
+  setNotificationSettings: (patch: Partial<Pick<NotificationSettings, "email" | "telegram" | "time_zone">>) =>
     request<NotificationSettings>("PUT", "/api/v1/me/notification-settings", patch),
   telegramGroups: (key: string) =>
     request<List<{ chat_id: string; title: string; linked_at: string }>>("GET", `/api/v1/projects/${seg(key)}/telegram-groups`).then((r) => r.items),

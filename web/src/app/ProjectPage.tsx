@@ -33,8 +33,10 @@ function ProjectDocs({ projectKey }: { projectKey: string }) {
   const members = useQuery({ queryKey: ["members", projectKey], queryFn: () => projectUseCases.members(projectKey) });
   return <Docs projectKey={projectKey} me={me.data?.id ?? ""} names={new Map((members.data ?? []).map((m) => [m.user_id, m.name || m.email]))} />;
 }
+import { useT } from "../shared/i18n/i18n";
 
 export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "docs" | "forms" | "announcements" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" }) {
+  const t = useT();
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
   const project = projects.data?.find((p) => p.key === key);
@@ -54,29 +56,29 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
       <h1>
         <span className="key">{key}</span> {project?.name ?? ""}
       </h1>
-      <nav className="tabs" aria-label="Project views">
-        <NavLink to={`/projects/${encodeURIComponent(key)}/summary`}>Summary</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/timeline`}>Timeline</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/backlog`}>Backlog</NavLink>
+      <nav className="tabs" aria-label={t("Project views")}>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/summary`}>{t("Summary")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/timeline`}>{t("Timeline")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/backlog`}>{t("Backlog")}</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}`} end>
-          Active sprints
+          {t("Active sprints")}
         </NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/reports`}>Reports</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/list`}>List</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/releases`}>Releases</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/goals`}>Goals</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/docs`}>Docs</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/forms`}>Forms</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/announcements`}>Announcements</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/reports`}>{t("Reports")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/list`}>{t("List")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/releases`}>{t("Releases")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/goals`}>{t("Goals")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/docs`}>{t("Docs")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/forms`}>{t("Forms")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/announcements`}>{t("Announcements")}</NavLink>
       </nav>
-      <nav className="tabs settings-tabs" aria-label="Project settings">
-        <NavLink to={`/projects/${encodeURIComponent(key)}/workflow`}>Workflow</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/board-settings`}>Board settings</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/fields`}>Fields</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/permissions`}>Permissions</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/notifications`}>Notifications</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/import`}>Import</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/audit`}>Audit</NavLink>
+      <nav className="tabs settings-tabs" aria-label={t("Project settings")}>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/workflow`}>{t("Workflow")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/board-settings`}>{t("Board settings")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/fields`}>{t("Fields")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/permissions`}>{t("Permissions")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/notifications`}>{t("Notifications")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/import`}>{t("Import")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/audit`}>{t("Audit")}</NavLink>
       </nav>
       <div className="project-grid">
         {view === "summary" && <ProjectSummary projectKey={key} />}

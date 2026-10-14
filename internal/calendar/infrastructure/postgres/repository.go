@@ -111,6 +111,24 @@ func (r *Repository) Respond(ctx context.Context, m *domain.Meeting, u domain.Us
 	return err
 }
 
+func (r *Repository) Reschedule(ctx context.Context, m *domain.Meeting) error {
+	if !id.Valid(string(m.ID)) {
+		return domain.ErrMeetingNotFound
+	}
+	events := m.PullEvents()
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE meetings SET title = $2, starts_at = $3, ends_at = $4, reminded_at = NULL WHERE id = $1`,
+			string(m.ID), m.Title, m.Start, m.End)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return domain.ErrMeetingNotFound
+		}
+		return db.WriteOutbox(ctx, tx, events)
+	})
+}
+
 func (r *Repository) DueForReminder(ctx context.Context, from, to time.Time) ([]*domain.Meeting, error) {
 	rows, err := r.pool.Query(ctx, `SELECT `+cols+` FROM meetings m
 		WHERE m.reminded_at IS NULL AND m.starts_at >= $1 AND m.starts_at < $2 ORDER BY m.starts_at, m.id`, from, to)

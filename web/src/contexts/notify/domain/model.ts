@@ -22,6 +22,8 @@ export type NotificationSettings = {
   email_available: boolean;
   telegram_available: boolean;
   telegram_connected: boolean;
+  /** IANA zone for meeting times in email/Telegram; "" = UTC. */
+  time_zone?: string;
 };
 
 /** Where a notification leads: the conversation (chat mentions, reminders), the issue, a project's announcements, or home for the workspace's. */

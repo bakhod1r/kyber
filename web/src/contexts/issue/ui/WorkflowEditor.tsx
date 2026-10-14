@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
 import { issueUseCases, STATUS_CATEGORIES, type StatusCategory, type Workflow } from "../application";
+import { useT } from "../../../shared/i18n/i18n";
 
 /** slug turns a status name into a stable id ("Code Review" → "code_review"). */
 export function slug(name: string): string {
@@ -27,6 +28,7 @@ function insertByCategory(wf: Workflow, name: string, category: StatusCategory):
 
 /** WorkflowEditor lets project admins rename, add and remove statuses (Jira's simplified workflow editor). */
 export function WorkflowEditor({ projectKey }: { projectKey: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const loaded = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => issueUseCases.workflow(projectKey) });
   const [draft, setDraft] = useState<Workflow | null>(null);
@@ -44,7 +46,7 @@ export function WorkflowEditor({ projectKey }: { projectKey: string }) {
     },
   });
 
-  if (loaded.isPending) return <p className="muted">Loading workflow…</p>;
+  if (loaded.isPending) return <p className="muted">{t("Loading workflow…")}</p>;
   if (loaded.isError) return <p role="alert" className="error">{loaded.error.message}</p>;
   if (!draft) return null;
 
@@ -69,39 +71,39 @@ export function WorkflowEditor({ projectKey }: { projectKey: string }) {
   }
 
   return (
-    <section className="workflow-editor" aria-label="Workflow">
-      <h2>Workflow</h2>
-      <p className="muted">Statuses are board columns. Each belongs to a category that reports and sprints understand.</p>
+    <section className="workflow-editor" aria-label={t("Workflow")}>
+      <h2>{t("Workflow")}</h2>
+      <p className="muted">{t("Statuses are board columns. Each belongs to a category that reports and sprints understand.")}</p>
       <ol className="workflow-statuses">
         {draft.statuses.map((s, i) => (
           <li key={s.id}>
             <input
-              aria-label={`Status ${i + 1} name`}
+              aria-label={t("Status {n} name", { n: i + 1 })}
               value={s.name}
               maxLength={60}
               onChange={(e) => update({ ...draft, statuses: draft.statuses.map((x) => (x.id === s.id ? { ...x, name: e.target.value } : x)) })}
             />
             <span className={`status status-${s.category}`}>{STATUS_CATEGORIES.find((c) => c.id === s.category)?.label}</span>
-            <button type="button" className="ghost" aria-label={`Remove ${s.name}`} onClick={() => remove(s.id)} disabled={draft.statuses.length <= 1}>
-              Remove
+            <button type="button" className="ghost" aria-label={t("Remove {name}", { name: s.name })} onClick={() => remove(s.id)} disabled={draft.statuses.length <= 1}>
+              {t("Remove")}
             </button>
           </li>
         ))}
       </ol>
       <form className="workflow-add" onSubmit={add}>
-        <input aria-label="New status name" placeholder="New status" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
-        <select aria-label="New status category" value={category} onChange={(e) => setCategory(e.target.value as StatusCategory)}>
+        <input aria-label={t("New status name")} placeholder={t("New status")} maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
+        <select aria-label={t("New status category")} value={category} onChange={(e) => setCategory(e.target.value as StatusCategory)}>
           {STATUS_CATEGORIES.map((c) => (
             <option key={c.id} value={c.id}>
               {c.label}
             </option>
           ))}
         </select>
-        <button type="submit">Add status</button>
+        <button type="submit">{t("Add status")}</button>
       </form>
       <label>
-        Initial status{" "}
-        <select aria-label="Initial status" value={draft.initial} onChange={(e) => update({ ...draft, initial: e.target.value })}>
+        {t("Initial status")}{" "}
+        <select aria-label={t("Initial status")} value={draft.initial} onChange={(e) => update({ ...draft, initial: e.target.value })}>
           {draft.statuses.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
@@ -110,12 +112,12 @@ export function WorkflowEditor({ projectKey }: { projectKey: string }) {
         </select>
       </label>
       <p className="muted">
-        {draft.transitions.length === 0 ? "Any status can move to any other status." : `${draft.transitions.length} transitions are configured.`}
+        {draft.transitions.length === 0 ? t("Any status can move to any other status.") : t("{n} transitions are configured.", { n: draft.transitions.length })}
       </p>
       <button type="button" onClick={() => save.mutate(draft)} disabled={save.isPending}>
-        Save workflow
+        {t("Save workflow")}
       </button>
-      {save.isSuccess && <p role="status" className="muted">Workflow saved</p>}
+      {save.isSuccess && <p role="status" className="muted">{t("Workflow saved")}</p>}
       {save.isError && (
         <p role="alert" className="error">
           {save.error.message}

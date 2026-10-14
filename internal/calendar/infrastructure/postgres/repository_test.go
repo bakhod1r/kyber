@@ -25,7 +25,7 @@ func TestContract(t *testing.T) {
 		_ = rows.Scan(&n)
 		names = append(names, n)
 	}
-	if strings.Join(names, ",") != "meeting.scheduled,meeting.scheduled,meeting.reminder,meeting.cancelled" {
+	if strings.Join(names, ",") != "meeting.scheduled,meeting.scheduled,meeting.reminder,meeting.rescheduled,meeting.cancelled" {
 		t.Fatalf("outbox = %v", names)
 	}
 }

@@ -3,8 +3,10 @@ import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { SocialSignIn } from "./SocialSignIn";
 import { identityUseCases } from "../application";
+import { useT } from "../../../shared/i18n/i18n";
 
 export function AuthPage({ mode }: { mode: "login" | "signup" }) {
+  const t = useT();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [name, setName] = useState("");
@@ -34,19 +36,19 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
     <main className="auth">
       <form className="panel" onSubmit={onSubmit}>
         <img src="/logo.svg" alt="" width={56} height={56} className="auth-logo" />
-        <h1>{signup ? "Create your Kyber account" : "Log in to Kyber"}</h1>
+        <h1>{signup ? t("Create your Kyber account") : t("Log in to Kyber")}</h1>
         {signup && (
           <label>
-            Name
+            {t("Name")}
             <input value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
           </label>
         )}
         <label>
-          Email
+          {t("Email")}
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
         </label>
         <label>
-          Password
+          {t("Password")}
           <input
             type="password"
             value={password}
@@ -62,14 +64,14 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
           </p>
         )}
         <button type="submit" disabled={submit.isPending}>
-          {signup ? "Create account" : "Log in"}
+          {signup ? t("Create account") : t("Log in")}
         </button>
         <SocialSignIn />
         <p className="muted">
           {signup ? (
-            <>Already have an account? <Link to="/login">Log in</Link></>
+            <>{t("Already have an account?")} <Link to="/login">{t("Log in")}</Link></>
           ) : (
-            <>New to Kyber? <Link to="/signup">Create an account</Link></>
+            <>{t("New to Kyber?")} <Link to="/signup">{t("Create an account")}</Link></>
           )}
         </p>
       </form>

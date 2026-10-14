@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addColumn, assignStatus, type BoardColumn, boardProblems, columnOf, moveColumn } from "./model";
+import { addColumn, assignStatus, type BoardColumn, boardProblems, columnOf, moveColumn, swimlanes } from "./model";
 
 const cols: BoardColumn[] = [
   { name: "To Do", statuses: ["todo"], min: 0, max: 0 },
@@ -36,5 +36,23 @@ describe("board configuration rules", () => {
         { name: "B", statuses: [], min: 5, max: 2 },
       ]),
     ).toEqual(['Two columns are called "a".', "Every column needs a name.", '"B": the minimum is above the maximum.']);
+  });
+});
+
+describe("swimlanes", () => {
+  const i = (key: string, assignee_id: string | null, parent_key: string | null = null) => ({ key, assignee_id, parent_key });
+  const list = [i("A-1", null, "A-9"), i("A-2", "u-2"), i("A-3", "u-1", "A-9"), i("A-4", "u-2", "A-8")];
+  it("groups by assignee with the unassigned lane last", () => {
+    expect(swimlanes(list, "assignee").map((l) => [l.id, l.items.map((x) => x.key)])).toEqual([
+      ["u-2", ["A-2", "A-4"]],
+      ["u-1", ["A-3"]],
+      ["", ["A-1"]],
+    ]);
+  });
+  it("groups by epic", () => {
+    expect(swimlanes(list, "epic").map((l) => l.id)).toEqual(["A-9", "A-8", ""]);
+  });
+  it("keeps one lane without swimlanes", () => {
+    expect(swimlanes(list, "none")).toEqual([{ id: "", items: list }]);
   });
 });

@@ -1,11 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type DragEvent, type FormEvent, useState } from "react";
-import { agileUseCases, type BoardColumn } from "../application";
+import { agileUseCases, type BoardColumn, SWIMLANE_MODES, swimlanes, type SwimlaneMode } from "../application";
 import { issueUseCases, DEFAULT_WORKFLOW, ISSUE_TYPES, type Issue, type IssueType, type Status } from "../../issue/application";
 import { projectUseCases, type Member } from "../../project/application";
 import { announceIssueDone } from "../../../shared/events";
+import { useT } from "../../../shared/i18n/i18n";
 
 const DRAG_TYPE = "application/x-kyber-issue";
+
+/** The swimlane choice is remembered per project in this browser (best effort). */
+function storedMode(projectKey: string): SwimlaneMode {
+  try {
+    const v = localStorage.getItem(`kyber.swimlanes.${projectKey}`);
+    return SWIMLANE_MODES.find((m) => m === v) ?? "none";
+  } catch {
+    return "none";
+  }
+}
+
+function storeMode(projectKey: string, mode: SwimlaneMode) {
+  try {
+    localStorage.setItem(`kyber.swimlanes.${projectKey}`, mode);
+  } catch {
+    // private mode or blocked storage: the choice lasts until reload
+  }
+}
 
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -22,6 +41,7 @@ export function Board({
   /** Quick filters (composed by the app): only these issues show; null shows all. */
   visibleKeys?: Set<string> | null;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   // With an active sprint the board shows only that sprint (Scrum); otherwise every issue (Kanban).
   const sprints = useQuery({ queryKey: ["sprints", projectKey], queryFn: () => agileUseCases.sprints(projectKey) });
@@ -48,6 +68,7 @@ export function Board({
   const byId = new Map<string, Member>((members.data ?? []).map((m) => [m.user_id, m]));
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [mode, setMode] = useState<SwimlaneMode>(() => storedMode(projectKey));
   const toggleBacklog = useMutation({
     mutationFn: (on: boolean) => agileUseCases.updateBoard(board!, { kanban_backlog: on }),
     onMutate: () => setError(null),
@@ -85,8 +106,70 @@ export function Board({
     if (issue && to && !col.statuses.includes(issue.status)) move.mutate({ key, to });
   }
 
-  if (sprints.isPending || issues.isPending || boards.isPending || workflow.isPending) return <p className="muted">Loading board…</p>;
+  const laneLabel = (id: string): string => {
+    if (mode === "assignee") return id ? (byId.get(id)?.name ?? id) : t("Unassigned");
+    if (!id) return t("No epic");
+    const epic = issues.data?.find((i) => i.key === id);
+    return epic ? `${id} ${epic.title}` : id;
+  };
+
+  if (sprints.isPending || issues.isPending || boards.isPending || workflow.isPending) return <p className="muted">{t("Loading board…")}</p>;
   if (issues.isError) return <p role="alert" className="error">{issues.error.message}</p>;
+
+  const renderColumns = (laneIssues: Issue[], lane?: string) =>
+    boardColumns.map((col) => {
+      const shown = (i: Issue) => col.statuses.includes(i.status) && (!visibleKeys || visibleKeys.has(i.key));
+      const cards = laneIssues.filter(shown);
+      const total = laneIssues === issues.data ? cards.length : issues.data.filter(shown).length; // WIP counts the whole column
+      const wip = col.max > 0 && total > col.max ? " wip-over" : col.min > 0 && total < col.min ? " wip-under" : "";
+      return (
+        <section
+          key={col.name}
+          aria-label={lane === undefined ? col.name : `${col.name} · ${lane}`}
+          className={`column${over === col.name ? " over" : ""}${wip}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setOver(col.name);
+          }}
+          onDragLeave={() => setOver(null)}
+          onDrop={(e) => onDrop(e, col)}
+        >
+          <h2>
+            {col.name}{" "}
+            <span className="count" title={col.max > 0 ? t("Issues / WIP limit") : undefined}>
+              {col.max > 0 ? `${total} / ${col.max}` : cards.length}
+            </span>
+          </h2>
+          {cards.map((i) => (
+            <article
+              key={i.id}
+              className="card"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(DRAG_TYPE, i.key);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+            >
+              <div className="card-head">
+                <span className={`type type-${i.type}`}>{i.type}</span>
+                <span className={`prio prio-${i.priority}`} aria-label={t("Priority: {priority}", { priority: i.priority })} title={t("Priority: {priority}", { priority: i.priority })} />
+              </div>
+              <button type="button" className="card-open" onClick={() => onOpen?.(i.key)}>
+                {i.title}
+              </button>
+              <div className="card-foot">
+                <small>{i.key}</small>
+                {i.assignee_id && byId.get(i.assignee_id) && (
+                  <span className="avatar" title={byId.get(i.assignee_id)?.name}>
+                    {initials(byId.get(i.assignee_id)?.name ?? "")}
+                  </span>
+                )}
+              </div>
+            </article>
+          ))}
+        </section>
+      );
+    });
 
   return (
     <div className="board-wrap">
@@ -98,8 +181,8 @@ export function Board({
       )}
       {boards.data && boards.data.length > 1 && (
         <label className="board-picker">
-          Board{" "}
-          <select aria-label="Board" value={board?.id} onChange={(e) => setBoardId(e.target.value)}>
+          {t("Board")}{" "}
+          <select aria-label={t("Board")} value={board?.id} onChange={(e) => setBoardId(e.target.value)}>
             {boards.data.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
@@ -116,7 +199,7 @@ export function Board({
             disabled={toggleBacklog.isPending}
             onChange={(e) => toggleBacklog.mutate(e.target.checked)}
           />
-          Kanban backlog
+          {t("Kanban backlog")}
         </label>
       )}
       <QuickAdd projectKey={projectKey} sprintId={active?.id} />
@@ -125,63 +208,38 @@ export function Board({
           {error}
         </p>
       )}
-      <div className="board">
-        {boardColumns.map((col) => {
-          const cards = issues.data.filter((i) => col.statuses.includes(i.status) && (!visibleKeys || visibleKeys.has(i.key)));
-          const wip = col.max > 0 && cards.length > col.max ? " wip-over" : col.min > 0 && cards.length < col.min ? " wip-under" : "";
-          return (
-            <section
-              key={col.name}
-              aria-label={col.name}
-              className={`column${over === col.name ? " over" : ""}${wip}`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setOver(col.name);
-              }}
-              onDragLeave={() => setOver(null)}
-              onDrop={(e) => onDrop(e, col)}
-            >
-              <h2>
-                {col.name}{" "}
-                <span className="count" title={col.max > 0 ? "Issues / WIP limit" : undefined}>
-                  {col.max > 0 ? `${cards.length} / ${col.max}` : cards.length}
-                </span>
-              </h2>
-              {cards.map((i) => (
-                <article
-                  key={i.id}
-                  className="card"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData(DRAG_TYPE, i.key);
-                    e.dataTransfer.effectAllowed = "move";
-                  }}
-                >
-                  <div className="card-head">
-                    <span className={`type type-${i.type}`}>{i.type}</span>
-                    <span className={`prio prio-${i.priority}`} aria-label={`Priority: ${i.priority}`} title={`Priority: ${i.priority}`} />
-                  </div>
-                  <button type="button" className="card-open" onClick={() => onOpen?.(i.key)}>
-                    {i.title}
-                  </button>
-                  <div className="card-foot">
-                    <small>{i.key}</small>
-                    {i.assignee_id && byId.get(i.assignee_id) && (
-                      <span className="avatar" title={byId.get(i.assignee_id)?.name}>
-                        {initials(byId.get(i.assignee_id)?.name ?? "")}
-                      </span>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </section>
-          );
-        })}
-      </div>
+      <label className="board-picker">
+        {t("Swimlanes")}{" "}
+        <select
+          aria-label={t("Swimlanes")}
+          value={mode}
+          onChange={(e) => {
+            const m = SWIMLANE_MODES.find((x) => x === e.target.value) ?? "none";
+            setMode(m);
+            storeMode(projectKey, m);
+          }}
+        >
+          <option value="none">{t("None")}</option>
+          <option value="assignee">{t("Assignee")}</option>
+          <option value="epic">{t("Epic")}</option>
+        </select>
+      </label>
+      {mode === "none" ? (
+        <div className="board">{renderColumns(issues.data)}</div>
+      ) : (
+        swimlanes(issues.data, mode).map((l) => (
+          <section key={l.id || "none"} className="swimlane" aria-label={laneLabel(l.id)}>
+            <h3>
+              {laneLabel(l.id)} <span className="count">{l.items.filter((i) => !visibleKeys || visibleKeys.has(i.key)).length}</span>
+            </h3>
+            <div className="board">{renderColumns(l.items, laneLabel(l.id))}</div>
+          </section>
+        ))
+      )}
       {kanbanBacklog && (
-        <section aria-label="Kanban backlog" className="kanban-backlog panel">
+        <section aria-label={t("Kanban backlog")} className="kanban-backlog panel">
           <h2>
-            Backlog <span className="count">{waiting.length}</span>
+            {t("Backlog")} <span className="count">{waiting.length}</span>
           </h2>
           <ul className="child-list">
             {waiting.map((i) => (
@@ -193,10 +251,10 @@ export function Board({
                 <button
                   type="button"
                   className="ghost"
-                  aria-label={`Select ${i.key} for development`}
+                  aria-label={t("Select {key} for development", { key: i.key })}
                   onClick={() => selectTo && move.mutate({ key: i.key, to: selectTo })}
                 >
-                  Select for development
+                  {t("Select for development")}
                 </button>
               </li>
             ))}
@@ -210,6 +268,7 @@ export function Board({
 // QuickAdd creates an issue; during an active sprint it joins that sprint (as in Jira),
 // otherwise it would land in the backlog and vanish from the sprint board.
 function QuickAdd({ projectKey, sprintId }: { projectKey: string; sprintId?: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
   const [type, setType] = useState<IssueType>("task");
@@ -228,8 +287,8 @@ function QuickAdd({ projectKey, sprintId }: { projectKey: string; sprintId?: str
 
   return (
     <form className="quick-add" onSubmit={submit}>
-      <input aria-label="New issue title" placeholder="What needs to be done?" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <select aria-label="Type" value={type} onChange={(e) => setType(e.target.value as IssueType)}>
+      <input aria-label={t("New issue title")} placeholder={t("What needs to be done?")} value={title} onChange={(e) => setTitle(e.target.value)} />
+      <select aria-label={t("Type")} value={type} onChange={(e) => setType(e.target.value as IssueType)}>
         {ISSUE_TYPES.map((t) => (
           <option key={t} value={t}>
             {t}
@@ -237,7 +296,7 @@ function QuickAdd({ projectKey, sprintId }: { projectKey: string; sprintId?: str
         ))}
       </select>
       <button type="submit" disabled={create.isPending}>
-        Add issue
+        {t("Add issue")}
       </button>
       {create.isError && (
         <span role="alert" className="error">

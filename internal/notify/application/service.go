@@ -185,8 +185,9 @@ type meeting struct {
 	Organizer, By             string
 }
 
-// OnMeetingEvent tells the invited about meeting.scheduled and meeting.cancelled (not whoever did
-// it) and reminds them before meeting.reminder's start.
+// OnMeetingEvent tells the invited about meeting.scheduled, meeting.rescheduled and
+// meeting.cancelled (not whoever did it) and reminds them before meeting.reminder's start; times
+// are in each recipient's time zone when known.
 func (s *Service) OnMeetingEvent(ctx context.Context, m outbox.Message) error {
 	var e meeting
 	if err := json.Unmarshal(m.Payload, &e); err != nil {
@@ -207,9 +208,17 @@ func (s *Service) OnMeetingEvent(ctx context.Context, m outbox.Message) error {
 		ids[i] = domain.UserID(u)
 	}
 	for _, u := range domain.AnnouncementRecipients(domain.UserID(actor), ids) {
+		zone := ""
+		if s.d.Prefs != nil {
+			p, err := s.d.Prefs.Prefs(ctx, u)
+			if err != nil {
+				return err
+			}
+			zone = p.TimeZone
+		}
 		n := domain.Notification{
 			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Workspace: e.Workspace, Kind: domain.KindMeeting, Project: e.Project,
-			IssueTitle: e.Title, ActorName: actorName, Excerpt: domain.MeetingText(m.Name, e.Start, e.End), SourceEvent: m.ID, CreatedAt: s.d.Now(),
+			IssueTitle: e.Title, ActorName: actorName, Excerpt: domain.MeetingText(m.Name, e.Start, e.End, zone), SourceEvent: m.ID, CreatedAt: s.d.Now(),
 		}
 		if err := s.d.Repo.Add(ctx, n); err != nil {
 			return err

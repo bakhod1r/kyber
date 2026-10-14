@@ -337,7 +337,8 @@ paths:
       description: >-
         Model Context Protocol endpoint (Streamable HTTP, JSON responses; ADR-0009). One JSON-RPC 2.0 message per request
         (initialize, ping, tools/list, tools/call); notifications are acknowledged with 202. Tools - list_projects,
-        search_issues, get_issue, create_issue, add_comment - run with the caller's permissions.
+        search_issues, get_issue, create_issue, update_issue, transition_issue, assign_issue, add_comment, get_comments,
+        list_members, list_sprints - run with the caller's permissions.
       requestBody:
         required: true
         content: { application/json: { schema: { type: object, required: [jsonrpc, method], properties: { jsonrpc: { type: string, enum: ["2.0"] }, id: {}, method: { type: string }, params: { type: object } } } } }
@@ -469,6 +470,29 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/meetings/{id}:
+    put:
+      operationId: rescheduleMeeting
+      description: The organizer changes the title and time (not in the past); attendees are told and reminded again before the new start.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [title, starts_at, ends_at]
+              properties:
+                title: { type: string }
+                starts_at: { type: string, format: date-time }
+                ends_at: { type: string, format: date-time }
+      responses:
+        "200": { description: Rescheduled, content: { application/json: { schema: { $ref: "#/components/schemas/Meeting" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
     delete:
       operationId: cancelMeeting
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
@@ -2645,20 +2669,17 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
-  /api/v1/events:
+  /api/v1/mqtt:
     get:
-      operationId: liveEvents
+      operationId: liveMQTT
       description: |
-        Server-Sent Events stream of change hints for the caller's workspace (ADR-0008). An `event: change`
-        carries only `{"project","event"}` for projects the caller may browse, never content; clients refetch
-        through the API. `event: resync` means hints were dropped (refetch everything). Comments keep the
-        connection alive every 25 s; `retry: 3000` sets the reconnect delay.
+        MQTT 3.1.1/5 over WebSocket (subprotocol `mqtt`, binary frames; ADR-0013), authenticated like any API call
+        (session cookie from the same origin, or Bearer token). Clients only subscribe, to
+        `kyber/<workspace>/projects/<KEY or +>/events`; each message is `{"project","event"}` for projects the caller
+        may browse (checked per delivery), never content — clients refetch through the API. Plain MQTT clients can
+        connect to KYBER_MQTT_ADDR with username = workspace id and password = a personal access token.
       responses:
-        "200":
-          description: The event stream (never ends on its own)
-          content:
-            text/event-stream:
-              schema: { type: string }
+        "101": { description: Switching to MQTT over WebSocket }
         "401": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/announcements:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
@@ -3141,10 +3162,12 @@ paths:
               properties:
                 email: { type: boolean }
                 telegram: { type: boolean }
+                time_zone: { type: string, description: "IANA name (the browser's zone), or empty for UTC" }
       responses:
         "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationSettings" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/notifications:
     get:
       operationId: listNotifications
@@ -3884,8 +3907,9 @@ components:
     NotificationSettings:
       type: object
       additionalProperties: false
-      required: [email, telegram, email_available, telegram_available, telegram_connected]
+      required: [email, telegram, email_available, telegram_available, telegram_connected, time_zone]
       properties:
+        time_zone: { type: string, description: "The user's IANA time zone for meeting times in messages; empty = UTC" }
         email: { type: boolean }
         telegram: { type: boolean }
         email_available: { type: boolean, description: SMTP is configured on this server }
