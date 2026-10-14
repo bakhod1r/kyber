@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/bakhod1r/kyber/internal/issue/domain"
 	"github.com/bakhod1r/kyber/internal/platform/db"
+	kid "github.com/bakhod1r/kyber/internal/platform/id"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
 type CommentRepository struct{ pool *pgxpool.Pool }
@@ -42,4 +45,21 @@ func (r *CommentRepository) ListByIssue(ctx context.Context, issueID domain.Issu
 		}
 		return domain.RehydrateComment(domain.CommentID(id), domain.IssueID(issue), domain.UserID(author), body, createdAt), nil
 	})
+}
+
+func (r *CommentRepository) IssueKeyOf(ctx context.Context, id domain.CommentID) (domain.IssueKey, error) {
+	if !kid.Valid(string(id)) {
+		return domain.IssueKey{}, domain.ErrCommentNotFound
+	}
+	var project string
+	var number int
+	err := r.pool.QueryRow(ctx, `SELECT i.project_key, i.number FROM comments c JOIN issues i ON i.id = c.issue_id
+		WHERE c.id = $1 AND i.workspace_id = $2`, string(id), tenant.Workspace(ctx)).Scan(&project, &number)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.IssueKey{}, domain.ErrCommentNotFound
+	}
+	if err != nil {
+		return domain.IssueKey{}, err
+	}
+	return domain.NewIssueKey(project, number)
 }

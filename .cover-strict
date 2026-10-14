@@ -39,3 +39,4 @@
 ./internal/attachment/domain
 ./internal/attachment/application
 ./internal/attachment/infrastructure/memory
+./internal/issue/infrastructure/livehints

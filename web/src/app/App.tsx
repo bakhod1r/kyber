@@ -21,6 +21,7 @@ import { Announcements } from "../contexts/announcement/ui/Announcements";
 import { ProjectPage } from "./ProjectPage";
 import { SettingsPage } from "../contexts/notify/ui/SettingsPage";
 import { AccessTokens } from "../contexts/identity/ui/AccessTokens";
+import { AppearanceSettings } from "../shared/ui/AppearanceSettings";
 import { ProjectsPage } from "../contexts/project/ui/ProjectsPage";
 import { identityUseCases } from "../contexts/identity/application";
 import { SearchPage } from "../contexts/search/ui/SearchPage";
@@ -96,7 +97,7 @@ export function AppRoutes() {
       <Route path="/chat/:id" element={<RequireUser><ChatPage extras={extras} activity={<ChatMentions />} commands={runChatCommand} issueMaker={issueFromMessage} /></RequireUser>} />
       <Route path="/meetings" element={<RequireUser><Meetings /></RequireUser>} />
       <Route path="/search" element={<RequireUser><SearchPage /></RequireUser>} />
-      <Route path="/settings" element={<RequireUser><SettingsPage /><AccessTokens /></RequireUser>} />
+      <Route path="/settings" element={<RequireUser><SettingsPage /><AppearanceSettings /><AccessTokens /></RequireUser>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

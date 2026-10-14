@@ -603,6 +603,18 @@ export const en = {
   "Filter by kind": "Filter by kind",
   "Board insights": "Board insights",
   "Configure board": "Configure board",
+  "Reactions": "Reactions",
+  "{emoji} reacted by {count}": "{emoji} reacted by {count}",
+  "Add reaction": "Add reaction",
+  "React with {emoji}": "React with {emoji}",
+  "Also viewing": "Also viewing",
+  "Also viewing:": "Also viewing:",
+  "Appearance": "Appearance",
+  "Theme": "Theme",
+  "Wallpaper": "Wallpaper",
+  "Upload image…": "Upload image…",
+  "Choose an image of at most 1 MB.": "Choose an image of at most 1 MB.",
+  "Upload wallpaper": "Upload wallpaper",
 } as const;
 
 export type MessageKey = keyof typeof en;

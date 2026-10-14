@@ -6,6 +6,8 @@ import { IssueDetails } from "./IssueDetails";
 import { IssueTimeTracking } from "./IssueTimeTracking";
 import { IssueAttachments } from "./IssueAttachments";
 import { IssueWatchers } from "./IssueWatchers";
+import { IssuePresence } from "./IssuePresence";
+import { CommentReactions } from "./CommentReactions";
 import { MentionTextarea } from "./MentionTextarea";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useId, useState } from "react";
@@ -31,12 +33,15 @@ const toDraft = (i: Issue): Draft => ({
 export function IssuePanel({
   issueKey,
   projectKey,
+  me,
   onClose,
   onOpen,
   extensions,
 }: {
   issueKey: string;
   projectKey: string;
+  /** The signed-in user's id, so "Also viewing" lists only the others. */
+  me?: string;
   onClose: () => void;
   onOpen?: (issueKey: string) => void;
   /** Panels other contexts contribute (e.g. Focus), composed by the app shell. */
@@ -107,6 +112,7 @@ export function IssuePanel({
             ✕
           </button>
         </header>
+        <IssuePresence issueKey={issueKey} me={me} />
         {issue.isError && <p role="alert" className="error">{issue.error.message}</p>}
         {loaded && (
           <p className="muted people">
@@ -249,6 +255,7 @@ function Comments({ issueKey, projectKey }: { issueKey: string; projectKey: stri
               <strong>{c.author_name}</strong> <time dateTime={c.created_at}>{new Date(c.created_at).toLocaleString()}</time>
             </div>
             <p className="comment-body">{c.body}</p>
+            <CommentReactions issueKey={issueKey} comment={c} />
           </li>
         ))}
       </ul>

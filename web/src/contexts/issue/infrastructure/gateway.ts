@@ -1,6 +1,6 @@
 // issue: HTTP gateway to the issue API (infrastructure).
 import { request, seg, upload, type List } from "../../../shared/http";
-import type { Attachment, Comment, HistoryEntry, Issue, IssueLink, IssuePatch, IssueType, LinkType, Status, Workflow, Worklog, CustomField, CustomFieldInput } from "../domain/model";
+import type { Attachment, Comment, Emoji, Viewer, HistoryEntry, Issue, IssueLink, IssuePatch, IssueType, LinkType, Status, Workflow, Worklog, CustomField, CustomFieldInput } from "../domain/model";
 
 export const issueGateway = {
   /** Issues in backlog rank order; `sprint` filters to a sprint id or "backlog". */
@@ -40,6 +40,10 @@ export const issueGateway = {
   issue: (issueKey: string) => request<Issue>("GET", `/api/v1/issues/${seg(issueKey)}`),
   editIssue: (issueKey: string, patch: IssuePatch) => request<Issue>("PATCH", `/api/v1/issues/${seg(issueKey)}`, patch),
   comments: (issueKey: string) => request<List<Comment>>("GET", `/api/v1/issues/${seg(issueKey)}/comments`).then((r) => r.items),
+  react: (commentId: string, emoji: Emoji) => request<undefined>("PUT", `/api/v1/comments/${seg(commentId)}/reactions/${seg(emoji)}`),
+  unreact: (commentId: string, emoji: Emoji) => request<undefined>("DELETE", `/api/v1/comments/${seg(commentId)}/reactions/${seg(emoji)}`),
+  viewers: (issueKey: string) => request<List<Viewer>>("GET", `/api/v1/issues/${seg(issueKey)}/presence`).then((r) => r.items),
+  heartbeat: (issueKey: string) => request<undefined>("POST", `/api/v1/issues/${seg(issueKey)}/presence`),
   addComment: (issueKey: string, body: string) =>
     request<Comment>("POST", `/api/v1/issues/${seg(issueKey)}/comments`, { body }),
 };

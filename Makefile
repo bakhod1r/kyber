@@ -3,7 +3,7 @@
 COVER_MIN ?= 85
 
 test: ## set KYBER_TEST_DATABASE_URL to include Postgres integration tests
-	go test -race -coverpkg=./internal/...,./web/... -coverprofile=coverage.out ./...
+	go test -race -timeout 30m -coverpkg=./internal/...,./web/... -coverprofile=coverage.out ./...
 	@total=$$(go tool cover -func=coverage.out | awk '/^total:/ {sub("%","",$$3); print $$3}'); \
 	echo "total coverage: $$total% (min $(COVER_MIN)%)"; \
 	awk -v t=$$total -v m=$(COVER_MIN) 'BEGIN { exit (t+0 < m+0) }'

@@ -121,6 +121,7 @@ import (
 	issuedomain "github.com/bakhod1r/kyber/internal/issue/domain"
 	issueaccessacl "github.com/bakhod1r/kyber/internal/issue/infrastructure/accessacl"
 	"github.com/bakhod1r/kyber/internal/issue/infrastructure/agileacl"
+	"github.com/bakhod1r/kyber/internal/issue/infrastructure/livehints"
 	issuememory "github.com/bakhod1r/kyber/internal/issue/infrastructure/memory"
 	issuepg "github.com/bakhod1r/kyber/internal/issue/infrastructure/postgres"
 	"github.com/bakhod1r/kyber/internal/issue/infrastructure/projectacl"
@@ -177,6 +178,7 @@ type deps struct {
 	history       issuedomain.HistoryRepository
 	links         issuedomain.LinkRepository
 	watchers      issuedomain.WatcherRepository
+	reactions     issuedomain.ReactionRepository
 	worklogs      issuedomain.WorklogRepository
 	fields        issuedomain.CustomFieldRepository
 	audit         auditdomain.Repository
@@ -356,7 +358,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	meetingRepo := calendarmemory.NewRepository()
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
-		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), worklogs: issuememory.NewWorklogRepository(), fields: issuememory.NewCustomFieldRepository(),
+		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), reactions: issuememory.NewReactionRepository(), worklogs: issuememory.NewWorklogRepository(), fields: issuememory.NewCustomFieldRepository(),
 		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: pageRepo, docComments: docCommentRepo, attachments: attmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
@@ -404,7 +406,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	ids := identitypg.NewRepository(pool)
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
-		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), worklogs: issuepg.NewWorklogRepository(pool), fields: issuepg.NewCustomFieldRepository(pool),
+		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), reactions: issuepg.NewReactionRepository(pool), worklogs: issuepg.NewWorklogRepository(pool), fields: issuepg.NewCustomFieldRepository(pool),
 		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), docComments: docspg.NewComments(pool), attachments: attpg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
@@ -445,7 +447,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	sprintACL := &lateSprints{}
 	issues := issueapp.NewService(issueapp.Deps{
 		Issues: d.issues, Comments: d.comments, Keys: acl, Access: issueaccessacl.New(access), Directory: acl, Sprints: sprintACL,
-		Workflow: issuedomain.DefaultWorkflow(), Workflows: d.workflows, History: d.history, Links: d.links, Watchers: d.watchers, Worklogs: d.worklogs, Fields: d.fields, SecurityLevels: []string{accessapp.LevelConfidential}, NewID: id.New, Now: time.Now,
+		Workflow: issuedomain.DefaultWorkflow(), Workflows: d.workflows, History: d.history, Links: d.links, Watchers: d.watchers, Reactions: d.reactions, Worklogs: d.worklogs, Fields: d.fields, SecurityLevels: []string{accessapp.LevelConfidential}, NewID: id.New, Now: time.Now,
 	})
 	agileACL := agileprojectacl.New(projectcompat.NewGate(projects, access, accessdomain.ManageSprints))
 	agile := agileapp.NewService(agileapp.Deps{
@@ -576,6 +578,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 		hints = pg
 	}
 	relay.HandleAll(live.OnEvent(hints, log))
+	// Presence is ephemeral and kept per replica (ADR-0013); the hint reaches every replica.
+	presence := issueapp.NewPresence(issues, issuememory.NewPresenceRegistry(), livehints.New(hints, log), time.Now)
 	if d.ctx == nil {
 		d.ctx = context.Background()
 	}
@@ -617,6 +621,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	auth.RegisterProtected(api)
 	projecthttp.New(projects, log).Register(api)
 	issuehttp.New(issues, log).Register(api)
+	issuehttp.NewPresence(presence, log).Register(api)
 	accesshttp.New(access, log).Register(api)
 	searchhttp.New(search, log).Register(api)
 	goalhttp.New(goals, log).Register(api)

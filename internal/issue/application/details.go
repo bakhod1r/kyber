@@ -166,6 +166,7 @@ func (s *Service) Edit(ctx context.Context, actor, rawKey string, cmd EditIssue)
 type CommentView struct {
 	*domain.Comment
 	AuthorName string
+	Reactions  []domain.ReactionCount // in the fixed emoji order; Mine is from the caller's view
 }
 
 // AddComment requires the Add Comments permission.
@@ -202,7 +203,7 @@ func (s *Service) Comments(ctx context.Context, actor, rawKey string) ([]Comment
 		}
 		out = append(out, CommentView{Comment: c, AuthorName: name})
 	}
-	return out, nil
+	return out, s.tallyReactions(ctx, actor, out)
 }
 
 // DisplayName exposes the directory's name lookup to adapters.
