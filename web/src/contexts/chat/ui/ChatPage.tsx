@@ -6,7 +6,7 @@ import { projectUseCases } from "../../project/application";
 import {
   applyEvent, canManage, type ChannelWorkflow, type ChatEvent, localTime, utcMinute, type ConversationPrefs, type Level, moveSection, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, COMMAND_HELP, clipName, type ClipKind, type ClipRecorder, MAX_CLIP_MS, type Message, parseCommand, startClip, parseRemind, type SlashCommand, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
 } from "../application";
-import { msg, useT } from "../../../shared/i18n/i18n";
+import { type MessageKey, msg, useT } from "../../../shared/i18n/i18n";
 
 const PAGE = 50;
 const TYPING_MS = 4000;
@@ -16,6 +16,22 @@ const threadKey = (id: string) => ["chat", "thread", id];
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 /** People the user works with (project members), by id → name. */
+
+/** S97: built-in labels the chat domain produces in English (presets, sections, help), translated for display. */
+const DOMAIN_LABELS: Record<string, MessageKey> = {
+  "In a meeting": msg("In a meeting"), Focusing: msg("Focusing"), Lunch: msg("Lunch"), "Working remotely": msg("Working remotely"),
+  "Out sick": msg("Out sick"), "On vacation": msg("On vacation"),
+  "30 minutes": msg("30 minutes"), "1 hour": msg("1 hour"), "4 hours": msg("4 hours"), Today: msg("Today"), "Don't clear": msg("Don't clear"),
+  "In 20 minutes": msg("In 20 minutes"), "In 1 hour": msg("In 1 hour"), "In 3 hours": msg("In 3 hours"), "Tomorrow at 9:00": msg("Tomorrow at 9:00"),
+  Channels: msg("Channels"), "Direct messages": msg("Direct messages"),
+  [COMMAND_HELP]: msg("Commands: /issue KEY title · /assign KEY-1 @me|@email · /status KEY-1 Status name · /remind me in 20 minutes …"),
+};
+/** label translates a built-in domain label; anything else (a user's own section name) stays as it is. */
+function useLabel() {
+  const t = useT();
+  return (s: string) => (DOMAIN_LABELS[s] ? t(DOMAIN_LABELS[s]) : s);
+}
+
 function usePeople() {
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
   const lists = useQueries({
@@ -128,6 +144,7 @@ export function ChatPage({ extras, activity, commands, issueMaker }: {
 /** Set my status and Do Not Disturb (S66). */
 function MyStatus({ me }: { me: string }) {
   const t = useT();
+  const label = useLabel();
   const qc = useQueryClient();
   const mine = useContext(Statuses).get(me);
   const [open, setOpen] = useState(false);
@@ -157,14 +174,14 @@ function MyStatus({ me }: { me: string }) {
         <form onSubmit={save} aria-label={t("Status")} className="chat-new">
           <div className="row">
             {STATUS_PRESETS.map((p) => (
-              <button type="button" key={p.text} className="ghost" title={p.text} onClick={() => { setEmoji(p.emoji); setText(p.text); }}>{p.emoji}</button>
+              <button type="button" key={p.text} className="ghost" title={label(p.text)} onClick={() => { setEmoji(p.emoji); setText(label(p.text)); }}>{p.emoji}</button>
             ))}
           </div>
           <label>{t("Emoji")} <input value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={8} style={{ width: "4em" }} /></label>
           <label>{t("Status")} <input value={text} onChange={(e) => setText(e.target.value)} maxLength={100} placeholder={t("What's your status?")} /></label>
           <label>{t("Clear after")}{" "}
             <select value={clear} onChange={(e) => setClear(Number(e.target.value))}>
-              {clearAfter(new Date()).map((c, i) => <option key={c.label} value={i}>{c.label}</option>)}
+              {clearAfter(new Date()).map((c, i) => <option key={c.label} value={i}>{label(c.label)}</option>)}
             </select>
           </label>
           <label>{t("Do not disturb")}{" "}
@@ -590,6 +607,7 @@ function ScheduledList({ title }: { title: (conversationId: string) => string })
 /** S65: save a message for later, optionally with a reminder; saved ones can be forgotten again. */
 function SaveMenu({ m }: { m: Message }) {
   const t = useT();
+  const label = useLabel();
   const qc = useQueryClient();
   const saved = useQuery({ queryKey: savedKey, queryFn: chatUseCases.saved });
   const mine = saved.data?.find((x) => x.message.id === m.id);
@@ -605,7 +623,7 @@ function SaveMenu({ m }: { m: Message }) {
     }}>
       <option value="">{t("🔖 Save")}</option>
       <option value="none">{t("Save for later")}</option>
-      {presets.map((p, i) => <option key={p.label} value={i}>{t("Remind me: {when}", { when: p.label.toLowerCase() })}</option>)}
+      {presets.map((p, i) => <option key={p.label} value={i}>{t("Remind me: {when}", { when: label(p.label).toLowerCase() })}</option>)}
     </select>
   );
 }
@@ -670,6 +688,7 @@ function Sidebar({ conversations, current, title, names, me }: {
   conversations: Conversation[]; current?: string; title: (c: Conversation) => string; names: Map<string, string>; me: string;
 }) {
   const t = useT();
+  const label = useLabel();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [form, setForm] = useState<"channel" | "dm" | null>(null);
@@ -774,12 +793,12 @@ function Sidebar({ conversations, current, title, names, me }: {
       )}
       <Link to="/chat" className={`chat-activity-link ${current ? "" : "active"}`} aria-current={current ? undefined : "page"}>{t("🔔 Activity")}</Link>
       {sections(conversations, prefs.data ?? [], order.data ?? []).map((sec, i, all) => (
-        <section key={sec.title} aria-label={sec.title}
+        <section key={sec.title} aria-label={label(sec.title)}
           onDragOver={(e) => { if (dragging && known.includes(sec.title)) e.preventDefault(); }}
           onDrop={(e) => { e.preventDefault(); if (dragging) reorder(dragging, sec.title); setDragging(null); }}>
           <h2 draggable={known.includes(sec.title)} onDragStart={() => setDragging(sec.title)} onDragEnd={() => setDragging(null)}
             className={known.includes(sec.title) ? "draggable-section" : ""}>
-            {sec.title}
+            {label(sec.title)}
             {known.includes(sec.title) && i > 0 && known.includes(all[i - 1]!.title) && (
               <button className="ghost" aria-label={t("Move {section} up", { section: sec.title })} onClick={() => reorder(sec.title, all[i - 1]!.title)}>↑</button>
             )}
@@ -825,6 +844,7 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
   onThread: (id: string) => void; extras?: ReactNode;
 }) {
   const t = useT();
+  const label = useLabel();
   const qc = useQueryClient();
   const history = useQuery({ queryKey: historyKey(id), queryFn: () => chatUseCases.history(id) });
   const [showPins, setShowPins] = useState(false);
@@ -860,7 +880,7 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
     if (/^\/(issue|assign|status)\b/i.test(body)) {
       const c = parseCommand(body);
       if (c && commands) command.mutate(c);
-      else setNote(COMMAND_HELP);
+      else setNote(label(COMMAND_HELP));
       return;
     }
     if (/^\/remind\b/i.test(body)) {
@@ -1090,6 +1110,7 @@ function Composer({ label, initial = "", onSend, onSchedule, onTyping, onCancel 
   onSchedule?: (body: string, at: Date) => void;
 }) {
   const t = useT();
+  const domainLabel = useLabel(); // "label" is a prop here
   const [text, setText] = useState(initial);
   const lastTyping = useRef(0);
   const send = () => {
@@ -1123,7 +1144,7 @@ function Composer({ label, initial = "", onSend, onSchedule, onTyping, onCancel 
           setText("");
         }}>
           <option value="">🕒</option>
-          {remindPresets(new Date()).map((p, i) => <option key={p.label} value={i}>{t("Send {when}", { when: p.label.toLowerCase() })}</option>)}
+          {remindPresets(new Date()).map((p, i) => <option key={p.label} value={i}>{t("Send {when}", { when: domainLabel(p.label).toLowerCase() })}</option>)}
         </select>
       )}
     </div>

@@ -17,5 +17,10 @@ Source: the items left after Sprint 14 (2026-10-14, "go"). Planned first, then b
   (members only; PNG/JPEG/GIF/WebP by their bytes, ≤ 10 MB, SVG refused; served with `nosniff` and a sandbox CSP;
   API 0.69.0); stored in the chat file store (disk, memory or S3). 🖼 button, paste and drag-and-drop place it fitted
   in the middle of the view. Also: the south-east resize handle is drawn on top, so tiny elements stay resizable.
+- ✅ **S97 The rest of chat in Uzbek and Russian** — the labels the chat domain produces in English: status
+  presets, "clear after" and reminder choices, the Channels / Direct messages sections and the slash-command help.
+  **Done:** translated where they are shown (the domain keeps its English); a preset you pick is set in your
+  language; sections you name yourself stay as you named them.
+- **S98 README screenshots** — chat, huddle, whiteboard and docs, taken from the running app by a script.
 
-Order: S94, then S95, S96.
+Order: S94, then S95, S96, S97, S98.
