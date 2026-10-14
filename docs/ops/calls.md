@@ -7,7 +7,7 @@ Design: [ADR-0009](../adr/0009-chat-and-calls.md).
 ## How media flows
 
 Kyber never touches audio or video. Browsers connect to each other (WebRTC, a full mesh of at most 6 people);
-Kyber only relays the signaling (who wants to talk to whom) over its event stream.
+Kyber only relays the signaling (who wants to talk to whom) over MQTT (each user's own topic, ADR-0013).
 
 | Situation | What is needed |
 |---|---|
@@ -47,7 +47,9 @@ minutes. No sticky sessions are needed. A browser that reconnects to another rep
 instead of replaying missed events (event ids are per replica). Presence (`GET /api/v1/presence`) only knows
 the streams of the replica that answers — a known limit.
 
-The reverse proxy must not buffer `text/event-stream` responses (`/api/v1/stream`, `/api/v1/events`): Kyber
+The reverse proxy must pass WebSocket upgrades on `/api/v1/mqtt` (the web app's only realtime connection,
+S88) and keep idle timeouts above MQTT's keepalive. It must not buffer `text/event-stream` responses
+(`/api/v1/stream`, kept for scripts): Kyber
 sends `X-Accel-Buffering: no` for nginx; keep read timeouts above the 25-second heartbeat.
 
 ## Files

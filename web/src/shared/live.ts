@@ -3,6 +3,7 @@
 // authorized API. Hints carry no content.
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { liveClient } from "./stream";
 
 /** Every project of the caller's workspace; the broker delivers only browsable projects. */
 export const LIVE_TOPIC = "kyber/+/projects/+/events";
@@ -32,20 +33,10 @@ export function startLive(qc: QueryClient, client: LiveClient, debounceMs = 300)
   };
 }
 
-/** liveURL is the broker's WebSocket endpoint on this origin (the session cookie goes along). */
-export function liveURL(loc: Pick<Location, "protocol" | "host">): string {
-  return `${loc.protocol === "https:" ? "wss" : "ws"}://${loc.host}/api/v1/mqtt`;
-}
+export { liveURL } from "./stream";
 
-/** Connects mqtt.js lazily, so the library loads only for signed-in pages. */
-async function browserClient(): Promise<LiveClient> {
-  const { default: mqtt } = await import("mqtt");
-  return mqtt.connect(liveURL(window.location), {
-    clientId: `web-${crypto.randomUUID()}`,
-    reconnectPeriod: 3000,
-    resubscribe: true,
-  });
-}
+/** S88: the hints ride on the tab's one shared MQTT connection (shared/stream). */
+const browserClient = (): Promise<LiveClient> => liveClient();
 
 /** useLive keeps the signed-in app in sync with changes made by other people and sessions. */
 export function useLive(connect: () => Promise<LiveClient> = browserClient): void {

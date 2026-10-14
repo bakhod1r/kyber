@@ -1,65 +1,98 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { onConnect, subscribe } from "./stream";
+import { afterEach, describe, expect, it } from "vitest";
+import { liveClient, onConnect, setStreamConnector, subscribe, subscribeTopic, USER_TOPIC } from "./stream";
+import { FakeStreamClient, flush } from "./test/fakeStream";
 
-class FakeEventSource {
-  static opened: FakeEventSource[] = [];
-  listeners = new Map<string, (e: MessageEvent<string>) => void>();
-  closed = false;
-  constructor(readonly url: string) {
-    FakeEventSource.opened.push(this);
-  }
-  addEventListener(type: string, fn: (e: MessageEvent<string>) => void) {
-    this.listeners.set(type, fn);
-  }
-  close() {
-    this.closed = true;
-  }
-  onopen: (() => void) | null = null;
-  emit(type: string, data: unknown) {
-    this.listeners.get(type)?.(new MessageEvent(type, { data: JSON.stringify(data) }));
-  }
-}
+afterEach(() => setStreamConnector(undefined));
 
-beforeEach(() => {
-  FakeEventSource.opened = [];
-  vi.stubGlobal("EventSource", FakeEventSource);
-});
-afterEach(() => vi.unstubAllGlobals());
-
-describe("shared stream", () => {
-  it("multiplexes one EventSource across subscribers and closes it with the last one", () => {
+describe("shared stream (S88: MQTT)", () => {
+  it("multiplexes one MQTT connection across subscribers and ends it with the last one", async () => {
+    const fake = new FakeStreamClient();
+    setStreamConnector(fake.connector());
     const chat: string[] = [];
     const call: string[] = [];
     const stopChat = subscribe(["message.posted"], (type, data) => chat.push(`${type}:${JSON.stringify(data)}`));
     const stopCall = subscribe(["call.updated", "message.posted"], (type) => call.push(type));
-    expect(FakeEventSource.opened).toHaveLength(1);
-    const es = FakeEventSource.opened[0]!;
-    es.emit("message.posted", { id: "m-1" });
-    es.emit("call.updated", {});
+    await flush();
+    expect(fake.connects).toBe(1);
+    expect(fake.topics).toEqual([USER_TOPIC]);
+    fake.emit("message.posted", { id: "m-1" });
+    fake.emit("call.updated", {});
+    fake.message("kyber/w/projects/KYB/events", '{"project":"KYB"}'); // board hints are not stream events
+    fake.message(USER_TOPIC, "not json");
     expect(chat).toEqual(['message.posted:{"id":"m-1"}']);
     expect(call).toEqual(["message.posted", "call.updated"]);
     stopChat();
-    expect(es.closed).toBe(false);
+    await flush();
+    expect(fake.ended).toBe(false);
     stopCall();
-    expect(es.closed).toBe(true);
+    await flush();
+    expect(fake.ended).toBe(true);
     const stopAgain = subscribe(["typing"], () => {});
-    expect(FakeEventSource.opened).toHaveLength(2);
+    await flush();
+    expect(fake.connects).toBe(2);
     stopAgain();
   });
-});
 
-describe("connections", () => {
-  it("tells listeners whenever the stream (re)connects, so they reload what they may have missed", () => {
+  it("carries board hints and personal events on the same connection", async () => {
+    const fake = new FakeStreamClient();
+    setStreamConnector(fake.connector());
+    const hints: string[] = [];
+    const stopEvents = subscribe(["typing"], () => {});
+    const stopHints = subscribeTopic("kyber/+/projects/+/events", (topic) => hints.push(topic));
+    await flush();
+    const late = subscribeTopic("kyber/+/projects/+/events", () => hints.push("late"));
+    expect(fake.connects).toBe(1);
+    expect(fake.topics).toEqual([USER_TOPIC, "kyber/+/projects/+/events"]); // one SUBSCRIBE per filter
+    fake.message("kyber/w/projects/KYB/events", "{}");
+    fake.emit("typing", {}); // a personal event is not a hint
+    expect(hints).toEqual(["kyber/w/projects/KYB/events", "late"]);
+    late();
+    stopHints();
+    stopEvents();
+    await flush();
+    expect(fake.ended).toBe(true);
+  });
+
+  it("offers live.ts a client over the shared connection", async () => {
+    const fake = new FakeStreamClient();
+    setStreamConnector(fake.connector());
+    const c = await liveClient();
+    let n = 0;
+    c.on("message", () => n++);
+    c.subscribe("kyber/+/projects/+/events");
+    await flush();
+    fake.message("kyber/w/projects/KYB/events", "{}");
+    expect(n).toBe(1);
+    c.end();
+    await flush();
+    expect(fake.ended).toBe(true);
+  });
+
+  it("tells listeners whenever the connection (re)connects, so they reload what they may have missed", async () => {
+    const fake = new FakeStreamClient();
+    setStreamConnector(fake.connector());
     let n = 0;
     const stopListen = onConnect(() => n++);
     const stop = subscribe(["typing"], () => {});
-    const es = FakeEventSource.opened.at(-1)!;
-    es.onopen?.();
-    es.onopen?.(); // a reconnect
+    await flush();
+    fake.connect();
+    fake.connect(); // a reconnect
     expect(n).toBe(2);
     stopListen();
-    es.onopen?.();
+    fake.connect();
     expect(n).toBe(2);
+    stop();
+  });
+
+  it("ends a connection that arrives after everyone left, and survives a failed connect", async () => {
+    const fake = new FakeStreamClient();
+    setStreamConnector(fake.connector());
+    subscribe(["typing"], () => {})();
+    await flush();
+    expect(fake.ended).toBe(true);
+    setStreamConnector(() => Promise.reject(new Error("offline")));
+    const stop = subscribe(["typing"], () => {});
+    await flush();
     stop();
   });
 });

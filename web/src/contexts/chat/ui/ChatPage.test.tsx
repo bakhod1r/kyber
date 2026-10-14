@@ -4,22 +4,10 @@ import { Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mockApi, renderWithProviders } from "../../../shared/test/test-utils";
 import { ChatPage } from "./ChatPage";
+import { setStreamConnector } from "../../../shared/stream";
+import { FakeStreamClient, flush } from "../../../shared/test/fakeStream";
 
-/** A stand-in for the browser's EventSource that the test drives. */
-class FakeEventSource {
-  static last: FakeEventSource | undefined;
-  listeners = new Map<string, (e: MessageEvent<string>) => void>();
-  constructor(readonly url: string) {
-    FakeEventSource.last = this;
-  }
-  addEventListener(type: string, fn: (e: MessageEvent<string>) => void) {
-    this.listeners.set(type, fn);
-  }
-  close() {}
-  emit(type: string, data: unknown) {
-    this.listeners.get(type)?.(new MessageEvent(type, { data: JSON.stringify(data) }));
-  }
-}
+let stream = new FakeStreamClient();
 
 const general = { id: "c-1", kind: "channel", name: "general", topic: "All hands", private: false, member_ids: ["u-1", "u-2"], member: true, unread: 2, created_at: "2026-10-13T09:00:00Z" };
 const random = { ...general, id: "c-2", name: "random", topic: "", member: false, unread: 0, member_ids: ["u-2"] };
@@ -68,8 +56,14 @@ function renderChat(path = "/chat/c-1") {
   );
 }
 
-beforeEach(() => vi.stubGlobal("EventSource", FakeEventSource));
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => {
+  stream = new FakeStreamClient();
+  setStreamConnector(stream.connector());
+});
+afterEach(() => {
+  setStreamConnector(undefined);
+  vi.unstubAllGlobals();
+});
 
 describe("Chat (S53)", () => {
   it("shows channels and DMs with unread counts, and the open channel's history", async () => {
@@ -116,9 +110,10 @@ describe("Chat (S53)", () => {
     routes();
     renderChat();
     await screen.findByText("morning");
-    act(() => FakeEventSource.last?.emit("typing", { conversation_id: "c-1", user_id: "u-2" }));
+    await flush();
+    act(() => stream.emit("typing", { conversation_id: "c-1", user_id: "u-2" }));
     expect(await screen.findByText("Bobur is typing…")).toBeInTheDocument();
-    act(() => FakeEventSource.last?.emit("message.posted", { ...message("m-5", "live!"), issues: undefined }));
+    act(() => stream.emit("message.posted", { ...message("m-5", "live!"), issues: undefined }));
     expect(await screen.findByText("live!")).toBeInTheDocument();
   });
 

@@ -2,6 +2,7 @@ package realtime_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,5 +103,43 @@ func TestOnline(t *testing.T) {
 	stop2()
 	if got := h.Online("w1", []string{"alice"}); len(got) != 0 {
 		t.Fatalf("all tabs closed = %v", got)
+	}
+}
+
+// fakeSink records what the hub forwards (the MQTT broker in production).
+type fakeSink struct {
+	sent   []string
+	online []string
+}
+
+func (f *fakeSink) PublishTo(ws string, users []string, typ string, data []byte) {
+	f.sent = append(f.sent, ws+"|"+strings.Join(users, ",")+"|"+typ+"|"+string(data))
+}
+
+func (f *fakeSink) Online(_ string, users []string) []string {
+	var out []string
+	for _, u := range users {
+		if slices.Contains(f.online, u) {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// S88: every event also goes to the users' MQTT topics; presence counts MQTT clients too.
+func TestHubForwardsToSink(t *testing.T) {
+	h := realtime.NewHub(8)
+	sink := &fakeSink{online: []string{"bob"}}
+	h.Forward(sink)
+	_, stop := h.Subscribe("w1", "ann", 0)
+	defer stop()
+	if err := h.Publish("w1", []string{"ann", "bob"}, "chat.message", map[string]string{"body": "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.sent) != 1 || sink.sent[0] != `w1|ann,bob|chat.message|{"body":"hi"}` {
+		t.Fatalf("sent = %v", sink.sent)
+	}
+	if got := h.Online("w1", []string{"carl", "bob", "ann"}); strings.Join(got, ",") != "bob,ann" {
+		t.Fatalf("online = %v", got)
 	}
 }
