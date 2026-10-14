@@ -26,6 +26,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/projects/{key}/reports/created-vs-resolved", h.createdVsResolved)
 	mux.HandleFunc("GET /api/v1/projects/{key}/reports/velocity", h.velocity)
 	mux.HandleFunc("GET /api/v1/projects/{key}/reports/control-chart", h.controlChart)
+	mux.HandleFunc("GET /api/v1/projects/{key}/reports/cumulative-flow", h.cumulativeFlow)
 	mux.HandleFunc("GET /api/v1/sprints/{id}/burndown", h.burndown)
 	mux.HandleFunc("GET /api/v1/sprints/{id}/report", h.sprintReport)
 }
@@ -120,6 +121,28 @@ func (h *Handler) controlChart(w http.ResponseWriter, r *http.Request) {
 				points = append(points, pointDTO{Key: p.Key, Title: p.Title, DoneAt: p.Done.UTC().Format(time.RFC3339), CycleHours: hours(p.Cycle), RollingHours: hours(p.Rolling)})
 			}
 			httpx.JSON(w, http.StatusOK, map[string]any{"days": days, "points": points, "average_hours": hours(c.Average), "stddev_hours": hours(c.StdDev)})
+			return
+		}
+	}
+	httpx.Error(w, r, h.log, err, codeFor)
+}
+
+func (h *Handler) cumulativeFlow(w http.ResponseWriter, r *http.Request) {
+	days, err := parseDays(r, 30)
+	if err == nil {
+		var flow []domain.FlowDay
+		if flow, err = h.svc.CumulativeFlow(r.Context(), auth.Actor(r.Context()), r.PathValue("key"), days); err == nil {
+			type dayDTO struct {
+				Date       string `json:"date"`
+				ToDo       int    `json:"todo"`
+				InProgress int    `json:"in_progress"`
+				Done       int    `json:"done"`
+			}
+			out := make([]dayDTO, 0, len(flow))
+			for _, d := range flow {
+				out = append(out, dayDTO{Date: d.Date.Format(time.DateOnly), ToDo: d.ToDo, InProgress: d.InProgress, Done: d.Done})
+			}
+			httpx.JSON(w, http.StatusOK, map[string]any{"days": out})
 			return
 		}
 	}

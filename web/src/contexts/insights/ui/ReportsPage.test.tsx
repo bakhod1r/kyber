@@ -30,6 +30,7 @@ const burndown = {
 };
 const velocity = { sprints: [{ id: "s-0", name: "Sprint 6", committed_points: 20, completed_points: 17, completed_issues: 6 }] };
 
+const flow = { days: [{ date: "2026-05-01", todo: 4, in_progress: 1, done: 0 }, { date: "2026-05-02", todo: 2, in_progress: 2, done: 1 }] };
 const control = {
   days: 30, average_hours: 36, stddev_hours: 12,
   points: [
@@ -47,6 +48,8 @@ function api(extra = {}) {
     "GET /api/v1/sprints/s-1/burndown": { status: 200, body: burndown },
     "GET /api/v1/projects/KYB/reports/velocity": { status: 200, body: velocity },
     "GET /api/v1/projects/KYB/reports/control-chart?days=30": { status: 200, body: control },
+    "GET /api/v1/projects/KYB/reports/cumulative-flow?days=30": { status: 200, body: flow },
+    "GET /api/v1/projects/KYB/reports/cumulative-flow?days=90": { status: 200, body: flow },
     "GET /api/v1/projects/KYB/reports/control-chart?days=90": { status: 200, body: control },
     ...extra,
   });
@@ -67,13 +70,16 @@ describe("Reports (KYB-S28)", () => {
   it("AC1/AC2: every chart is a labelled figure with a data table", async () => {
     api();
     renderWithProviders(<Reports projectKey="KYB" />);
-    for (const name of ["Issues by status", "Issues by type", "Issues by priority", "Workload (open issues)", "Created vs resolved", "Burndown — Sprint 7", "Velocity", "Control chart"]) {
+    for (const name of ["Issues by status", "Issues by type", "Issues by priority", "Workload (open issues)", "Created vs resolved", "Burndown — Sprint 7", "Velocity", "Control chart", "Cumulative flow"]) {
       const fig = await screen.findByRole("figure", { name });
       expect(within(fig).getByRole("table", { hidden: true })).toBeInTheDocument();
     }
     const status = screen.getByRole("figure", { name: "Issues by status" });
     const rows = within(status).getAllByRole("row", { hidden: true }).map((r) => r.textContent);
     expect(rows).toContain("In Progress38");
+    const cfd = screen.getByRole("figure", { name: "Cumulative flow" });
+    const cfdRows = within(cfd).getAllByRole("row", { hidden: true }).map((r) => r.textContent);
+    expect(cfdRows.some((r) => r?.startsWith("2026-05-02") && r.endsWith("531"))).toBe(true);
     const cc = screen.getByRole("figure", { name: "Control chart" });
     expect(within(cc).getByText(/Average 1.5 days/)).toBeInTheDocument();
     const burn = screen.getByRole("figure", { name: "Burndown — Sprint 7" });

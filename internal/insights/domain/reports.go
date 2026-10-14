@@ -252,3 +252,48 @@ func Velocity(entries []Entry, sprints []SprintWindow) []SprintVelocity {
 	}
 	return out
 }
+
+// FlowDay is one day of the cumulative flow diagram: issues in each status category at its end.
+type FlowDay struct {
+	Date                   time.Time
+	ToDo, InProgress, Done int
+}
+
+// CumulativeFlow counts, at the end of each of the last `days` UTC days (ending today), the issues
+// in each status category. A new issue starts in to do; status entries carry categories.
+func CumulativeFlow(entries []Entry, now time.Time, days int) []FlowDay {
+	today := now.UTC().Truncate(24 * time.Hour)
+	out := make([]FlowDay, days)
+	state := map[string]string{}
+	es := sorted(entries)
+	n := 0
+	for i := range out {
+		day := today.AddDate(0, 0, i-(days-1))
+		end := day.Add(24 * time.Hour)
+		if end.After(now) {
+			end = now.Add(time.Nanosecond) // today: up to now
+		}
+		for ; n < len(es) && es[n].At.Before(end); n++ {
+			switch e := es[n]; e.Kind {
+			case KindCreated:
+				if _, ok := state[e.Issue]; !ok {
+					state[e.Issue] = "todo"
+				}
+			case KindStatus:
+				state[e.Issue] = e.To
+			}
+		}
+		out[i].Date = day
+		for _, c := range state {
+			switch c {
+			case "todo":
+				out[i].ToDo++
+			case done:
+				out[i].Done++
+			default:
+				out[i].InProgress++
+			}
+		}
+	}
+	return out
+}

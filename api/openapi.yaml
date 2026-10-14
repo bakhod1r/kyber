@@ -2947,6 +2947,36 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/reports/cumulative-flow:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: getCumulativeFlow
+      summary: Issues per status category at the end of each of the last `days` days (CFD).
+      parameters:
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 30 } }
+      responses:
+        "200":
+          description: Oldest day first; today counts up to now.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [days]
+                properties:
+                  days:
+                    type: array
+                    items:
+                      type: object
+                      required: [date, todo, in_progress, done]
+                      properties:
+                        date: { type: string, format: date }
+                        todo: { type: integer }
+                        in_progress: { type: integer }
+                        done: { type: integer }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/reports/control-chart:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:

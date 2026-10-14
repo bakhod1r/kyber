@@ -3,7 +3,7 @@ import { useState } from "react";
 import { SprintReport } from "./SprintReport";
 import { BarList, GroupedBars, LineChart, StatTile, fmt } from "../../../shared/ui/charts";
 import { agileUseCases } from "../../agile/application";
-import { insightsUseCases } from "../application";
+import { insightsUseCases, stackFlow } from "../application";
 import { issueUseCases } from "../../issue/application";
 import { msg, type MessageKey, type Translate, useT } from "../../../shared/i18n/i18n";
 
@@ -24,6 +24,11 @@ export function Reports({ projectKey }: { projectKey: string }) {
   const burndown = useQuery({ queryKey: ["reports", "burndown", focus?.id], queryFn: () => insightsUseCases.burndown(focus!.id), enabled: !!focus });
   const workflow = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => issueUseCases.workflow(projectKey) });
   const statusName = (k: string) => workflow.data?.statuses.find((st) => st.id === k)?.name ?? title(t, k);
+  const flow = useQuery({
+    queryKey: ["reports", projectKey, "cfd", days],
+    queryFn: () => insightsUseCases.reportCumulativeFlow(projectKey, days),
+    placeholderData: (prev) => prev,
+  });
   const control = useQuery({
     queryKey: ["reports", projectKey, "control", days],
     queryFn: () => insightsUseCases.reportControlChart(projectKey, days),
@@ -72,6 +77,19 @@ export function Reports({ projectKey }: { projectKey: string }) {
           series={[
             { name: t("Created"), slot: 1, points: cvr.data.days.map((d) => ({ x: new Date(`${d.date}T00:00:00Z`), y: d.cum_created })) },
             { name: t("Resolved"), slot: 2, points: cvr.data.days.map((d) => ({ x: new Date(`${d.date}T00:00:00Z`), y: d.cum_resolved })) },
+          ]}
+        />
+      )}
+
+      {flow.data && (
+        <LineChart
+          title={t("Cumulative flow")}
+          yLabel={t("issues")}
+          caption={t("Issues by status category at the end of each day over the last {n} days. A widening In Progress band means work piles up.", { n: days })}
+          series={[
+            { name: t("To Do"), slot: "muted", points: stackFlow(flow.data.days).map((d) => ({ x: d.x, y: d.total })) },
+            { name: t("In Progress"), slot: 1, points: stackFlow(flow.data.days).map((d) => ({ x: d.x, y: d.started })) },
+            { name: t("Done"), slot: 2, points: stackFlow(flow.data.days).map((d) => ({ x: d.x, y: d.done })) },
           ]}
         />
       )}

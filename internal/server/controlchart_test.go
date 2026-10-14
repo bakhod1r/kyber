@@ -18,7 +18,14 @@ func TestControlChart(t *testing.T) {
 		if p["key"] != "KYB-1" || p["title"] != "Ship it" || p["done_at"] == nil {
 			t.Fatalf("point = %v", p)
 		}
-		code, b := dev.do("GET", "/api/v1/projects/KYB/reports/control-chart?days=0", nil)
+		code, cfd := dev.do("GET", "/api/v1/projects/KYB/reports/cumulative-flow?days=3", nil)
+		expect(t, code, 200, cfd)
+		if days := cfd["days"].([]any); len(days) != 3 || days[2].(map[string]any)["done"] != float64(1) {
+			t.Fatalf("cumulative flow = %v", cfd)
+		}
+		code, b := dev.do("GET", "/api/v1/projects/KYB/reports/cumulative-flow?days=400", nil)
+		expect(t, code, 422, b)
+		code, b = dev.do("GET", "/api/v1/projects/KYB/reports/control-chart?days=0", nil)
 		expect(t, code, 422, b)
 		code, b = eve.do("GET", "/api/v1/projects/KYB/reports/control-chart", nil)
 		expect(t, code, 404, b)

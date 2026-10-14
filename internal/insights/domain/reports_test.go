@@ -165,3 +165,26 @@ func TestControlChart(t *testing.T) {
 		t.Fatalf("empty = %+v", empty)
 	}
 }
+
+func TestCumulativeFlow(t *testing.T) {
+	entries := []domain.Entry{
+		created(1, at(0, 9), "a"), created(2, at(0, 10), "b"),
+		status(3, at(1, 9), "a", "todo", "in_progress"),
+		status(4, at(2, 9), "a", "in_progress", "done"), status(5, at(2, 10), "b", "todo", "in_progress"),
+		created(6, at(2, 11), "c"),
+		status(7, at(9, 0), "b", "in_progress", "done"), // after now: ignored
+	}
+	days := domain.CumulativeFlow(entries, at(3, 12), 4)
+	want := [][3]int{{2, 0, 0}, {1, 1, 0}, {1, 1, 1}, {1, 1, 1}} // todo, in progress, done at each day's end
+	if len(days) != 4 {
+		t.Fatalf("days = %+v", days)
+	}
+	for i, d := range days {
+		if got := [3]int{d.ToDo, d.InProgress, d.Done}; got != want[i] {
+			t.Errorf("day %d (%s) = %v, want %v", i, d.Date.Format(time.DateOnly), got, want[i])
+		}
+	}
+	if !days[3].Date.Equal(at(3, 0).Truncate(24 * time.Hour)) {
+		t.Fatalf("last day = %v", days[3].Date)
+	}
+}

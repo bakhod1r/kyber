@@ -29,6 +29,15 @@ services:
       # direct connection is impossible. See docs/ops/calls.md. Replace turn.example.com with your host.
       KYBER_ICE_SERVERS: stun:turn.example.com:3478,turn:turn.example.com:3478?transport=udp,turn:turn.example.com:3478?transport=tcp
       KYBER_TURN_SECRET: change-me-to-a-long-random-secret
+      # With `--profile dev` (minio + mailpit below), uncomment to store attachments in S3 and send email:
+      # KYBER_S3_ENDPOINT: minio:9000
+      # KYBER_S3_BUCKET: kyber
+      # KYBER_S3_ACCESS_KEY: kyber
+      # KYBER_S3_SECRET_KEY: kyber-dev-secret
+      # KYBER_S3_TLS: "false"
+      # KYBER_SMTP_HOST: mailpit
+      # KYBER_SMTP_PORT: "1025"
+      # KYBER_SMTP_TLS: none
     ports: ["8080:8080"]
     volumes: ["attachments:/data/attachments"] # uploaded files; back up with the database
     depends_on:
@@ -55,6 +64,26 @@ services:
       - --denied-peer-ip=172.16.0.0-172.31.255.255
       - --denied-peer-ip=192.168.0.0-192.168.255.255
     profiles: ["calls"] # docker compose --profile calls up
+  # Development services: S3-compatible storage and a mail catcher (docker compose --profile dev up).
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: kyber
+      MINIO_ROOT_PASSWORD: kyber-dev-secret
+    ports: ["9000:9000", "9001:9001"] # API, web console
+    volumes: ["minio:/data"]
+    profiles: ["dev"]
+  minio-init: # creates the bucket once MinIO is up
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on: [minio]
+    entrypoint: ["/bin/sh", "-c", "until mc alias set local http://minio:9000 kyber kyber-dev-secret; do sleep 1; done; mc mb --ignore-existing local/kyber"]
+    profiles: ["dev"]
+  mailpit:
+    image: axllent/mailpit:v1.24
+    ports: ["8025:8025"] # web UI; SMTP on mailpit:1025 inside the network
+    profiles: ["dev"]
 volumes:
   pgdata:
+  minio:
   attachments:

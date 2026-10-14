@@ -189,6 +189,13 @@ func TestControlChartShowsOnlyVisibleIssues(t *testing.T) {
 	if len(r.Points) != 2 || r.Points[0].Key != "KYB-1" || r.Points[0].Title != "Crash" || r.Points[1].Key != "KYB-2" {
 		t.Fatalf("points = %+v", r.Points)
 	}
+	flow, err := s.CumulativeFlow(ctx, "dev", "KYB", 2)
+	if err != nil || len(flow) != 2 || flow[1].Done != 2 {
+		t.Fatalf("flow over visible issues = %+v %v", flow, err)
+	}
+	if _, err := s.CumulativeFlow(ctx, "stranger", "KYB", 2); !errors.Is(err, application.ErrProjectNotFound) {
+		t.Fatalf("outsider flow err = %v", err)
+	}
 	if r.Average != 15*time.Hour {
 		t.Fatalf("average over visible issues = %v", r.Average)
 	}

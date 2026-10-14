@@ -39,3 +39,11 @@ export type ControlChart = {
   stddev_hours: number;
   points: { key: string; title: string; done_at: string; cycle_hours: number; rolling_hours: number }[];
 };
+
+/** Cumulative flow: issues per status category at the end of each day. */
+export type FlowDay = { date: string; todo: number; in_progress: number; done: number };
+
+/** stackFlow turns flow days into the CFD's stacked bands: done, done + in progress, and all. */
+export function stackFlow(days: FlowDay[]): { x: Date; done: number; started: number; total: number }[] {
+  return days.map((d) => ({ x: new Date(`${d.date}T00:00:00Z`), done: d.done, started: d.done + d.in_progress, total: d.done + d.in_progress + d.todo }));
+}

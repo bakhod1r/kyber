@@ -222,7 +222,8 @@ Har bir milestone `awesome-agents` zanjiri bo'yicha o'tadi: `/design` → implem
 - [x] ADR'lar — `docs/adr/0002…0015` (ADR-0001 alohida yozilmagan; qarorlar §6 va ADR-0002…0005 da)
 - [x] `Makefile`, `golangci-lint` (`make lint`) — `pre-commit` o'rniga CI va `make lint`
 - [x] CI (GitHub Actions): lint, test, build, `govulncheck`, CodeQL (`.github/workflows/`)
-- [ ] `docker-compose.yml` ga minio va mailpit; dev hot-reload (`air`) — hozir faqat postgres
+- [x] `docker-compose.yml`: postgres, redis, coturn; `--profile dev` bilan minio (S3) va mailpit
+  - [ ] dev hot-reload (`air`)
 - [x] OpenAPI 3.1 (`api/openapi.yaml`) + contract test; `/healthz`, `/readyz`, `/metrics`
 - [x] README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY.md, issue/PR shablonlari
 
@@ -253,7 +254,7 @@ Har bir milestone `awesome-agents` zanjiri bo'yicha o'tadi: `/design` → implem
 ### M3 — v1.0
 - [x] Saved filters, swimlanes, quick filters, velocity
   - [x] Control chart (cycle time, rolling average, σ)
-  - [ ] CFD (cumulative flow)
+  - [x] CFD (cumulative flow)
 - [x] Permission schemes, issue-level security; audit log UI; RLS (ADR-0010)
 - [x] F18 Jira import (CSV); F17 GitHub integratsiya (commit/PR `KYB-12` → Development paneli)
 - [x] Helm chart (`deploy/helm/kyber`), backup/restore (`docs/operations/backup.md`)

@@ -313,12 +313,36 @@ type Control struct {
 // ControlChart covers issues done in the last `days` days (cycle time: first in progress → done),
 // with a rolling average over five issues. Issues the actor cannot see are left out.
 func (s *Service) ControlChart(ctx context.Context, actor, project string, days int) (Control, error) {
-	if err := s.d.Access.Authorize(ctx, actor, project); err != nil {
+	visible, entries, err := s.visibleActivity(ctx, actor, project)
+	if err != nil {
 		return Control{}, err
+	}
+	r := domain.ControlChart(entries, s.d.Now(), time.Duration(days)*24*time.Hour, 5)
+	out := Control{Average: r.Average, StdDev: r.StdDev}
+	for _, p := range r.Points {
+		row := visible[p.Issue]
+		out.Points = append(out.Points, ControlPoint{Key: row.Key, Title: row.Title, CyclePoint: p})
+	}
+	return out, nil
+}
+
+// CumulativeFlow counts the actor's visible issues per status category at the end of each day.
+func (s *Service) CumulativeFlow(ctx context.Context, actor, project string, days int) ([]domain.FlowDay, error) {
+	_, entries, err := s.visibleActivity(ctx, actor, project)
+	if err != nil {
+		return nil, err
+	}
+	return domain.CumulativeFlow(entries, s.d.Now(), days), nil
+}
+
+// visibleActivity is the project's activity limited to issues the actor can see (security levels).
+func (s *Service) visibleActivity(ctx context.Context, actor, project string) (map[string]IssueRow, []domain.Entry, error) {
+	if err := s.d.Access.Authorize(ctx, actor, project); err != nil {
+		return nil, nil, err
 	}
 	rows, err := s.d.Issues.Issues(ctx, actor, project)
 	if err != nil {
-		return Control{}, err
+		return nil, nil, err
 	}
 	visible := map[string]IssueRow{}
 	for _, r := range rows {
@@ -326,7 +350,7 @@ func (s *Service) ControlChart(ctx context.Context, actor, project string, days 
 	}
 	entries, err := s.d.Repo.ForProject(ctx, project)
 	if err != nil {
-		return Control{}, err
+		return nil, nil, err
 	}
 	kept := entries[:0:0]
 	for _, e := range entries {
@@ -334,13 +358,7 @@ func (s *Service) ControlChart(ctx context.Context, actor, project string, days 
 			kept = append(kept, e)
 		}
 	}
-	r := domain.ControlChart(kept, s.d.Now(), time.Duration(days)*24*time.Hour, 5)
-	out := Control{Average: r.Average, StdDev: r.StdDev}
-	for _, p := range r.Points {
-		row := visible[p.Issue]
-		out.Points = append(out.Points, ControlPoint{Key: row.Key, Title: row.Title, CyclePoint: p})
-	}
-	return out, nil
+	return visible, kept, nil
 }
 
 type Burndown struct {
