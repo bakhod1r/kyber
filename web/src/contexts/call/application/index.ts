@@ -101,6 +101,11 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
     },
     /** Recent reactions (S75), newest last; each fades after 4 s. */
     reactions,
+    /** The host takes someone out of the huddle (S103). */
+    remove: async (user: string) => {
+      const id = engine.snapshot.call?.id;
+      if (id) engine.update(await callGateway.remove(id, user));
+    },
     raiseHand: async (raised: boolean) => {
       const id = engine.snapshot.call?.id;
       if (id) engine.update(await callGateway.raiseHand(id, raised));
@@ -116,7 +121,9 @@ export function useHuddle(conversationId: string, user: string, platform: Platfo
     startRecording: async () => {
       const id = engine.snapshot.call?.id;
       if (!id) return;
-      engine.update(await callGateway.startRecording(id));
+      const call = await callGateway.startRecording(id);
+      engine.update(call);
+      if (call.recording?.server) return; // the media server records this room call (S104)
       recorder.current = startRecorder(() => {
         const s = engine.snapshot;
         const all = [s.local, s.screen, ...Object.values(s.remotes).flatMap((r) => [r.camera, r.screen])];

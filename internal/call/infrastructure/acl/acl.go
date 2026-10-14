@@ -4,6 +4,7 @@ package acl
 import (
 	"context"
 	"errors"
+	"io"
 
 	"github.com/bakhod1r/kyber/internal/call/application"
 	chatapp "github.com/bakhod1r/kyber/internal/chat/application"
@@ -12,6 +13,17 @@ import (
 
 type Chat interface {
 	Conversation(ctx context.Context, actor, id string) (chatapp.View, error)
+	UploadRecording(ctx context.Context, actor, conv, name string, body io.Reader) (*chatdomain.Message, error)
+}
+
+// Recordings posts the media server's recordings to the conversation (S104), as the one who recorded.
+type Recordings struct{ chat Chat }
+
+func NewRecordings(chat Chat) Recordings { return Recordings{chat: chat} }
+
+func (r Recordings) Post(ctx context.Context, by, conversation, name string, body io.Reader) error {
+	_, err := r.chat.UploadRecording(ctx, by, conversation, name, body)
+	return err
 }
 
 type Conversations struct{ chat Chat }

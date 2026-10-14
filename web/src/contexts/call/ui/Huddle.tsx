@@ -1,7 +1,7 @@
 import { useT } from "../../../shared/i18n/i18n";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
-  type Call, fromFraction, MAX_PARTICIPANTS, type Platform, type Presentable, type Presentation, presenter, REACTIONS, toFraction, useHuddle, useSpeaking,
+  type Call, fromFraction, capacity, type Platform, type Presentable, type Presentation, presenter, REACTIONS, toFraction, useHuddle, useSpeaking,
 } from "../application";
 
 /** The app shell renders presented files (docs, whiteboards), which belong to other contexts. */
@@ -97,13 +97,14 @@ export function Huddle({ conversationId, me, names, platform, presentables = [],
 
   if (!state.joined) {
     const people = call?.participants ?? [];
-    const full = people.length >= MAX_PARTICIPANTS;
+    const full = people.length >= capacity(call);
     return (
       <div className="huddle-bar">
         {people.length > 0 && <span className="muted">🎧 {t("Huddle:")} {people.map((p) => name(p.user_id)).join(", ")}</span>}
-        <button onClick={() => void h.join()} disabled={full} title={full ? t("The huddle is full (6 people)") : undefined}>
+        <button onClick={() => void h.join()} disabled={full} title={full ? t("The huddle is full ({count} people)", { count: capacity(call) }) : undefined}>
           {people.length > 0 ? t("Join huddle ({count})", { count: people.length }) : t("Start huddle")}
         </button>
+        {state.removed && <span role="status" className="muted">{t("You were removed from the huddle")}</span>}
         {state.error && <span role="alert" className="error">{state.error}</span>}
       </div>
     );
@@ -143,6 +144,10 @@ export function Huddle({ conversationId, me, names, platform, presentables = [],
                 {name(p.user_id)} {!p.audio && <span aria-label={t("muted")}>🔇</span>} {p.screen && <span aria-label={t("sharing screen")}>🖥️</span>}
                 {p.hand && <span aria-label={t("hand raised")}> ✋</span>}
               </span>
+              {call.started_by === me && p.user_id !== me && (
+                <button className="ghost huddle-remove" aria-label={t("Remove {name} from the huddle", { name: name(p.user_id) })}
+                  onClick={() => void h.remove(p.user_id).catch(() => {})}>✕</button>
+              )}
             </li>
           );
         })}

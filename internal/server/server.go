@@ -264,6 +264,7 @@ type deps struct {
 	chatBlobs     blob.Store // chat files; memory unless WithFilesDir
 	baseDomain    string     // "" = single-tenant (ADR-0004)
 	ice           ice.Config
+	media         MediaServer
 	outbox        outbox.Store
 	livePool      *pgxpool.Pool   // set: hints cross replicas through NOTIFY
 	ctx           context.Context // lifetime of background work (outbox relay)
@@ -357,6 +358,27 @@ func WithBaseDomain(domain string) Option { return func(d *deps) { d.baseDomain 
 func WithICE(urls []string, turnSecret string) Option {
 	return func(d *deps) { d.ice = ice.Config{URLs: urls, Secret: turnSecret} }
 }
+
+// MediaServer is an SFU for large calls (ADR-0017): it issues room tickets, and the web app connects to its
+// origins.
+type MediaServer interface {
+	callapp.Rooms
+	Origins() []string
+}
+
+// recorder is the media server's recorder when it records (LiveKit Egress with a recordings directory, S104).
+func (d *deps) recorder() callapp.Recorder {
+	if r, ok := d.media.(interface {
+		callapp.Recorder
+		Records() bool
+	}); ok && r.Records() {
+		return r
+	}
+	return nil
+}
+
+// WithMediaServer makes new calls rooms on the media server (LiveKit) instead of a browser mesh.
+func WithMediaServer(m MediaServer) Option { return func(d *deps) { d.media = m } }
 
 // WithTranscriber transcribes huddle recordings into their threads (S77).
 func WithTranscriber(t chatapp.Transcriber) Option { return func(d *deps) { d.transcriber = t } }
@@ -548,7 +570,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	calendar.WithConversations(calendaracl.NewConversations(chat)) // meetings in a channel's huddle (S76)
 	callEvents := callrealtime.New(publish, func(c *calldomain.Call) any { return callhttp.ToDTO(c) })
 	calls := callapp.NewService(callapp.Deps{Calls: d.calls, Conversations: callacl.NewConversations(chat),
-		Notifier: callEvents, Signals: callEvents, NewID: id.New, Now: time.Now})
+		Notifier: callEvents, Signals: callEvents, Rooms: d.media, Recorder: d.recorder(), Recordings: callacl.NewRecordings(chat),
+		NewID: id.New, Now: time.Now})
 	notify.WithConversations(notifyacl.NewConversations(chat))
 	notify.WithQuiet(notifyacl.NewQuiet(chat, focus))
 	notify.WithGroupMentions(notifyacl.NewGroupMentions(chat))
@@ -606,6 +629,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	for _, name := range []string{"issue.created", "issue.transitioned", "sprint.started", "sprint.completed"} {
 		relay.Handle(name, chat.OnProjectEvent) // project channels (S73)
 	}
+	relay.Handle("call.participant_left", calls.OnParticipantLeft)   // drop them from the media server (S103)
+	relay.Handle("call.recording_stopped", calls.OnRecordingStopped) // post the media server's recording (S104)
 	relay.Handle("call.started", chat.OnCallEvent)
 	relay.Handle("call.ended", chat.OnCallEvent)
 	relay.Handle("issue.changed", notify.OnIssueChanged)
@@ -743,7 +768,11 @@ func build(log *slog.Logger, d deps) http.Handler {
 	chatAPI.RegisterPublic(mux) // incoming webhooks (S81): the secret in the URL is the credential
 	webhookHTTP.RegisterPublic(mux)
 	mux.Handle("/api/v1/", auth.RequireAuth(d.rateLimit(log)(tenancy.RequireMember(audit.Record(problemFallback(otel.Routed(api)))))))
-	mux.Handle("/", web.Handler(web.Dist()))
+	var mediaOrigins []string
+	if d.media != nil {
+		mediaOrigins = d.media.Origins()
+	}
+	mux.Handle("/", web.Handler(web.Dist(), mediaOrigins...))
 	return otel.Middleware(observe(log, m, recoverer(log, hsts(d.cookieSecure, tenancy.Resolve(otel.Routed(mux))))))
 }
 
