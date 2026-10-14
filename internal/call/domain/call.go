@@ -80,6 +80,24 @@ type CallEnded struct {
 	Seconds      int            `json:"seconds"`
 }
 
+// ParticipantLeft: someone left (or was removed from) a room call; the media server must drop them (S103).
+type ParticipantLeft struct {
+	Call CallID `json:"call_id"`
+	User UserID `json:"user_id"`
+}
+
+// RecordingStopped: the media server finished recording; its file goes to the conversation (S104).
+type RecordingStopped struct {
+	Call         CallID         `json:"call_id"`
+	Conversation ConversationID `json:"conversation_id"`
+	By           UserID         `json:"by"`
+	Egress       string         `json:"egress_id"`
+	Since        time.Time      `json:"since"`
+}
+
+func (ParticipantLeft) EventName() string  { return "call.participant_left" }
+func (RecordingStopped) EventName() string { return "call.recording_stopped" }
+
 func (CallStarted) EventName() string { return "call.started" }
 func (CallEnded) EventName() string   { return "call.ended" }
 
@@ -90,10 +108,12 @@ func (c *Call) PullEvents() []Event {
 	return ev
 }
 
-// Recording: one participant's browser records the call; everyone in it is shown who and since when.
+// Recording: one participant's browser — or, in a room call, the media server — records the call; everyone in
+// it is shown who and since when.
 type Recording struct {
-	By    UserID
-	Since time.Time
+	By     UserID
+	Since  time.Time
+	Egress string // the media server's recording, if it records (S104)
 }
 
 var (
@@ -112,12 +132,49 @@ func (c *Call) StartRecording(by UserID, now time.Time) error {
 	return nil
 }
 
+// RecordOnServer: the media server records a room call (egress is its recording's id).
+func (c *Call) RecordOnServer(by UserID, egress string, now time.Time) error {
+	if !c.Room {
+		return ErrNotRoom
+	}
+	if egress == "" {
+		return errors.New("no media-server recording")
+	}
+	if err := c.StartRecording(by, now); err != nil {
+		return err
+	}
+	c.Recording.Egress = egress
+	return nil
+}
+
 func (c *Call) StopRecording(by UserID) error {
 	if c.Recording == nil || c.Recording.By != by {
 		return ErrNotRecorder
 	}
-	c.Recording = nil
+	c.endRecording()
 	return nil
+}
+
+// endRecording clears the recording; a media-server recording's file is then handed on.
+func (c *Call) endRecording() {
+	if r := c.Recording; r.Egress != "" {
+		c.events = append(c.events, RecordingStopped{Call: c.ID, Conversation: c.Conversation, By: r.By, Egress: r.Egress, Since: r.Since})
+	}
+	c.Recording = nil
+}
+
+// ErrNotHost: only the one who started the call removes others (and not themselves: they leave).
+var ErrNotHost = errors.New("only the host can remove people from the call")
+
+// Remove takes target out of the call (S103).
+func (c *Call) Remove(by, target UserID, now time.Time) error {
+	switch {
+	case !c.Live() || !c.In(target):
+		return ErrNotInCall
+	case by != c.StartedBy || by == target || !c.In(by):
+		return ErrNotHost
+	}
+	return c.Leave(target, now)
 }
 
 // A Presentation is a shared file opened for everyone in the call ("present to all"); each viewer opens it
@@ -235,7 +292,10 @@ func (c *Call) Leave(u UserID, now time.Time) error {
 		c.Presentation = nil
 	}
 	if c.Recording != nil && c.Recording.By == u {
-		c.Recording = nil
+		c.endRecording()
+	}
+	if c.Room {
+		c.events = append(c.events, ParticipantLeft{Call: c.ID, User: u})
 	}
 	if len(c.Participants) == 0 {
 		c.EndedAt = now.UTC()

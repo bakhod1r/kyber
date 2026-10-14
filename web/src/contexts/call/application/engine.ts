@@ -24,6 +24,8 @@ export type HuddleState = {
   remotes: Record<string, Remote>;
   media: Media;
   error?: string;
+  /** The host removed us from the live call (S103). */
+  removed?: boolean;
 };
 
 type Peer = {
@@ -75,6 +77,7 @@ export class HuddleEngine {
   async join(conversationId: string) {
     this.joining = true;
     this.early = [];
+    this.set({ removed: false });
     try {
       this.ice = await this.gw.ice().catch(() => []);
       this.local = new MediaStream();
@@ -131,7 +134,11 @@ export class HuddleEngine {
   update(call: Call | null) {
     this.set({ call });
     if (!this.state.joined || !call) return;
-    if (!call.live || !me(call, this.user)) return this.teardown();
+    if (!call.live || !me(call, this.user)) {
+      this.teardown();
+      if (call.live) this.set({ removed: true }); // still going without us: the host removed us
+      return;
+    }
     if (this.room) {
       if (this.screen && !me(call, this.user)?.screen) void this.stopShare(false);
       return; // the media server tells who is there

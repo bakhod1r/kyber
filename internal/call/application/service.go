@@ -5,11 +5,14 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/call/domain"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
@@ -24,6 +27,25 @@ var (
 // enters with a short-lived ticket for that room only.
 type Rooms interface {
 	Ticket(room, user string, now time.Time) (RoomTicket, error)
+	// Evict disconnects user from room (S103); someone already gone is no error.
+	Evict(ctx context.Context, room, user string) error
+}
+
+// Recorder records room calls on the media server (LiveKit Egress, S104).
+type Recorder interface {
+	Start(ctx context.Context, room string) (egress string, err error)
+	Stop(ctx context.Context, egress string) error // a recording that already ended is no error
+	// Open is the finished file; an error while it is still being written (the relay retries).
+	Open(ctx context.Context, egress string) (io.ReadCloser, error)
+	Discard(ctx context.Context, egress string) error // after the file was posted
+}
+
+// ErrRecordingLost: the media server's recording failed or its file is gone; there is nothing to post.
+var ErrRecordingLost = errors.New("the media server's recording was lost")
+
+// Recordings posts a finished recording to its conversation, as by did (the Chat context).
+type Recordings interface {
+	Post(ctx context.Context, by, conversation, name string, body io.Reader) error
 }
 
 // RoomTicket is where the browser connects and the signed token that lets it in.
@@ -68,6 +90,8 @@ type Deps struct {
 	Notifier      Notifier // optional
 	Signals       Signals  // optional
 	Rooms         Rooms    // optional: without it every call is a browser mesh
+	Recorder      Recorder // optional: without it room calls are recorded in the browser
+	Recordings    Recordings
 	NewID         func() string
 	Now           func() time.Time
 }
@@ -202,6 +226,44 @@ func (s *Service) change(ctx context.Context, actor, id string, fn func(*domain.
 	return nil, domain.ErrConflict
 }
 
+// Remove takes target out of the call; only its host may (S103).
+func (s *Service) Remove(ctx context.Context, actor, id, target string) (*domain.Call, error) {
+	return s.change(ctx, actor, id, func(c *domain.Call) error { return c.Remove(domain.UserID(actor), domain.UserID(target), s.d.Now()) })
+}
+
+// OnParticipantLeft disconnects whoever left a room call from the media server (call.participant_left).
+func (s *Service) OnParticipantLeft(ctx context.Context, m outbox.Message) error {
+	var e domain.ParticipantLeft
+	if err := json.Unmarshal(m.Payload, &e); err != nil || s.d.Rooms == nil {
+		return nil // a poison message must not block the relay
+	}
+	return s.d.Rooms.Evict(ctx, string(e.Call), string(e.User))
+}
+
+// OnRecordingStopped stops the media server's recording and posts the file to the conversation as the one who
+// recorded it (call.recording_stopped); the transcript follows as for browser recordings.
+func (s *Service) OnRecordingStopped(ctx context.Context, m outbox.Message) error {
+	var e domain.RecordingStopped
+	if err := json.Unmarshal(m.Payload, &e); err != nil || s.d.Recorder == nil || s.d.Recordings == nil {
+		return nil
+	}
+	if err := s.d.Recorder.Stop(ctx, e.Egress); err != nil {
+		return err
+	}
+	file, err := s.d.Recorder.Open(ctx, e.Egress)
+	if errors.Is(err, ErrRecordingLost) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	defer file.Close()
+	name := "Huddle " + e.Since.UTC().Format("2006-01-02 15-04") + ".mp4"
+	if err := s.d.Recordings.Post(ctx, string(e.By), string(e.Conversation), name, file); err != nil {
+		return err
+	}
+	return s.d.Recorder.Discard(ctx, e.Egress)
+}
+
 func (s *Service) Leave(ctx context.Context, actor, id string) error {
 	_, err := s.change(ctx, actor, id, func(c *domain.Call) error { return c.Leave(domain.UserID(actor), s.d.Now()) })
 	return err
@@ -266,9 +328,28 @@ func (s *Service) React(ctx context.Context, actor, id, emoji string) error {
 // LiveCalls counts live calls across workspaces (operations metric).
 func (s *Service) LiveCalls(ctx context.Context) (int, error) { return s.d.Calls.CountLive(ctx) }
 
-// StartRecording marks the call as recorded by actor (everyone sees it); StopRecording ends that.
+// StartRecording marks the call as recorded by actor (everyone sees it); StopRecording ends that. A room call is
+// recorded by the media server when one records (S104), otherwise by actor's browser.
 func (s *Service) StartRecording(ctx context.Context, actor, id string) (*domain.Call, error) {
-	return s.change(ctx, actor, id, func(c *domain.Call) error { return c.StartRecording(domain.UserID(actor), s.d.Now()) })
+	c, _, err := s.load(ctx, actor, id)
+	if err != nil {
+		return nil, err
+	}
+	if !c.Room || s.d.Recorder == nil {
+		return s.change(ctx, actor, id, func(c *domain.Call) error { return c.StartRecording(domain.UserID(actor), s.d.Now()) })
+	}
+	if err := c.StartRecording(domain.UserID(actor), s.d.Now()); err != nil {
+		return nil, err // checked before the media server starts anything
+	}
+	egress, err := s.d.Recorder.Start(ctx, string(c.ID))
+	if err != nil {
+		return nil, err
+	}
+	c, err = s.change(ctx, actor, id, func(c *domain.Call) error { return c.RecordOnServer(domain.UserID(actor), egress, s.d.Now()) })
+	if err != nil {
+		_ = s.d.Recorder.Stop(ctx, egress) // someone else started recording meanwhile
+	}
+	return c, err
 }
 
 func (s *Service) StopRecording(ctx context.Context, actor, id string) (*domain.Call, error) {

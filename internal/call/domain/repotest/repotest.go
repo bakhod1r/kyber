@@ -88,6 +88,13 @@ func Run(t *testing.T, r domain.Repository) {
 	if got, err := r.ByID(ctx, room.ID); err != nil || !got.Room {
 		t.Fatalf("room call = %+v %v", got, err)
 	}
+	_ = room.RecordOnServer(Lead, "EG_42", t0)
+	if err := r.Save(ctx, room); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := r.ByID(ctx, room.ID); got.Recording == nil || got.Recording.Egress != "EG_42" {
+		t.Fatalf("server recording = %+v", got.Recording)
+	}
 	if got, _ := r.ByID(ctx, "74000000-0000-4000-8000-000000000003"); got.Room {
 		t.Fatalf("mesh call reads as a room: %+v", got)
 	}

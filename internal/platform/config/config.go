@@ -86,6 +86,12 @@ type Config struct {
 	LiveKitURL    string `env:"KYBER_LIVEKIT_URL"`
 	LiveKitKey    string `env:"KYBER_LIVEKIT_KEY"`
 	LiveKitSecret string `env:"KYBER_LIVEKIT_SECRET"`
+	// Where Kyber calls LiveKit's server API when browsers use another address (default: KYBER_LIVEKIT_URL over http(s)).
+	LiveKitAPIURL string `env:"KYBER_LIVEKIT_API_URL"`
+	// Server-side recording of room calls (LiveKit Egress, S104): the directory Egress writes MP4 files to, as Kyber
+	// sees it, and as Egress sees it. Unset, room calls are recorded in the browser.
+	LiveKitRecordingsDir string `env:"KYBER_LIVEKIT_RECORDINGS_DIR"`
+	LiveKitEgressDir     string `env:"KYBER_LIVEKIT_EGRESS_DIR" default:"/out"`
 	// FilesDir keeps chat files and huddle recordings on disk (back it up with the database).
 	FilesDir string `env:"KYBER_FILES_DIR"`
 	// STTURL turns on transcripts of huddle recordings (S77): an OpenAI-compatible speech-to-text endpoint, e.g.

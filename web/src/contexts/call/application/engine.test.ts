@@ -265,4 +265,16 @@ describe("huddle engine", () => {
     await engine.join("c-1");
     expect(engine.snapshot.call?.participants[0]?.video).toBe(true);
   });
+
+  it("someone removed by the host is disconnected and told so (S103)", async () => {
+    const { engine, rooms, gw } = setup("b", () => ({ ...callOf("a", "b"), room: true }));
+    await engine.join("c-1");
+    engine.update({ ...callOf("a"), room: true }); // the host removed b
+    expect(engine.snapshot.joined).toBe(false);
+    expect(engine.snapshot.removed).toBe(true);
+    expect(rooms[0]?.log.at(-1)).toBe("close");
+    expect(gw.leave).not.toHaveBeenCalled();
+    await engine.join("c-1"); // joining again clears it
+    expect(engine.snapshot.removed).toBe(false);
+  });
 });

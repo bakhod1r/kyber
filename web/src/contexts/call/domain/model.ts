@@ -16,7 +16,8 @@ export type Call = {
   /** Media goes through the media server (S99): everyone uploads once, up to MAX_ROOM_PARTICIPANTS people. */
   room?: boolean;
 };
-export type Recording = { by: string; since: string };
+/** server: the media server records it (S104), not a browser. */
+export type Recording = { by: string; since: string; server?: boolean };
 /** Something that can be presented to everyone in a huddle. */
 export type Presentable = { kind: PresentKind; ref: string; title: string };
 /** Where the presenter is looking: scroll position as fractions of the scrollable size, and zoom. */

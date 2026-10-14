@@ -459,6 +459,7 @@ a.user:hover { text-decoration: underline; }
 .huddle-tile video { width: 100%; height: 100%; object-fit: cover; }
 .huddle-tile .avatar { width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: var(--accent-text); display: grid; place-items: center; font-size: 1.5rem; }
 .huddle-name { position: absolute; left: 6px; bottom: 6px; color: #fff; font-size: 0.8rem; background: rgb(0 0 0 / 0.5); padding: 1px 6px; border-radius: 4px; }
+.huddle-remove { position: absolute; right: 4px; top: 4px; color: #fff; background: rgb(0 0 0 / 0.5); padding: 0 6px; border-radius: 4px; }
 .huddle-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .huddle-controls button[aria-pressed="true"] { outline: 2px solid var(--accent); }
 .huddle-controls .danger { background: #dc2626; color: #fff; }

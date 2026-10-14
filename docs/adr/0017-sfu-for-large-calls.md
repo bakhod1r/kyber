@@ -82,7 +82,12 @@ simulcast, dynacast, congestion control and multi-node, which option A would tak
 
 - One more service for operators who want large calls (`docker compose --profile rooms`); none for those who
   do not. Ops: `docs/ops/calls.md`.
-- Someone who leaves the call keeps their LiveKit connection until their browser disconnects (the engine does
-  on leave); a removed member's token expires within 15 minutes. Kicking via LiveKit's server API is a follow-up.
-- Server-side recording (LiveKit Egress) is possible later; browser recording works in rooms as in a mesh.
+- Leaving or being removed (the host may, S103) is a domain event, `call.participant_left`; its handler calls
+  LiveKit's `RemoveParticipant` (Twirp, a token with `roomAdmin` for that room only), so nobody keeps listening
+  after they are out of the call.
+- Server-side recording (S104): with Egress and a shared directory configured, **Record** in a room call starts a
+  room-composite MP4 egress (`roomRecord` grant) instead of the browser recorder; stopping it is the domain event
+  `call.recording_stopped`, whose handler stops the egress, waits for the file (bounded; the outbox retries) and
+  posts it to the conversation through the Chat context like a browser recording. Without Egress, rooms are recorded
+  in the browser as before.
 - CI runs the room e2e against a real `livekit-server --dev` (`make e2e-rooms`).

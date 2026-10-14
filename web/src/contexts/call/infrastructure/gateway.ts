@@ -29,6 +29,7 @@ export const callGateway = {
   },
   raiseHand: (callId: string, raised: boolean) => request<Call>("PUT", `${call(callId)}/hand`, { raised }),
   react: (callId: string, emoji: string) => request<undefined>("POST", `${call(callId)}/reactions`, { emoji }),
+  remove: (callId: string, user: string) => request<Call>("DELETE", `${call(callId)}/participants/${seg(user)}`),
   room: (callId: string) => request<RoomTicket>("POST", `${call(callId)}/room`),
   ice: () => request<{ ice_servers: IceServer[] }>("GET", "/api/v1/calls/ice").then((r) => r.ice_servers),
 };

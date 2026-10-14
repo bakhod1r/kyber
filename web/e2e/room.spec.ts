@@ -64,7 +64,11 @@ test("seven people in a huddle through the media server", async ({ browser }) =>
   await playing(a, "Bobur's screen");
   expect(signals).toEqual([]);
 
-  await b.getByRole("button", { name: "Leave" }).click();
+  // S103: the host removes Bobur; his browser is told and leaves the room.
+  await expect(b.getByRole("button", { name: /^Remove / })).toHaveCount(0); // only the host may
+  await a.getByRole("button", { name: "Remove Bobur from the huddle" }).click();
   await expect(a.getByRole("list", { name: "Participants" })).not.toContainText("Bobur");
+  await expect(b.getByText("You were removed from the huddle")).toBeVisible();
+  await expect(a.getByLabel("Bobur's screen")).toHaveCount(0);
   await a.getByRole("button", { name: "Leave" }).click();
 });

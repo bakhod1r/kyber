@@ -65,8 +65,28 @@ web app's Content-Security-Policy allows that origin (and a `blob:` worker LiveK
 - Strict networks: LiveKit has an embedded TURN server (`turn.enabled`), or keep coturn.
 - Sizing: LiveKit forwards, it does not transcode — roughly 1.5 Mbit/s per viewer per shown video; a small VM
   handles a few 20-person calls.
-- Recording stays in the browser of the one who records (it records what that browser receives).
+- The host (who started the call) can remove someone (✕ on their tile, `DELETE /calls/{id}/participants/{user}`);
+  Kyber then removes them from the LiveKit room too (`RemoveParticipant`, through the outbox, retried). The same
+  happens to anyone who leaves, so a closed tab cannot keep listening. `KYBER_LIVEKIT_API_URL` sets where Kyber
+  calls LiveKit's API when that differs from the browsers' address (e.g. `http://livekit:7880` inside a cluster).
 - Several LiveKit nodes need Redis (LiveKit's own `redis:` setting); Kyber replicas need nothing extra.
+
+### Server-side recording (LiveKit Egress)
+
+Without Egress a room call is recorded by the browser of whoever presses **Record**. With
+[Egress](https://docs.livekit.io/home/egress/overview/) (`docker compose --profile rooms up` starts it with Redis)
+the media server records instead: one MP4 with everyone in a grid, independent of anyone's connection.
+
+| Setting | Value |
+|---|---|
+| `KYBER_LIVEKIT_RECORDINGS_DIR` | the directory Egress writes into, as Kyber sees it (compose: the `recordings` volume at `/data/recordings`) |
+| `KYBER_LIVEKIT_EGRESS_DIR` | the same directory as Egress sees it (default `/out`) |
+
+When the recording stops (or its recorder leaves), Kyber stops the egress, waits up to 30 seconds for the file,
+posts it to the conversation as the recorder's "huddle recording" (transcript and summary follow when configured)
+and deletes it from the directory. A file still being written is retried by the outbox. Kyber only opens plain
+file names inside that directory, as LiveKit reports them. Egress needs about one CPU core per recording
+(it runs Chrome); give it `SYS_ADMIN` or see LiveKit's docs for running without.
 - Turning LiveKit off: room calls still live cannot be entered (409); new calls are a mesh again.
 
 ## Several Kyber replicas

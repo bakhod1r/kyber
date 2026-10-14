@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.70.0
+  version: 0.71.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1319,6 +1319,22 @@ paths:
         "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/participants/{user}:
+    delete:
+      operationId: removeCallParticipant
+      description: |
+        The host (who started the call) removes someone from it (S103); in a room call the media server drops them
+        too. 403 `CALL_NOT_HOST` for anyone else or for removing oneself (leave instead).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: user, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The call after the removal, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/calls/ice:
     get:
       operationId: getIceServers
@@ -1474,7 +1490,10 @@ paths:
   /api/v1/calls/{id}/recording:
     put:
       operationId: startRecording
-      description: Starts recording the call (one recorder at a time); everyone sees `recording` on the call.
+      description: |
+        Starts recording the call (one recorder at a time); everyone sees `recording` on the call. In a room call with
+        LiveKit Egress configured the media server records (`recording.server`) and posts the MP4 to the conversation
+        when the recording stops; otherwise the browser records and uploads.
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
@@ -4331,7 +4350,12 @@ components:
         recording:
           oneOf:
             - { type: "null" }
-            - { type: object, required: [by, since], properties: { by: { type: string }, since: { type: string, format: date-time } } }
+            - type: object
+              required: [by, since, server]
+              properties:
+                by: { type: string }
+                since: { type: string, format: date-time }
+                server: { type: boolean, description: "The media server records (S104); the file is posted when it stops." }
         participants:
           type: array
           items:

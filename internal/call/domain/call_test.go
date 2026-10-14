@@ -241,3 +241,89 @@ func TestRoomCall(t *testing.T) {
 		t.Fatalf("ended room = %v", err)
 	}
 }
+
+// S103: the host removes someone; leaving a room call is a fact the media server must hear about.
+func TestRemove(t *testing.T) {
+	c := domain.StartRoom("k-1", "w-1", "c-1", "u-host", t0)
+	_ = c.Join("u-a", t0)
+	_ = c.Join("u-b", t0)
+	c.PullEvents()
+	if err := c.Remove("u-a", "u-b", t0); !errors.Is(err, domain.ErrNotHost) {
+		t.Fatalf("non-host removes = %v", err)
+	}
+	if err := c.Remove("u-host", "u-x", t0); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("remove outsider = %v", err)
+	}
+	if err := c.Remove("u-host", "u-host", t0); !errors.Is(err, domain.ErrNotHost) {
+		t.Fatalf("host removes self = %v", err)
+	}
+	if err := c.Remove("u-host", "u-b", t0); err != nil || c.In("u-b") {
+		t.Fatalf("remove = %v %+v", err, c.Participants)
+	}
+	_ = c.Leave("u-a", t0)
+	ev := c.PullEvents()
+	if len(ev) != 2 || ev[0] != (domain.ParticipantLeft{Call: "k-1", User: "u-b"}) || ev[1] != (domain.ParticipantLeft{Call: "k-1", User: "u-a"}) ||
+		ev[0].EventName() != "call.participant_left" {
+		t.Fatalf("events = %+v", ev)
+	}
+	// A mesh call has no media server to tell.
+	m := domain.Start("k-2", "w-1", "c-1", "u-host", t0)
+	_ = m.Join("u-a", t0)
+	m.PullEvents()
+	_ = m.Remove("u-host", "u-a", t0)
+	if ev := m.PullEvents(); len(ev) != 0 {
+		t.Fatalf("mesh events = %+v", ev)
+	}
+	ended := domain.StartRoom("k-3", "w-1", "c-1", "u-host", t0)
+	_ = ended.Join("u-a", t0)
+	_ = ended.Leave("u-a", t0)
+	_ = ended.Leave("u-host", t0)
+	if err := ended.Remove("u-host", "u-a", t0); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("remove from an ended call = %v", err)
+	}
+}
+
+// S104: a room call is recorded by the media server; stopping it (or the recorder leaving) hands the file on.
+func TestServerRecording(t *testing.T) {
+	mesh := domain.Start("k-1", "w-1", "c-1", "u-a", t0)
+	if err := mesh.RecordOnServer("u-a", "EG_1", t0); !errors.Is(err, domain.ErrNotRoom) {
+		t.Fatalf("mesh = %v", err)
+	}
+	c := domain.StartRoom("k-2", "w-1", "c-1", "u-a", t0)
+	_ = c.Join("u-b", t0)
+	c.PullEvents()
+	if err := c.RecordOnServer("u-x", "EG_1", t0); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("outsider = %v", err)
+	}
+	if err := c.RecordOnServer("u-a", "", t0); err == nil {
+		t.Fatal("empty egress accepted")
+	}
+	if err := c.RecordOnServer("u-a", "EG_1", t0); err != nil || c.Recording == nil || c.Recording.Egress != "EG_1" || c.Recording.By != "u-a" {
+		t.Fatalf("record = %v %+v", err, c.Recording)
+	}
+	if err := c.RecordOnServer("u-b", "EG_2", t0); !errors.Is(err, domain.ErrAlreadyRecording) {
+		t.Fatalf("twice = %v", err)
+	}
+	if err := c.StopRecording("u-a"); err != nil {
+		t.Fatal(err)
+	}
+	stopped := domain.RecordingStopped{Call: "k-2", Conversation: "c-1", By: "u-a", Egress: "EG_1", Since: t0.UTC()}
+	if ev := c.PullEvents(); len(ev) != 1 || ev[0] != stopped || ev[0].EventName() != "call.recording_stopped" {
+		t.Fatalf("stop events = %+v", ev)
+	}
+	// The recorder leaves: the recording stops too.
+	_ = c.RecordOnServer("u-b", "EG_3", t0)
+	_ = c.Leave("u-b", t0)
+	ev := c.PullEvents()
+	if len(ev) != 2 || ev[0].(domain.RecordingStopped).Egress != "EG_3" {
+		t.Fatalf("leave events = %+v", ev)
+	}
+	// A browser recording has nothing for the server to hand on.
+	b := domain.StartRoom("k-3", "w-1", "c-1", "u-a", t0)
+	_ = b.StartRecording("u-a", t0)
+	b.PullEvents()
+	_ = b.StopRecording("u-a")
+	if ev := b.PullEvents(); len(ev) != 0 {
+		t.Fatalf("browser recording events = %+v", ev)
+	}
+}

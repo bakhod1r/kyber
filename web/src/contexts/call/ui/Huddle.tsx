@@ -104,6 +104,7 @@ export function Huddle({ conversationId, me, names, platform, presentables = [],
         <button onClick={() => void h.join()} disabled={full} title={full ? t("The huddle is full ({count} people)", { count: capacity(call) }) : undefined}>
           {people.length > 0 ? t("Join huddle ({count})", { count: people.length }) : t("Start huddle")}
         </button>
+        {state.removed && <span role="status" className="muted">{t("You were removed from the huddle")}</span>}
         {state.error && <span role="alert" className="error">{state.error}</span>}
       </div>
     );
@@ -143,6 +144,10 @@ export function Huddle({ conversationId, me, names, platform, presentables = [],
                 {name(p.user_id)} {!p.audio && <span aria-label={t("muted")}>🔇</span>} {p.screen && <span aria-label={t("sharing screen")}>🖥️</span>}
                 {p.hand && <span aria-label={t("hand raised")}> ✋</span>}
               </span>
+              {call.started_by === me && p.user_id !== me && (
+                <button className="ghost huddle-remove" aria-label={t("Remove {name} from the huddle", { name: name(p.user_id) })}
+                  onClick={() => void h.remove(p.user_id).catch(() => {})}>✕</button>
+              )}
             </li>
           );
         })}

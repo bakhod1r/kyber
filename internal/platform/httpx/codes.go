@@ -32,6 +32,7 @@ const (
 	CodeImageNotFound          = "IMAGE_NOT_FOUND"
 	CodeWhiteboardBusy         = "WHITEBOARD_BUSY"
 	CodeCallNotPresenter       = "CALL_NOT_PRESENTER"
+	CodeCallNotHost            = "CALL_NOT_HOST"
 	CodeCallRecording          = "CALL_ALREADY_RECORDING"
 	CodeCallNotRecorder        = "CALL_NOT_RECORDER"
 	CodeScheduledNotFound      = "SCHEDULED_MESSAGE_NOT_FOUND"
@@ -138,6 +139,7 @@ var codes = []code{
 	{CodeWhiteboardNotFound, "6107", 404, "Whiteboard not found.", "Doska topilmadi.", "Доска не найдена.", errorx.CategoryBusiness},
 	{CodeImageNotFound, "6191", 404, "Image not found.", "Rasm topilmadi.", "Изображение не найдено.", errorx.CategoryBusiness},
 	{CodeWhiteboardBusy, "6108", 409, "The whiteboard is busy. Try again.", "Doska band. Qayta urinib ko'ring.", "Доска занята. Попробуйте снова.", errorx.CategoryBusiness},
+	{CodeCallNotHost, "6192", 403, "Only the one who started the call can remove people.", "Odamlarni faqat qo‘ng‘iroqni boshlagan kishi chiqara oladi.", "Удалять участников может только тот, кто начал звонок.", errorx.CategoryBusiness},
 	{CodeCallNotPresenter, "6109", 403, "Only the presenter can do that.", "Buni faqat taqdimotchi qila oladi.", "Это может сделать только докладчик.", errorx.CategoryBusiness},
 	{CodeCallRecording, "6110", 409, "Someone is already recording this call.", "Bu qo'ng'iroqni allaqachon kimdir yozib olyapti.", "Этот звонок уже кто-то записывает.", errorx.CategoryBusiness},
 	{CodeGroupHandleTaken, "6113", 409, "That group handle is taken.", "Bu guruh nomi band.", "Это имя группы уже занято.", errorx.CategoryBusiness},

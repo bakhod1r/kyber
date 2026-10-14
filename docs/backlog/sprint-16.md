@@ -20,5 +20,16 @@ acceptance tests, and a Playwright e2e against a real LiveKit server).
 - ✅ **S102 Operations** — `docker compose --profile rooms`, ops guide, CI e2e with `livekit-server --dev`:
   seven people, camera and screen through LiveKit, no mesh signals.
 
-Follow-ups (not planned): remove a participant from the LiveKit room on leave/kick (server API), LiveKit Egress
-recording, an embedded Pion SFU adapter (ADR-0017 option A).
+- ✅ **S103 Remove people** (product request, 2026-10-14) — the host removes someone from the huddle; whoever
+  leaves or is removed is dropped from the LiveKit room by the server. AC: only the host; the removed person is told;
+  a closed tab cannot keep listening.
+  **Done:** `Call.Remove`, `ParticipantLeft` event → `RemoveParticipant`; `DELETE /calls/{id}/participants/{user}`
+  (403 `CALL_NOT_HOST`, API 0.71.0); ✕ on tiles for the host; "You were removed from the huddle".
+- ✅ **S104 Server-side recording** (product request) — LiveKit Egress records room calls; the MP4 lands in the
+  conversation like a browser recording (transcript and summary follow). AC: works without the recorder's browser
+  staying connected; without Egress, unchanged.
+  **Done:** `Recorder` port and `RecordOnServer`; `RecordingStopped` event → stop, wait for the file, post via the
+  Chat ACL, delete it; `recording.server` in the API (migration 0087); `KYBER_LIVEKIT_RECORDINGS_DIR`/`_EGRESS_DIR`/
+  `_API_URL`; compose `egress` service.
+
+Not planned (product owner, 2026-10-14): a Helm chart for LiveKit and an embedded Pion SFU.

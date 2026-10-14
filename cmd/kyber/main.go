@@ -127,7 +127,8 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		server.WithWebhooks(cfg.WebhookAllowPrivate, 0), server.WithGitHubSecret(cfg.GitHubWebhookSecret),
 		server.WithRateLimits(cfg.APIRateLimit, cfg.UploadRateLimit), server.WithSCIMToken(cfg.SCIMToken)}, telegramBot(cfg)...)
 	if cfg.LiveKitURL != "" {
-		lk, err := livekit.New(livekit.Config{URL: cfg.LiveKitURL, Key: cfg.LiveKitKey, Secret: cfg.LiveKitSecret})
+		lk, err := livekit.New(livekit.Config{URL: cfg.LiveKitURL, APIURL: cfg.LiveKitAPIURL, Key: cfg.LiveKitKey,
+			Secret: cfg.LiveKitSecret, RecordingsDir: cfg.LiveKitRecordingsDir, EgressDir: cfg.LiveKitEgressDir})
 		if err != nil {
 			return nil, nil, err
 		}
