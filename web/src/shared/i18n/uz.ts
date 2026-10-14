@@ -597,4 +597,10 @@ export const uz: Record<MessageKey, string> = {
   "Filter by kind": "Turi bo‘yicha filtr",
   "Board insights": "Doska tahlili",
   "Configure board": "Doskani sozlash",
+  "Reactions": "Reaksiyalar",
+  "{emoji} reacted by {count}": "{emoji}: {count} ta reaksiya",
+  "Add reaction": "Reaksiya qo‘shish",
+  "React with {emoji}": "{emoji} bilan javob berish",
+  "Also viewing": "Hozir ko‘rmoqda",
+  "Also viewing:": "Hozir ko‘rmoqda:",
 };

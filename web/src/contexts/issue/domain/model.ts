@@ -58,7 +58,18 @@ export type IssuePatch = {
   start_date?: string;
   due_date?: string;
 };
-export type Comment = { id: string; author_id: string; author_name: string; body: string; created_at: string };
+/** The fixed reactions people can put on a comment, in display order. */
+export const REACTIONS = ["👍", "👎", "😄", "🎉", "😕", "❤️", "🚀", "👀"] as const;
+export type Emoji = (typeof REACTIONS)[number];
+export type ReactionCount = { emoji: Emoji; count: number; mine: boolean };
+export type Comment = { id: string; author_id: string; author_name: string; body: string; created_at: string; reactions: ReactionCount[] };
+export type Viewer = { user_id: string; name: string };
+
+/** Initials for an avatar: first letters of the first and last words ("Ali Valiyev" → "AV"). */
+export function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "")).toUpperCase() || "?";
+}
 export const STATUSES: { id: Status; label: string }[] = [
   { id: "todo", label: "To Do" },
   { id: "in_progress", label: "In Progress" },

@@ -41,3 +41,18 @@ func (r *CommentRepository) ListByIssue(_ context.Context, issueID domain.IssueI
 	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt().Before(out[j].CreatedAt()) })
 	return out, nil
 }
+
+func (r *CommentRepository) IssueKeyOf(ctx context.Context, id domain.CommentID) (domain.IssueKey, error) {
+	r.mu.Lock()
+	var issue domain.IssueID
+	for i := range r.comments {
+		if r.comments[i].ID() == id {
+			issue = r.comments[i].IssueID()
+		}
+	}
+	r.mu.Unlock()
+	if issue == "" {
+		return domain.IssueKey{}, domain.ErrCommentNotFound
+	}
+	return r.issues.keyOf(ctx, issue)
+}

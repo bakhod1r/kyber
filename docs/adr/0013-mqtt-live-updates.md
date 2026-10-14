@@ -32,4 +32,8 @@ WebSocket.
 - One protocol for browsers and integrations; QoS 0, no retained messages, so a client that was
   offline refetches on reconnect as before.
 - The web app loads mqtt.js lazily for signed-in pages.
-- Presence (who is viewing an issue) can use the same broker later.
+- Presence (who is viewing an issue, F4) uses the same broker: the issue panel sends
+  `POST /api/v1/issues/{key}/presence` every 20 s, the replica keeps (user, issue) in memory for 45 s,
+  and a new viewer triggers a `presence.changed` hint on the issue's project (project only, never the
+  key, per the rule above). Presence is per replica: without sticky sessions a viewer is listed only
+  by the replica that received their heartbeats; clients also poll every 20 s to notice people leaving.

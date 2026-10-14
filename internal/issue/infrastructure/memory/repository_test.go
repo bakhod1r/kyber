@@ -70,6 +70,12 @@ func TestWorklogContract(t *testing.T) {
 	})
 }
 
+func TestReactionContract(t *testing.T) {
+	repotest.RunReactions(t, func(t *testing.T) (domain.ReactionRepository, [2]domain.CommentID) {
+		return memory.NewReactionRepository(), [2]domain.CommentID{"00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"}
+	})
+}
+
 func TestCustomFieldContract(t *testing.T) {
 	repotest.RunCustomFields(t, func(t *testing.T) domain.CustomFieldRepository { return memory.NewCustomFieldRepository() })
 }

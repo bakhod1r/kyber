@@ -54,4 +54,6 @@ func (c *Comment) PullEvents() []Event {
 type CommentRepository interface {
 	Add(ctx context.Context, c *Comment, events []Event) error
 	ListByIssue(ctx context.Context, issueID IssueID) ([]*Comment, error) // oldest first
+	// IssueKeyOf finds the key of the comment's issue in the request's workspace (ErrCommentNotFound).
+	IssueKeyOf(ctx context.Context, id CommentID) (IssueKey, error)
 }

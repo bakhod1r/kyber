@@ -595,6 +595,12 @@ export const en = {
   "Filter by kind": "Filter by kind",
   "Board insights": "Board insights",
   "Configure board": "Configure board",
+  "Reactions": "Reactions",
+  "{emoji} reacted by {count}": "{emoji} reacted by {count}",
+  "Add reaction": "Add reaction",
+  "React with {emoji}": "React with {emoji}",
+  "Also viewing": "Also viewing",
+  "Also viewing:": "Also viewing:",
 } as const;
 
 export type MessageKey = keyof typeof en;

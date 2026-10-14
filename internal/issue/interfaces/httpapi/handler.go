@@ -2,6 +2,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -30,6 +31,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/rank", h.rank)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/comments", h.comments)
 	mux.HandleFunc("POST /api/v1/issues/{issueKey}/comments", h.addComment)
+	mux.HandleFunc("PUT /api/v1/comments/{id}/reactions/{emoji}", h.react)
+	mux.HandleFunc("DELETE /api/v1/comments/{id}/reactions/{emoji}", h.unreact)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/history", h.history)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/watchers", h.watchers)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}/worklogs", h.worklogs)
@@ -114,12 +117,14 @@ func codeFor(err error) (string, bool) {
 		errors.Is(err, domain.ErrInvalidWorkflow), errors.Is(err, domain.ErrUnknownStatus),
 		errors.Is(err, application.ErrInvalidSecurityLevel), errors.Is(err, domain.ErrInvalidResolution), errors.Is(err, application.ErrInvalidVersion),
 		errors.Is(err, domain.ErrInvalidDuration), errors.Is(err, domain.ErrInvalidWorklog),
-		errors.Is(err, domain.ErrInvalidCustomField), errors.Is(err, domain.ErrInvalidFieldValue), errors.Is(err, domain.ErrInvalidSchedule):
+		errors.Is(err, domain.ErrInvalidCustomField), errors.Is(err, domain.ErrInvalidReaction), errors.Is(err, domain.ErrInvalidFieldValue), errors.Is(err, domain.ErrInvalidSchedule):
 		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrFieldNotFound):
 		return httpx.CodeFieldNotFound, true
 	case errors.Is(err, domain.ErrFieldConflict):
 		return httpx.CodeFieldConflict, true
+	case errors.Is(err, domain.ErrCommentNotFound):
+		return httpx.CodeCommentNotFound, true
 	case errors.Is(err, domain.ErrWorklogNotFound):
 		return httpx.CodeWorklogNotFound, true
 	case errors.Is(err, application.ErrProjectNotFound):
@@ -280,16 +285,43 @@ func (h *Handler) edit(w http.ResponseWriter, r *http.Request) {
 }
 
 type commentDTO struct {
-	ID         string    `json:"id"`
-	AuthorID   string    `json:"author_id"`
-	AuthorName string    `json:"author_name"`
-	Body       string    `json:"body"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         string        `json:"id"`
+	AuthorID   string        `json:"author_id"`
+	AuthorName string        `json:"author_name"`
+	Body       string        `json:"body"`
+	CreatedAt  time.Time     `json:"created_at"`
+	Reactions  []reactionDTO `json:"reactions"`
+}
+
+type reactionDTO struct {
+	Emoji string `json:"emoji"`
+	Count int    `json:"count"`
+	Mine  bool   `json:"mine"`
 }
 
 func toCommentDTO(c application.CommentView) commentDTO {
+	rs := make([]reactionDTO, 0, len(c.Reactions))
+	for _, r := range c.Reactions {
+		rs = append(rs, reactionDTO{Emoji: string(r.Emoji), Count: r.Count, Mine: r.Mine})
+	}
 	return commentDTO{ID: string(c.ID()), AuthorID: string(c.Author()), AuthorName: c.AuthorName,
-		Body: c.Body(), CreatedAt: c.CreatedAt().UTC()}
+		Body: c.Body(), CreatedAt: c.CreatedAt().UTC(), Reactions: rs}
+}
+
+func (h *Handler) react(w http.ResponseWriter, r *http.Request) {
+	h.reaction(w, r, h.svc.React)
+}
+
+func (h *Handler) unreact(w http.ResponseWriter, r *http.Request) {
+	h.reaction(w, r, h.svc.Unreact)
+}
+
+func (h *Handler) reaction(w http.ResponseWriter, r *http.Request, do func(ctx context.Context, actor, comment, emoji string) error) {
+	if err := do(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), r.PathValue("emoji")); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) comments(w http.ResponseWriter, r *http.Request) {

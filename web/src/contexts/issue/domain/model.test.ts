@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Issue, planTimeline } from "./model";
+import { initials, type Issue, planTimeline } from "./model";
 
 const base: Issue = {
   id: "", key: "", title: "", type: "task", status: "todo", description: "", priority: "medium",
@@ -33,4 +33,13 @@ describe("planTimeline", () => {
     expect(plan.rows).toEqual([]);
     expect(plan.unscheduled).toHaveLength(1);
   });
+});
+
+describe("initials", () => {
+  it.each([
+    ["Ali Valiyev", "AV"],
+    ["  bob  ", "B"],
+    ["Ana Maria Lopez", "AL"],
+    ["", "?"],
+  ])("%s → %s", (name, want) => expect(initials(name)).toBe(want));
 });

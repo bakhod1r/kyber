@@ -1131,6 +1131,40 @@ paths:
         "204": { description: Not watching }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/issues/{issueKey}/presence:
+    parameters: [{ $ref: "#/components/parameters/IssueKey" }]
+    get:
+      operationId: issuePresence
+      description: |
+        Who is viewing the issue right now (heartbeats from the last 45 s), in order of arrival. Presence is
+        kept in memory per replica: behind a load balancer without sticky sessions a viewer is listed only
+        by the replica that received their heartbeats.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [user_id, name]
+                      properties: { user_id: { type: string }, name: { type: string } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: issuePresenceHeartbeat
+      description: |
+        The caller is viewing the issue (send every 20 s while it is open; it counts for 45 s). A new viewer
+        triggers a live hint with event `presence.changed` on the issue's project.
+      responses:
+        "204": { description: Recorded }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/history:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
     get:
@@ -2179,6 +2213,30 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/comments/{id}/reactions/{emoji}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - name: emoji
+        in: path
+        required: true
+        description: One of the fixed reactions, percent-encoded.
+        schema: { type: string }
+    put:
+      operationId: reactToComment
+      description: The caller reacts to the comment with the emoji (anyone who can see the issue). Idempotent.
+      responses:
+        "204": { description: Reacted }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: unreactToComment
+      description: The caller takes the emoji back. Idempotent.
+      responses:
+        "204": { description: Not reacted }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
 
 components:
   securitySchemes:
@@ -2762,7 +2820,7 @@ components:
       properties: { items: { type: array, items: { $ref: "#/components/schemas/Issue" } } }
     Comment:
       type: object
-      required: [id, author_id, author_name, body, created_at]
+      required: [id, author_id, author_name, body, created_at, reactions]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -2770,3 +2828,14 @@ components:
         author_name: { type: string }
         body: { type: string, minLength: 1 }
         created_at: { type: string, format: date-time }
+        reactions:
+          type: array
+          description: Reaction counts in the fixed order 👍 👎 😄 🎉 😕 ❤️ 🚀 👀 (only emoji with at least one reaction).
+          items:
+            type: object
+            required: [emoji, count, mine]
+            additionalProperties: false
+            properties:
+              emoji: { type: string, enum: ["👍", "👎", "😄", "🎉", "😕", "❤️", "🚀", "👀"] }
+              count: { type: integer, minimum: 1 }
+              mine: { type: boolean, description: Whether the caller reacted with this emoji. }

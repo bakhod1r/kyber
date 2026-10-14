@@ -597,4 +597,10 @@ export const ru: Record<MessageKey, string> = {
   "Filter by kind": "Фильтр по виду",
   "Board insights": "Аналитика доски",
   "Configure board": "Настроить доску",
+  "Reactions": "Реакции",
+  "{emoji} reacted by {count}": "{emoji}: реакций — {count}",
+  "Add reaction": "Добавить реакцию",
+  "React with {emoji}": "Отреагировать {emoji}",
+  "Also viewing": "Сейчас смотрят",
+  "Also viewing:": "Сейчас смотрят:",
 };

@@ -414,6 +414,21 @@ func RunComments(t *testing.T, newRepo CommentFactory) {
 			t.Fatalf("outbox = %v", ev)
 		}
 	})
+	t.Run("issue key of a comment", func(t *testing.T) {
+		repo, is, _ := newRepo(t)
+		c, _ := domain.NewComment(domain.CommentID(uuidFor(20)), is.ID(), is.Key(), domain.UserID(Assignee), "hi", time.Now())
+		if err := repo.Add(ctx, c, nil); err != nil {
+			t.Fatal(err)
+		}
+		if k, err := repo.IssueKeyOf(ctx, c.ID()); err != nil || k != is.Key() {
+			t.Fatalf("key = %v, %v", k, err)
+		}
+		for _, id := range []string{uuidFor(21), "not-a-uuid"} {
+			if _, err := repo.IssueKeyOf(ctx, domain.CommentID(id)); !errors.Is(err, domain.ErrCommentNotFound) {
+				t.Fatalf("unknown %q: %v", id, err)
+			}
+		}
+	})
 	t.Run("other issue has no comments", func(t *testing.T) {
 		repo, _, _ := newRepo(t)
 		list, err := repo.ListByIssue(ctx, domain.IssueID(uuidFor(98)))

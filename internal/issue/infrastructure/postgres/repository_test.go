@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -203,6 +204,34 @@ func TestWorklogContract(t *testing.T) {
 			}
 		}
 		return postgres.NewWorklogRepository(pool), is
+	})
+}
+
+func TestReactionContract(t *testing.T) {
+	repotest.RunReactions(t, func(t *testing.T) (domain.ReactionRepository, [2]domain.CommentID) {
+		pool := dbtest.New(t)
+		ctx := context.Background()
+		if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, name, password_hash) VALUES ($1, 'a@x.uz', 'A', 'h')`, repotest.Assignee); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO projects (id, key, name, workspace_id) VALUES ('10000000-0000-4000-8000-000000000001','KYB','Kyber','00000000-0000-4000-8000-000000000001')`); err != nil {
+			t.Fatal(err)
+		}
+		key, _ := domain.NewIssueKey("KYB", 1)
+		is, _ := domain.NewIssue("00000000-0000-4000-8000-000000000001", key, "t", domain.TypeTask, repotest.Assignee, domain.DefaultWorkflow())
+		if err := postgres.NewRepository(pool).Save(ctx, is, nil); err != nil {
+			t.Fatal(err)
+		}
+		comments := postgres.NewCommentRepository(pool)
+		var ids [2]domain.CommentID
+		for n := range 2 {
+			c, _ := domain.NewComment(domain.CommentID(fmt.Sprintf("00000000-0000-4000-8000-00000000001%d", n+1)), is.ID(), is.Key(), repotest.Assignee, "c", time.Now())
+			if err := comments.Add(ctx, c, nil); err != nil {
+				t.Fatal(err)
+			}
+			ids[n] = c.ID()
+		}
+		return postgres.NewReactionRepository(pool), ids
 	})
 }
 

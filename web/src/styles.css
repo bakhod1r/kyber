@@ -143,6 +143,12 @@ textarea { font: inherit; color: var(--text); background: var(--surface); border
 .comments label { width: 100%; }
 .comment-meta { font-size: 0.8rem; color: var(--muted); }
 .comment-body { margin: 0.2rem 0 0; white-space: pre-wrap; }
+.reactions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; margin-top: 0.3rem; }
+.reaction { padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.8rem; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.reaction[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--surface)); }
+.reaction-picker { display: inline-flex; gap: 0.1rem; }
+.reaction-picker button { padding: 0.1rem 0.3rem; }
+.presence { display: flex; align-items: center; gap: 0.3rem; margin: -0.5rem 0 0; font-size: 0.8rem; }
 
 /* Sprint 05: tabs, backlog, sprints */
 .tabs { display: flex; gap: 0.25rem; margin: -0.5rem 0 1rem; border-bottom: 1px solid var(--border); }
