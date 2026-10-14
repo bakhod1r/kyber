@@ -23,8 +23,10 @@
 | **Issue** — details, Pomodoro focus, comments with @mentions. | **Time table** — no Pomodoro can start during a meeting. |
 | <img src="docs/assets/notifications.png" alt="Notifications for mentions and comments"> | <img src="docs/assets/chat.png" alt="Chat channel with a thread, reactions and an issue preview"> |
 | **Notifications** — comments and mentions, per workspace. | **Chat** — channels, DMs, threads, reactions, @mentions, pins, search, files, issue previews. |
-| <img src="docs/assets/huddle.png" alt="Video huddle with two cameras while recording"> | <img src="docs/assets/whiteboard.png" alt="Shared whiteboard with an architecture sketch"> |
-| **Huddles** — video, audio and screen share (WebRTC, up to 6), present a doc or whiteboard to everyone, record to the channel. | **Whiteboards** — draw architecture together in real time; stickies become issues; export SVG/PNG. |
+| <img src="docs/assets/huddle.png" alt="Video huddle with two cameras while recording"> | <img src="docs/assets/whiteboard.png" alt="Shared whiteboard: styled shapes, arrows and coloured sticky notes"> |
+| **Huddles** — video, audio and screen share (WebRTC, up to 6), present a doc or whiteboard to everyone, record to the channel, transcripts and summaries. | **Whiteboards** — an infinite canvas drawn together live: shapes, styles, templates, images, comments; stickies become issues; export SVG/PNG. |
+| <img src="docs/assets/docs.png" alt="Project doc with comments on a paragraph"> | |
+| **Docs** — Markdown pages with history; comment on a paragraph, @mentions notify. | |
 
 Screenshots are generated from a seeded demo with `make screenshots`.
 
