@@ -62,9 +62,9 @@ Migration numbers are reserved per item so parallel work does not collide.
 | F2 ✅ | i18n (en/uz/ru) | web UI strings through a typed dictionary; language picker; Accept-Language for API problems | — |
 | F3 ✅ | Meetings: reschedule + time zones | PUT /meetings/{id} (re-notifies), user time zone preference, display in it | 0050 |
 | F4 ✅ | Comment reactions + presence | emoji reactions on comments; who is viewing an issue (over MQTT) | 0075 |
-| F5 ✅ | Webhooks | per-project outgoing webhooks (HMAC-SHA256 signed, retries via outbox); GitHub commit/PR linking by issue key | 0077 |
+| F5 ✅ | Webhooks | per-project outgoing webhooks (HMAC-SHA256 signed, retries via outbox); GitHub commit/PR linking by issue key | 0079 |
 | F6 ✅ | Generic OIDC + GitHub sign-in | KYBER_OIDC_* (any provider), GitHub OAuth; SAML/SCIM later | — |
 | F7 ✅ | Board swimlanes | by assignee / epic / none | — |
 | F8 ✅ | MCP: more tools + OAuth | transition_issue, assign_issue, list_sprints, get_comments, update_issue; OAuth 2.1 later | — |
 | F9 ✅ | Sync docs/PLAN.md checkboxes; recheck F5 workflow editor | docs (visual editor still open) | — |
-| F10 ✅ | Labels + JQL autocomplete | issue labels, `labels` in JQL, board Label filter, JQL combobox | 0078 |
+| F10 ✅ | Labels + JQL autocomplete | issue labels, `labels` in JQL, board Label filter, JQL combobox | 0080 |

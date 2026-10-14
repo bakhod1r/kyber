@@ -229,7 +229,7 @@ Har bir milestone `awesome-agents` zanjiri bo'yicha o'tadi: `/design` → implem
 ### M1 — v0.1 MVP
 - [x] F1 Auth (signup, login, logout, sessiya, PAT — ADR-0012) + threat model
 - [x] F2/F3 Workspace, Project, a'zolar, RBAC (ADR-0003, ADR-0004)
-- [x] F4 Issue CRUD, kalit generatsiyasi, sub-task, **labels** (migratsiya 0078)
+- [x] F4 Issue CRUD, kalit generatsiyasi, sub-task, **labels** (migratsiya 0080)
 - [x] F5 Default workflow — data-driven (`WorkflowDef`), loyihaga moslanadi
 - [x] F6 Kanban board, drag & drop, optimistic update + `version` conflict
 - [x] F8 Comments (+ reaksiyalar), F9 Activity log, F12 in-app notifications
