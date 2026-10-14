@@ -104,6 +104,11 @@ func (s *Service) ExchangeCode(ctx context.Context, r TokenRequest) (string, tim
 	if string(code.Client) != r.ClientID || code.RedirectURI != r.RedirectURI || code.Expired(s.clock.Now()) || !code.Verifier(r.Verifier) {
 		return "", 0, ErrInvalidGrant
 	}
+	if _, err := s.activeUser(ctx, code.User); errors.Is(err, ErrUnauthenticated) { // deactivated or deleted since consent
+		return "", 0, ErrInvalidGrant
+	} else if err != nil {
+		return "", 0, err
+	}
 	c, err := s.oauth.Client(ctx, code.Client)
 	if err != nil {
 		return "", 0, err

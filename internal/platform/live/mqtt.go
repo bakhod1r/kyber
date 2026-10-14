@@ -43,16 +43,21 @@ type CanBrowse func(ctx context.Context, user, project string) bool
 // id) and the password is a personal access token; it returns the user.
 type Login func(ctx context.Context, workspace, token string) (string, error)
 
+// Active reports whether user may still use Kyber (not deactivated or deleted, e.g. over SCIM); the
+// composition root asks the Identity context. ctx carries the client's workspace.
+type Active func(ctx context.Context, user string) bool
+
 // identity is who a connected client acts for.
 type identity struct{ user, workspace string }
 
 // Broker is Kyber's embedded MQTT broker (ADR-0013). Clients only subscribe: to their
 // workspace's project topics, and every delivery is re-authorized, so a revoked membership stops
-// hints at once. The server publishes through the inline client.
+// hints at once, and a deactivated user is disconnected on their next delivery. The server publishes through the inline client.
 type Broker struct {
 	srv   *mqtt.Server
 	can   CanBrowse
 	login Login
+	alive Active
 	mu    sync.Mutex
 	who   map[*mqtt.Client]identity
 	up    websocket.Upgrader
@@ -60,9 +65,9 @@ type Broker struct {
 
 const wsListener = "ws"
 
-func NewBroker(can CanBrowse, login Login, log *slog.Logger) (*Broker, error) {
+func NewBroker(can CanBrowse, login Login, active Active, log *slog.Logger) (*Broker, error) {
 	srv := mqtt.New(&mqtt.Options{InlineClient: true, Logger: log})
-	b := &Broker{srv: srv, can: can, login: login, who: map[*mqtt.Client]identity{},
+	b := &Broker{srv: srv, can: can, login: login, alive: active, who: map[*mqtt.Client]identity{},
 		up: websocket.Upgrader{Subprotocols: []string{"mqtt"}}} // default CheckOrigin: same origin only
 	// Both fail only for duplicate ids, impossible on a fresh server.
 	_ = srv.AddHook(&hook{b: b}, nil)
@@ -155,6 +160,8 @@ type wsConn struct {
 	id identity
 }
 
+var errDeactivated = errors.New("user deactivated")
+
 var errTextFrame = errors.New("mqtt over websocket needs binary messages")
 
 func (ws *wsConn) Read(p []byte) (int, error) {
@@ -238,6 +245,10 @@ func (h *hook) OnACLCheck(cl *mqtt.Client, topic string, write bool) bool {
 	h.b.mu.Lock()
 	id := h.b.who[cl] // unknown clients get the zero identity, which matches no workspace
 	h.b.mu.Unlock()
+	if id.user != "" && !h.b.alive(tenant.With(context.Background(), id.workspace), id.user) {
+		cl.Stop(errDeactivated) // a deactivated user's sessions and tokens are gone; end the stream too
+		return false
+	}
 	parts := strings.Split(topic, "/")
 	if len(parts) == 5 && parts[0] == "kyber" && parts[2] == "users" && parts[4] == "events" {
 		// S88: own events only; "+" may stand for the workspace and the user, every delivery is concrete.

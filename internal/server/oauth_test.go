@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -67,6 +68,21 @@ func TestMCPOAuth(t *testing.T) {
 		approve["redirect_uri"] = "https://evil.example/cb"
 		code, b = ali.do("POST", "/api/v1/oauth/authorize", approve)
 		expect(t, code, 422, b)
+		// Consent must be JSON (no simple cross-site form or text posts), even with a session.
+		approve["redirect_uri"] = "http://localhost:51234/callback"
+		body, _ := json.Marshal(approve)
+		plain, _ := http.NewRequest("POST", anon.srv.URL+"/api/v1/oauth/authorize", bytes.NewReader(body))
+		plain.Header.Set("Content-Type", "text/plain")
+		plain.Header.Set("Authorization", "Bearer "+ali.token)
+		res, err := http.DefaultClient.Do(plain)
+		if err != nil {
+			t.Fatal(err)
+		}
+		spec.check(t, plain, res)
+		res.Body.Close()
+		if res.StatusCode != 400 {
+			t.Fatalf("non-JSON consent = %d", res.StatusCode)
+		}
 
 		exchange := func(code, verifier string) (int, map[string]any) {
 			form := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {clientID},

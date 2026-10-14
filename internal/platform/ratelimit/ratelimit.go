@@ -73,9 +73,11 @@ type Rules struct {
 }
 
 // Middleware enforces rules per signed-in user (auth.Actor); anonymous requests are left to the
-// limits of their own endpoints (login). A failing limiter fails open, so Redis trouble never
-// takes the API down.
+// limits of their own endpoints (login). When the limiter fails, the request is counted by an
+// in-process limiter instead, so Redis trouble degrades to per-replica limits rather than none
+// and never takes the API down.
 func Middleware(l guard.Limiter, rules Rules, log *slog.Logger) func(http.Handler) http.Handler {
+	local := NewMemory(time.Now)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user := auth.Actor(r.Context())
@@ -90,8 +92,10 @@ func Middleware(l guard.Limiter, rules Rules, log *slog.Logger) func(http.Handle
 			res, err := l.Allow(r.Context(), bucket+user, rule)
 			if err != nil {
 				log.WarnContext(r.Context(), "rate limiter unavailable", "err", err)
-				next.ServeHTTP(w, r)
-				return
+				if res, err = local.Allow(r.Context(), bucket+user, rule); err != nil { // an invalid rule: nothing to enforce
+					next.ServeHTTP(w, r)
+					return
+				}
 			}
 			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(res.Limit))
 			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(res.Remaining))
