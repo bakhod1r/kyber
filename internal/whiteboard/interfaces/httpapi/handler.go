@@ -3,6 +3,7 @@ package httpapi
 
 import (
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -30,6 +31,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/whiteboards/{id}/comments", h.comments)
 	mux.HandleFunc("POST /api/v1/whiteboards/{id}/comments", h.comment)
 	mux.HandleFunc("DELETE /api/v1/whiteboard-comments/{id}", h.removeComment)
+	mux.HandleFunc("POST /api/v1/whiteboards/{id}/images", h.uploadImage)
+	mux.HandleFunc("GET /api/v1/whiteboards/{id}/images/{image}", h.image)
 }
 
 func codeFor(err error) (string, bool) {
@@ -42,7 +45,9 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeCommentNotFound, true
 	case errors.Is(err, application.ErrNotAuthor):
 		return httpx.CodeNotCommentAuthor, true
-	case errors.Is(err, domain.ErrInvalidTitle), errors.Is(err, application.ErrTooManyOps), errors.Is(err, domain.ErrInvalidComment):
+	case errors.Is(err, domain.ErrImageMissing), errors.Is(err, application.ErrNoImages):
+		return httpx.CodeImageNotFound, true
+	case errors.Is(err, domain.ErrInvalidTitle), errors.Is(err, application.ErrTooManyOps), errors.Is(err, domain.ErrInvalidComment), errors.Is(err, domain.ErrNotImage):
 		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrStale):
 		return httpx.CodeWhiteboardBusy, true
@@ -275,4 +280,35 @@ func (h *Handler) removeComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// uploadImage: the request body is the picture (S96); the answer names it for an image element.
+func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
+	board := r.PathValue("id")
+	id, err := h.svc.UploadImage(r.Context(), auth.Actor(r.Context()), board, http.MaxBytesReader(w, r.Body, domain.MaxImage+1))
+	var tooBig *http.MaxBytesError
+	if errors.As(err, &tooBig) {
+		err = domain.ErrNotImage
+	}
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, map[string]string{"id": id, "url": "/api/v1/whiteboards/" + board + "/images/" + id})
+}
+
+func (h *Handler) image(w http.ResponseWriter, r *http.Request) {
+	body, typ, err := h.svc.Image(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), r.PathValue("image"))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	defer body.Close()
+	hd := w.Header()
+	hd.Set("Content-Type", typ)
+	hd.Set("X-Content-Type-Options", "nosniff")
+	hd.Set("Content-Security-Policy", "sandbox; default-src 'none'")
+	hd.Set("Cache-Control", "private, max-age=86400")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, body)
 }

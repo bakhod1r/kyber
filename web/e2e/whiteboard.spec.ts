@@ -253,3 +253,44 @@ test("order and erase on the whiteboard", async ({ page }) => {
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(canvas.locator("rect[data-id]")).toHaveCount(2);
 });
+
+// S96: a picture uploaded from the toolbar shows on the board (served to members), can be resized, and stays after a reload.
+test("images on the whiteboard", async ({ page }) => {
+  const id = Date.now().toString(36).slice(-5);
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  const call = (method: string, path: string, data?: unknown) =>
+    page.request.fetch(path, { method, data, headers: { "Content-Type": "application/json" } }).then((x) => (x.status() === 204 ? null : x.json()));
+  const email = `img-${id}@example.com`;
+  await call("POST", "/api/v1/auth/signup", { email, name: "Ida", password: "a very long password" });
+  await call("POST", "/api/v1/auth/login", { email, password: "a very long password" });
+  const channel = await call("POST", "/api/v1/channels", { name: `img-${id}` });
+  await call("POST", `/api/v1/conversations/${channel.id}/whiteboards`, { title: "Mockups" });
+  const open = async () => {
+    await page.goto(`/chat/${channel.id}`);
+    await page.getByRole("button", { name: "Whiteboards" }).click();
+    await page.getByRole("button", { name: "Mockups" }).click();
+    return page.getByRole("img", { name: "Canvas" });
+  };
+  let canvas = await open();
+  // A 2×1 red PNG.
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAADUlEQVR4nGP4z8AARAAI/gH/xp559wAAAABJRU5ErkJggg==", "base64");
+  await page.getByLabel("Image file").setInputFiles({ name: "red.png", mimeType: "image/png", buffer: png });
+  const pic = canvas.locator("image[data-id]");
+  await expect(pic).toHaveCount(1);
+  await expect.poll(() => pic.evaluate(async (el) => {
+    const img = new Image();
+    img.src = (el as SVGImageElement).href.baseVal;
+    await img.decode().catch(() => undefined);
+    return img.naturalWidth;
+  })).toBe(2); // the server returns the stored picture
+  const w0 = Number(await pic.getAttribute("width"));
+  expect(w0).toBe(2); // small pictures keep their size
+  const handle = (await canvas.getByLabel("Resize se").boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + 120, handle.y + 60, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => Number(await pic.getAttribute("width"))).toBeGreaterThan(50);
+  canvas = await open();
+  await expect(canvas.locator("image[data-id]")).toHaveCount(1);
+});

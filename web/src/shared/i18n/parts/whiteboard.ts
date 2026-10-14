@@ -72,6 +72,9 @@ export const en = {
   "Zoom in": "Zoom in",
   "Fit to content": "Fit to content",
   "Fit (Shift+1)": "Fit (Shift+1)",
+  "Add an image": "Add an image",
+  "Image file": "Image file",
+  "Could not add the image": "Could not add the image",
 } as const;
 
 type Key = keyof typeof en;
@@ -148,6 +151,9 @@ export const uz: Record<Key, string> = {
   "Zoom in": "Kattalashtirish",
   "Fit to content": "Tarkibga moslash",
   "Fit (Shift+1)": "Moslash (Shift+1)",
+  "Add an image": "Rasm qo‘shish",
+  "Image file": "Rasm fayli",
+  "Could not add the image": "Rasmni qo‘shib bo‘lmadi",
 };
 export const ru: Record<Key, string> = {
   "Select": "Выделение",
@@ -222,4 +228,7 @@ export const ru: Record<Key, string> = {
   "Zoom in": "Увеличить",
   "Fit to content": "По размеру содержимого",
   "Fit (Shift+1)": "Вписать (Shift+1)",
+  "Add an image": "Добавить изображение",
+  "Image file": "Файл изображения",
+  "Could not add the image": "Не удалось добавить изображение",
 };

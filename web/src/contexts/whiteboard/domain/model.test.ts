@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { COLORS, erased, look, ordered, restyle, STICKY, STICKY_COLORS, template, toBack, toFront } from "./model";
+import { HANDLES } from "./model";
+import { COLORS, erased, fitImage, imageURL, look, ordered, restyle, STICKY, STICKY_COLORS, template, toBack, toFront } from "./model";
 import { applyLocal, bounds, box, duplicate, fit, fromClipboard, HOME, inverseAll, MIN_SIZE, moveBy, moveEnd, newer, type Element, hit, inverse, linkedIssue, onScreen, panBy, reconcile, resize, stickyToIssue, toClipboard, viewBox, within, zoomAt } from "./model";
 
 const rect: Element = { id: "r", kind: "rect", x: 10, y: 10, w: 100, h: 50, points: [], text: "", color: "#000000", version: 1 };
@@ -174,5 +175,30 @@ describe("eraser and order (S93)", () => {
     const els = [rect, line, { ...rect, id: "far", x: 500 }];
     expect(erased(els, [{ x: 0, y: 0 }, { x: 20, y: 20 }]).map((e) => e.id).sort()).toEqual(["l", "r"]);
     expect(erased(els, [])).toEqual([]);
+  });
+});
+
+describe("images (S96)", () => {
+  it("sizes a picture to fit, keeping its proportions", () => {
+    expect(fitImage(1920, 1080)).toEqual({ w: 480, h: 270 });
+    expect(fitImage(300, 600)).toEqual({ w: 240, h: 480 });
+    expect(fitImage(100, 50)).toEqual({ w: 100, h: 50 }); // small pictures keep their size
+    expect(fitImage(0, 0)).toEqual({ w: 320, h: 240 }); // unknown size
+  });
+
+  it("points an image element at the board's picture", () => {
+    expect(imageURL("b 1", { text: "i-1" })).toBe("/api/v1/whiteboards/b%201/images/i-1");
+  });
+
+  it("styles never apply to pictures", () => {
+    const pic: Element = { ...rect, id: "p", kind: "image", text: "i-1" };
+    expect(restyle([pic, rect], { stroke: 3 }).map((e) => e.id)).toEqual(["r"]);
+  });
+});
+
+describe("handles (S96)", () => {
+  it("draws the south-east handle last, on top when a tiny element's handles overlap", () => {
+    expect(HANDLES.at(-1)).toBe("se");
+    expect(new Set(HANDLES).size).toBe(8);
   });
 });

@@ -29,6 +29,7 @@ const (
 	CodeCallFull               = "CALL_FULL"
 	CodeCallState              = "CALL_STATE"
 	CodeWhiteboardNotFound     = "WHITEBOARD_NOT_FOUND"
+	CodeImageNotFound          = "IMAGE_NOT_FOUND"
 	CodeWhiteboardBusy         = "WHITEBOARD_BUSY"
 	CodeCallNotPresenter       = "CALL_NOT_PRESENTER"
 	CodeCallRecording          = "CALL_ALREADY_RECORDING"
@@ -135,6 +136,7 @@ var codes = []code{
 	{CodeCallFull, "6105", 409, "The call is full (6 people at most).", "Qo'ng'iroq to'lgan (ko'pi bilan 6 kishi).", "Звонок заполнен (не более 6 человек).", errorx.CategoryBusiness},
 	{CodeCallState, "6106", 409, "You are not in this call.", "Siz bu qo'ng'iroqda emassiz.", "Вы не участвуете в этом звонке.", errorx.CategoryBusiness},
 	{CodeWhiteboardNotFound, "6107", 404, "Whiteboard not found.", "Doska topilmadi.", "Доска не найдена.", errorx.CategoryBusiness},
+	{CodeImageNotFound, "6191", 404, "Image not found.", "Rasm topilmadi.", "Изображение не найдено.", errorx.CategoryBusiness},
 	{CodeWhiteboardBusy, "6108", 409, "The whiteboard is busy. Try again.", "Doska band. Qayta urinib ko'ring.", "Доска занята. Попробуйте снова.", errorx.CategoryBusiness},
 	{CodeCallNotPresenter, "6109", 403, "Only the presenter can do that.", "Buni faqat taqdimotchi qila oladi.", "Это может сделать только докладчик.", errorx.CategoryBusiness},
 	{CodeCallRecording, "6110", 409, "Someone is already recording this call.", "Bu qo'ng'iroqni allaqachon kimdir yozib olyapti.", "Этот звонок уже кто-то записывает.", errorx.CategoryBusiness},

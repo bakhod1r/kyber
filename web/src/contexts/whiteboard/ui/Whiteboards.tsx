@@ -5,7 +5,7 @@ import { type MessageKey, msg, useT } from "../../../shared/i18n/i18n";
 import { issueUseCases } from "../../issue/application";
 import { projectUseCases } from "../../project/application";
 import {
-  bounds, box, COLORS, commentCounts, duplicate, type Element, erased, fit, fromClipboard, type Handle, HANDLES, hit, HOME, type Kind, linkedIssue, moveBy, moveEnd, newId,
+  bounds, box, COLORS, commentCounts, duplicate, type Element, erased, fit, fitImage, imageURL, fromClipboard, type Handle, HANDLES, hit, HOME, type Kind, linkedIssue, moveBy, moveEnd, newId,
   look, onScreen, onWhiteboardComments, ordered, panBy, resize, restyle, STICKY_COLORS, type Template, template, TEMPLATES, toBack, toClipboard, toFront, within,
   type Point, STICKY, stickyToIssue, useWhiteboard, type View, viewBox, whiteboardUseCases, zoomAt,
 } from "../application";
@@ -77,7 +77,7 @@ export function Whiteboards({ conversationId, me, names }: { conversationId: str
   );
 }
 
-function Shape({ e, selected }: { e: Element; selected: boolean }) {
+function Shape({ e, selected, board }: { e: Element; selected: boolean; board: string }) {
   const stroke = e.color || "#1f2937";
   const l = look(e);
   const common = { "data-id": e.id, stroke, strokeWidth: l.strokeWidth + (selected ? 1 : 0), fill: l.fill, strokeDasharray: l.dash } as const;
@@ -99,6 +99,13 @@ function Shape({ e, selected }: { e: Element; selected: boolean }) {
           <rect data-id={e.id} x={e.x} y={e.y} width={e.w} height={e.h} fill={STICKY_COLORS.includes(e.color) ? e.color : STICKY}
             stroke={selected ? "#1f2937" : "#00000022"} strokeWidth={selected ? 2 : 1} />
           <Label e={e} />
+        </g>
+      );
+    case "image":
+      return (
+        <g>
+          <image data-id={e.id} href={imageURL(board, e)} x={e.x} y={e.y} width={e.w} height={e.h} preserveAspectRatio="none" />
+          {selected && <rect x={e.x} y={e.y} width={e.w} height={e.h} fill="none" stroke="#2563eb" strokeWidth={2} pointerEvents="none" />}
         </g>
       );
     case "text":
@@ -421,6 +428,33 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
     if (els.length > 0) addCopies(els, 24);
   };
   const nudge = (dx: number, dy: number) => wb.changeAll(moveBy(selection, dx, dy).map((element) => ({ op: "update", element })));
+  /**
+   * naturalSize reads a picture's size (0×0 when the browser cannot decode it). createImageBitmap decodes the file
+   * itself; an <img> on a blob: URL would be blocked by the page's Content-Security-Policy (img-src).
+   */
+  const naturalSize = async (file: File): Promise<{ w: number; h: number }> => {
+    if (typeof createImageBitmap === "function") {
+      try {
+        const bmp = await createImageBitmap(file);
+        const size = { w: bmp.width, h: bmp.height };
+        bmp.close();
+        return size;
+      } catch {
+        return { w: 0, h: 0 };
+      }
+    }
+    return new Promise<{ w: number; h: number }>((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      const done = (w: number, h: number) => {
+        URL.revokeObjectURL(url);
+        resolve({ w, h });
+      };
+      img.onload = () => done(img.naturalWidth, img.naturalHeight);
+      img.onerror = () => done(0, 0);
+      img.src = url;
+    });
+  };
   const editable = (e?: Element) => !!e && (e.kind === "text" || e.kind === "sticky" || e.kind === "rect" || e.kind === "ellipse");
   const editText = () => {
     if (sel && editable(sel)) setEditing({ element: sel, fresh: false });
@@ -442,6 +476,35 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
     }
   };
   /** S92: lays a template out in the middle of what is on screen, selected so it can be moved at once. */
+  /** S96: uploads a picture and places it, fitted, in the middle of the view, selected. */
+  const [imageError, setImageError] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const addImage = async (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    setImageError("");
+    try {
+      const [up, natural] = await Promise.all([whiteboardUseCases.uploadImage(id, file), naturalSize(file)]);
+      const size = fitImage(natural.w, natural.h);
+      const c = { x: view.x + W / view.zoom / 2, y: view.y + H / view.zoom / 2 };
+      const el: Element = { id: newId(), kind: "image", x: Math.round(c.x - size.w / 2), y: Math.round(c.y - size.h / 2), ...size, points: [], text: up.id, color: "", version: 0 };
+      wb.change({ op: "add", element: el });
+      setSelectedIds([el.id]);
+    } catch (e) {
+      setImageError(e instanceof Error ? e.message : t("Could not add the image"));
+    }
+  };
+  useEffect(() => {
+    const paste = (e: ClipboardEvent) => {
+      if ((e.target as HTMLElement).closest?.("input, textarea")) return;
+      const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith("image/"));
+      if (file) {
+        e.preventDefault();
+        void addImage(file);
+      }
+    };
+    window.addEventListener("paste", paste);
+    return () => window.removeEventListener("paste", paste);
+  });
   const insertTemplate = (kind: Template) => {
     const els = template(kind, { x: view.x + W / view.zoom / 2, y: view.y + H / view.zoom / 2 });
     wb.changeAll(els.map((element) => ({ op: "add", element })));
@@ -574,6 +637,13 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
       <header className="wb-bar">
         <b>{wb.board?.title}</b>
         <div role="toolbar" aria-label={t("Drawing tools")} className="row">
+          <button className="ghost" aria-label={t("Add an image")} title={t("Add an image")} onClick={() => fileInput.current?.click()}>🖼</button>
+          <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden aria-label={t("Image file")}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void addImage(f);
+            }} />
           {TOOLS.map((x) => (
             <button key={x.tool} className={tool === x.tool ? "active" : "ghost"} aria-pressed={tool === x.tool} aria-label={t(x.label)} title={t(x.label)}
               onClick={() => setTool(x.tool)}>{x.icon}</button>
@@ -635,7 +705,14 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
           {onClose && <button className="ghost" aria-label={t("Close whiteboard")} onClick={onClose}>✕</button>}
         </div>
       </header>
-      <div className="wb-stage">
+      <div className="wb-stage" onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          const f = [...e.dataTransfer.files].find((x) => x.type.startsWith("image/"));
+          if (f) {
+            e.preventDefault();
+            void addImage(f);
+          }
+        }}>
       <svg ref={svg} role="img" aria-label={t("Canvas")} viewBox={viewBox(view, PAGE)} className={`wb-canvas tool-${tool}`} xmlns="http://www.w3.org/2000/svg"
         onPointerDown={down} onPointerMove={move} onPointerUp={up}
         onDoubleClick={() => editText()}>
@@ -650,7 +727,7 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
         <rect className="wb-background" x={view.x} y={view.y} width={W / view.zoom} height={H / view.zoom} fill="#ffffff" />
         <rect className="wb-grid" x={view.x} y={view.y} width={W / view.zoom} height={H / view.zoom} fill="url(#wb-dots)" pointerEvents="none" />
         {shapes.map((e) => (
-          <g key={e.id} opacity={erasing.includes(e.id) ? 0.25 : undefined}><Shape e={e} selected={selected.includes(e.id)} /></g>
+          <g key={e.id} opacity={erasing.includes(e.id) ? 0.25 : undefined}><Shape e={e} selected={selected.includes(e.id)} board={id} /></g>
         ))}
         {sel && !editing && <Handles e={sel} zoom={view.zoom} />}
         {selection.length > 1 && (() => {
@@ -681,6 +758,7 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
       </div>
       {sel && !draft && !moving && <ElementComments board={id} element={sel.id} me={me} names={names} />}
       {wb.error && <p role="status" className="muted">{wb.error}</p>}
+      {imageError && <p role="alert" className="error">{imageError}</p>}
       {toIssue.error && <p role="alert" className="error">{toIssue.error.message}</p>}
     </section>
   );
