@@ -220,3 +220,23 @@ func TestSignupRejectsReservedDomain(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// F6: generic OpenID Connect and GitHub identities link like Google's.
+func TestLoginExternalSSOProviders(t *testing.T) {
+	ctx := context.Background()
+	s, _ := setupExternal()
+	for _, tc := range []struct {
+		p    domain.Provider
+		name string
+	}{{domain.ProviderOIDC, "SSO user 5"}, {domain.ProviderGitHub, "GitHub user 5"}} {
+		_, u, err := s.LoginExternal(ctx, application.ExternalProfile{Provider: tc.p, Subject: "5"})
+		if err != nil || u.Name() != tc.name || string(u.Email()) != string(tc.p)+"-5@users.kyber.invalid" {
+			t.Fatalf("%s = %+v %v", tc.p, u, err)
+		}
+	}
+	_, a, _ := s.LoginExternal(ctx, application.ExternalProfile{Provider: domain.ProviderOIDC, Subject: "o", Email: "same@x.uz", EmailVerified: true, Name: "S"})
+	_, b, err := s.LoginExternal(ctx, application.ExternalProfile{Provider: domain.ProviderGitHub, Subject: "77", Email: "same@x.uz", EmailVerified: true, Name: "S"})
+	if err != nil || a.ID() != b.ID() {
+		t.Fatalf("verified email must link: %v %v %v", a, b, err)
+	}
+}

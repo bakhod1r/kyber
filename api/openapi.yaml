@@ -102,9 +102,11 @@ paths:
               schema:
                 type: object
                 additionalProperties: false
-                required: [google, telegram_bot, telegram_otp]
+                required: [google, oidc, github, telegram_bot, telegram_otp]
                 properties:
                   google: { type: boolean }
+                  oidc: { type: [string, "null"], description: Button label of the generic OpenID Connect (SSO) provider; null when disabled. }
+                  github: { type: boolean }
                   telegram_bot: { type: [string, "null"], description: Bot username for the Telegram Login Widget; null when disabled. }
                   telegram_otp: { type: boolean, description: The bot sends one-time login codes. }
         "404": { $ref: "#/components/responses/Error" }
@@ -133,6 +135,56 @@ paths:
       responses:
         "302": { description: "Redirect to / when signed in, otherwise to /login?error=google_failed or google_email_taken" }
         "404": { description: Google sign-in is not configured }
+  /api/v1/auth/oidc/start:
+    get:
+      operationId: oidcStart
+      security: []
+      description: >-
+        Starts single sign-on with the installation's OpenID Connect provider (`KYBER_OIDC_ISSUER`, found by
+        discovery; code flow with PKCE, state and nonce). Sets the `kyber_oauth` cookie and redirects to the provider.
+      responses:
+        "302": { description: "Redirect to the provider's sign-in page" }
+        "404": { description: SSO is not configured }
+  /api/v1/auth/oidc/callback:
+    get:
+      operationId: oidcCallback
+      security: []
+      description: >-
+        The OpenID Connect provider redirects here. The `state` must match this browser's `kyber_oauth` cookie; the ID
+        token is verified against the provider's JWKS (signature, issuer, audience, expiry, nonce) and `email_verified`
+        must be true. A verified email links to an existing account. On success sets `kyber_session` and redirects to
+        `/`; on failure redirects to `/login?error=oidc_failed` or `oidc_email_taken`.
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+      responses:
+        "302": { description: "Redirect to / when signed in, otherwise to /login?error=oidc_failed or oidc_email_taken" }
+        "404": { description: SSO is not configured }
+  /api/v1/auth/github/start:
+    get:
+      operationId: githubStart
+      security: []
+      description: >-
+        Starts "Sign in with GitHub" (OAuth web flow with state and PKCE). Sets the `kyber_oauth` cookie and
+        redirects to GitHub.
+      responses:
+        "302": { description: "Redirect to GitHub's authorization page" }
+        "404": { description: GitHub sign-in is not configured }
+  /api/v1/auth/github/callback:
+    get:
+      operationId: githubCallback
+      security: []
+      description: >-
+        GitHub redirects here. The `state` must match this browser's `kyber_oauth` cookie. The profile comes from
+        GitHub's `/user` (subject = numeric user id) and `/user/emails` (only the primary verified email is used, and
+        only it links to an existing account). On success sets `kyber_session` and redirects to `/`; on failure
+        redirects to `/login?error=github_failed` or `github_email_taken`.
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+      responses:
+        "302": { description: "Redirect to / when signed in, otherwise to /login?error=github_failed or github_email_taken" }
+        "404": { description: GitHub sign-in is not configured }
   /api/v1/auth/telegram:
     post:
       operationId: telegramLogin

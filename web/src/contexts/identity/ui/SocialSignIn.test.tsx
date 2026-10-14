@@ -49,6 +49,24 @@ describe("Sign in with Google and Telegram (KYB-S39)", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("already has a Kyber account");
   });
 
+  it("F6: shows single sign-on and GitHub buttons and explains their failures", async () => {
+    mockApi({
+      "GET /api/v1/me": anonymous,
+      "GET /api/v1/auth/providers": { status: 200, body: { google: false, oidc: "Okta", github: true, telegram_bot: null } },
+    });
+    renderWithProviders(<AppRoutes />, "/login?error=github_email_taken");
+    expect(await screen.findByRole("link", { name: "Continue with Okta" })).toHaveAttribute("href", "/api/v1/auth/oidc/start");
+    expect(screen.getByRole("link", { name: "Continue with GitHub" })).toHaveAttribute("href", "/api/v1/auth/github/start");
+    expect(screen.getByRole("alert")).toHaveTextContent("GitHub did not confirm it");
+  });
+
+  it("F6: explains a failed single sign-on", async () => {
+    mockApi({ "GET /api/v1/me": anonymous, "GET /api/v1/auth/providers": { status: 200, body: { google: false, oidc: "SSO", github: false, telegram_bot: null } } });
+    renderWithProviders(<AppRoutes />, "/login?error=oidc_failed");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Single sign-on did not complete");
+    expect(screen.queryByRole("link", { name: "Continue with GitHub" })).not.toBeInTheDocument();
+  });
+
   it("AC4: nothing extra when no provider is configured", async () => {
     mockApi({ "GET /api/v1/me": anonymous, "GET /api/v1/auth/providers": { status: 200, body: { google: false, telegram_bot: null } } });
     renderWithProviders(<AppRoutes />, "/login");

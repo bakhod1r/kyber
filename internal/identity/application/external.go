@@ -13,12 +13,13 @@ var (
 	ErrInvalidProfile   = errors.New("invalid external profile")
 )
 
-// WithExternalIdentities enables sign-in with Google and Telegram.
+// WithExternalIdentities enables sign-in with external identity providers.
 func WithExternalIdentities(ids domain.ExternalIdentities) Option {
 	return func(s *Service) { s.external = ids }
 }
 
-var providerTitle = map[domain.Provider]string{domain.ProviderGoogle: "Google", domain.ProviderTelegram: "Telegram"}
+var providerTitle = map[domain.Provider]string{domain.ProviderGoogle: "Google", domain.ProviderTelegram: "Telegram",
+	domain.ProviderOIDC: "SSO", domain.ProviderGitHub: "GitHub"}
 
 // ExternalProfile is what an identity provider vouches for after verification by its adapter.
 type ExternalProfile struct {
