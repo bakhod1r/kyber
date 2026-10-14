@@ -21,6 +21,27 @@ const (
 	CodeFocusState           = "FOCUS_STATE"
 	CodeMeetingNotFound      = "MEETING_NOT_FOUND"
 	CodeMeetingForbidden     = "MEETING_FORBIDDEN"
+	CodeConversationNotFound = "CONVERSATION_NOT_FOUND"
+	CodeMessageNotFound      = "MESSAGE_NOT_FOUND"
+	CodeChannelNameTaken     = "CHANNEL_NAME_TAKEN"
+	CodeChatForbidden        = "CHAT_FORBIDDEN"
+	CodeCallNotFound         = "CALL_NOT_FOUND"
+	CodeCallFull             = "CALL_FULL"
+	CodeCallState            = "CALL_STATE"
+	CodeWhiteboardNotFound   = "WHITEBOARD_NOT_FOUND"
+	CodeWhiteboardBusy       = "WHITEBOARD_BUSY"
+	CodeCallNotPresenter     = "CALL_NOT_PRESENTER"
+	CodeCallRecording        = "CALL_ALREADY_RECORDING"
+	CodeCallNotRecorder      = "CALL_NOT_RECORDER"
+	CodeScheduledNotFound    = "SCHEDULED_MESSAGE_NOT_FOUND"
+	CodeGroupHandleTaken     = "GROUP_HANDLE_TAKEN"
+	CodeGroupNotFound        = "GROUP_NOT_FOUND"
+	CodeBookmarkNotFound     = "BOOKMARK_NOT_FOUND"
+	CodeWorkflowNotFound     = "WORKFLOW_NOT_FOUND"
+	CodeWebhookNotFound      = "WEBHOOK_NOT_FOUND"
+	CodeWebhookRateLimited   = "WEBHOOK_RATE_LIMITED"
+	CodeCommentNotFound      = "WHITEBOARD_COMMENT_NOT_FOUND"
+	CodeNotCommentAuthor     = "NOT_COMMENT_AUTHOR"
 	CodeWorkspaceSlugTaken   = "WORKSPACE_SLUG_TAKEN"
 	CodeOTPPending           = "AUTH_OTP_PENDING"
 	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
@@ -49,7 +70,7 @@ const (
 	CodeVersionState         = "VERSION_STATE"
 	CodeVersionNameTaken     = "VERSION_NAME_TAKEN"
 	CodeWorklogNotFound      = "WORKLOG_NOT_FOUND"
-	CodeCommentNotFound      = "COMMENT_NOT_FOUND"
+	CodeIssueCommentNotFound = "COMMENT_NOT_FOUND"
 	CodeInvalidJQL           = "SEARCH_INVALID_JQL"
 	CodeFilterNotFound       = "FILTER_NOT_FOUND"
 	CodeFilterConflict       = "FILTER_CONFLICT"
@@ -104,6 +125,27 @@ var codes = []code{
 	{CodeFocusState, "6073", 409, "The focus session cannot do that now.", "Fokus seansi hozir buni qila olmaydi.", "Фокус-сессия сейчас не может этого сделать.", errorx.CategoryBusiness},
 	{CodeMeetingNotFound, "6074", 404, "Meeting not found.", "Uchrashuv topilmadi.", "Встреча не найдена.", errorx.CategoryBusiness},
 	{CodeMeetingForbidden, "6075", 403, "Only the organizer can cancel this meeting.", "Uchrashuvni faqat tashkilotchi bekor qila oladi.", "Отменить встречу может только организатор.", errorx.CategorySecurity},
+	{CodeConversationNotFound, "6100", 404, "Conversation not found.", "Suhbat topilmadi.", "Беседа не найдена.", errorx.CategoryBusiness},
+	{CodeMessageNotFound, "6101", 404, "Message not found.", "Xabar topilmadi.", "Сообщение не найдено.", errorx.CategoryBusiness},
+	{CodeChannelNameTaken, "6102", 409, "A channel with this name already exists.", "Bu nomli kanal allaqachon bor.", "Канал с таким названием уже существует.", errorx.CategoryBusiness},
+	{CodeCallNotFound, "6104", 404, "Call not found.", "Qo'ng'iroq topilmadi.", "Звонок не найден.", errorx.CategoryBusiness},
+	{CodeCallFull, "6105", 409, "The call is full (6 people at most).", "Qo'ng'iroq to'lgan (ko'pi bilan 6 kishi).", "Звонок заполнен (не более 6 человек).", errorx.CategoryBusiness},
+	{CodeCallState, "6106", 409, "You are not in this call.", "Siz bu qo'ng'iroqda emassiz.", "Вы не участвуете в этом звонке.", errorx.CategoryBusiness},
+	{CodeWhiteboardNotFound, "6107", 404, "Whiteboard not found.", "Doska topilmadi.", "Доска не найдена.", errorx.CategoryBusiness},
+	{CodeWhiteboardBusy, "6108", 409, "The whiteboard is busy. Try again.", "Doska band. Qayta urinib ko'ring.", "Доска занята. Попробуйте снова.", errorx.CategoryBusiness},
+	{CodeCallNotPresenter, "6109", 403, "Only the presenter can do that.", "Buni faqat taqdimotchi qila oladi.", "Это может сделать только докладчик.", errorx.CategoryBusiness},
+	{CodeCallRecording, "6110", 409, "Someone is already recording this call.", "Bu qo'ng'iroqni allaqachon kimdir yozib olyapti.", "Этот звонок уже кто-то записывает.", errorx.CategoryBusiness},
+	{CodeGroupHandleTaken, "6113", 409, "That group handle is taken.", "Bu guruh nomi band.", "Это имя группы уже занято.", errorx.CategoryBusiness},
+	{CodeCommentNotFound, "6119", 404, "Comment not found.", "Izoh topilmadi.", "Комментарий не найден.", errorx.CategoryBusiness},
+	{CodeNotCommentAuthor, "6120", 403, "Only its author can remove a comment.", "Izohni faqat muallifi o'chira oladi.", "Удалить комментарий может только его автор.", errorx.CategoryBusiness},
+	{CodeWebhookNotFound, "6117", 404, "Webhook not found.", "Vebhuk topilmadi.", "Вебхук не найден.", errorx.CategoryBusiness},
+	{CodeWebhookRateLimited, "6118", 429, "Too many messages from this webhook; slow down.", "Bu vebhukdan juda ko'p xabar; sekinroq.", "Слишком много сообщений от этого вебхука; помедленнее.", errorx.CategoryBusiness},
+	{CodeWorkflowNotFound, "6116", 404, "Workflow not found.", "Ish jarayoni topilmadi.", "Сценарий не найден.", errorx.CategoryBusiness},
+	{CodeBookmarkNotFound, "6115", 404, "Bookmark not found.", "Xatcho'p topilmadi.", "Закладка не найдена.", errorx.CategoryBusiness},
+	{CodeGroupNotFound, "6114", 404, "Group not found.", "Guruh topilmadi.", "Группа не найдена.", errorx.CategoryBusiness},
+	{CodeScheduledNotFound, "6112", 404, "Scheduled message not found.", "Rejalashtirilgan xabar topilmadi.", "Запланированное сообщение не найдено.", errorx.CategoryBusiness},
+	{CodeCallNotRecorder, "6111", 403, "Only the one recording can stop it.", "Yozuvni faqat uni boshlagan odam to'xtata oladi.", "Остановить запись может только тот, кто её начал.", errorx.CategoryBusiness},
+	{CodeChatForbidden, "6103", 403, "You cannot do that in this conversation.", "Bu suhbatda buni qila olmaysiz.", "В этой беседе так сделать нельзя.", errorx.CategorySecurity},
 	{CodeProjectNotFound, "6002", 404, "Project not found.", "Loyiha topilmadi.", "Проект не найден.", errorx.CategoryBusiness},
 	{CodeProjectKeyTaken, "6003", 409, "This project key is already taken.", "Bu loyiha kaliti band.", "Этот ключ проекта уже занят.", errorx.CategoryBusiness},
 	{CodeForbidden, "6004", 403, "Your project role does not allow this.", "Loyihadagi rolingiz bunga ruxsat bermaydi.", "Ваша роль в проекте не позволяет это сделать.", errorx.CategorySecurity},
@@ -129,7 +171,7 @@ var codes = []code{
 	{CodeVersionState, "6082", 409, "The version is not in a state that allows this.", "Versiya holati bunga ruxsat bermaydi.", "Текущее состояние версии этого не допускает.", errorx.CategoryBusiness},
 	{CodeVersionNameTaken, "6083", 409, "This project already has a version with that name.", "Loyihada bu nomli versiya allaqachon bor.", "В проекте уже есть версия с таким названием.", errorx.CategoryBusiness},
 	{CodeWorklogNotFound, "6084", 404, "Worklog not found.", "Vaqt yozuvi topilmadi.", "Запись о работе не найдена.", errorx.CategoryBusiness},
-	{CodeCommentNotFound, "6089", 404, "Comment not found.", "Izoh topilmadi.", "Комментарий не найден.", errorx.CategoryBusiness},
+	{CodeIssueCommentNotFound, "6089", 404, "Comment not found.", "Izoh topilmadi.", "Комментарий не найден.", errorx.CategoryBusiness},
 	{CodeInvalidJQL, "6090", 422, "The query is not valid JQL.", "So'rov JQL qoidalariga mos emas.", "Запрос не является корректным JQL.", errorx.CategoryValidation},
 	{CodeFilterNotFound, "6091", 404, "Filter not found.", "Filtr topilmadi.", "Фильтр не найден.", errorx.CategoryBusiness},
 	{CodeFilterConflict, "6092", 409, "Someone else changed this filter. Reload and try again.", "Filtrni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Фильтр изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},

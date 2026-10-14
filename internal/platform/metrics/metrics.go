@@ -19,6 +19,19 @@ type HTTP struct {
 	mu       sync.Mutex
 	count    map[key]uint64
 	duration map[key]float64
+	gauges   []gauge
+}
+
+type gauge struct {
+	name, help string
+	read       func() float64
+}
+
+// Gauge exposes a value read at scrape time (e.g. open streams, live calls).
+func (m *HTTP) Gauge(name, help string, read func() float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.gauges = append(m.gauges, gauge{name, help, read})
 }
 
 func NewHTTP() *HTTP { return &HTTP{count: map[key]uint64{}, duration: map[key]float64{}} }
@@ -53,5 +66,9 @@ func (m *HTTP) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(w, "kyber_http_request_duration_seconds_sum{method=%q,status=\"%d\"} %s\n",
 			k.method, k.status, strconv.FormatFloat(m.duration[k], 'f', -1, 64))
 	}
+	gauges := m.gauges
 	m.mu.Unlock()
+	for _, g := range gauges {
+		fmt.Fprintf(w, "# HELP %s %s\n# TYPE %s gauge\n%s %s\n", g.name, g.help, g.name, g.name, strconv.FormatFloat(g.read(), 'f', -1, 64))
+	}
 }

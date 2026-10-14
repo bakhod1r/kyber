@@ -49,6 +49,21 @@ type Config struct {
 	SMTPPassword string `env:"KYBER_SMTP_PASSWORD"`
 	SMTPFrom     string `env:"KYBER_SMTP_FROM" default:"Kyber <noreply@localhost>"`
 	SMTPTLS      string `env:"KYBER_SMTP_TLS" default:"starttls"` // starttls (587), tls (465) or none
+	// Calls (WebRTC): comma-separated stun:/turn:/turns: URLs, and coturn's static-auth-secret for TURN.
+	ICEServers string `env:"KYBER_ICE_SERVERS"`
+	TURNSecret string `env:"KYBER_TURN_SECRET"`
+	// FilesDir keeps chat files and huddle recordings on disk (back it up with the database).
+	FilesDir string `env:"KYBER_FILES_DIR"`
+	// STTURL turns on transcripts of huddle recordings (S77): an OpenAI-compatible speech-to-text endpoint, e.g.
+	// a self-hosted Whisper. Unset (the default), recordings never leave the server.
+	STTURL   string `env:"KYBER_STT_URL"`
+	STTModel string `env:"KYBER_STT_MODEL"`
+	STTKey   string `env:"KYBER_STT_KEY"`
+	// LLMURL turns on summaries of those transcripts (S87): an OpenAI-compatible chat completions endpoint, e.g. a
+	// self-hosted Ollama. Unset (the default), transcripts never leave the server.
+	LLMURL   string `env:"KYBER_LLM_URL"`
+	LLMModel string `env:"KYBER_LLM_MODEL"`
+	LLMKey   string `env:"KYBER_LLM_KEY"`
 }
 
 func Load() (*Config, error) {

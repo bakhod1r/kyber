@@ -95,6 +95,18 @@ func (c *contract) check(t *testing.T, req *http.Request, res *http.Response) {
 	}
 }
 
+// exercised marks a streaming operation as hit without reading its (endless) body.
+func (c *contract) exercised(req *http.Request) {
+	if c.load() != nil {
+		return
+	}
+	if route, _, err := c.router.FindRoute(req); err == nil {
+		c.mu.Lock()
+		c.hit[route.Operation.OperationID] = true
+		c.mu.Unlock()
+	}
+}
+
 // report returns drift problems once all tests have run.
 func (c *contract) report() []string {
 	if c.doc == nil {

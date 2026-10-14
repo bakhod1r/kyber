@@ -1,5 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { audienceLabel, calendarUseCases, localInput, type Meeting, minutesOf, RESPONSES, type MeetingResponse, tally, when } from "../application";
 import { identityUseCases } from "../../identity/application";
 import { notifyUseCases } from "../../notify/application";
@@ -60,8 +61,11 @@ function RescheduleForm({ m, onDone }: { m: Meeting; onDone: () => void }) {
   );
 }
 
+/** A chat channel a meeting can happen in (S76); the app shell lists them. */
+export type HuddleChannel = { id: string; name: string };
+
 /** The workspace time table (KYB-S42). During a meeting its attendees cannot start a Pomodoro. */
-export function MeetingsPage() {
+export function MeetingsPage({ channels = [] }: { channels?: HuddleChannel[] }) {
   const t = useT();
   const qc = useQueryClient();
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: () => calendarUseCases.meetings() });
@@ -89,6 +93,7 @@ export function MeetingsPage() {
   const [picked, setPicked] = useState<string[]>([]);
   /** "people", "workspace" or "project:KEY". */
   const [invite, setInvite] = useState("people");
+  const [channel, setChannel] = useState("");
   const refresh = () => qc.invalidateQueries({ queryKey: ["meetings"] });
   const schedule = useMutation({
     mutationFn: () => {
@@ -97,6 +102,7 @@ export function MeetingsPage() {
       return calendarUseCases.scheduleMeeting({
         title, starts_at: start.toISOString(), ends_at: new Date(start.getTime() + mins * 60_000).toISOString(),
         attendee_ids: scope === "people" ? picked : [], scope, ...(project ? { project_key: project } : {}),
+        ...(channel ? { conversation_id: channel } : {}),
       });
     },
     onSuccess: () => {
@@ -145,6 +151,9 @@ export function MeetingsPage() {
                 ))}
               </span>
             )}
+            {m.conversation_id && (
+              <Link className="button" to={`/chat/${m.conversation_id}?huddle=join`} aria-label={`Join the huddle of ${m.title}`}>🎧 Join huddle</Link>
+            )}
             {m.organizer_id === me.data?.id && (
               <>
                 <button className="ghost" aria-label={t("Reschedule {title}", { title: m.title })} aria-expanded={editing === m.id}
@@ -186,6 +195,15 @@ export function MeetingsPage() {
             <option value="workspace">{t("Everyone in the workspace")}</option>
           </select>
         </label>
+        {channels.length > 0 && (
+          <label>
+            {t("Huddle in")}
+            <select value={channel} onChange={(e) => setChannel(e.target.value)}>
+              <option value="">{t("No huddle")}</option>
+              {channels.map((c) => <option key={c.id} value={c.id}>#{c.name}</option>)}
+            </select>
+          </label>
+        )}
         {invite !== "people" && <p className="muted">{t("Everyone invited is notified now and reminded 15 minutes before it starts.")}</p>}
         <fieldset hidden={invite !== "people"}>
           <legend>{t("Attendees")}</legend>

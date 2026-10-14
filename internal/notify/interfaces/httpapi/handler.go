@@ -124,6 +124,8 @@ type notificationDTO struct {
 	Kind       string    `json:"kind"`
 	IssueKey   string    `json:"issue_key"`
 	IssueTitle string    `json:"issue_title"`
+	ConvID     string    `json:"conversation_id"`
+	ConvName   string    `json:"conversation_name"`
 	ProjectKey string    `json:"project_key"`
 	ActorName  string    `json:"actor_name"`
 	Excerpt    string    `json:"excerpt"`
@@ -158,6 +160,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	out := make([]notificationDTO, 0, len(items))
 	for _, n := range items {
 		out = append(out, notificationDTO{ID: string(n.ID), Kind: string(n.Kind), IssueKey: n.IssueKey, IssueTitle: n.IssueTitle,
+			ConvID: n.ConversationID, ConvName: n.ConversationName,
 			ProjectKey: n.Project, ActorName: n.ActorName, Excerpt: n.Excerpt, Read: n.Read(), CreatedAt: n.CreatedAt.UTC()})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": out, "unread": unread})
@@ -172,7 +175,11 @@ func (h *Handler) read(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) readAll(w http.ResponseWriter, r *http.Request) {
-	if err := h.svc.MarkAllRead(r.Context(), auth.Actor(r.Context())); err != nil {
+	read := func() error { return h.svc.MarkAllRead(r.Context(), auth.Actor(r.Context())) }
+	if conv := r.URL.Query().Get("conversation_id"); conv != "" {
+		read = func() error { return h.svc.MarkConversationRead(r.Context(), auth.Actor(r.Context()), conv) }
+	}
+	if err := read(); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}

@@ -41,12 +41,13 @@ type (
 var ErrProjectNotFound = errors.New("project not found")
 
 type Service struct {
-	repo       domain.Repository
-	members    Members
-	organizers Organizers
-	audience   Audience
-	newID      func() string
-	now        func() time.Time
+	repo          domain.Repository
+	members       Members
+	organizers    Organizers
+	audience      Audience
+	conversations Conversations
+	newID         func() string
+	now           func() time.Time
 }
 
 // WithTeams enables meetings for a whole project or workspace.
@@ -73,7 +74,20 @@ type Schedule struct {
 	// Scope "project" (with Project) or "workspace" invites every member; "" or "people" invites Attendees.
 	Scope   string
 	Project string
+	// Conversation (optional): the channel whose huddle the meeting happens in (S76); the organizer must read it.
+	Conversation string
 }
+
+// Conversations tells whether someone may read a chat conversation (Chat context).
+type Conversations interface {
+	Readable(ctx context.Context, user, conversation string) (bool, error)
+}
+
+// ErrNoConversation: the meeting's channel does not exist or the organizer may not read it.
+var ErrNoConversation = errors.New("no such channel")
+
+// WithConversations lets meetings happen in a channel's huddle (S76).
+func (s *Service) WithConversations(c Conversations) *Service { s.conversations = c; return s }
 
 // Schedule books a meeting in the request's workspace; the organizer always attends. A team
 // event invites a project's or the workspace's members (and tells them all).
@@ -117,10 +131,23 @@ func (s *Service) Schedule(ctx context.Context, actor string, in Schedule) (*dom
 		}
 		attendees = append(attendees, domain.UserID(a))
 	}
+	if in.Conversation != "" {
+		ok := false
+		if s.conversations != nil {
+			var err error
+			if ok, err = s.conversations.Readable(ctx, actor, in.Conversation); err != nil {
+				return nil, err
+			}
+		}
+		if !ok {
+			return nil, ErrNoConversation
+		}
+	}
 	m, err := domain.PlanMeeting(domain.MeetingID(s.newID()), domain.WorkspaceID(ws), in.Title, in.Start, in.End, domain.UserID(actor), attendees, aud)
 	if err != nil {
 		return nil, err
 	}
+	m.Conversation = in.Conversation
 	return m, s.repo.Create(ctx, m)
 }
 

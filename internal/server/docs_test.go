@@ -51,3 +51,49 @@ func TestDocs(t *testing.T) {
 		expect(t, code, 404, b)
 	})
 }
+
+// S86: comments on a page's paragraphs; readers comment, @mentions of project members notify, authors remove.
+func TestDocComments(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		vic := anon.signedIn("vic@x.uz")
+		out := anon.signedIn("out@x.uz")
+		lead.do("POST", "/api/v1/projects", map[string]string{"key": "KYB", "name": "Kyber"})
+		lead.do("POST", "/api/v1/projects/KYB/members", map[string]string{"email": "vic@x.uz", "role": "viewer"})
+		_, p := lead.do("POST", "/api/v1/projects/KYB/docs", map[string]string{"title": "Guide", "body": "# Hi\n\nCache it"})
+		url := "/api/v1/docs/" + p["id"].(string) + "/comments"
+
+		code, c := lead.do("POST", url, map[string]any{"paragraph": 1, "quote": "Cache it", "body": "@vic@x.uz @out@x.uz why?"})
+		expect(t, code, 201, c)
+		if c["paragraph"] != float64(1) || c["quote"] != "Cache it" || c["author_id"] == "" {
+			t.Fatalf("comment = %v", c)
+		}
+		code, x := lead.do("POST", url, map[string]any{"paragraph": -1, "body": "x"})
+		expect(t, code, 422, x)
+		code, x = out.do("POST", url, map[string]any{"paragraph": 0, "body": "x"})
+		expect(t, code, 404, x)
+		code, x = out.do("GET", url, nil)
+		expect(t, code, 404, x)
+		code, l := vic.do("GET", url, nil)
+		expect(t, code, 200, l)
+		if len(l["items"].([]any)) != 1 {
+			t.Fatalf("comments = %v", l)
+		}
+		eventuallyJSON(t, vic, "/api/v1/notifications", func(n map[string]any) bool {
+			items := n["items"].([]any)
+			return len(items) == 1 && items[0].(map[string]any)["kind"] == "doc"
+		})
+		if _, n := out.do("GET", "/api/v1/notifications", nil); len(n["items"].([]any)) != 0 {
+			t.Fatalf("an outsider was told: %v", n)
+		}
+		del := "/api/v1/doc-comments/" + c["id"].(string)
+		code, x = vic.do("DELETE", del, nil)
+		expect(t, code, 403, x)
+		code, x = out.do("DELETE", del, nil)
+		expect(t, code, 404, x)
+		code, x = lead.do("DELETE", del, nil)
+		expect(t, code, 204, x)
+		code, x = lead.do("DELETE", del, nil)
+		expect(t, code, 404, x)
+	})
+}

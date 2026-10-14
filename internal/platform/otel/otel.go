@@ -92,7 +92,10 @@ func Middleware(next http.Handler) http.Handler {
 		span.SetName(rt.pattern)
 		span.SetAttributes(attribute.String("http.route", rt.pattern[strings.IndexByte(rt.pattern, ' ')+1:]))
 	})
-	return otelhttp.NewHandler(named, "http", otelhttp.WithFilter(func(r *http.Request) bool { return !probes[r.URL.Path] }))
+	// Incoming webhook URLs carry their secret (S81): never record them in traces.
+	return otelhttp.NewHandler(named, "http", otelhttp.WithFilter(func(r *http.Request) bool {
+		return !probes[r.URL.Path] && !strings.HasPrefix(r.URL.Path, "/api/v1/hooks/")
+	}))
 }
 
 // Routed records the pattern mux matched for the request's span; the innermost mux wins.

@@ -1,16 +1,44 @@
-// Typed i18n: English text is the key; uz/ru must translate every key (a missing one fails tsc).
+// Typed i18n: English text is the key; uz/ru must translate every key (a missing one fails tsc); 22
+// more languages translate the core interface and fall back to English.
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { en, type MessageKey } from "./en";
 import { ru } from "./ru";
 import { uz } from "./uz";
+import { zh } from "./zh";
+import { hi } from "./hi";
+import { es } from "./es";
+import { ar } from "./ar";
+import { fr } from "./fr";
+import { bn } from "./bn";
+import { pt } from "./pt";
+import { ur } from "./ur";
+import { id } from "./id";
+import { de } from "./de";
+import { ja } from "./ja";
+import { tr } from "./tr";
+import { ko } from "./ko";
+import { vi } from "./vi";
+import { it } from "./it";
+import { fa } from "./fa";
+import { pl } from "./pl";
+import { uk } from "./uk";
+import { nl } from "./nl";
+import { th } from "./th";
+import { kk } from "./kk";
+import { az } from "./az";
 
-export const LANGUAGES = ["en", "uz", "ru"] as const;
+export const LANGUAGES = ["en", "uz", "ru", "zh", "hi", "es", "ar", "fr", "bn", "pt", "ur", "id", "de", "ja", "tr", "ko", "vi", "it", "fa", "pl", "uk", "nl", "th", "kk", "az"] as const;
 export type Language = (typeof LANGUAGES)[number];
 export type { MessageKey };
 
-export const LANGUAGE_NAMES: Record<Language, string> = { en: "English", uz: "O‘zbekcha", ru: "Русский" };
+export const LANGUAGE_NAMES: Record<Language, string> = { en: "English", uz: "O‘zbekcha", ru: "Русский", zh: "中文", hi: "हिन्दी", es: "Español", ar: "العربية", fr: "Français", bn: "বাংলা", pt: "Português", ur: "اردو", id: "Bahasa Indonesia", de: "Deutsch", ja: "日本語", tr: "Türkçe", ko: "한국어", vi: "Tiếng Việt", it: "Italiano", fa: "فارسی", pl: "Polski", uk: "Українська", nl: "Nederlands", th: "ไทย", kk: "Қазақша", az: "Azərbaycanca" };
 
-const dictionaries: Record<Language, Record<MessageKey, string>> = { en, uz, ru };
+/** Languages written right to left. */
+export const RTL: readonly Language[] = ["ar", "fa", "ur"];
+
+// en, uz and ru translate every key (checked by tsc); the others cover the core interface and fall
+// back to English for the rest.
+const dictionaries: Record<Language, Partial<Record<MessageKey, string>>> = { en, uz, ru, zh, hi, es, ar, fr, bn, pt, ur, id, de, ja, tr, ko, vi, it, fa, pl, uk, nl, th, kk, az };
 const STORAGE_KEY = "kyber.lang";
 
 export function isLanguage(v: unknown): v is Language {
@@ -62,6 +90,7 @@ export function I18nProvider({ children, initial }: { children: ReactNode; initi
   const [lang, setLangState] = useState<Language>(() => initial ?? currentLanguage());
   useEffect(() => {
     document.documentElement.lang = lang;
+    document.documentElement.dir = RTL.includes(lang) ? "rtl" : "ltr";
   }, [lang]);
   const setLang = useCallback((l: Language) => {
     storeLanguage(l);

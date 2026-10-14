@@ -587,6 +587,14 @@ export const en = {
   "Swimlanes": "Swimlanes",
   "No epic": "No epic",
   "Epic": "Epic",
+  "⏰ Reminder": "⏰ Reminder",
+  "wrote": "wrote",
+  "mentioned you": "mentioned you",
+  "mentioned you in a comment on": "mentioned you in a comment on",
+  "from": "from",
+  "in": "in",
+  "Huddle in": "Huddle in",
+  "No huddle": "No huddle",
   "Assignees": "Assignees",
   "Board filters": "Board filters",
   "Group": "Group",
@@ -601,6 +609,12 @@ export const en = {
   "React with {emoji}": "React with {emoji}",
   "Also viewing": "Also viewing",
   "Also viewing:": "Also viewing:",
+  "Appearance": "Appearance",
+  "Theme": "Theme",
+  "Wallpaper": "Wallpaper",
+  "Upload image…": "Upload image…",
+  "Choose an image of at most 1 MB.": "Choose an image of at most 1 MB.",
+  "Upload wallpaper": "Upload wallpaper",
 } as const;
 
 export type MessageKey = keyof typeof en;

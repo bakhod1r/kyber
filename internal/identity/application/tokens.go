@@ -86,3 +86,24 @@ func (s *Service) authenticateToken(ctx context.Context, secret string) (*domain
 	}
 	return u, err
 }
+
+// botDomain gives bots placeholder addresses that are never mailed (RFC 2606 .invalid).
+const botDomain = "bots.kyber.invalid"
+
+// CreateBot makes a bot user (S84): no password, so it never signs in, and a token that does not expire,
+// returned once.
+func (s *Service) CreateBot(ctx context.Context, name string) (*domain.User, string, error) {
+	id := domain.UserID(s.newID())
+	u, err := domain.NewUser(id, domain.Email("bot-"+string(id)+"@"+botDomain), name, "")
+	if err != nil {
+		return nil, "", err
+	}
+	if err := s.users.Create(ctx, u); err != nil {
+		return nil, "", err
+	}
+	secret, _, err := s.CreateToken(ctx, u.ID(), "bot", 0)
+	if err != nil {
+		return nil, "", err
+	}
+	return u, secret, nil
+}

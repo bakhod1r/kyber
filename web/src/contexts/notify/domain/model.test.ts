@@ -4,8 +4,10 @@ import { notificationTarget } from "./model";
 describe("notificationTarget", () => {
   it("leads to the issue, the project's announcements or home", () => {
     expect(notificationTarget({ kind: "assigned", issue_key: "MY-APP-12" })).toBe("/projects/MY-APP?issue=MY-APP-12");
+    expect(notificationTarget({ kind: "reminder", issue_key: "", conversation_id: "c 1" })).toBe("/chat/c%201");
     expect(notificationTarget({ kind: "announcement", issue_key: "", project_key: "KYB" })).toBe("/projects/KYB/announcements");
     expect(notificationTarget({ kind: "announcement", issue_key: "", project_key: "" })).toBe("/");
     expect(notificationTarget({ kind: "meeting", issue_key: "", project_key: "KYB" })).toBe("/meetings");
+    expect(notificationTarget({ kind: "doc", issue_key: "", project_key: "KYB" })).toBe("/projects/KYB/docs");
   });
 });

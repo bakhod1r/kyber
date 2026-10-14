@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -111,6 +112,32 @@ func TestNoMeetingsInThePast(t *testing.T) {
 	s, ctx := setup()
 	if _, err := s.Schedule(ctx, "lead", application.Schedule{Title: "Old", Start: t0.Add(-time.Hour), End: t0}); !errors.Is(err, application.ErrInPast) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// readable is a fake Conversations: which conversations each user may read.
+type readable map[string][]string
+
+func (r readable) Readable(_ context.Context, user, conv string) (bool, error) {
+	if conv == "broken" {
+		return false, errors.New("chat down")
+	}
+	return slices.Contains(r[user], conv), nil
+}
+
+// S76: a meeting can happen in a channel's huddle the organizer may read.
+func TestMeetingInAHuddle(t *testing.T) {
+	s, ctx := setup()
+	s = s.WithConversations(readable{"lead": {"c-1"}})
+	if _, err := s.Schedule(ctx, "lead", application.Schedule{Title: "Sync", Start: t0.Add(time.Hour), End: t0.Add(2 * time.Hour), Conversation: "c-2"}); !errors.Is(err, application.ErrNoConversation) {
+		t.Fatalf("unreadable channel = %v", err)
+	}
+	m, err := s.Schedule(ctx, "lead", application.Schedule{Title: "Sync", Start: t0.Add(time.Hour), End: t0.Add(2 * time.Hour), Conversation: "c-1"})
+	if err != nil || m.Conversation != "c-1" {
+		t.Fatalf("meeting = %+v %v", m, err)
+	}
+	if _, err := s.Schedule(ctx, "lead", application.Schedule{Title: "Sync", Start: t0.Add(time.Hour), End: t0.Add(2 * time.Hour), Conversation: "broken"}); err == nil || errors.Is(err, application.ErrNoConversation) {
+		t.Fatalf("a failing check must surface: %v", err)
 	}
 }
 

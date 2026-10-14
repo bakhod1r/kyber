@@ -1,0 +1,204 @@
+package domain_test
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/bakhod1r/kyber/internal/call/domain"
+)
+
+var t0 = time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+
+func TestStartJoinLeave(t *testing.T) {
+	c := domain.Start("k-1", "w-1", "c-1", "u-a", t0)
+	if !c.Live() || len(c.Participants) != 1 || c.Participants[0].User != "u-a" || c.Participants[0].Media != (domain.Media{Audio: true}) {
+		t.Fatalf("started = %+v (the starter joins with the microphone on)", c)
+	}
+	if err := c.Join("u-b", t0.Add(time.Minute)); err != nil || !c.In("u-b") {
+		t.Fatalf("join = %v", err)
+	}
+	if err := c.Join("u-b", t0); err != nil || len(c.Participants) != 2 {
+		t.Fatalf("joining twice is a no-op: %v %d", err, len(c.Participants))
+	}
+	if err := c.Leave("u-c", t0); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("leave outsider = %v", err)
+	}
+	_ = c.Leave("u-a", t0.Add(2*time.Minute))
+	if !c.Live() {
+		t.Fatal("ends only when the last one leaves")
+	}
+	_ = c.Leave("u-b", t0.Add(3*time.Minute))
+	if c.Live() || !c.EndedAt.Equal(t0.Add(3*time.Minute)) {
+		t.Fatalf("ended = %+v", c)
+	}
+	if err := c.Join("u-a", t0); !errors.Is(err, domain.ErrCallEnded) {
+		t.Fatalf("join ended = %v", err)
+	}
+}
+
+func TestCallIsCapped(t *testing.T) {
+	c := domain.Start("k-1", "w-1", "c-1", "u-0", t0)
+	for i := 1; i < domain.MaxParticipants; i++ {
+		if err := c.Join(domain.UserID(fmt.Sprint("u-", i)), t0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.Join("u-late", t0); !errors.Is(err, domain.ErrCallFull) {
+		t.Fatalf("7th = %v", err)
+	}
+}
+
+func TestMedia(t *testing.T) {
+	c := domain.Start("k-1", "w-1", "c-1", "u-a", t0)
+	if err := c.SetMedia("u-a", domain.Media{Audio: true, Video: true, Screen: true}); err != nil {
+		t.Fatal(err)
+	}
+	if c.Participants[0].Media != (domain.Media{Audio: true, Video: true, Screen: true}) {
+		t.Fatalf("media = %+v", c.Participants[0])
+	}
+	if err := c.SetMedia("u-x", domain.Media{}); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("outsider media = %v", err)
+	}
+	// Only one person shares a screen at a time (Zoom-style): a new share stops the previous one.
+	_ = c.Join("u-b", t0)
+	_ = c.SetMedia("u-b", domain.Media{Screen: true})
+	if c.Participants[0].Media.Screen || !c.Participants[1].Media.Screen {
+		t.Fatalf("screens = %+v", c.Participants)
+	}
+}
+
+func TestSignal(t *testing.T) {
+	c := domain.Start("k-1", "w-1", "c-1", "u-a", t0)
+	_ = c.Join("u-b", t0)
+	s, err := c.Signal("u-a", "u-b", "offer", `{"sdp":"v=0"}`)
+	if err != nil || s.From != "u-a" || s.To != "u-b" || s.Kind != domain.SignalOffer || s.Call != "k-1" {
+		t.Fatalf("signal = %+v %v", s, err)
+	}
+	cases := map[string]struct {
+		from, to domain.UserID
+		kind     string
+		data     string
+		want     error
+	}{
+		"outsider sends": {"u-x", "u-b", "offer", "{}", domain.ErrNotInCall},
+		"to an outsider": {"u-a", "u-x", "offer", "{}", domain.ErrNotInCall},
+		"to yourself":    {"u-a", "u-a", "offer", "{}", domain.ErrInvalidSignal},
+		"unknown kind":   {"u-a", "u-b", "hack", "{}", domain.ErrInvalidSignal},
+		"empty":          {"u-a", "u-b", "answer", "", domain.ErrInvalidSignal},
+		"too large":      {"u-a", "u-b", "candidate", strings.Repeat("x", domain.MaxSignal+1), domain.ErrInvalidSignal},
+	}
+	for name, tc := range cases {
+		if _, err := c.Signal(tc.from, tc.to, tc.kind, tc.data); !errors.Is(err, tc.want) {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}
+
+func TestPresentation(t *testing.T) {
+	c := domain.Start("k-1", "w-1", "c-1", "u-a", t0)
+	_ = c.Join("u-b", t0)
+	if err := c.Present("u-x", domain.PresentDoc, "d-1"); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("outsider presents = %v", err)
+	}
+	for _, bad := range []struct{ kind, ref string }{{"slides", "x"}, {"doc", ""}, {"doc", strings.Repeat("x", 201)}} {
+		if err := c.Present("u-a", domain.PresentKind(bad.kind), bad.ref); !errors.Is(err, domain.ErrInvalidPresentation) {
+			t.Errorf("%v = %v", bad, err)
+		}
+	}
+	if err := c.Present("u-a", domain.PresentDoc, "d-1"); err != nil || c.Presentation == nil || c.Presentation.By != "u-a" {
+		t.Fatalf("present = %+v %v", c.Presentation, err)
+	}
+	// Someone else takes over (one presentation at a time).
+	_ = c.Present("u-b", domain.PresentWhiteboard, "b-1")
+	if c.Presentation.By != "u-b" || c.Presentation.Kind != domain.PresentWhiteboard {
+		t.Fatalf("takeover = %+v", c.Presentation)
+	}
+	if err := c.StopPresenting("u-a"); !errors.Is(err, domain.ErrNotPresenter) {
+		t.Fatalf("stop by someone else = %v", err)
+	}
+	if err := c.CanFollow("u-a"); !errors.Is(err, domain.ErrNotPresenter) {
+		t.Fatalf("follow by non-presenter = %v", err)
+	}
+	if err := c.CanFollow("u-b"); err != nil {
+		t.Fatal(err)
+	}
+	// The presenter leaving ends the presentation.
+	_ = c.Leave("u-b", t0)
+	if c.Presentation != nil {
+		t.Fatalf("after presenter left = %+v", c.Presentation)
+	}
+	_ = c.Present("u-a", domain.PresentDoc, "d-1")
+	if err := c.StopPresenting("u-a"); err != nil || c.Presentation != nil {
+		t.Fatalf("stop = %v %+v", err, c.Presentation)
+	}
+}
+
+func TestCallEvents(t *testing.T) {
+	c := domain.Start("k-1", "w-1", "c-1", "u-a", t0)
+	_ = c.Join("u-b", t0)
+	if ev := c.PullEvents(); len(ev) != 1 || ev[0] != (domain.CallStarted{Call: "k-1", Conversation: "c-1", By: "u-a"}) || ev[0].EventName() != "call.started" {
+		t.Fatalf("started = %+v", ev)
+	}
+	_ = c.Leave("u-a", t0.Add(time.Minute))
+	if ev := c.PullEvents(); len(ev) != 0 {
+		t.Fatalf("not ended yet = %+v", ev)
+	}
+	_ = c.Leave("u-b", t0.Add(12*time.Minute))
+	ev := c.PullEvents()
+	if len(ev) != 1 || ev[0] != (domain.CallEnded{Call: "k-1", Conversation: "c-1", By: "u-a", Seconds: 720}) || ev[0].EventName() != "call.ended" {
+		t.Fatalf("ended = %+v", ev)
+	}
+}
+
+func TestRecording(t *testing.T) {
+	c := domain.Start("k-1", "w-1", "c-1", "u-a", t0)
+	_ = c.Join("u-b", t0)
+	if err := c.StartRecording("u-x", t0); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("outsider records = %v", err)
+	}
+	if err := c.StartRecording("u-a", t0); err != nil || c.Recording == nil || c.Recording.By != "u-a" || !c.Recording.Since.Equal(t0) {
+		t.Fatalf("start = %+v %v", c.Recording, err)
+	}
+	if err := c.StartRecording("u-b", t0); !errors.Is(err, domain.ErrAlreadyRecording) {
+		t.Fatalf("second recording = %v", err)
+	}
+	if err := c.StopRecording("u-b"); !errors.Is(err, domain.ErrNotRecorder) {
+		t.Fatalf("stop by someone else = %v", err)
+	}
+	if err := c.StopRecording("u-a"); err != nil || c.Recording != nil {
+		t.Fatalf("stop = %+v %v", c.Recording, err)
+	}
+	_ = c.StartRecording("u-b", t0)
+	_ = c.Leave("u-b", t0) // the recorder leaving stops the recording
+	if c.Recording != nil {
+		t.Fatalf("after the recorder left = %+v", c.Recording)
+	}
+}
+
+// S75: raised hands stay until lowered (or leaving); reactions are checked, never stored.
+func TestHandsAndReactions(t *testing.T) {
+	t0 := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	c := domain.Start("k-1", "ws", "c-1", "a", t0)
+	_ = c.Join("b", t0)
+	if err := c.RaiseHand("x", true); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("outsider raises = %v", err)
+	}
+	if err := c.RaiseHand("b", true); err != nil || !c.Participants[1].Hand {
+		t.Fatalf("raise = %v %+v", err, c.Participants)
+	}
+	if err := c.RaiseHand("b", false); err != nil || c.Participants[1].Hand {
+		t.Fatalf("lower = %v", err)
+	}
+	if err := c.CanReact("b", "🎉"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.CanReact("b", "not an emoji at all"); !errors.Is(err, domain.ErrInvalidReaction) {
+		t.Fatalf("long reaction = %v", err)
+	}
+	if err := c.CanReact("x", "🎉"); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("outsider reacts = %v", err)
+	}
+}

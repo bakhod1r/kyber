@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/notify/domain"
@@ -50,26 +51,52 @@ type (
 	}
 )
 
+// Conversations is the port to the Chat context: may user read the conversation, and its name.
+type Conversations interface {
+	Readable(ctx context.Context, user, conversation string) (name string, ok bool, err error)
+}
+
+// Quiet tells whether someone does not want to be disturbed now (Do Not Disturb, a running Pomodoro): chat
+// mentions then stay in the inbox without email or Telegram copies (S66).
+type Quiet interface {
+	Quiet(ctx context.Context, user string) (bool, error)
+}
+
+// GroupMentions resolves the @group handles in a chat message to their members (S70).
+type GroupMentions interface {
+	Mentioned(ctx context.Context, body string) ([]string, error)
+}
+
+// ChatPrefs are people's settings for conversations (S71): muted ones never notify; followers hear every message.
+type ChatPrefs interface {
+	Muted(ctx context.Context, user, conversation string) (bool, error)
+	Followers(ctx context.Context, conversation string) ([]string, error)
+}
+
 type Deps struct {
-	Repo       domain.Repository
-	Deliveries domain.DeliveryRepository // optional: email/Telegram copies of notifications
-	Prefs      domain.PrefsRepository
-	Contacts   Contacts
-	Channels   []domain.Channel       // channels configured on this server (SMTP, Telegram bot)
-	PublicURL  string                 // base of the links in messages
-	Groups     domain.GroupRepository // optional: Telegram groups subscribed to projects
-	Admins     Admins
-	Bot        Messenger // replies in Telegram when a group is connected
-	BotName    string
-	Lookups    Lookups
-	Issues     Issues
-	Members    Members
-	Workspaces Workspaces
-	Users      Users
-	Audience   Audience
-	NewID      func() string
-	Now        func() time.Time
-	Log        *slog.Logger
+	Conversations Conversations // optional: chat mentions
+	ChatPrefs     ChatPrefs     // optional
+	GroupMentions GroupMentions // optional: @group mentions in chat
+	Quiet         Quiet         // optional
+	Repo          domain.Repository
+	Deliveries    domain.DeliveryRepository // optional: email/Telegram copies of notifications
+	Prefs         domain.PrefsRepository
+	Contacts      Contacts
+	Channels      []domain.Channel       // channels configured on this server (SMTP, Telegram bot)
+	PublicURL     string                 // base of the links in messages
+	Groups        domain.GroupRepository // optional: Telegram groups subscribed to projects
+	Admins        Admins
+	Bot           Messenger // replies in Telegram when a group is connected
+	BotName       string
+	Lookups       Lookups
+	Issues        Issues
+	Members       Members
+	Workspaces    Workspaces
+	Users         Users
+	Audience      Audience
+	NewID         func() string
+	Now           func() time.Time
+	Log           *slog.Logger
 }
 
 type Service struct{ d Deps }
@@ -79,6 +106,27 @@ func NewService(d Deps) *Service {
 		d.Log = slog.New(slog.DiscardHandler)
 	}
 	return &Service{d: d}
+}
+
+// WithConversations enables notifications for mentions in chat.
+func (s *Service) WithGroupMentions(g GroupMentions) *Service {
+	s.d.GroupMentions = g
+	return s
+}
+
+func (s *Service) WithChatPrefs(p ChatPrefs) *Service {
+	s.d.ChatPrefs = p
+	return s
+}
+
+func (s *Service) WithQuiet(q Quiet) *Service {
+	s.d.Quiet = q
+	return s
+}
+
+func (s *Service) WithConversations(c Conversations) *Service {
+	s.d.Conversations = c
+	return s
 }
 
 const excerptLen = 140
@@ -171,6 +219,57 @@ func (s *Service) OnMeetingEvent(ctx context.Context, m outbox.Message) error {
 		n := domain.Notification{
 			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Workspace: e.Workspace, Kind: domain.KindMeeting, Project: e.Project,
 			IssueTitle: e.Title, ActorName: actorName, Excerpt: domain.MeetingText(m.Name, e.Start, e.End, zone), SourceEvent: m.ID, CreatedAt: s.d.Now(),
+		}
+		if err := s.d.Repo.Add(ctx, n); err != nil {
+			return err
+		}
+		if err := s.enqueue(ctx, n, e.Project); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// OnDocComment tells the people @mentioned in a comment on a doc page (doc.comment_added, S86), if they are
+// members of the page's project; never its author.
+func (s *Service) OnDocComment(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		Workspace string `json:"workspace"`
+		Project   string `json:"project"`
+		Title     string `json:"title"`
+		Author    string `json:"author_id"`
+		Body      string `json:"body"`
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "name", m.Name)
+		return nil
+	}
+	members, err := s.d.Audience.ProjectMembers(ctx, e.Project)
+	if err != nil {
+		return err
+	}
+	var mentioned []domain.UserID
+	for _, email := range domain.ParseMentions(e.Body) {
+		id, ok, err := s.d.Users.UserIDByEmail(ctx, email)
+		if err != nil {
+			return err
+		}
+		if ok && slices.Contains(members, id) {
+			mentioned = append(mentioned, domain.UserID(id))
+		}
+	}
+	recipients := domain.AnnouncementRecipients(domain.UserID(e.Author), mentioned)
+	if len(recipients) == 0 {
+		return nil
+	}
+	actor, err := s.d.Users.DisplayName(ctx, e.Author)
+	if err != nil {
+		return err
+	}
+	for _, u := range recipients {
+		n := domain.Notification{
+			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Workspace: e.Workspace, Kind: domain.KindDoc, Project: e.Project,
+			IssueTitle: e.Title, ActorName: actor, Excerpt: excerpt(e.Body), SourceEvent: m.ID, CreatedAt: s.d.Now(),
 		}
 		if err := s.d.Repo.Add(ctx, n); err != nil {
 			return err
@@ -366,6 +465,131 @@ func (s *Service) MarkRead(ctx context.Context, user, id string) error {
 	return s.d.Repo.MarkRead(ctx, inbox(ctx, user), domain.NotificationID(id), s.d.Now())
 }
 
+// MarkConversationRead reads the user's chat mentions in a conversation (they opened it).
+func (s *Service) MarkConversationRead(ctx context.Context, user, conversation string) error {
+	return s.d.Repo.MarkConversationRead(ctx, inbox(ctx, user), conversation, s.d.Now())
+}
+
 func (s *Service) MarkAllRead(ctx context.Context, user string) error {
 	return s.d.Repo.MarkAllRead(ctx, inbox(ctx, user), s.d.Now())
+}
+
+// OnChatMessage tells people mentioned (@email) in a chat message, if they may read it.
+func (s *Service) OnChatMessage(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		Conversation string `json:"conversation_id"`
+		Author       string `json:"author_id"`
+		Body         string `json:"body"`
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "err", err)
+		return nil
+	}
+	if s.d.Conversations == nil {
+		return nil
+	}
+	var people []string
+	for _, email := range domain.ParseMentions(e.Body) {
+		id, ok, err := s.d.Users.UserIDByEmail(ctx, email)
+		if err != nil {
+			return err
+		}
+		if ok {
+			people = append(people, id)
+		}
+	}
+	if s.d.GroupMentions != nil {
+		ids, err := s.d.GroupMentions.Mentioned(ctx, e.Body)
+		if err != nil {
+			return err
+		}
+		people = append(people, ids...)
+	}
+	told := map[string]bool{e.Author: true}
+	tell := func(id string, kind domain.Kind) error {
+		if told[id] {
+			return nil
+		}
+		told[id] = true
+		if s.d.ChatPrefs != nil {
+			if muted, err := s.d.ChatPrefs.Muted(ctx, id, e.Conversation); err != nil || muted {
+				return err
+			}
+		}
+		return s.tellChat(ctx, m, id, kind, e.Conversation, e.Author, e.Body)
+	}
+	for _, id := range people {
+		if err := tell(id, domain.KindMentioned); err != nil {
+			return err
+		}
+	}
+	if s.d.ChatPrefs != nil { // S71: people who follow every message of the conversation
+		followers, err := s.d.ChatPrefs.Followers(ctx, e.Conversation)
+		if err != nil {
+			return err
+		}
+		for _, id := range followers {
+			if err := tell(id, domain.KindMessage); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// tellChat adds a chat notification for id if they may read the conversation, and copies it to email and
+// Telegram unless they do not want to be disturbed now.
+func (s *Service) tellChat(ctx context.Context, m outbox.Message, id string, kind domain.Kind, conv, author, body string) error {
+	name, readable, err := s.d.Conversations.Readable(ctx, id, conv)
+	if err != nil || !readable {
+		return err
+	}
+	actorName, err := s.d.Users.DisplayName(ctx, author)
+	if err != nil {
+		return err
+	}
+	n := domain.Notification{
+		ID: domain.NotificationID(s.d.NewID()), Recipient: domain.UserID(id), Workspace: tenant.Workspace(ctx),
+		Kind: kind, ConversationID: conv, ConversationName: name, ActorName: actorName,
+		Excerpt: excerpt(body), SourceEvent: m.ID, CreatedAt: s.d.Now(),
+	}
+	if err := s.d.Repo.Add(ctx, n); err != nil {
+		return err
+	}
+	if s.d.Quiet != nil {
+		if quiet, err := s.d.Quiet.Quiet(ctx, id); err != nil || quiet {
+			return err
+		}
+	}
+	return s.enqueue(ctx, n, "")
+}
+
+// OnChatReminder tells the user about a saved message whose reminder is due (chat.reminder), if they may
+// still read its conversation.
+func (s *Service) OnChatReminder(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		User         string `json:"user_id"`
+		Conversation string `json:"conversation_id"`
+		Excerpt      string `json:"excerpt"`
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "err", err)
+		return nil
+	}
+	if s.d.Conversations == nil {
+		return nil
+	}
+	name, readable, err := s.d.Conversations.Readable(ctx, e.User, e.Conversation)
+	if err != nil || !readable {
+		return err
+	}
+	n := domain.Notification{
+		ID: domain.NotificationID(s.d.NewID()), Recipient: domain.UserID(e.User), Workspace: tenant.Workspace(ctx),
+		Kind: domain.KindReminder, ConversationID: e.Conversation, ConversationName: name, Excerpt: e.Excerpt,
+		SourceEvent: m.ID, CreatedAt: s.d.Now(),
+	}
+	if err := s.d.Repo.Add(ctx, n); err != nil {
+		return err
+	}
+	return s.enqueue(ctx, n, "")
 }

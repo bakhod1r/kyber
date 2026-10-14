@@ -175,9 +175,6 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 		ctx := context.WithValue(r.Context(), ctxKey{}, u)
-		if application.IsPersonalToken(token) {
-			ctx = context.WithValue(ctx, viaTokenKey{}, true)
-		}
 		next.ServeHTTP(w, r.WithContext(auth.WithActor(ctx, string(u.ID()))))
 	})
 }

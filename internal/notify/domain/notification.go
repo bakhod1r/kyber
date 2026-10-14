@@ -27,23 +27,32 @@ const (
 	KindAnnouncement Kind = "announcement"
 	// KindMeeting: a meeting you are invited to was scheduled or cancelled, or starts soon.
 	KindMeeting Kind = "meeting"
+	// KindReminder: a chat message I saved for later, at the time I asked (ConversationID set).
+	KindReminder Kind = "reminder"
+	// KindMessage: a message in a conversation someone follows (level "all", S71).
+	KindMessage Kind = "message"
+	// KindDoc: someone @mentioned you in a comment on a doc page of a project (S86; Project and IssueTitle set).
+	KindDoc Kind = "doc"
 )
 
 // Notification is one message to one recipient about one event. SourceEvent (the
 // outbox message id) plus Recipient is unique, which makes delivery idempotent.
 type Notification struct {
-	ID          NotificationID
-	Recipient   UserID
-	Workspace   string // the issue's workspace: inboxes are per workspace (ADR-0004)
-	Kind        Kind
-	IssueKey    string
-	IssueTitle  string // or the announcement's title
-	Project     string // the announced project ("" = the workspace); announcements only
-	ActorName   string
-	Excerpt     string
-	SourceEvent int64
-	CreatedAt   time.Time
-	ReadAt      time.Time // zero = unread
+	ID         NotificationID
+	Recipient  UserID
+	Workspace  string // the issue's workspace: inboxes are per workspace (ADR-0004)
+	Kind       Kind
+	IssueKey   string
+	IssueTitle string // or the announcement's title
+	// ConversationID is set for a mention in chat (IssueKey empty); ConversationName is the channel ("" for a DM).
+	ConversationID   string
+	ConversationName string
+	Project          string // the announced project ("" = the workspace); announcements only
+	ActorName        string
+	Excerpt          string
+	SourceEvent      int64
+	CreatedAt        time.Time
+	ReadAt           time.Time // zero = unread
 }
 
 func (n Notification) Read() bool { return !n.ReadAt.IsZero() }
@@ -140,4 +149,6 @@ type Repository interface {
 	// MarkRead fails with ErrNotificationNotFound unless id belongs to the inbox.
 	MarkRead(ctx context.Context, in Inbox, id NotificationID, at time.Time) error
 	MarkAllRead(ctx context.Context, in Inbox, at time.Time) error
+	// MarkConversationRead reads the inbox's chat mentions in one conversation.
+	MarkConversationRead(ctx context.Context, in Inbox, conversation string, at time.Time) error
 }

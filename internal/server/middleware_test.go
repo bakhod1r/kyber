@@ -22,3 +22,17 @@ func TestRecoverReturns500OnPanic(t *testing.T) {
 		t.Fatalf("panic leaked to client: %s", rec.Body)
 	}
 }
+
+// S81: webhook secrets are in the URL; logs must never carry them.
+func TestLoggedPathHidesWebhookSecrets(t *testing.T) {
+	for in, want := range map[string]string{
+		"/api/v1/hooks/s3cr3t-token":  "/api/v1/hooks/…",
+		"/api/v1/hooks/s3cr3t/extra":  "/api/v1/hooks/…",
+		"/api/v1/conversations/c-1":   "/api/v1/conversations/c-1",
+		"/api/v1/webhooks/w-1/rotate": "/api/v1/webhooks/w-1/rotate",
+	} {
+		if got := loggedPath(in); got != want {
+			t.Fatalf("loggedPath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

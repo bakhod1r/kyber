@@ -23,6 +23,10 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/bakhod1r/kyber/internal/call/infrastructure/ice"
+	"github.com/bakhod1r/kyber/internal/chat/infrastructure/llm"
+	"github.com/bakhod1r/kyber/internal/chat/infrastructure/stt"
+	blobs3chat "github.com/bakhod1r/kyber/internal/platform/blob/s3"
 	"github.com/bakhod1r/kyber/internal/platform/config"
 	"github.com/bakhod1r/kyber/internal/platform/db"
 	"github.com/bakhod1r/kyber/internal/platform/otel"
@@ -98,7 +102,8 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		TelegramBot: cfg.TelegramBotName,
 	})
 	common := append([]server.Option{social, server.WithContext(ctx), server.WithBaseDomain(cfg.BaseDomain), server.WithSiteAdmins(cfg.AdminEmails),
-		server.WithPublicURL(cfg.PublicURL), server.WithAttachmentsDir(cfg.AttachmentsDir), server.WithMQTTAddr(cfg.MQTTAddr)}, telegramBot(cfg)...)
+		server.WithPublicURL(cfg.PublicURL), server.WithAttachmentsDir(cfg.AttachmentsDir), server.WithMQTTAddr(cfg.MQTTAddr),
+		server.WithICE(ice.Parse(cfg.ICEServers), cfg.TURNSecret)}, telegramBot(cfg)...)
 	if cfg.S3Bucket != "" {
 		blobs, err := blobs3.New(ctx, blobs3.Config{Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, Region: cfg.S3Region,
 			AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, TLS: cfg.S3TLS})
@@ -106,6 +111,21 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 			return nil, nil, err
 		}
 		common = append(common, server.WithAttachmentStore(blobs))
+		chat, err := blobs3chat.New(ctx, blobs3chat.Config{Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, Region: cfg.S3Region,
+			AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, TLS: cfg.S3TLS, Prefix: "chat/"})
+		if err != nil {
+			return nil, nil, err
+		}
+		common = append(common, server.WithChatFiles(chat)) // chat files and recordings too (S82)
+	}
+	if cfg.FilesDir != "" {
+		common = append(common, server.WithFilesDir(cfg.FilesDir))
+	}
+	if cfg.STTURL != "" {
+		common = append(common, server.WithTranscriber(stt.New(cfg.STTURL, cfg.STTModel, cfg.STTKey)))
+	}
+	if cfg.LLMURL != "" {
+		common = append(common, server.WithSummarizer(llm.New(cfg.LLMURL, cfg.LLMModel, cfg.LLMKey)))
 	}
 	mailer, err := mailer(cfg)
 	if err != nil {

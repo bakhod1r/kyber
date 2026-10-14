@@ -124,7 +124,7 @@ func codeFor(err error) (string, bool) {
 	case errors.Is(err, domain.ErrFieldConflict):
 		return httpx.CodeFieldConflict, true
 	case errors.Is(err, domain.ErrCommentNotFound):
-		return httpx.CodeCommentNotFound, true
+		return httpx.CodeIssueCommentNotFound, true
 	case errors.Is(err, domain.ErrWorklogNotFound):
 		return httpx.CodeWorklogNotFound, true
 	case errors.Is(err, application.ErrProjectNotFound):

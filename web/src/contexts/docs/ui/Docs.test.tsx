@@ -87,6 +87,36 @@ describe("docs", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("changed");
   });
 
+  it("comments on a paragraph (S86)", async () => {
+    const two = { ...page, body: "# Welcome\n\nCache it here" };
+    let comments = [{ id: "c-1", page_id: "p-1", paragraph: 1, quote: "Cache it here", author_id: "u-2", body: "Why?", created_at: "2026-10-13T09:00:00Z" },
+      { id: "c-0", page_id: "p-1", paragraph: 5, quote: "Gone", author_id: "u-2", body: "Old remark", created_at: "2026-10-13T08:00:00Z" }];
+    const calls = mockApi({
+      "GET /api/v1/projects/KYB/docs": { status: 200, body: { items: [two] } },
+      "GET /api/v1/docs/p-1/comments": () => ({ status: 200, body: { items: comments } }),
+      "POST /api/v1/docs/p-1/comments": () => {
+        comments = [...comments, { ...comments[0]!, id: "c-2", author_id: "me", body: "Because" }];
+        return { status: 201, body: comments[2] };
+      },
+      "DELETE /api/v1/doc-comments/c-2": () => {
+        comments = comments.filter((c) => c.id !== "c-2");
+        return { status: 204 };
+      },
+    });
+    renderWithProviders(<Docs projectKey="KYB" me="me" names={new Map([["u-2", "Vic"]])} />);
+    const pin = await screen.findByRole("button", { name: "1 comment on paragraph 2" });
+    expect(screen.getByRole("button", { name: "Comment on paragraph 1" })).toBeInTheDocument();
+    expect(screen.getByText(/Old remark/)).toBeInTheDocument(); // on an earlier version
+    await userEvent.click(pin);
+    const panel = screen.getByRole("complementary", { name: "Comments on paragraph 2" });
+    expect(within(panel).getByText("Vic")).toBeInTheDocument();
+    await userEvent.type(within(panel).getByLabelText("Comment"), "Because");
+    await userEvent.click(within(panel).getByRole("button", { name: "Comment" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "POST /api/v1/docs/p-1/comments")?.body).toEqual({ paragraph: 1, quote: "Cache it here", body: "Because" }));
+    await userEvent.click(await within(panel).findByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(calls.some((c) => c.key === "DELETE /api/v1/doc-comments/c-2")).toBe(true));
+  });
+
   it("shows a loading failure", async () => {
     mockApi({ "GET /api/v1/projects/KYB/docs": { status: 404, body: { ...conflict, status: 404, code: "PROJECT_NOT_FOUND", detail: "gone" } } });
     renderWithProviders(<Docs projectKey="KYB" />);

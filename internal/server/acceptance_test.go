@@ -121,7 +121,8 @@ func TestOps(t *testing.T) {
 		res := c.raw("GET", "/metrics", nil, nil)
 		b, _ := io.ReadAll(res.Body)
 		res.Body.Close()
-		if res.StatusCode != 200 || !strings.Contains(string(b), `kyber_http_requests_total{method="GET",status="200"}`) {
+		if res.StatusCode != 200 || !strings.Contains(string(b), `kyber_http_requests_total{method="GET",status="200"}`) ||
+			!strings.Contains(string(b), "kyber_stream_connections 0") || !strings.Contains(string(b), "kyber_calls_active 0") {
 			t.Fatalf("metrics = %d %s", res.StatusCode, b)
 		}
 	})
