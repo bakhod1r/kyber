@@ -17,12 +17,17 @@ const (
 	lead   = "u-lead"
 	viewer = "u-viewer"
 	out    = "u-outsider"
+	broken = "u-broken" // the project check fails
 )
+
+var errDown = errors.New("db down")
 
 type projects struct{}
 
 func (projects) Authorize(_ context.Context, actor, project string, change bool) error {
 	switch {
+	case actor == broken:
+		return errDown
 	case project != "KYB" || actor == out:
 		return application.ErrProjectNotFound
 	case change && actor == viewer:
@@ -143,6 +148,12 @@ func TestParagraphComments(t *testing.T) {
 	}
 	if err := s.RemoveComment(ctx, lead, string(c.ID)); !errors.Is(err, application.ErrNotAuthor) {
 		t.Fatalf("someone else removes: %v", err)
+	}
+	if err := s.RemoveComment(ctx, out, string(c.ID)); !errors.Is(err, domain.ErrCommentMissing) {
+		t.Fatalf("outsider removes: %v", err)
+	}
+	if err := s.RemoveComment(ctx, broken, string(c.ID)); !errors.Is(err, errDown) {
+		t.Fatalf("failing check: %v", err)
 	}
 	if err := s.RemoveComment(ctx, viewer, "nope"); !errors.Is(err, domain.ErrCommentMissing) {
 		t.Fatalf("missing: %v", err)

@@ -119,6 +119,9 @@ func TestNoMeetingsInThePast(t *testing.T) {
 type readable map[string][]string
 
 func (r readable) Readable(_ context.Context, user, conv string) (bool, error) {
+	if conv == "broken" {
+		return false, errors.New("chat down")
+	}
 	return slices.Contains(r[user], conv), nil
 }
 
@@ -132,6 +135,9 @@ func TestMeetingInAHuddle(t *testing.T) {
 	m, err := s.Schedule(ctx, "lead", application.Schedule{Title: "Sync", Start: t0.Add(time.Hour), End: t0.Add(2 * time.Hour), Conversation: "c-1"})
 	if err != nil || m.Conversation != "c-1" {
 		t.Fatalf("meeting = %+v %v", m, err)
+	}
+	if _, err := s.Schedule(ctx, "lead", application.Schedule{Title: "Sync", Start: t0.Add(time.Hour), End: t0.Add(2 * time.Hour), Conversation: "broken"}); err == nil || errors.Is(err, application.ErrNoConversation) {
+		t.Fatalf("a failing check must surface: %v", err)
 	}
 }
 
