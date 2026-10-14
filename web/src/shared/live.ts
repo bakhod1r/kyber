@@ -2,6 +2,7 @@
 // app refetches its active queries through the normal, authorized API. Hints carry no content.
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { subscribe } from "./stream";
 
 /** A Server-Sent Events source (EventSource in browsers; a fake in tests). */
 export type LiveSource = {
@@ -29,7 +30,14 @@ export function startLive(qc: QueryClient, open: (url: string) => LiveSource, de
   };
 }
 
-const browserSource = (url: string): LiveSource => new EventSource(url, { withCredentials: true });
+/** S83: the hints ride on the shared realtime stream (/api/v1/stream), so a tab keeps one connection. */
+const browserSource = (_url: string): LiveSource => {
+  const stops: (() => void)[] = [];
+  return {
+    addEventListener: (type, listener) => void stops.push(subscribe([type], () => listener())),
+    close: () => stops.splice(0).forEach((stop) => stop()),
+  };
+};
 
 /** useLive keeps the signed-in app in sync with changes made by other people and sessions. */
 export function useLive(open: (url: string) => LiveSource = browserSource): void {

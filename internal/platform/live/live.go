@@ -158,6 +158,53 @@ func (h *Hub) Handler(can CanBrowse, heartbeat time.Duration) http.Handler {
 	})
 }
 
+// Hint is a server-sent event for another stream: Type "change" (Data {project, event}) or "resync".
+type Hint struct {
+	Type string
+	Data []byte
+}
+
+// Follow delivers the workspace's hints that user may see until ctx ends (S83: the chat stream carries them, so
+// a browser tab needs one stream).
+func (h *Hub) Follow(ctx context.Context, user, workspace string, can CanBrowse) <-chan Hint {
+	out := make(chan Hint, buffer)
+	s, cancel := h.subscribe(workspace)
+	go func() {
+		defer cancel()
+		defer close(out)
+		emit := func(hint Hint) bool {
+			select {
+			case out <- hint:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case c := <-s.ch:
+				s.mu.Lock()
+				lagged := s.lagged
+				s.lagged = false
+				s.mu.Unlock()
+				if lagged && !emit(Hint{Type: "resync", Data: []byte("{}")}) {
+					return
+				}
+				if !can(ctx, user, c.Project) {
+					continue
+				}
+				data, _ := json.Marshal(c)
+				if !emit(Hint{Type: "change", Data: data}) {
+					return
+				}
+			}
+		}
+	}()
+	return out
+}
+
 // Broadcaster delivers a change to the subscribers of every replica.
 type Broadcaster interface {
 	Broadcast(ctx context.Context, c Change) error

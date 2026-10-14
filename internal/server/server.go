@@ -604,7 +604,24 @@ func build(log *slog.Logger, d deps) http.Handler {
 	focushttp.New(focus, log, time.Now).Register(api)
 	chatAPI := chathttp.New(chat, log)
 	chatAPI.Register(api)
-	rt.Register(api, 25*time.Second)
+	canBrowse := func(ctx context.Context, user, project string) bool {
+		return projects.Authorize(ctx, projectdomain.UserID(user), project, projectdomain.PermRead) == nil
+	}
+	// S83: board hints ride on the chat stream too, so a tab needs one connection (/api/v1/events stays).
+	rt.Register(api, 25*time.Second, func(ctx context.Context, ws, user string) <-chan realtime.Extra {
+		out := make(chan realtime.Extra)
+		go func() {
+			defer close(out)
+			for hint := range hub.Follow(ctx, user, ws, canBrowse) {
+				select {
+				case out <- realtime.Extra{Type: hint.Type, Data: hint.Data}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+		return out
+	})
 	whiteboards := wbapp.NewService(wbapp.Deps{Boards: d.whiteboards, Conversations: wbacl.NewConversations(chat),
 		Notifier: wbrealtime.New(publish, func(e wbdomain.Element) any { return wbhttp.ToDTO(e) }), NewID: id.New, Now: time.Now})
 	wbhttp.New(whiteboards, log).Register(api)

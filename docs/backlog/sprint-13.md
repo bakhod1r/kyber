@@ -8,10 +8,12 @@ built DDD + TDD (contract tests on memory and PostgreSQL, acceptance tests on ev
   replicas share them. AC: with S3 set, upload → download works on another replica; without it, unchanged.
   **Done:** `platform/blob/s3` (contract `blob/blobtest`, fake S3 in tests); `KYBER_S3_*` → chat files under
   `chat/` in the attachments bucket.
-- **S83 One realtime stream** — the app opens two SSE streams (`/api/v1/stream` for chat/calls, main's
+- ✅ **S83 One realtime stream** — the app opens two SSE streams (`/api/v1/stream` for chat/calls, main's
   `/api/v1/events` for boards). Serve main's events over the chat stream as well and let the web app open one.
   AC: one EventSource per tab; board live updates and chat both still arrive; `/api/v1/events` stays for
   compatibility.
+  **Done:** `live.Hub.Follow` + realtime `Feed`s: `/api/v1/stream` also carries `change`/`resync` hints (same browse
+  check); the web app's live updates listen on the shared stream — e2e shows no `/api/v1/events` request.
 - **S84 Bot users with tokens** — main added personal access tokens. A workspace admin creates a bot (a user that
   cannot sign in) and gets a token for it; the bot posts to channels it was invited to through the normal API.
   AC: bots show with a 🤖 badge; a bot never gets notifications by email/Telegram; tokens shown once.

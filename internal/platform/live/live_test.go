@@ -244,3 +244,29 @@ func TestHandlerStopsWhenTheClientIsGone(t *testing.T) {
 }
 
 const buffer = 64
+
+// S83: Follow gives the same hints as the handler to another stream (the chat stream carries them).
+func TestFollowFiltersByBrowsing(t *testing.T) {
+	h := live.NewHub()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hints := h.Follow(ctx, "u-1", "ws", func(_ context.Context, user, project string) bool { return project == "KYB" })
+	for h.Subscribers() == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	h.Publish(live.Change{Workspace: "ws", Project: "SECRET", Event: "issue.created"})
+	h.Publish(live.Change{Workspace: "other", Project: "KYB", Event: "issue.created"})
+	h.Publish(live.Change{Workspace: "ws", Project: "KYB", Event: "issue.changed"})
+	select {
+	case got := <-hints:
+		if got.Type != "change" || string(got.Data) != `{"project":"KYB","event":"issue.changed"}` {
+			t.Fatalf("hint = %+v %s", got, got.Data)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no hint")
+	}
+	cancel()
+	for h.Subscribers() != 0 {
+		time.Sleep(time.Millisecond)
+	}
+}
