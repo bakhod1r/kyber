@@ -72,3 +72,40 @@ test("seven people in a huddle through the media server", async ({ browser }) =>
   await expect(a.getByLabel("Bobur's screen")).toHaveCount(0);
   await a.getByRole("button", { name: "Leave" }).click();
 });
+
+// S104: with LiveKit Egress, Record in a room call is done by the media server; the MP4 lands in the channel.
+test("the media server records a room call", async ({ browser }) => {
+  test.skip(!process.env.KYBER_E2E_EGRESS, "set KYBER_E2E_EGRESS with a server whose LiveKit has Egress");
+  test.setTimeout(120_000);
+  const id = Date.now().toString(36).slice(-5);
+  const ctx = await browser.newContext({ permissions: ["camera", "microphone"] });
+  const api = (method: string, path: string, data?: unknown) =>
+    ctx.request.fetch(path, { method, data, headers: { "Content-Type": "application/json" } }).then((x) => (x.status() === 204 ? null : x.json()));
+  const email = `rec-${id}@example.com`;
+  await api("POST", "/api/v1/auth/signup", { email, name: "Rec", password: "a very long password" });
+  await api("POST", "/api/v1/auth/login", { email, password: "a very long password" });
+  const channel = await api("POST", "/api/v1/channels", { name: `rec-${id}` });
+  const page = await ctx.newPage();
+  await page.goto(`/chat/${channel.id}`);
+  await page.getByRole("button", { name: "Start huddle" }).click();
+  await page.getByRole("button", { name: "Start camera" }).click();
+  await page.getByRole("button", { name: "Record" }).click();
+  await expect(page.getByText(/Recording by/)).toBeVisible();
+  await page.waitForTimeout(8_000); // something worth recording
+  await page.getByRole("button", { name: "Stop recording" }).click();
+  await expect(page.getByText("Saving the recording…")).toHaveCount(0); // no browser upload
+  let file: { id: string; name: string; size: number } | undefined;
+  await expect
+    .poll(async () => {
+      const msgs = await api("GET", `/api/v1/conversations/${channel.id}/messages`);
+      const rec = msgs.items.find((m: { kind: string }) => m.kind === "huddle_recording");
+      file = rec && { id: rec.id, ...rec.file };
+      return file?.name ?? "";
+    }, { timeout: 90_000 })
+    .toMatch(/^Huddle .*\.mp4$/);
+  expect(file!.size).toBeGreaterThan(10_000);
+  const res = await ctx.request.get(`/api/v1/messages/${file!.id}/file`);
+  expect(res.status()).toBe(200);
+  expect((await res.body()).subarray(4, 8).toString()).toBe("ftyp"); // an MP4
+  await page.getByRole("button", { name: "Leave" }).click();
+});

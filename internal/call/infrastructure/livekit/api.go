@@ -166,8 +166,12 @@ func (l *LiveKit) Open(ctx context.Context, egress string) (io.ReadCloser, error
 	}
 }
 
-// Discard removes a posted recording's file; one already gone is no error.
+// Discard removes a posted recording's file and the manifest Egress writes next to it (<egress id>.json); files
+// already gone are no error.
 func (l *LiveKit) Discard(ctx context.Context, egress string) error {
+	if egress == "" || path.Base(egress) != egress {
+		return application.ErrRecordingLost
+	}
 	_, file, err := l.status(ctx, egress)
 	if err != nil {
 		return err
@@ -176,8 +180,10 @@ func (l *LiveKit) Discard(ctx context.Context, egress string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+	for _, f := range []string{name, filepath.Join(l.c.RecordingsDir, egress+".json")} {
+		if err := os.Remove(f); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	return nil
 }

@@ -144,6 +144,7 @@ func TestEgress(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "call-1-1.mp4"), []byte("video"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	_ = os.WriteFile(filepath.Join(dir, "EG_1.json"), []byte("{}"), 0o600) // Egress's manifest next to the file
 	f, err := lk.Open(ctx, "EG_1")
 	if err != nil {
 		t.Fatal(err)
@@ -156,8 +157,10 @@ func TestEgress(t *testing.T) {
 	if err := lk.Discard(ctx, "EG_1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "call-1-1.mp4")); !os.IsNotExist(err) {
-		t.Fatalf("not discarded: %v", err)
+	for _, f := range []string{"call-1-1.mp4", "EG_1.json"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); !os.IsNotExist(err) {
+			t.Fatalf("%s not discarded: %v", f, err)
+		}
 	}
 	if err := lk.Discard(ctx, "EG_1"); err != nil {
 		t.Fatalf("discard twice = %v", err)
@@ -258,6 +261,12 @@ func TestOpenAndDiscardEdges(t *testing.T) {
 	fake.file = "/elsewhere/x.mp4"
 	if err := lk.Discard(ctx, "EG_1"); !errors.Is(err, application.ErrRecordingLost) {
 		t.Fatalf("discard outside = %v", err)
+	}
+	// An egress id that is not a plain name never picks a manifest outside the directory.
+	fake.file = "/out/ok.mp4"
+	_ = os.WriteFile(filepath.Join(dir, "ok.mp4"), nil, 0o600)
+	if err := lk.Discard(ctx, "../EG_1"); !errors.Is(err, application.ErrRecordingLost) {
+		t.Fatalf("odd egress id = %v", err)
 	}
 	// A directory in its place cannot be removed as a file.
 	fake.file = "/out/busy.mp4"

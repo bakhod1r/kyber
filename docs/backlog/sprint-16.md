@@ -30,6 +30,8 @@ acceptance tests, and a Playwright e2e against a real LiveKit server).
   staying connected; without Egress, unchanged.
   **Done:** `Recorder` port and `RecordOnServer`; `RecordingStopped` event → stop, wait for the file, post via the
   Chat ACL, delete it; `recording.server` in the API (migration 0087); `KYBER_LIVEKIT_RECORDINGS_DIR`/`_EGRESS_DIR`/
-  `_API_URL`; compose `egress` service.
+  `_API_URL`; compose `egress` service. Verified against a real Egress (`make e2e-egress`, in CI: Redis, LiveKit and
+  `livekit/egress` in Docker — the MP4 lands in the channel, nothing is left in the directory). That run found
+  Egress's `<id>.json` manifest left behind; it is deleted with the file now.
 
 Not planned (product owner, 2026-10-14): a Helm chart for LiveKit and an embedded Pion SFU.
