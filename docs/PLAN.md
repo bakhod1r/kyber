@@ -252,13 +252,16 @@ Har bir milestone `awesome-agents` zanjiri bo'yicha o'tadi: `/design` → implem
 
 ### M3 — v1.0
 - [x] Saved filters, swimlanes, quick filters, velocity
-  - [ ] CFD (cumulative flow) va control chart
+  - [x] Control chart (cycle time, rolling average, σ)
+  - [ ] CFD (cumulative flow)
 - [x] Permission schemes, issue-level security; audit log UI; RLS (ADR-0010)
 - [x] F18 Jira import (CSV); F17 GitHub integratsiya (commit/PR `KYB-12` → Development paneli)
 - [x] Helm chart (`deploy/helm/kyber`), backup/restore (`docs/operations/backup.md`)
   - [ ] upgrade yo'riqnomasi
 - [ ] Pentest + `/audit`, `/ship` gate; docs sayt
-- [ ] SAML/SCIM, MCP OAuth 2.1, umumiy API rate limiting
+- [x] Umumiy API va upload rate limiting (foydalanuvchi bo'yicha, Redis bilan replikalararo)
+- [x] MCP OAuth 2.1 (ADR-0016: discovery, dynamic registration, PKCE, consent sahifasi)
+- [ ] SAML/SCIM
 - [ ] **Release v1.0.0** + launch
 
 Qo'shimcha (rejadan tashqari, bajarilgan): chat, qo'ng'iroqlar/huddle, yozib olish, whiteboard, docs, forms,

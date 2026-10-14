@@ -30,6 +30,14 @@ const burndown = {
 };
 const velocity = { sprints: [{ id: "s-0", name: "Sprint 6", committed_points: 20, completed_points: 17, completed_issues: 6 }] };
 
+const control = {
+  days: 30, average_hours: 36, stddev_hours: 12,
+  points: [
+    { key: "KYB-1", title: "Login", done_at: "2026-05-02T10:00:00Z", cycle_hours: 24, rolling_hours: 24 },
+    { key: "KYB-2", title: "Logout", done_at: "2026-05-05T10:00:00Z", cycle_hours: 48, rolling_hours: 36 },
+  ],
+};
+
 function api(extra = {}) {
   return mockApi({
     "GET /api/v1/projects/KYB/reports/summary": { status: 200, body: summary },
@@ -38,6 +46,8 @@ function api(extra = {}) {
     "GET /api/v1/projects/KYB/sprints": { status: 200, body: { items: [sprint] } },
     "GET /api/v1/sprints/s-1/burndown": { status: 200, body: burndown },
     "GET /api/v1/projects/KYB/reports/velocity": { status: 200, body: velocity },
+    "GET /api/v1/projects/KYB/reports/control-chart?days=30": { status: 200, body: control },
+    "GET /api/v1/projects/KYB/reports/control-chart?days=90": { status: 200, body: control },
     ...extra,
   });
 }
@@ -57,13 +67,15 @@ describe("Reports (KYB-S28)", () => {
   it("AC1/AC2: every chart is a labelled figure with a data table", async () => {
     api();
     renderWithProviders(<Reports projectKey="KYB" />);
-    for (const name of ["Issues by status", "Issues by type", "Issues by priority", "Workload (open issues)", "Created vs resolved", "Burndown — Sprint 7", "Velocity"]) {
+    for (const name of ["Issues by status", "Issues by type", "Issues by priority", "Workload (open issues)", "Created vs resolved", "Burndown — Sprint 7", "Velocity", "Control chart"]) {
       const fig = await screen.findByRole("figure", { name });
       expect(within(fig).getByRole("table", { hidden: true })).toBeInTheDocument();
     }
     const status = screen.getByRole("figure", { name: "Issues by status" });
     const rows = within(status).getAllByRole("row", { hidden: true }).map((r) => r.textContent);
     expect(rows).toContain("In Progress38");
+    const cc = screen.getByRole("figure", { name: "Control chart" });
+    expect(within(cc).getByText(/Average 1.5 days/)).toBeInTheDocument();
     const burn = screen.getByRole("figure", { name: "Burndown — Sprint 7" });
     expect(within(burn).getByText(/Scope added after start: 8 points \(1 issue\)/)).toBeInTheDocument();
   });

@@ -11,7 +11,7 @@ Source: the items left after Sprint 14 (2026-10-14, "go"). Planned first, then b
   presets, slash-command help, section names) — a follow-up.
 - ✅ **S95 Doc comment notifications open the page** — a `doc` notification links to the commented page itself, not
   the project's docs list. AC: email/Telegram link and the bell both open `…/docs?page=<id>`.
-  **Done:** notifications keep `page_id` (migration 0081, API 0.68.0); Docs opens `?page=`.
+  **Done:** notifications keep `page_id` (migration 0082, API 0.68.0); Docs opens `?page=`.
 - **S96 Images on whiteboards** — paste or upload an image onto a board (stored like chat files), move and resize it.
 
 Order: S94, then S95, S96.

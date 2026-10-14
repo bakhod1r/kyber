@@ -25,6 +25,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/projects/{key}/reports/summary", h.summary)
 	mux.HandleFunc("GET /api/v1/projects/{key}/reports/created-vs-resolved", h.createdVsResolved)
 	mux.HandleFunc("GET /api/v1/projects/{key}/reports/velocity", h.velocity)
+	mux.HandleFunc("GET /api/v1/projects/{key}/reports/control-chart", h.controlChart)
 	mux.HandleFunc("GET /api/v1/sprints/{id}/burndown", h.burndown)
 	mux.HandleFunc("GET /api/v1/sprints/{id}/report", h.sprintReport)
 }
@@ -87,6 +88,42 @@ func (h *Handler) summary(w http.ResponseWriter, r *http.Request) {
 		"workload":   loads,
 		"cycle_time": map[string]any{"count": s.Cycle.Count, "average_hours": hours(s.Cycle.Average), "median_hours": hours(s.Cycle.Median)},
 	})
+}
+
+// parseDays reads ?days= (1-365, default def).
+func parseDays(r *http.Request, def int) (int, error) {
+	raw := r.URL.Query().Get("days")
+	if raw == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 || n > 365 {
+		return 0, errBadDays
+	}
+	return n, nil
+}
+
+func (h *Handler) controlChart(w http.ResponseWriter, r *http.Request) {
+	days, err := parseDays(r, 30)
+	if err == nil {
+		var c application.Control
+		if c, err = h.svc.ControlChart(r.Context(), auth.Actor(r.Context()), r.PathValue("key"), days); err == nil {
+			type pointDTO struct {
+				Key          string  `json:"key"`
+				Title        string  `json:"title"`
+				DoneAt       string  `json:"done_at"`
+				CycleHours   float64 `json:"cycle_hours"`
+				RollingHours float64 `json:"rolling_hours"`
+			}
+			points := make([]pointDTO, 0, len(c.Points))
+			for _, p := range c.Points {
+				points = append(points, pointDTO{Key: p.Key, Title: p.Title, DoneAt: p.Done.UTC().Format(time.RFC3339), CycleHours: hours(p.Cycle), RollingHours: hours(p.Rolling)})
+			}
+			httpx.JSON(w, http.StatusOK, map[string]any{"days": days, "points": points, "average_hours": hours(c.Average), "stddev_hours": hours(c.StdDev)})
+			return
+		}
+	}
+	httpx.Error(w, r, h.log, err, codeFor)
 }
 
 func (h *Handler) createdVsResolved(w http.ResponseWriter, r *http.Request) {

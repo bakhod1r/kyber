@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ApiError } from "../shared/http";
 import { Layout } from "./Layout";
 import { AuthPage } from "../contexts/identity/ui/AuthPage";
@@ -21,6 +21,7 @@ import { Announcements } from "../contexts/announcement/ui/Announcements";
 import { ProjectPage } from "./ProjectPage";
 import { SettingsPage } from "../contexts/notify/ui/SettingsPage";
 import { AccessTokens } from "../contexts/identity/ui/AccessTokens";
+import { OAuthConsent } from "../contexts/identity/ui/OAuthConsent";
 import { AppearanceSettings } from "../shared/ui/AppearanceSettings";
 import { ProjectsPage } from "../contexts/project/ui/ProjectsPage";
 import { identityUseCases } from "../contexts/identity/application";
@@ -47,9 +48,10 @@ function useMe() {
 function RequireUser({ children }: { children: ReactNode }) {
   const t = useT();
   const me = useMe();
+  const here = useLocation();
   if (me.isPending) return <p className="muted center">{t("Loading…")}</p>;
   if (me.isError) return <p role="alert" className="error center">{me.error.message}</p>;
-  if (!me.data) return <Navigate to="/login" replace />;
+  if (!me.data) return <Navigate to={here.pathname === "/" ? "/login" : `/login?next=${encodeURIComponent(here.pathname + here.search)}`} replace />;
   return <Layout user={me.data}>{children}</Layout>;
 }
 
@@ -97,6 +99,7 @@ export function AppRoutes() {
       <Route path="/chat/:id" element={<RequireUser><ChatPage extras={extras} activity={<ChatMentions />} commands={runChatCommand} issueMaker={issueFromMessage} /></RequireUser>} />
       <Route path="/meetings" element={<RequireUser><Meetings /></RequireUser>} />
       <Route path="/projects/:key/webhooks" element={<RequireUser><ProjectPage view="webhooks" /></RequireUser>} />
+      <Route path="/oauth/authorize" element={<RequireUser><OAuthConsent /></RequireUser>} />
       <Route path="/search" element={<RequireUser><SearchPage /></RequireUser>} />
       <Route path="/settings" element={<RequireUser><SettingsPage /><AppearanceSettings /><AccessTokens /></RequireUser>} />
       <Route path="*" element={<Navigate to="/" replace />} />

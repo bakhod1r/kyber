@@ -14,6 +14,153 @@ security:
   - cookie: []
 
 paths:
+  /.well-known/oauth-protected-resource:
+    get:
+      operationId: getProtectedResourceMetadata
+      security: []
+      summary: OAuth protected resource metadata for the MCP endpoint (RFC 9728, ADR-0016).
+      responses:
+        "200": { $ref: "#/components/responses/OAuthResourceMetadata" }
+  /.well-known/oauth-protected-resource/api/v1/mcp:
+    get:
+      operationId: getMCPResourceMetadata
+      security: []
+      summary: The same metadata at the path-suffixed location.
+      responses:
+        "200": { $ref: "#/components/responses/OAuthResourceMetadata" }
+  /.well-known/oauth-authorization-server:
+    get:
+      operationId: getAuthorizationServerMetadata
+      security: []
+      summary: OAuth authorization server metadata (RFC 8414).
+      responses:
+        "200":
+          description: Endpoints and capabilities (authorization code with PKCE S256, public clients).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [issuer, authorization_endpoint, token_endpoint, registration_endpoint, code_challenge_methods_supported]
+                properties:
+                  issuer: { type: string }
+                  authorization_endpoint: { type: string }
+                  token_endpoint: { type: string }
+                  registration_endpoint: { type: string }
+                  response_types_supported: { type: array, items: { type: string } }
+                  grant_types_supported: { type: array, items: { type: string } }
+                  code_challenge_methods_supported: { type: array, items: { type: string } }
+                  token_endpoint_auth_methods_supported: { type: array, items: { type: string } }
+  /api/v1/oauth/register:
+    post:
+      operationId: registerOAuthClient
+      security: []
+      summary: Dynamic client registration for public MCP clients (RFC 7591).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_name, redirect_uris]
+              properties:
+                client_name: { type: string }
+                redirect_uris: { type: array, items: { type: string } }
+      responses:
+        "201":
+          description: Registered.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [client_id, client_name, redirect_uris]
+                properties:
+                  client_id: { type: string }
+                  client_name: { type: string }
+                  redirect_uris: { type: array, items: { type: string } }
+                  client_id_issued_at: { type: integer }
+                  token_endpoint_auth_method: { type: string }
+                  grant_types: { type: array, items: { type: string } }
+                  response_types: { type: array, items: { type: string } }
+        "400": { $ref: "#/components/responses/OAuthError" }
+  /api/v1/oauth/token:
+    post:
+      operationId: exchangeOAuthCode
+      security: []
+      summary: Exchange an authorization code (PKCE) for an access token (a personal access token).
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type, code, client_id, redirect_uri, code_verifier]
+              properties:
+                grant_type: { type: string, enum: [authorization_code] }
+                code: { type: string }
+                client_id: { type: string }
+                redirect_uri: { type: string }
+                code_verifier: { type: string }
+      responses:
+        "200":
+          description: Access token.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_in]
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, enum: [Bearer] }
+                  expires_in: { type: integer }
+        "400": { $ref: "#/components/responses/OAuthError" }
+  /api/v1/oauth/clients/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: getOAuthClient
+      summary: The client asking for access (consent screen).
+      responses:
+        "200":
+          description: The client.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [client_id, client_name, redirect_uris]
+                properties:
+                  client_id: { type: string }
+                  client_name: { type: string }
+                  redirect_uris: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/oauth/authorize:
+    post:
+      operationId: approveOAuthClient
+      summary: The signed-in user approves a client; returns the redirect carrying the code. Browser sessions only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_id, redirect_uri, code_challenge, code_challenge_method]
+              properties:
+                client_id: { type: string }
+                redirect_uri: { type: string }
+                code_challenge: { type: string }
+                code_challenge_method: { type: string, enum: [S256] }
+                state: { type: string }
+      responses:
+        "200":
+          description: Where to send the browser.
+          content:
+            application/json:
+              schema: { type: object, required: [redirect_to], properties: { redirect_to: { type: string } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /healthz:
     get:
       operationId: healthz
@@ -218,6 +365,7 @@ paths:
                 properties: { token: { type: string } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
   /api/v1/auth/telegram/otp:
@@ -278,6 +426,7 @@ paths:
       responses:
         "204": { description: Session ended. }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/me:
     get:
@@ -285,6 +434,7 @@ paths:
       responses:
         "200": { description: Current user, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{key}/attachments:
@@ -299,6 +449,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Attachment" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: uploadAttachment
@@ -313,6 +464,7 @@ paths:
           description: Created
           content: { application/json: { schema: { $ref: "#/components/schemas/Attachment" } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }
@@ -330,6 +482,7 @@ paths:
           description: File contents
           content: { "*/*": { schema: { type: string, format: binary } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     delete:
       operationId: deleteAttachment
@@ -337,6 +490,7 @@ paths:
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/webhooks:
@@ -351,6 +505,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ProjectWebhook" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
     post:
@@ -370,6 +525,7 @@ paths:
           description: Created (with its secret)
           content: { application/json: { schema: { $ref: "#/components/schemas/ProjectWebhook" } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -390,6 +546,7 @@ paths:
           description: Updated
           content: { application/json: { schema: { $ref: "#/components/schemas/ProjectWebhook" } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -399,6 +556,7 @@ paths:
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/webhooks/{id}/deliveries:
@@ -415,6 +573,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/WebhookDelivery" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{key}/development:
@@ -429,6 +588,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/DevelopmentLink" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/integrations/github:
     post:
@@ -454,6 +614,7 @@ paths:
               schema: { type: object, required: [linked], properties: { linked: { type: integer, description: "Development links saved" } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/me/tokens:
     get:
@@ -466,6 +627,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/PersonalToken" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
     post:
       operationId: createToken
@@ -487,6 +649,7 @@ paths:
                   - { $ref: "#/components/schemas/PersonalToken" }
                   - { type: object, required: [token], properties: { token: { type: string } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/me/tokens/{id}:
@@ -497,6 +660,7 @@ paths:
       responses:
         "204": { description: Revoked }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/mcp:
@@ -516,6 +680,7 @@ paths:
           content: { application/json: { schema: { type: object, required: [jsonrpc, id], properties: { jsonrpc: { type: string }, id: {}, result: {}, error: { type: object } } } } }
         "202": { description: Notification accepted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/admin/access:
     get:
@@ -526,6 +691,7 @@ paths:
           description: OK
           content: { application/json: { schema: { type: object, required: [admin], properties: { admin: { type: boolean } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/admin/members:
     get:
@@ -538,6 +704,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/AdminMember" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/admin/members/{id}:
@@ -552,6 +719,7 @@ paths:
         "204": { description: Changed }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -567,6 +735,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/AdminProject" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/admin/dead-letters:
@@ -580,6 +749,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/DeadLetter" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/admin/dead-letters/{id}/retry:
@@ -590,6 +760,7 @@ paths:
       responses:
         "204": { description: Queued }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/meetings:
@@ -606,6 +777,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Meeting" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
     post:
@@ -634,6 +806,7 @@ paths:
         "201": { description: Scheduled, content: { application/json: { schema: { $ref: "#/components/schemas/Meeting" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -658,6 +831,7 @@ paths:
         "200": { description: Rescheduled, content: { application/json: { schema: { $ref: "#/components/schemas/Meeting" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -667,6 +841,7 @@ paths:
       responses:
         "204": { description: Cancelled }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/meetings/{id}/response:
@@ -683,6 +858,7 @@ paths:
         "200": { description: Answered, content: { application/json: { schema: { $ref: "#/components/schemas/Meeting" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/conversations:
@@ -692,6 +868,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Conversation" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/channels:
     post:
@@ -709,6 +886,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -725,6 +903,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}:
@@ -734,6 +913,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     patch:
       operationId: renameChannel
@@ -746,6 +926,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -758,6 +939,7 @@ paths:
       responses:
         "204": { description: Joined }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/leave:
@@ -767,6 +949,7 @@ paths:
       responses:
         "204": { description: Left }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/members:
@@ -783,6 +966,7 @@ paths:
         "204": { description: Invited }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -798,6 +982,7 @@ paths:
       responses:
         "200": { description: Event stream, content: { text/event-stream: { schema: { type: string } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/presence:
     get:
@@ -808,6 +993,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [online], properties: { online: { type: array, items: { type: string } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/typing:
     post:
@@ -817,6 +1003,7 @@ paths:
       responses:
         "204": { description: Sent }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/read:
@@ -826,6 +1013,7 @@ paths:
       responses:
         "204": { description: Marked read }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/messages:
@@ -839,6 +1027,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
     post:
@@ -850,6 +1039,7 @@ paths:
         "201": { description: Posted, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -861,6 +1051,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: replyToMessage
@@ -871,6 +1062,7 @@ paths:
         "201": { description: Posted, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -888,6 +1080,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -900,6 +1093,7 @@ paths:
         "200": { description: Edited, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -910,6 +1104,7 @@ paths:
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/call:
@@ -924,6 +1119,7 @@ paths:
             application/json:
               schema: { type: object, required: [call], properties: { call: { oneOf: [{ $ref: "#/components/schemas/Call" }, { type: "null" }] } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: joinCall
@@ -934,6 +1130,7 @@ paths:
       responses:
         "200": { description: In the call, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -945,6 +1142,7 @@ paths:
       responses:
         "204": { description: Left }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
   /api/v1/calls/{id}/media:
@@ -961,6 +1159,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
   /api/v1/calls/{id}/signal:
@@ -982,6 +1181,7 @@ paths:
         "204": { description: Relayed }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1005,6 +1205,7 @@ paths:
                       required: [urls]
                       properties: { urls: { type: array, items: { type: string } }, username: { type: string }, credential: { type: string } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/whiteboards:
     get:
@@ -1014,6 +1215,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Whiteboard" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createWhiteboard
@@ -1025,6 +1227,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Whiteboard" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/whiteboards/{id}:
@@ -1035,6 +1238,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Whiteboard" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/whiteboards/{id}/ops:
     post:
@@ -1075,6 +1279,7 @@ paths:
                         element: { $ref: "#/components/schemas/WhiteboardElement" }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1090,6 +1295,7 @@ paths:
         "204": { description: Shared }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/calls/{id}/presentation:
     put:
@@ -1103,6 +1309,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1112,6 +1319,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/calls/{id}/presentation/follow:
@@ -1126,6 +1334,7 @@ paths:
         "204": { description: Sent }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/calls/{id}/recording:
@@ -1136,6 +1345,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -1145,6 +1355,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -1160,6 +1371,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
   /api/v1/calls/{id}/reactions:
@@ -1174,6 +1386,7 @@ paths:
         "204": { description: Sent }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1191,6 +1404,7 @@ paths:
           content: { application/json: { schema: { type: object, required: [saved_at, remind_at], properties: { saved_at: { type: string, format: date-time }, remind_at: { type: [string, "null"], format: date-time } } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
     delete:
@@ -1199,6 +1413,7 @@ paths:
       responses:
         "204": { description: Forgotten }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/v1/me/status:
     put:
       operationId: setStatus
@@ -1221,6 +1436,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserStatus" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/chat/statuses:
     get:
@@ -1233,6 +1449,7 @@ paths:
           description: OK
           content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/UserStatus" } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/scheduled:
     post:
@@ -1244,6 +1461,7 @@ paths:
         "201": { description: Scheduled, content: { application/json: { schema: { $ref: "#/components/schemas/ScheduledMessage" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1254,6 +1472,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ScheduledMessage" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/v1/scheduled/{id}:
     parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
     patch:
@@ -1263,6 +1482,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ScheduledMessage" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
     delete:
@@ -1270,6 +1490,7 @@ paths:
       responses:
         "204": { description: Cancelled }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/reminders:
     post:
@@ -1285,6 +1506,7 @@ paths:
           content: { application/json: { schema: { type: object, required: [id, text, at], properties: { id: { type: string }, text: { type: string }, at: { type: string, format: date-time } } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/receipts:
@@ -1303,6 +1525,7 @@ paths:
                 properties:
                   items: { type: array, items: { type: object, required: [user_id, read_at], properties: { user_id: { type: string }, read_at: { type: string, format: date-time } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/archive:
     post:
@@ -1312,6 +1535,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/unarchive:
@@ -1321,6 +1545,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/admins/{user}:
@@ -1333,6 +1558,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
     delete:
@@ -1340,6 +1566,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/project:
@@ -1356,6 +1583,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1367,6 +1595,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Bookmark" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: addBookmark
@@ -1378,6 +1607,7 @@ paths:
         "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/Bookmark" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1389,6 +1619,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ChannelWorkflow" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: addWorkflow
@@ -1411,6 +1642,7 @@ paths:
         "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/ChannelWorkflow" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1421,6 +1653,7 @@ paths:
       responses:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/webhooks:
@@ -1431,6 +1664,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Webhook" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
     post:
@@ -1443,6 +1677,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1454,6 +1689,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [url], properties: { url: { type: string } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/webhooks/{id}:
@@ -1463,6 +1699,7 @@ paths:
       responses:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/hooks/{secret}:
@@ -1491,6 +1728,7 @@ paths:
       responses:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/members/{user}:
@@ -1503,6 +1741,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/groups:
@@ -1512,6 +1751,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/UserGroup" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "422": { $ref: "#/components/responses/Error" }
     post:
       operationId: createGroup
@@ -1520,6 +1760,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/UserGroup" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/groups/{id}:
@@ -1532,6 +1773,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserGroup" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1541,6 +1783,7 @@ paths:
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/prefs:
@@ -1557,6 +1800,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ConversationPrefs" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/chat/prefs:
@@ -1565,6 +1809,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ConversationPrefs" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/v1/bots:
     get:
       operationId: listBots
@@ -1572,6 +1817,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Bot" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "422": { $ref: "#/components/responses/Error" }
     post:
       operationId: createBot
@@ -1585,6 +1831,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Bot" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/chat/sections:
@@ -1594,6 +1841,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SectionOrder" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
     put:
       operationId: setSectionOrder
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SectionOrder" } } } }
@@ -1601,6 +1849,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SectionOrder" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/whiteboards/{id}/comments:
     parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
@@ -1610,6 +1859,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/WhiteboardComment" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: commentOnElement
@@ -1621,6 +1871,7 @@ paths:
         "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/WhiteboardComment" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/whiteboard-comments/{id}:
@@ -1630,6 +1881,7 @@ paths:
       responses:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/chat/saved:
@@ -1656,6 +1908,7 @@ paths:
                         remind_at: { type: [string, "null"], format: date-time }
                         reminded: { type: boolean }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/v1/messages/{id}/pin:
     post:
       operationId: pinMessage
@@ -1664,6 +1917,7 @@ paths:
       responses:
         "200": { description: Pinned, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
     delete:
@@ -1672,6 +1926,7 @@ paths:
       responses:
         "200": { description: Unpinned, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/pins:
@@ -1682,6 +1937,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/chat/search:
     get:
@@ -1691,6 +1947,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/conversations/{id}/files:
@@ -1710,6 +1967,7 @@ paths:
       responses:
         "201": { description: Posted, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1723,6 +1981,7 @@ paths:
       responses:
         "200": { description: The file, content: { "*/*": { schema: { type: string, format: binary } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/focus:
     get:
@@ -1738,6 +1997,7 @@ paths:
                 required: [session]
                 properties: { session: { oneOf: [{ $ref: "#/components/schemas/FocusSession" }, { type: "null" }] } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: startFocus
@@ -1756,6 +2016,7 @@ paths:
         "201": { description: Started, content: { application/json: { schema: { $ref: "#/components/schemas/FocusSession" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -1766,6 +2027,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FocusSession" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
   /api/v1/focus/resume:
@@ -1774,6 +2036,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FocusSession" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
   /api/v1/focus/stop:
@@ -1782,6 +2045,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FocusSession" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/focus:
@@ -1801,6 +2065,7 @@ paths:
                   items: { type: array, items: { $ref: "#/components/schemas/FocusSession" } }
                   total_focused_seconds: { type: integer }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/workspaces:
     get:
@@ -1816,6 +2081,7 @@ paths:
                 required: [items]
                 properties: { items: { type: array, items: { $ref: "#/components/schemas/Workspace" } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createWorkspace
@@ -1832,6 +2098,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Workspace" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1842,6 +2109,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProjectList" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createProject
@@ -1859,6 +2127,7 @@ paths:
         "201": { description: Created; the caller becomes admin., content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1870,6 +2139,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/members:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
@@ -1885,6 +2155,7 @@ paths:
                 required: [items]
                 properties: { items: { type: array, items: { $ref: "#/components/schemas/Member" } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: setMember
@@ -1902,6 +2173,7 @@ paths:
       responses:
         "204": { description: Membership saved. }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -1913,6 +2185,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Workflow" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     put:
       operationId: setWorkflow
@@ -1923,6 +2196,7 @@ paths:
       responses:
         "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Workflow" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -1942,6 +2216,7 @@ paths:
                 required: [items]
                 properties: { items: { type: array, items: { $ref: "#/components/schemas/Board" } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createBoard
@@ -1952,6 +2227,7 @@ paths:
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Board" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -1962,6 +2238,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Board" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     put:
       operationId: updateBoard
@@ -1977,6 +2254,7 @@ paths:
       responses:
         "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Board" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -1987,6 +2265,7 @@ paths:
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2010,6 +2289,7 @@ paths:
                 required: [items]
                 properties: { items: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/permissions:
@@ -2022,6 +2302,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PermissionScheme" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
     put:
@@ -2041,6 +2322,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PermissionScheme" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -2050,6 +2332,7 @@ paths:
       responses:
         "204": { description: Reset }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/telegram-groups/link:
@@ -2072,6 +2355,7 @@ paths:
                   url: { type: string, format: uri }
                   expires_at: { type: string, format: date-time }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/telegram-groups:
@@ -2098,6 +2382,7 @@ paths:
                         title: { type: string }
                         linked_at: { type: string, format: date-time }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/telegram-groups/{chat}:
@@ -2109,6 +2394,7 @@ paths:
       responses:
         "204": { description: Disconnected }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/labels:
@@ -2126,6 +2412,7 @@ paths:
                 required: [items]
                 properties: { items: { type: array, items: { type: string } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/issues:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
@@ -2142,6 +2429,7 @@ paths:
       responses:
         "200": { description: Ordered by backlog rank., content: { application/json: { schema: { $ref: "#/components/schemas/IssueList" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createIssue
@@ -2159,6 +2447,7 @@ paths:
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -2170,6 +2459,7 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     patch:
       operationId: editIssue
@@ -2203,6 +2493,7 @@ paths:
         "200": { description: Updated issue, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2228,6 +2519,7 @@ paths:
                   done_points: { type: number }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/links:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
@@ -2245,6 +2537,7 @@ paths:
                 properties: { items: { type: array, items: { $ref: "#/components/schemas/IssueLink" } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: linkIssue
@@ -2263,6 +2556,7 @@ paths:
         "201": { description: Linked, content: { application/json: { schema: { $ref: "#/components/schemas/IssueLink" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2274,6 +2568,7 @@ paths:
       responses:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/worklogs:
@@ -2288,6 +2583,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Worklog" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: logWork
@@ -2307,6 +2603,7 @@ paths:
         "201": { description: Logged, content: { application/json: { schema: { $ref: "#/components/schemas/Worklog" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -2318,6 +2615,7 @@ paths:
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/watchers:
@@ -2342,6 +2640,7 @@ paths:
                       required: [user_id, name]
                       properties: { user_id: { type: string }, name: { type: string } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: watchIssue
@@ -2349,6 +2648,7 @@ paths:
       responses:
         "204": { description: Watching }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     delete:
       operationId: unwatchIssue
@@ -2356,6 +2656,7 @@ paths:
       responses:
         "204": { description: Not watching }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/presence:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
@@ -2381,6 +2682,7 @@ paths:
                       required: [user_id, name]
                       properties: { user_id: { type: string }, name: { type: string } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: issuePresenceHeartbeat
@@ -2390,6 +2692,7 @@ paths:
       responses:
         "204": { description: Recorded }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/history:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
@@ -2410,6 +2713,7 @@ paths:
                 properties: { items: { type: array, items: { $ref: "#/components/schemas/HistoryEntry" } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/rank:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
@@ -2428,6 +2732,7 @@ paths:
       responses:
         "200": { description: Re-ranked issue, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2447,6 +2752,7 @@ paths:
                 required: [items]
                 properties: { items: { type: array, items: { $ref: "#/components/schemas/Sprint" } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createSprint
@@ -2463,6 +2769,7 @@ paths:
       responses:
         "201": { description: Planned sprint, content: { application/json: { schema: { $ref: "#/components/schemas/Sprint" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -2481,6 +2788,7 @@ paths:
       responses:
         "200": { description: Active sprint, content: { application/json: { schema: { $ref: "#/components/schemas/Sprint" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2514,6 +2822,7 @@ paths:
                   returned: { type: integer, description: Unfinished issues carried over to the backlog or the next sprint. }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2543,6 +2852,7 @@ paths:
         "207": { description: Stopped midway; re-run to resume, content: { application/json: { schema: { $ref: "#/components/schemas/ImportReport" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }
@@ -2557,6 +2867,7 @@ paths:
       responses:
         "200": { description: CSV file, content: { text/csv: { schema: { type: string } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/reports/summary:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
@@ -2602,6 +2913,7 @@ paths:
                       average_hours: { type: number }
                       median_hours: { type: number }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/reports/created-vs-resolved:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
@@ -2632,6 +2944,41 @@ paths:
                         cum_created: { type: integer }
                         cum_resolved: { type: integer }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/reports/control-chart:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: getControlChart
+      summary: Cycle time (first In Progress → Done) of each issue done in the last `days` days.
+      parameters:
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 30 } }
+      responses:
+        "200":
+          description: Points ordered by completion, with a rolling average over five issues.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [days, points, average_hours, stddev_hours]
+                properties:
+                  days: { type: integer }
+                  average_hours: { type: number }
+                  stddev_hours: { type: number }
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      required: [key, title, done_at, cycle_hours, rolling_hours]
+                      properties:
+                        key: { type: string }
+                        title: { type: string }
+                        done_at: { type: string, format: date-time }
+                        cycle_hours: { type: number }
+                        rolling_hours: { type: number }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/reports/velocity:
@@ -2662,6 +3009,7 @@ paths:
                         completed_points: { type: number }
                         completed_issues: { type: integer }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/versions:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
@@ -2678,6 +3026,7 @@ paths:
                 required: [items]
                 properties: { items: { type: array, items: { $ref: "#/components/schemas/Version" } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createVersion
@@ -2687,6 +3036,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Version" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2708,6 +3058,7 @@ paths:
         "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/Version" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2720,6 +3071,7 @@ paths:
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -2742,6 +3094,7 @@ paths:
                 properties: { version: { $ref: "#/components/schemas/Version" }, moved: { type: integer } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2754,6 +3107,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Version" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2765,6 +3119,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Version" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2776,6 +3131,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Version" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2806,6 +3162,7 @@ paths:
                         done: { type: boolean }
                         resolution: { type: string }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/versions/{id}/release-notes:
     parameters: [{ $ref: "#/components/parameters/VersionID" }]
@@ -2815,6 +3172,7 @@ paths:
       responses:
         "200": { description: OK, content: { text/markdown: { schema: { type: string } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/search:
     get:
@@ -2840,6 +3198,7 @@ paths:
                   total: { type: integer }
                   items: { type: array, items: { $ref: "#/components/schemas/SearchHit" } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/filters:
     get:
@@ -2852,6 +3211,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Filter" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
     post:
       operationId: createFilter
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FilterInput" } } } }
@@ -2859,6 +3219,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Filter" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/filters/{id}:
     parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
@@ -2877,6 +3238,7 @@ paths:
         "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Filter" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -2887,6 +3249,7 @@ paths:
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/mqtt:
@@ -2901,6 +3264,7 @@ paths:
       responses:
         "101": { description: Switching to MQTT over WebSocket }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/v1/projects/{key}/announcements:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -2913,6 +3277,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Announcement" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: publishProjectAnnouncement
@@ -2931,6 +3296,7 @@ paths:
         "201": { description: Published, content: { application/json: { schema: { $ref: "#/components/schemas/Announcement" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -2945,6 +3311,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Announcement" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: publishWorkspaceAnnouncement
@@ -2963,6 +3330,7 @@ paths:
         "201": { description: Published, content: { application/json: { schema: { $ref: "#/components/schemas/Announcement" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -2978,6 +3346,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Goal" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createGoal
@@ -2987,6 +3356,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Goal" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -3009,6 +3379,7 @@ paths:
         "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Goal" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -3019,6 +3390,7 @@ paths:
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/docs:
@@ -3033,6 +3405,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Page" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createPage
@@ -3042,6 +3415,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -3052,6 +3426,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     put:
       operationId: revisePage
@@ -3068,6 +3443,7 @@ paths:
         "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -3078,6 +3454,7 @@ paths:
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/docs/{id}/history:
@@ -3092,6 +3469,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/PageRevision" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/docs/{id}/comments:
     parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
@@ -3101,6 +3479,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/DocComment" } } } } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: commentOnParagraph
@@ -3119,6 +3498,7 @@ paths:
         "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/DocComment" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/doc-comments/{id}:
@@ -3129,6 +3509,7 @@ paths:
       responses:
         "204": { description: Removed }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/forms:
@@ -3143,6 +3524,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Form" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createForm
@@ -3152,6 +3534,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Form" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -3162,6 +3545,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Form" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     put:
       operationId: redesignForm
@@ -3178,6 +3562,7 @@ paths:
         "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/Form" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -3188,6 +3573,7 @@ paths:
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/forms/{id}/submissions:
@@ -3211,6 +3597,7 @@ paths:
           content: { application/json: { schema: { type: object, required: [issue_key], properties: { issue_key: { type: string } } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -3226,6 +3613,7 @@ paths:
             application/json:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/CustomField" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createCustomField
@@ -3235,6 +3623,7 @@ paths:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CustomField" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -3256,6 +3645,7 @@ paths:
         "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/CustomField" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -3266,6 +3656,7 @@ paths:
       responses:
         "204": { description: Deleted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/sprints/{id}/report:
@@ -3306,6 +3697,7 @@ paths:
                   not_completed: { type: array, items: { $ref: "#/components/schemas/SprintReportIssue" } }
                   removed: { type: array, items: { $ref: "#/components/schemas/SprintReportIssue" } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/sprints/{id}/burndown:
     parameters: [{ $ref: "#/components/parameters/SprintID" }]
@@ -3341,6 +3733,7 @@ paths:
                   samples: { type: array, items: { $ref: "#/components/schemas/BurndownSample" } }
                   ideal: { type: array, items: { $ref: "#/components/schemas/BurndownSample" } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/me/telegram/connect:
     post:
@@ -3361,6 +3754,7 @@ paths:
                   url: { type: string, format: uri }
                   expires_at: { type: string, format: date-time }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/me/notification-settings:
     get:
@@ -3371,6 +3765,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationSettings" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
     put:
       operationId: setNotificationSettings
       requestBody:
@@ -3387,6 +3782,7 @@ paths:
         "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationSettings" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/notifications:
     get:
@@ -3407,6 +3803,7 @@ paths:
                   items: { type: array, items: { $ref: "#/components/schemas/Notification" } }
                   unread: { type: integer, minimum: 0 }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/notifications/{id}/read:
     parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
@@ -3415,6 +3812,7 @@ paths:
       responses:
         "204": { description: Marked as read. }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/notifications/read-all:
     post:
@@ -3425,6 +3823,7 @@ paths:
       responses:
         "204": { description: All marked as read. }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/issues/{issueKey}/transitions:
     parameters: [{ $ref: "#/components/parameters/IssueKey" }]
@@ -3445,6 +3844,7 @@ paths:
       responses:
         "200": { description: Moved, content: { application/json: { schema: { $ref: "#/components/schemas/Issue" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
@@ -3463,6 +3863,7 @@ paths:
                 required: [items]
                 properties: { items: { type: array, items: { $ref: "#/components/schemas/Comment" } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: addComment
@@ -3477,6 +3878,7 @@ paths:
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Comment" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
@@ -3494,6 +3896,7 @@ paths:
       responses:
         "204": { description: Reacted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
     delete:
@@ -3502,6 +3905,7 @@ paths:
       responses:
         "204": { description: Not reacted }
         "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
 
@@ -3515,6 +3919,30 @@ components:
     SprintID: { name: id, in: path, required: true, schema: { type: string } }
     VersionID: { name: id, in: path, required: true, schema: { type: string } }
   responses:
+    OAuthResourceMetadata:
+      description: The MCP endpoint and its authorization server.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [resource, authorization_servers]
+            properties:
+              resource: { type: string }
+              authorization_servers: { type: array, items: { type: string } }
+              bearer_methods_supported: { type: array, items: { type: string } }
+    OAuthError:
+      description: OAuth error (RFC 6749 §5.2 / RFC 7591 §3.2.2).
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties: { error: { type: string }, error_description: { type: string } }
+    RateLimited:
+      description: Too many requests (RATE_LIMITED); retry after `Retry-After` seconds.
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content: { application/problem+json: { schema: { $ref: "#/components/schemas/Error" } } }
     Error:
       description: RFC 9457 problem details; `title` is localized from Accept-Language (en, uz, ru).
       content: { application/problem+json: { schema: { $ref: "#/components/schemas/Error" } } }

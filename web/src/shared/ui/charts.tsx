@@ -110,7 +110,8 @@ export function BarList({ title, items, valueLabel, extraLabel, caption }: { tit
   );
 }
 
-export type Series = { name: string; slot: Slot; points: { x: Date; y: number }[]; step?: boolean };
+/** dots: plot each point on its own (a scatter) instead of a line. */
+export type Series = { name: string; slot: Slot; points: { x: Date; y: number }[]; step?: boolean; dots?: boolean };
 
 const VW = 800, VH = 260, M = { top: 12, right: 44, bottom: 28, left: 40 };
 
@@ -199,7 +200,14 @@ export function LineChart({ title, series: raw, caption, xMax, yLabel }: { title
               {shortDate(new Date(t))}
             </text>
           ))}
-          {series.map((s) => (
+          {series.filter((s) => s.dots).map((s) => (
+            <g key={s.name} className="dots">
+              {s.points.map((p, i) => (
+                <circle key={i} cx={sx(p.x.getTime())} cy={sy(p.y)} r={3.5} fill={stroke(s.slot)} opacity={0.75} />
+              ))}
+            </g>
+          ))}
+          {series.filter((s) => !s.dots).map((s) => (
             <path key={s.name} d={path(s)} fill="none" stroke={stroke(s.slot)} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
           ))}
           {series.map((s) => {

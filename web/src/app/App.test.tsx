@@ -35,7 +35,7 @@ describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
     expect(calls.find((c) => c.key === "POST /api/v1/auth/login")?.body).toEqual({ email: "ali@x.uz", password: "long enough pw" });
   });
 
-  it("regression: logging in after being redirected from an app page lands on projects", async () => {
+  it("logging in after being redirected from an app page returns to that page", async () => {
     let loggedIn = false;
     mockApi({
       "GET /api/v1/me": () => (loggedIn ? { status: 200, body: me } : { status: 401, body: { type: "about:blank", title: "Error", status: 400, code: "TEST", detail: "authentication required" } }),
@@ -44,12 +44,14 @@ describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
         return { status: 200, body: { token: "t" } };
       },
       "GET /api/v1/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/search?jql=": { status: 200, body: { total: 0, items: [] } },
+      "GET /api/v1/filters": { status: 200, body: { items: [] } },
     });
-    renderWithProviders(<AppRoutes />, "/projects/KYB"); // caches "anonymous", redirects to /login
+    renderWithProviders(<AppRoutes />, "/search"); // caches "anonymous", redirects to /login?next=/search
     await userEvent.type(await screen.findByLabelText("Email"), "ali@x.uz");
     await userEvent.type(screen.getByLabelText("Password"), "long enough pw");
     await userEvent.click(screen.getByRole("button", { name: "Log in" }));
-    expect(await screen.findByText(/No projects yet/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Search", level: 1 })).toBeInTheDocument();
   });
 
   it("shows login errors from the server", async () => {

@@ -32,6 +32,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	guard "github.com/bakhod1r/guard/ratelimit"
 	accessapp "github.com/bakhod1r/kyber/internal/access/application"
 	accessdomain "github.com/bakhod1r/kyber/internal/access/domain"
 	accessmemory "github.com/bakhod1r/kyber/internal/access/infrastructure/memory"
@@ -149,6 +150,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/metrics"
 	"github.com/bakhod1r/kyber/internal/platform/otel"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
+	"github.com/bakhod1r/kyber/internal/platform/ratelimit"
 	"github.com/bakhod1r/kyber/internal/platform/realtime"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 	projectapp "github.com/bakhod1r/kyber/internal/project/application"
@@ -213,6 +215,7 @@ type deps struct {
 	users         identitydomain.Users
 	external      identitydomain.ExternalIdentities
 	tokens        identitydomain.PersonalTokens
+	oauth         identitydomain.OAuthStore
 	social        identityhttp.Social
 	otps          identitydomain.OTPChallenges
 	telegramBot   *telegram.Bot
@@ -228,6 +231,8 @@ type deps struct {
 	ready         func(context.Context) error
 	cookieSecure  bool
 	redis         redis.UniversalClient // optional: shared login limiter (guard)
+	apiRate       int                   // requests per user per minute (0 = off)
+	uploadRate    int                   // uploads per user per minute (0 = off)
 	notes         notifydomain.Repository
 	activity      insightsdomain.Repository
 	mappings      importerdomain.MappingRepository
@@ -301,6 +306,12 @@ func WithWebhooks(allowPrivate bool, every time.Duration) Option {
 }
 
 // WithGitHubSecret enables POST /api/v1/integrations/github, verified with this shared secret.
+// WithRateLimits caps each signed-in user's API requests and uploads per minute (0 = off);
+// with WithRedis the budget is shared across replicas.
+func WithRateLimits(api, upload int) Option {
+	return func(d *deps) { d.apiRate, d.uploadRate = api, upload }
+}
+
 func WithGitHubSecret(secret string) Option { return func(d *deps) { d.githubSecret = secret } }
 
 func WithPublicURL(u string) Option { return func(d *deps) { d.publicURL = u } }
@@ -392,7 +403,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
 		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), bots: chatmemory.NewBots(), sectionOrders: chatmemory.NewSectionOrders(), calls: callRepo, whiteboards: wbmemory.NewRepository(), wbComments: wbCommentRepo,
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(wbCommentRepo.Outbox, wbCommentRepo.OutboxMeta), events(docCommentRepo.Outbox, docCommentRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
-		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, ready: func(context.Context) error { return nil },
+		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
 		o(&d)
@@ -440,7 +451,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), scheduled: chatpg.NewScheduled(pool), reminders: chatpg.NewReminders(pool), userGroups: chatpg.NewGroups(pool), chatPrefs: chatpg.NewPrefs(pool), bookmarks: chatpg.NewBookmarks(pool), chatWorkflows: chatpg.NewWorkflows(pool), webhooks: chatpg.NewWebhooks(pool), bots: chatpg.NewBots(pool), sectionOrders: chatpg.NewSectionOrders(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool), wbComments: wbpg.NewComments(pool),
-		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, ready: pool.Ping, cookieSecure: cookieSecure,
+		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
 		o(&d)
@@ -624,7 +635,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	go remindMeetings(d.ctx, log, chat.SendDue, d.reminderEvery)      // scheduled messages (S67)
 	go remindMeetings(d.ctx, log, chat.RunWorkflows, d.reminderEvery) // channel workflows (S80)
 	go dispatchWebhooks(d.ctx, log, webhooks, d.webhookEvery)
-	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens)}
+	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens), identityapp.WithOAuth(d.oauth)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
 	}
@@ -646,7 +657,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 			})
 	}
 	chat.WithBots(d.bots, chatacl.NewBotMaker(identity), chatacl.NewWorkspace(workspaces, d.siteAdmin)) // bot users (S84)
-	auth := identityhttp.New(identity, log, d.cookieSecure).WithSocial(d.social)
+	auth := identityhttp.New(identity, log, d.cookieSecure).WithSocial(d.social).WithPublicURL(d.publicURL)
 	m := metrics.NewHTTP()
 
 	api := http.NewServeMux()
@@ -720,9 +731,24 @@ func build(log *slog.Logger, d deps) http.Handler {
 	auth.RegisterPublic(mux)
 	chatAPI.RegisterPublic(mux) // incoming webhooks (S81): the secret in the URL is the credential
 	webhookHTTP.RegisterPublic(mux)
-	mux.Handle("/api/v1/", auth.RequireAuth(tenancy.RequireMember(audit.Record(problemFallback(otel.Routed(api))))))
+	mux.Handle("/api/v1/", auth.RequireAuth(d.rateLimit(log)(tenancy.RequireMember(audit.Record(problemFallback(otel.Routed(api)))))))
 	mux.Handle("/", web.Handler(web.Dist()))
 	return otel.Middleware(observe(log, m, recoverer(log, tenancy.Resolve(otel.Routed(mux)))))
+}
+
+// rateLimit limits each user's API requests: per process, or across replicas with Redis.
+func (d *deps) rateLimit(log *slog.Logger) func(http.Handler) http.Handler {
+	var l guard.Limiter = ratelimit.NewMemory(time.Now)
+	if d.redis != nil {
+		l = guard.NewRedis(d.redis, "kyber:rl:")
+	}
+	minute := func(n int) guard.Rule {
+		if n <= 0 {
+			return guard.Rule{}
+		}
+		return guard.Rule{Limit: n, Window: time.Minute}
+	}
+	return ratelimit.Middleware(l, ratelimit.Rules{API: minute(d.apiRate), Upload: minute(d.uploadRate)}, log)
 }
 
 // loggedPath is the request path as logged: incoming webhook URLs carry their secret, so it is cut (S81).

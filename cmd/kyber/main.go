@@ -113,7 +113,8 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 	common := append([]server.Option{social, server.WithContext(ctx), server.WithBaseDomain(cfg.BaseDomain), server.WithSiteAdmins(cfg.AdminEmails),
 		server.WithPublicURL(cfg.PublicURL), server.WithAttachmentsDir(cfg.AttachmentsDir), server.WithMQTTAddr(cfg.MQTTAddr),
 		server.WithICE(ice.Parse(cfg.ICEServers), cfg.TURNSecret),
-		server.WithWebhooks(cfg.WebhookAllowPrivate, 0), server.WithGitHubSecret(cfg.GitHubWebhookSecret)}, telegramBot(cfg)...)
+		server.WithWebhooks(cfg.WebhookAllowPrivate, 0), server.WithGitHubSecret(cfg.GitHubWebhookSecret),
+		server.WithRateLimits(cfg.APIRateLimit, cfg.UploadRateLimit)}, telegramBot(cfg)...)
 	if cfg.S3Bucket != "" {
 		blobs, err := blobs3.New(ctx, blobs3.Config{Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, Region: cfg.S3Region,
 			AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, TLS: cfg.S3TLS})

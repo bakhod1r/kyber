@@ -37,6 +37,7 @@ type Service struct {
 	connect  domain.ConnectTokens // nil = connecting Telegram for notifications disabled
 	botName  string
 	tokens   domain.PersonalTokens // nil = personal access tokens disabled
+	oauth    domain.OAuthStore     // nil = OAuth for MCP clients disabled
 }
 
 // Option customises the service.

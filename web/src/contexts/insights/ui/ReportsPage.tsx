@@ -24,6 +24,11 @@ export function Reports({ projectKey }: { projectKey: string }) {
   const burndown = useQuery({ queryKey: ["reports", "burndown", focus?.id], queryFn: () => insightsUseCases.burndown(focus!.id), enabled: !!focus });
   const workflow = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => issueUseCases.workflow(projectKey) });
   const statusName = (k: string) => workflow.data?.statuses.find((st) => st.id === k)?.name ?? title(t, k);
+  const control = useQuery({
+    queryKey: ["reports", projectKey, "control", days],
+    queryFn: () => insightsUseCases.reportControlChart(projectKey, days),
+    placeholderData: (prev) => prev,
+  });
   const velocity = useQuery({ queryKey: ["reports", projectKey, "velocity"], queryFn: () => insightsUseCases.reportVelocity(projectKey) });
 
   if (summary.isPending) return <p className="muted">{t("Loading reports…")}</p>;
@@ -94,6 +99,28 @@ export function Reports({ projectKey }: { projectKey: string }) {
           series={[
             { name: t("Remaining"), slot: 1, step: true, points: burndown.data.samples.map((p) => ({ x: new Date(p.at), y: p.remaining_points })) },
             { name: t("Ideal"), slot: "muted", points: burndown.data.ideal.map((p) => ({ x: new Date(p.at), y: p.remaining_points })) },
+          ]}
+        />
+      )}
+
+      {control.data && control.data.points.length === 0 && (
+        <section className="chart empty">
+          <h3>{t("Control chart")}</h3>
+          <p className="muted">{t("Finish an issue to see its cycle time.")}</p>
+        </section>
+      )}
+      {control.data && control.data.points.length > 0 && (
+        <LineChart
+          title={t("Control chart")}
+          yLabel={t("cycle time (hours)")}
+          caption={t("Cycle time from first In Progress to Done for {n} issues. Average {avg} days, standard deviation {sd} days.", {
+            n: control.data.points.length,
+            avg: (control.data.average_hours / 24).toFixed(1),
+            sd: (control.data.stddev_hours / 24).toFixed(1),
+          })}
+          series={[
+            { name: t("Issues"), slot: 1, dots: true, points: control.data.points.map((p) => ({ x: new Date(p.done_at), y: p.cycle_hours })) },
+            { name: t("Rolling average"), slot: 2, points: control.data.points.map((p) => ({ x: new Date(p.done_at), y: p.rolling_hours })) },
           ]}
         />
       )}

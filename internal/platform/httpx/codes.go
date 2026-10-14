@@ -99,6 +99,7 @@ const (
 	CodeNotFound               = "NOT_FOUND"
 	CodeMethodNotAllowed       = "METHOD_NOT_ALLOWED"
 	CodeInternal               = "INTERNAL"
+	CodeRateLimited            = "RATE_LIMITED"
 )
 
 type code struct {
@@ -141,6 +142,7 @@ var codes = []code{
 	{CodeCommentNotFound, "6119", 404, "Comment not found.", "Izoh topilmadi.", "Комментарий не найден.", errorx.CategoryBusiness},
 	{CodeNotCommentAuthor, "6120", 403, "Only its author can remove a comment.", "Izohni faqat muallifi o'chira oladi.", "Удалить комментарий может только его автор.", errorx.CategoryBusiness},
 	{CodeWebhookNotFound, "6117", 404, "Webhook not found.", "Vebhuk topilmadi.", "Вебхук не найден.", errorx.CategoryBusiness},
+	{CodeRateLimited, "6190", 429, "Too many requests; slow down.", "So'rovlar juda ko'p; sekinroq.", "Слишком много запросов; помедленнее.", errorx.CategoryBusiness},
 	{CodeWebhookRateLimited, "6118", 429, "Too many messages from this webhook; slow down.", "Bu vebhukdan juda ko'p xabar; sekinroq.", "Слишком много сообщений от этого вебхука; помедленнее.", errorx.CategoryBusiness},
 	{CodeWorkflowNotFound, "6116", 404, "Workflow not found.", "Ish jarayoni topilmadi.", "Сценарий не найден.", errorx.CategoryBusiness},
 	{CodeBookmarkNotFound, "6115", 404, "Bookmark not found.", "Xatcho'p topilmadi.", "Закладка не найдена.", errorx.CategoryBusiness},
