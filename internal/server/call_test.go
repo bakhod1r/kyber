@@ -7,11 +7,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/bakhod1r/kyber/internal/call/infrastructure/livekit"
 	"github.com/bakhod1r/kyber/internal/server"
 )
 
@@ -308,4 +313,162 @@ func TestMeetingHuddle(t *testing.T) {
 			t.Fatalf("dev's time table = %v", day)
 		}
 	})
+}
+
+// S99 (ADR-0017): with a media server (LiveKit) calls are rooms: more than six people, and each participant gets
+// a short-lived ticket for that room only; there is nothing to relay between browsers.
+func TestRoomHuddle(t *testing.T) {
+	lk, err := livekit.New(livekit.Config{URL: "wss://sfu.example.com", Key: "APIkey", Secret: "s3cret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		eve := anon.signedIn("eve@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "all"})
+		url := "/api/v1/conversations/" + ch["id"].(string)
+		code, call := lead.do("POST", url+"/call", nil)
+		expect(t, code, 200, call)
+		if call["room"] != true {
+			t.Fatalf("room call = %v", call)
+		}
+		callURL := "/api/v1/calls/" + call["id"].(string)
+		var last *client
+		for i := range 9 {
+			last = anon.signedIn(fmt.Sprintf("p%d@x.uz", i))
+			last.do("POST", url+"/join", nil)
+			code, b := last.do("POST", url+"/call", nil)
+			expect(t, code, 200, b)
+		}
+		code, b := lead.do("POST", callURL+"/room", nil)
+		expect(t, code, 200, b)
+		if b["url"] != "wss://sfu.example.com" || strings.Count(b["token"].(string), ".") != 2 || b["expires_at"] == "" {
+			t.Fatalf("ticket = %v", b)
+		}
+		code, b = eve.do("POST", callURL+"/room", nil)
+		expect(t, code, 404, b)
+		eve.do("POST", url+"/join", nil) // a member who has not joined the call
+		code, b = eve.do("POST", callURL+"/room", nil)
+		expect(t, code, 409, b)
+		_, leadMe := lead.do("GET", "/api/v1/me", nil)
+		code, b = last.do("POST", callURL+"/signal", map[string]string{"to": leadMe["id"].(string), "kind": "offer", "data": "x"})
+		expect(t, code, 422, b)
+	}, server.WithMediaServer(lk))
+}
+
+// Without a media server calls stay a browser mesh and have no room.
+func TestMeshHasNoRoom(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "dev"})
+		_, call := lead.do("POST", "/api/v1/conversations/"+ch["id"].(string)+"/call", nil)
+		if call["room"] != false {
+			t.Fatalf("mesh call = %v", call)
+		}
+		code, b := lead.do("POST", "/api/v1/calls/"+call["id"].(string)+"/room", nil)
+		expect(t, code, 409, b)
+		if b["code"] != "CALL_STATE" {
+			t.Fatalf("no room = %v", b)
+		}
+	})
+}
+
+// S103/S104: the host removes someone from a room call and LiveKit drops them; a room call is recorded by LiveKit
+// Egress and the file lands in the conversation as a huddle recording.
+func TestRoomRemoveAndServerRecording(t *testing.T) {
+	dir := t.TempDir()
+	var mu sync.Mutex
+	var calls []string
+	file := ""
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var in map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		mu.Lock()
+		defer mu.Unlock()
+		method := strings.TrimPrefix(r.URL.Path, "/twirp/livekit.")
+		calls = append(calls, method)
+		switch method {
+		case "Egress/StartRoomCompositeEgress":
+			file = in["file_outputs"].([]any)[0].(map[string]any)["filepath"].(string)
+			_, _ = w.Write([]byte(`{"egress_id":"EG_1"}`))
+		case "Egress/StopEgress":
+			mp4 := append([]byte{0, 0, 0, 0x18, 'f', 't', 'y', 'p', 'm', 'p', '4', '2'}, bytes.Repeat([]byte{1}, 64)...)
+			_ = os.WriteFile(filepath.Join(dir, filepath.Base(file)), mp4, 0o600)
+			_, _ = w.Write([]byte(`{}`))
+		case "Egress/ListEgress":
+			_, _ = w.Write([]byte(`{"items":[{"status":"EGRESS_COMPLETE","file_results":[{"filename":"` + file + `"}]}]}`))
+		default:
+			_, _ = w.Write([]byte(`{}`))
+		}
+	}))
+	defer fake.Close()
+	lk, err := livekit.New(livekit.Config{URL: "wss://sfu.example.com", APIURL: fake.URL, Key: "APIkey", Secret: "s3cret", RecordingsDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		mu.Lock()
+		calls = nil
+		mu.Unlock()
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		qa := anon.signedIn("qa@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "all"})
+		conv := "/api/v1/conversations/" + ch["id"].(string)
+		dev.do("POST", conv+"/join", nil)
+		qa.do("POST", conv+"/join", nil)
+		_, call := lead.do("POST", conv+"/call", nil)
+		dev.do("POST", conv+"/call", nil)
+		qa.do("POST", conv+"/call", nil)
+		callURL := "/api/v1/calls/" + call["id"].(string)
+		_, qaMe := qa.do("GET", "/api/v1/me", nil)
+
+		code, b := dev.do("DELETE", callURL+"/participants/"+qaMe["id"].(string), nil)
+		expect(t, code, 403, b)
+		if b["code"] != "CALL_NOT_HOST" {
+			t.Fatalf("non-host = %v", b)
+		}
+		code, b = lead.do("DELETE", callURL+"/participants/"+qaMe["id"].(string), nil)
+		expect(t, code, 200, b)
+		if len(b["participants"].([]any)) != 2 {
+			t.Fatalf("after remove = %v", b)
+		}
+		code, b = qa.do("POST", callURL+"/room", nil)
+		expect(t, code, 409, b) // no new ticket either
+
+		code, b = dev.do("PUT", callURL+"/recording", nil)
+		expect(t, code, 200, b)
+		if r := b["recording"].(map[string]any); r["server"] != true {
+			t.Fatalf("server recording = %v", b)
+		}
+		code, b = dev.do("DELETE", callURL+"/recording", nil)
+		expect(t, code, 200, b)
+		page := eventuallyJSON(t, lead, conv+"/messages", func(p map[string]any) bool {
+			for _, m := range p["items"].([]any) {
+				if m.(map[string]any)["kind"] == "huddle_recording" {
+					return true
+				}
+			}
+			return false
+		})
+		for _, m := range page["items"].([]any) {
+			if m := m.(map[string]any); m["kind"] == "huddle_recording" && !strings.HasPrefix(m["file"].(map[string]any)["name"].(string), "Huddle ") {
+				t.Fatalf("recording message = %v", m)
+			}
+		}
+		mu.Lock()
+		got := strings.Join(calls, " ")
+		mu.Unlock()
+		for _, want := range []string{"RoomService/RemoveParticipant", "Egress/StartRoomCompositeEgress", "Egress/StopEgress", "Egress/ListEgress"} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("livekit calls = %s, missing %s", got, want)
+			}
+		}
+		mu.Lock()
+		posted := filepath.Join(dir, filepath.Base(file))
+		mu.Unlock()
+		if _, err := os.Stat(posted); !os.IsNotExist(err) {
+			t.Fatalf("the posted file stays behind: %v", err)
+		}
+	}, server.WithMediaServer(lk))
 }

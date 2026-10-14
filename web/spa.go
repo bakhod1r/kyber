@@ -22,12 +22,18 @@ func Dist() fs.FS {
 }
 
 // Handler serves static files from fsys, falling back to index.html for client-side
-// routes. Hashed assets are cached forever; the shell is always revalidated.
-func Handler(fsys fs.FS) http.Handler {
+// routes. Hashed assets are cached forever; the shell is always revalidated. connect lists other origins the
+// app may talk to (the media server, ADR-0017).
+func Handler(fsys fs.FS, connect ...string) http.Handler {
 	files := http.FileServerFS(fsys)
+	csp := "default-src 'self'; img-src 'self' data:; script-src 'self' https://telegram.org; frame-src https://oauth.telegram.org; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+	if len(connect) > 0 {
+		// The media server's client runs a small worker from a blob: URL.
+		csp += "; connect-src 'self' " + strings.Join(connect, " ") + "; worker-src 'self' blob:"
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; script-src 'self' https://telegram.org; frame-src https://oauth.telegram.org; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+		w.Header().Set("Content-Security-Policy", csp)
 		w.Header().Set("Referrer-Policy", "same-origin")
 		index, err := fs.ReadFile(fsys, "index.html")
 		if err != nil {

@@ -26,4 +26,11 @@ describe("Huddle (S57)", () => {
     renderWithProviders(<Huddle conversationId="c-1" me="u-1" names={names} />);
     expect(await screen.findByRole("button", { name: "Join huddle (6)" })).toBeDisabled();
   });
+
+  it("a room call takes more than six people (S99)", async () => {
+    const six = live("a", "b", "c", "d", "e", "f");
+    mockApi({ "GET /api/v1/conversations/c-1/call": { status: 200, body: { call: { ...six.call, room: true } } } });
+    renderWithProviders(<Huddle conversationId="c-1" me="u-1" names={names} />);
+    expect(await screen.findByRole("button", { name: "Join huddle (6)" })).toBeEnabled();
+  });
 });

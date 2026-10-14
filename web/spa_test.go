@@ -60,3 +60,15 @@ func TestSPAHandlerWithoutBuild(t *testing.T) {
 		t.Fatalf("unbuilt = %d %q", code, body)
 	}
 }
+
+// The media server's origins (ADR-0017) are added to connect-src; without one, default-src covers it.
+func TestSPAHandlerConnectOrigins(t *testing.T) {
+	app := fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}}
+	if _, _, hdr := get(t, web.Handler(app), "/"); strings.Contains(hdr.Get("Content-Security-Policy"), "connect-src") || strings.Contains(hdr.Get("Content-Security-Policy"), "blob:") {
+		t.Fatalf("CSP = %q", hdr.Get("Content-Security-Policy"))
+	}
+	_, _, hdr := get(t, web.Handler(app, "wss://sfu.example.com", "https://sfu.example.com"), "/")
+	if csp := hdr.Get("Content-Security-Policy"); !strings.HasSuffix(csp, "; connect-src 'self' wss://sfu.example.com https://sfu.example.com; worker-src 'self' blob:") {
+		t.Fatalf("CSP = %q", csp)
+	}
+}

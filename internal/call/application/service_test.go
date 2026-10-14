@@ -2,14 +2,18 @@ package application_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
 	app "github.com/bakhod1r/kyber/internal/call/application"
 	"github.com/bakhod1r/kyber/internal/call/domain"
 	"github.com/bakhod1r/kyber/internal/call/infrastructure/memory"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
@@ -161,5 +165,223 @@ func TestHandsAndReactions(t *testing.T) {
 	}
 	if err := svc.React(ctx, "qa", string(c.ID), "🎉"); err == nil {
 		t.Fatal("someone outside the call reacted")
+	}
+}
+
+// rooms is a fake media server: it hands out a ticket naming the room and the user, and records evictions.
+type rooms struct {
+	fail    error
+	evicted *[]string
+}
+
+func (r rooms) Evict(_ context.Context, room, user string) error {
+	if r.evicted != nil {
+		*r.evicted = append(*r.evicted, room+"/"+user)
+	}
+	return r.fail
+}
+
+func (r rooms) Ticket(room, user string, now time.Time) (app.RoomTicket, error) {
+	return app.RoomTicket{URL: "wss://sfu.test", Token: room + "/" + user, Expires: now.Add(time.Hour)}, r.fail
+}
+
+func TestRoomCalls(t *testing.T) {
+	_, ctx, _ := setup()
+	n := 0
+	deps := app.Deps{Calls: memory.NewRepository(), Conversations: convs{"dev": {"lead", "dev"}},
+		NewID: func() string { n++; return fmt.Sprintf("k-%d", n) }, Now: func() time.Time { return time.Unix(0, 0) }}
+	mesh := app.NewService(deps)
+	c, _ := mesh.Join(ctx, "lead", "dev")
+	if c.Room {
+		t.Fatal("without a media server calls are a mesh")
+	}
+	if _, err := mesh.EnterRoom(ctx, "lead", string(c.ID)); !errors.Is(err, domain.ErrNotRoom) {
+		t.Fatalf("mesh room = %v", err)
+	}
+	_ = mesh.Leave(ctx, "lead", string(c.ID))
+
+	deps.Rooms = rooms{}
+	svc := app.NewService(deps)
+	c, _ = svc.Join(ctx, "lead", "dev")
+	if !c.Room {
+		t.Fatal("with a media server new calls are rooms")
+	}
+	tk, err := svc.EnterRoom(ctx, "lead", string(c.ID))
+	if err != nil || tk.URL != "wss://sfu.test" || tk.Token != string(c.ID)+"/lead" || !tk.Expires.Equal(time.Unix(3600, 0)) {
+		t.Fatalf("ticket = %+v %v", tk, err)
+	}
+	if _, err := svc.EnterRoom(ctx, "dev", string(c.ID)); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("member not in the call = %v", err)
+	}
+	if _, err := svc.EnterRoom(ctx, "qa", string(c.ID)); !errors.Is(err, domain.ErrCallNotFound) {
+		t.Fatalf("outsider = %v", err)
+	}
+	broken := errors.New("no signing key")
+	deps.Rooms = rooms{fail: broken}
+	if _, err := app.NewService(deps).EnterRoom(ctx, "lead", string(c.ID)); !errors.Is(err, broken) {
+		t.Fatalf("ticket failure = %v", err)
+	}
+	// The media server was turned off while a room call is live: nobody can enter it.
+	deps.Rooms = nil
+	if _, err := app.NewService(deps).EnterRoom(ctx, "lead", string(c.ID)); !errors.Is(err, app.ErrNoMediaServer) {
+		t.Fatalf("media server gone = %v", err)
+	}
+}
+
+// recorder is a fake LiveKit Egress: recordings are ids; a finished one opens as its id's bytes.
+type recorder struct {
+	log            []string
+	startErr, open error
+}
+
+func (r *recorder) Start(_ context.Context, room string) (string, error) {
+	r.log = append(r.log, "start "+room)
+	return "EG_" + room, r.startErr
+}
+func (r *recorder) Stop(_ context.Context, egress string) error {
+	r.log = append(r.log, "stop "+egress)
+	return nil
+}
+func (r *recorder) Open(_ context.Context, egress string) (io.ReadCloser, error) {
+	r.log = append(r.log, "open "+egress)
+	return io.NopCloser(strings.NewReader("video of " + egress)), r.open
+}
+func (r *recorder) Discard(_ context.Context, egress string) error {
+	r.log = append(r.log, "discard "+egress)
+	return nil
+}
+
+type posted []string
+
+func (p *posted) Post(_ context.Context, by, conv, name string, body io.Reader) error {
+	b, _ := io.ReadAll(body)
+	*p = append(*p, fmt.Sprintf("%s %s %q %s", by, conv, name, b))
+	return nil
+}
+
+func roomService(t *testing.T) (*app.Service, *memory.Repository, *recorder, *posted, *[]string, context.Context) {
+	t.Helper()
+	_, ctx, _ := setup()
+	n := 0
+	repo, rec, out, evicted := memory.NewRepository(), &recorder{}, &posted{}, &[]string{}
+	svc := app.NewService(app.Deps{Calls: repo, Conversations: convs{"dev": {"lead", "dev", "qa"}},
+		Rooms: rooms{evicted: evicted}, Recorder: rec, Recordings: out,
+		NewID: func() string { n++; return fmt.Sprintf("k-%d", n) }, Now: func() time.Time { return time.Date(2026, 10, 14, 9, 5, 0, 0, time.UTC) }})
+	return svc, repo, rec, out, evicted, ctx
+}
+
+// relay delivers the events written so far (from index from) to the service's handlers, like the outbox relay.
+func relay(t *testing.T, ctx context.Context, svc *app.Service, repo *memory.Repository, from int) int {
+	t.Helper()
+	events := repo.Outbox()
+	for _, e := range events[from:] {
+		payload, _ := json.Marshal(e)
+		m := outbox.Message{Name: e.EventName(), Workspace: "w1", Payload: payload}
+		h := map[string]func(context.Context, outbox.Message) error{
+			"call.participant_left": svc.OnParticipantLeft, "call.recording_stopped": svc.OnRecordingStopped}[m.Name]
+		if h == nil {
+			continue
+		}
+		if err := h(ctx, m); err != nil {
+			t.Fatalf("%s: %v", m.Name, err)
+		}
+	}
+	return len(events)
+}
+
+func TestRemoveFromRoom(t *testing.T) {
+	svc, repo, _, _, evicted, ctx := roomService(t)
+	c, _ := svc.Join(ctx, "lead", "dev")
+	_, _ = svc.Join(ctx, "dev", "dev")
+	_, _ = svc.Join(ctx, "qa", "dev")
+	if _, err := svc.Remove(ctx, "dev", string(c.ID), "qa"); !errors.Is(err, domain.ErrNotHost) {
+		t.Fatalf("non-host = %v", err)
+	}
+	got, err := svc.Remove(ctx, "lead", string(c.ID), "qa")
+	if err != nil || got.In("qa") {
+		t.Fatalf("remove = %+v %v", got, err)
+	}
+	_ = svc.Leave(ctx, "dev", string(c.ID))
+	relay(t, ctx, svc, repo, 0)
+	if fmt.Sprint(*evicted) != "[k-1/qa k-1/dev]" {
+		t.Fatalf("evicted = %v", *evicted)
+	}
+	// Without a media server (turned off meanwhile) there is no one to tell.
+	payload, _ := json.Marshal(domain.ParticipantLeft{Call: "k-1", User: "lead"})
+	if err := app.NewService(app.Deps{Calls: repo}).OnParticipantLeft(ctx, outbox.Message{Payload: payload}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.OnParticipantLeft(ctx, outbox.Message{Payload: []byte("{bad")}); err != nil {
+		t.Fatalf("poison = %v", err)
+	}
+}
+
+func TestServerRecordingFlow(t *testing.T) {
+	svc, repo, rec, out, _, ctx := roomService(t)
+	c, _ := svc.Join(ctx, "lead", "dev")
+	_, _ = svc.Join(ctx, "dev", "dev")
+	got, err := svc.StartRecording(ctx, "dev", string(c.ID))
+	if err != nil || got.Recording == nil || got.Recording.Egress != "EG_k-1" || got.Recording.By != "dev" {
+		t.Fatalf("start = %+v %v", got, err)
+	}
+	if _, err := svc.StartRecording(ctx, "lead", string(c.ID)); !errors.Is(err, domain.ErrAlreadyRecording) {
+		t.Fatalf("twice = %v", err)
+	}
+	if _, err := svc.StartRecording(ctx, "qa", string(c.ID)); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("member not in call = %v", err)
+	}
+	if fmt.Sprint(rec.log) != "[start k-1]" {
+		t.Fatalf("egress started for refused requests: %v", rec.log)
+	}
+	from := relay(t, ctx, svc, repo, 0)
+	if _, err := svc.StopRecording(ctx, "dev", string(c.ID)); err != nil {
+		t.Fatal(err)
+	}
+	relay(t, ctx, svc, repo, from)
+	if fmt.Sprint(rec.log) != "[start k-1 stop EG_k-1 open EG_k-1 discard EG_k-1]" {
+		t.Fatalf("recorder = %v", rec.log)
+	}
+	if fmt.Sprint(*out) != `[dev dev "Huddle 2026-10-14 09-05.mp4" video of EG_k-1]` {
+		t.Fatalf("posted = %v", *out)
+	}
+
+	// Not finished yet: the relay retries later, nothing is posted or discarded.
+	pending := errors.New("still writing")
+	rec.open, rec.log = pending, nil
+	payload, _ := json.Marshal(domain.RecordingStopped{Call: c.ID, Conversation: "dev", By: "dev", Egress: "EG_2"})
+	if err := svc.OnRecordingStopped(ctx, outbox.Message{Payload: payload}); !errors.Is(err, pending) {
+		t.Fatalf("pending = %v", err)
+	}
+	if fmt.Sprint(rec.log) != "[stop EG_2 open EG_2]" || len(*out) != 1 {
+		t.Fatalf("pending log = %v posted %v", rec.log, *out)
+	}
+	rec.open = app.ErrRecordingLost
+	if err := svc.OnRecordingStopped(ctx, outbox.Message{Payload: payload}); err != nil {
+		t.Fatalf("lost = %v", err)
+	}
+	if err := svc.OnRecordingStopped(ctx, outbox.Message{Payload: []byte("{bad")}); err != nil {
+		t.Fatalf("poison = %v", err)
+	}
+}
+
+func TestServerRecordingFallsBack(t *testing.T) {
+	svc, _, rec, _, _, ctx := roomService(t)
+	c, _ := svc.Join(ctx, "lead", "dev")
+	rec.startErr = errors.New("egress unavailable")
+	if _, err := svc.StartRecording(ctx, "lead", string(c.ID)); !errors.Is(err, rec.startErr) {
+		t.Fatalf("egress down = %v", err)
+	}
+	// Without a recorder a room call is recorded in the browser, as a mesh call.
+	_, ctx2, _ := setup()
+	plain := app.NewService(app.Deps{Calls: memory.NewRepository(), Conversations: convs{"dev": {"lead"}}, Rooms: rooms{},
+		NewID: func() string { return "k-9" }, Now: time.Now})
+	c, _ = plain.Join(ctx2, "lead", "dev")
+	got, err := plain.StartRecording(ctx2, "lead", string(c.ID))
+	if err != nil || got.Recording.Egress != "" {
+		t.Fatalf("browser recording = %+v %v", got.Recording, err)
+	}
+	payload, _ := json.Marshal(domain.RecordingStopped{Call: c.ID, Conversation: "dev", By: "lead", Egress: "EG_x"})
+	if err := plain.OnRecordingStopped(ctx2, outbox.Message{Payload: payload}); err != nil {
+		t.Fatalf("no recorder = %v", err)
 	}
 }
