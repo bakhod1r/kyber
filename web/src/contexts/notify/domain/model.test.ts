@@ -9,5 +9,6 @@ describe("notificationTarget", () => {
     expect(notificationTarget({ kind: "announcement", issue_key: "", project_key: "" })).toBe("/");
     expect(notificationTarget({ kind: "meeting", issue_key: "", project_key: "KYB" })).toBe("/meetings");
     expect(notificationTarget({ kind: "doc", issue_key: "", project_key: "KYB" })).toBe("/projects/KYB/docs");
+    expect(notificationTarget({ kind: "doc", issue_key: "", project_key: "KYB", page_id: "p 1" })).toBe("/projects/KYB/docs?page=p%201"); // S95
   });
 });

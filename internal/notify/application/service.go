@@ -237,6 +237,7 @@ func (s *Service) OnDocComment(ctx context.Context, m outbox.Message) error {
 		Workspace string `json:"workspace"`
 		Project   string `json:"project"`
 		Title     string `json:"title"`
+		Page      string `json:"page_id"`
 		Author    string `json:"author_id"`
 		Body      string `json:"body"`
 	}
@@ -268,7 +269,7 @@ func (s *Service) OnDocComment(ctx context.Context, m outbox.Message) error {
 	}
 	for _, u := range recipients {
 		n := domain.Notification{
-			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Workspace: e.Workspace, Kind: domain.KindDoc, Project: e.Project,
+			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Workspace: e.Workspace, Kind: domain.KindDoc, Project: e.Project, PageID: e.Page,
 			IssueTitle: e.Title, ActorName: actor, Excerpt: excerpt(e.Body), SourceEvent: m.ID, CreatedAt: s.d.Now(),
 		}
 		if err := s.d.Repo.Add(ctx, n); err != nil {

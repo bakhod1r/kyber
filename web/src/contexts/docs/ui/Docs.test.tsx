@@ -122,4 +122,11 @@ describe("docs", () => {
     renderWithProviders(<Docs projectKey="KYB" />);
     expect(await screen.findByRole("alert")).toHaveTextContent("gone");
   });
+
+  it("opens the page named in the address (S95: a notification links to it)", async () => {
+    const other = { ...page, id: "p-2", title: "Runbook", body: "Steps" };
+    mockApi({ "GET /api/v1/projects/KYB/docs": { status: 200, body: { items: [page, other] } } });
+    renderWithProviders(<Docs projectKey="KYB" />, "/projects/KYB/docs?page=p-2");
+    expect(await screen.findByRole("article", { name: "Runbook" })).toBeInTheDocument();
+  });
 });
