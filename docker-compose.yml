@@ -2,12 +2,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: kyber
-      POSTGRES_PASSWORD: kyber
-      POSTGRES_DB: kyber
-    volumes: ["pgdata:/var/lib/postgresql/data"]
+      POSTGRES_USER: postgres # admin only; Kyber uses the plain "kyber" role (RLS, ADR-0010)
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-postgres-admin}
+      POSTGRES_DB: postgres
+      KYBER_DB_PASSWORD: ${KYBER_DB_PASSWORD:-kyber}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/compose/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "kyber"]
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "kyber"]
       interval: 5s
       retries: 10
   redis:
@@ -19,7 +22,7 @@ services:
   kyber:
     build: .
     environment:
-      KYBER_DATABASE_URL: postgres://kyber:kyber@postgres:5432/kyber?sslmode=disable
+      KYBER_DATABASE_URL: postgres://kyber:${KYBER_DB_PASSWORD:-kyber}@postgres:5432/kyber?sslmode=disable
       KYBER_REDIS_URL: redis://redis:6379/0 # optional: shares the login limiter across replicas
       KYBER_COOKIE_SECURE: "false" # set to true behind HTTPS
     ports: ["8080:8080"]

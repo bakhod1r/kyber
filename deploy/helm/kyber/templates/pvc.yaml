@@ -1,0 +1,15 @@
+{{- if .Values.attachments.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kyber.fullname" . }}-attachments
+  labels: {{- include "kyber.labels" . | nindent 4 }}
+spec:
+  accessModes: [{{ .Values.attachments.persistence.accessMode }}]
+  {{- with .Values.attachments.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.attachments.persistence.size }}
+{{- end }}
