@@ -791,6 +791,51 @@ func TestRecordingTranscript(t *testing.T) {
 	}
 }
 
+// summarizer is a fake Summarizer; fail makes the next call fail.
+type summarizer struct {
+	calls int
+	fail  bool
+	got   string
+}
+
+func (s *summarizer) Summarize(_ context.Context, transcript string) (string, error) {
+	s.calls++
+	if s.fail {
+		s.fail = false
+		return "", errors.New("model down")
+	}
+	s.got = transcript
+	return "  We agreed to ship on Friday.  ", nil
+}
+
+// S87: with a chat model configured too, the transcript also gets a short summary in the thread, once; a failed
+// summary is retried without transcribing again.
+func TestRecordingSummary(t *testing.T) {
+	repo := memory.NewRepository()
+	n := 0
+	tr, sum := &transcriber{}, &summarizer{fail: true}
+	svc := app.NewService(app.Deps{Conversations: repo, Messages: repo.Messages(), Blobs: blob.NewMemory(), Transcriber: tr, Summarizer: sum,
+		Members: members{"lead": {"w1"}}, NewID: func() string { n++; return fmt.Sprintf("id-%03d", n) }, Now: time.Now})
+	ctx := tenant.With(context.Background(), "w1")
+	ch, _ := svc.CreateChannel(ctx, "lead", app.NewChannel{Name: "general"})
+	rec, _ := svc.UploadRecording(ctx, "lead", string(ch.ID), "huddle.webm", bytes.NewReader(append([]byte("\x1aE\xdf\xa3"), make([]byte, 10)...)))
+	payload, _ := json.Marshal(repo.Outbox()[0])
+	m := outbox.Message{ID: 1, Name: "chat.message_posted", Payload: payload, Workspace: "w1"}
+	if err := svc.OnRecordingPosted(ctx, m); err == nil {
+		t.Fatal("a failed summary must be retried")
+	}
+	for range 2 {
+		if err := svc.OnRecordingPosted(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	replies, _ := svc.Replies(ctx, "lead", string(rec.ID))
+	if tr.calls != 1 || sum.calls != 2 || len(replies) != 2 || replies[1].Kind != domain.KindSummary ||
+		replies[1].Body != "🧠 Summary:\nWe agreed to ship on Friday." || !strings.HasPrefix(sum.got, "transcript of huddle.webm") {
+		t.Fatalf("transcribed %d, summarized %d, replies = %+v", tr.calls, sum.calls, replies)
+	}
+}
+
 // S79: members keep docs and links in the channel's header; the one who added it or a manager removes it.
 func TestBookmarks(t *testing.T) {
 	svc, ctx, ev := setupWithEvents(t)

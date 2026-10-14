@@ -23,6 +23,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/bakhod1r/kyber/internal/call/infrastructure/ice"
+	"github.com/bakhod1r/kyber/internal/chat/infrastructure/llm"
 	"github.com/bakhod1r/kyber/internal/chat/infrastructure/stt"
 	blobs3chat "github.com/bakhod1r/kyber/internal/platform/blob/s3"
 	"github.com/bakhod1r/kyber/internal/platform/config"
@@ -121,6 +122,9 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 	}
 	if cfg.STTURL != "" {
 		common = append(common, server.WithTranscriber(stt.New(cfg.STTURL, cfg.STTModel, cfg.STTKey)))
+	}
+	if cfg.LLMURL != "" {
+		common = append(common, server.WithSummarizer(llm.New(cfg.LLMURL, cfg.LLMModel, cfg.LLMKey)))
 	}
 	mailer, err := mailer(cfg)
 	if err != nil {

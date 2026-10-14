@@ -56,6 +56,11 @@ type Config struct {
 	STTURL   string `env:"KYBER_STT_URL"`
 	STTModel string `env:"KYBER_STT_MODEL"`
 	STTKey   string `env:"KYBER_STT_KEY"`
+	// LLMURL turns on summaries of those transcripts (S87): an OpenAI-compatible chat completions endpoint, e.g. a
+	// self-hosted Ollama. Unset (the default), transcripts never leave the server.
+	LLMURL   string `env:"KYBER_LLM_URL"`
+	LLMModel string `env:"KYBER_LLM_MODEL"`
+	LLMKey   string `env:"KYBER_LLM_KEY"`
 }
 
 func Load() (*Config, error) {

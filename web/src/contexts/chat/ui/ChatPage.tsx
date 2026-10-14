@@ -959,9 +959,9 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
       </article>
     );
   }
-  if (m.kind === "transcript") {
+  if (m.kind === "transcript" || m.kind === "summary") {
     return (
-      <article className="chat-message chat-system" aria-label={`Transcript at ${time(m.created_at)}`}>
+      <article className="chat-message chat-system" aria-label={`${m.kind === "summary" ? "Summary" : "Transcript"} at ${time(m.created_at)}`}>
         <p className="chat-body chat-transcript">{m.body}</p>
       </article>
     );

@@ -34,7 +34,10 @@ built DDD + TDD (contract tests on memory and PostgreSQL, acceptance tests on ev
   remove; migration 0072). A comment keeps its paragraph index and the start of its text, so it follows the paragraph
   through edits (or lists under "Comments on earlier versions"). @mentions of project members notify (kind `doc`,
   email/Telegram link to the project's docs). API 0.64.0.
-- **S87 Recording summaries (optional)** — when an OpenAI-compatible chat model is configured (`KYBER_LLM_URL`),
+- ✅ **S87 Recording summaries (optional)** — when an OpenAI-compatible chat model is configured (`KYBER_LLM_URL`),
   a recording's transcript also gets a short summary. Off by default; nothing leaves the server without it.
+  **Done:** `chat/infrastructure/llm` (`KYBER_LLM_URL`, `_MODEL`, `_KEY`; input capped at 16000 characters); a
+  "🧠 Summary" reply (message kind `summary`, migration 0073) after the transcript, once; a failed summary is retried
+  without transcribing again. API 0.65.0.
 
 Order: S82 → S83 (infrastructure first), then S84, S85, S86, S87.

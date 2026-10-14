@@ -224,13 +224,23 @@ func TestHuddleRecording(t *testing.T) {
 		res.Body.Close()
 		expect(t, res.StatusCode, 404, nil)
 
-		// S77: with a speech-to-text service, the transcript lands in the recording's thread.
+		// S77: with a speech-to-text service, the transcript lands in the recording's thread; S87: with a chat
+		// model too, its summary follows.
 		eventuallyJSON(t, lead, "/api/v1/messages/"+m["id"].(string)+"/replies", func(b map[string]any) bool {
 			items := b["items"].([]any)
-			return len(items) == 1 && items[0].(map[string]any)["kind"] == "transcript" &&
-				strings.HasPrefix(items[0].(map[string]any)["body"].(string), "📝 Transcript:\nHuddle 13 Oct.webm")
+			return len(items) == 2 && items[0].(map[string]any)["kind"] == "transcript" &&
+				strings.HasPrefix(items[0].(map[string]any)["body"].(string), "📝 Transcript:\nHuddle 13 Oct.webm") &&
+				items[1].(map[string]any)["kind"] == "summary" && items[1].(map[string]any)["body"] == "🧠 Summary:\n- Huddle 13 Oct.webm"
 		})
-	}, server.WithTranscriber(fakeSTT{}))
+	}, server.WithTranscriber(fakeSTT{}), server.WithSummarizer(fakeLLM{}))
+}
+
+// fakeLLM "summarizes" a transcript into what it is about (the recording's name).
+type fakeLLM struct{}
+
+func (fakeLLM) Summarize(_ context.Context, transcript string) (string, error) {
+	about, _, _ := strings.Cut(transcript, ":")
+	return "- " + about, nil
 }
 
 // fakeSTT "transcribes" a recording into its name and size.

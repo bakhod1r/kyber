@@ -314,6 +314,8 @@ const (
 	KindProjectEvent MessageKind = "project_event"
 	// KindTranscript: the transcript of a huddle recording, in its thread (S77).
 	KindTranscript MessageKind = "transcript"
+	// KindSummary: a short summary of a recording's transcript, in its thread (S87).
+	KindSummary MessageKind = "summary"
 	// KindWorkflow: a message a channel's workflow posted (S80).
 	KindWorkflow MessageKind = "workflow"
 	// KindWebhook: a message another system posted through an incoming webhook (S81).
@@ -393,11 +395,25 @@ func NewRecordingMessage(id MessageID, conv ConversationID, author UserID, f Fil
 
 // NewTranscript is the transcript of a recording, written by Kyber in the recording's thread (S77).
 func NewTranscript(id MessageID, rec *Message, text string, now time.Time) *Message {
-	text = "📝 Transcript:\n" + strings.TrimSpace(text)
+	text = TranscriptPrefix + strings.TrimSpace(text)
 	if r := []rune(text); len(r) > MaxBody {
 		text = string(r[:MaxBody-1]) + "…"
 	}
 	m := NewSystemMessage(id, rec.Conversation, rec.Author, KindTranscript, "transcript:"+string(rec.ID), text, now)
+	m.Thread = rec.ID
+	return m
+}
+
+// TranscriptPrefix starts every transcript's body.
+const TranscriptPrefix = "📝 Transcript:\n"
+
+// NewSummary writes the summary of a recording's transcript into the recording's thread (S87).
+func NewSummary(id MessageID, rec *Message, text string, now time.Time) *Message {
+	text = "🧠 Summary:\n" + strings.TrimSpace(text)
+	if r := []rune(text); len(r) > MaxBody {
+		text = string(r[:MaxBody-1]) + "…"
+	}
+	m := NewSystemMessage(id, rec.Conversation, rec.Author, KindSummary, "summary:"+string(rec.ID), text, now)
 	m.Thread = rec.ID
 	return m
 }

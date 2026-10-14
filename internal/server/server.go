@@ -223,6 +223,7 @@ type deps struct {
 	userGroups    chatdomain.Groups // chat @groups (S70); groups are Telegram groups
 	chatPrefs     chatdomain.Prefs
 	transcriber   chatapp.Transcriber
+	summarizer    chatapp.Summarizer
 	bookmarks     chatdomain.Bookmarks
 	chatWorkflows chatdomain.Workflows
 	webhooks      chatdomain.Webhooks
@@ -310,6 +311,9 @@ func WithICE(urls []string, turnSecret string) Option {
 
 // WithTranscriber transcribes huddle recordings into their threads (S77).
 func WithTranscriber(t chatapp.Transcriber) Option { return func(d *deps) { d.transcriber = t } }
+
+// WithSummarizer adds a short summary to those transcripts (S87).
+func WithSummarizer(s chatapp.Summarizer) Option { return func(d *deps) { d.summarizer = s } }
 
 // WithChatFiles keeps chat files and recordings in s (e.g. S3, S82); it wins over WithFilesDir.
 func WithChatFiles(s blob.Store) Option { return func(d *deps) { d.chatStore = s } }
@@ -486,7 +490,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 		log.Warn("KYBER_FILES_DIR not set: chat files are kept in memory and lost on restart")
 		d.chatBlobs = blob.NewMemory()
 	}
-	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved, Statuses: d.statuses, Scheduled: d.scheduled, Reminders: d.reminders, Groups: d.userGroups, Prefs: d.chatPrefs, Projects: chatacl.NewProjects(projects), Transcriber: d.transcriber, Bookmarks: d.bookmarks, Workflows: d.chatWorkflows, Webhooks: d.webhooks, SectionOrders: d.sectionOrders, Directory: chatacl.NewMembers(workspaces, d.users),
+	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved, Statuses: d.statuses, Scheduled: d.scheduled, Reminders: d.reminders, Groups: d.userGroups, Prefs: d.chatPrefs, Projects: chatacl.NewProjects(projects), Transcriber: d.transcriber, Summarizer: d.summarizer, Bookmarks: d.bookmarks, Workflows: d.chatWorkflows, Webhooks: d.webhooks, SectionOrders: d.sectionOrders, Directory: chatacl.NewMembers(workspaces, d.users),
 		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
 	chat.WithIssues(chatacl.NewIssues(issues))
 	calendar.WithConversations(calendaracl.NewConversations(chat)) // meetings in a channel's huddle (S76)
@@ -520,7 +524,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	relay.Handle("chat.reminder", notify.OnChatReminder)
 	relay.Handle("doc.comment_added", notify.OnDocComment)         // @mentions in doc comments (S86)
 	relay.Handle("whiteboard.comment_added", notify.OnChatMessage) // @mentions in board comments (S86), as in its conversation
-	relay.Handle("chat.message_posted", chat.OnRecordingPosted)    // transcripts (S77)
+	relay.Handle("chat.message_posted", chat.OnRecordingPosted)    // transcripts (S77) and their summaries (S87)
 	for _, name := range []string{"issue.created", "issue.transitioned", "sprint.started", "sprint.completed"} {
 		relay.Handle(name, chat.OnProjectEvent) // project channels (S73)
 	}

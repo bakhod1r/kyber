@@ -64,6 +64,11 @@ Set `KYBER_STT_URL` to an OpenAI-compatible speech-to-text endpoint (for example
 defaults to `whisper-1`; `KYBER_STT_KEY` (a secret — set it in the environment, never in files) is sent as a
 bearer token. Unset, recordings never leave the server. Transcripts are capped at 4000 characters.
 
+With transcripts on, set `KYBER_LLM_URL` to an OpenAI-compatible chat completions endpoint (for example a
+self-hosted Ollama's `/v1/chat/completions`) and each transcript also gets a "🧠 Summary" (decisions, action items,
+open questions) in the same thread (S87). `KYBER_LLM_MODEL` defaults to `gpt-4o-mini`; `KYBER_LLM_KEY` is a secret
+like `KYBER_STT_KEY`. At most 16000 characters of a transcript are sent. Unset, transcripts never leave the server.
+
 ## Metrics
 
 `GET /metrics` adds:

@@ -46,6 +46,11 @@ type Transcriber interface {
 	Transcribe(ctx context.Context, name string, audio io.Reader) (string, error)
 }
 
+// Summarizer writes a short summary of a transcript (an OpenAI-compatible chat model, S87).
+type Summarizer interface {
+	Summarize(ctx context.Context, transcript string) (string, error)
+}
+
 // Projects tells whether someone may browse a project (Project context).
 type Projects interface {
 	CanBrowse(ctx context.Context, user, key string) (bool, error)
@@ -104,6 +109,7 @@ type Deps struct {
 	Prefs         domain.Prefs             // optional: levels and sections (S71)
 	Projects      Projects                 // optional: project channels (S73)
 	Transcriber   Transcriber              // optional: recording transcripts (S77); nothing leaves the server without it
+	Summarizer    Summarizer               // optional: summaries of those transcripts (S87)
 	Bookmarks     domain.Bookmarks         // optional: docs and links in a conversation's header (S79)
 	Workflows     domain.Workflows         // optional: channel automations (S80)
 	Webhooks      domain.Webhooks          // optional: incoming webhooks (S81)
@@ -1257,7 +1263,8 @@ func (s *Service) OnProjectEvent(ctx context.Context, m outbox.Message) error {
 }
 
 // OnRecordingPosted transcribes a huddle recording into its thread when a speech-to-text service is configured
-// (chat.message_posted of kind huddle_recording); once per recording.
+// (chat.message_posted of kind huddle_recording), then summarizes the transcript when a chat model is configured too
+// (S87); each once per recording. A failure is retried by the relay without redoing the finished step.
 func (s *Service) OnRecordingPosted(ctx context.Context, m outbox.Message) error {
 	var e domain.MessageWritten
 	if err := json.Unmarshal(m.Payload, &e); err != nil || e.Kind != domain.KindHuddleRecording || s.d.Transcriber == nil || s.d.Blobs == nil {
@@ -1273,34 +1280,66 @@ func (s *Service) OnRecordingPosted(ctx context.Context, m outbox.Message) error
 	if err != nil {
 		return err
 	}
+	var transcript *domain.Message
 	for _, r := range replies {
-		if r.Kind == domain.KindTranscript {
+		switch r.Kind {
+		case domain.KindSummary:
 			return nil // done already (redelivery)
+		case domain.KindTranscript:
+			transcript = r
 		}
 	}
 	if rec.Deleted || rec.File == nil {
 		return nil
 	}
+	if transcript == nil {
+		if transcript, err = s.transcribe(ctx, rec); err != nil || transcript == nil {
+			return err
+		}
+	}
+	if s.d.Summarizer == nil {
+		return nil
+	}
+	text := strings.TrimSpace(strings.TrimPrefix(transcript.Body, domain.TranscriptPrefix))
+	if text == "" {
+		return nil
+	}
+	summary, err := s.d.Summarizer.Summarize(ctx, text)
+	if err != nil {
+		return err // retried by the relay
+	}
+	if strings.TrimSpace(summary) == "" {
+		return nil
+	}
+	_, err = s.postToThread(ctx, rec, domain.NewSummary(domain.MessageID(s.d.NewID()), rec, summary, s.d.Now()))
+	return err
+}
+
+// transcribe posts the recording's transcript; nil when it exists already.
+func (s *Service) transcribe(ctx context.Context, rec *domain.Message) (*domain.Message, error) {
 	audio, err := s.d.Blobs.Open(ctx, string(rec.ID))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer audio.Close()
 	text, err := s.d.Transcriber.Transcribe(ctx, rec.File.Name, audio)
 	if err != nil {
-		return err // retried by the relay
+		return nil, err // retried by the relay
 	}
-	t := domain.NewTranscript(domain.MessageID(s.d.NewID()), rec, text, s.d.Now())
-	if err := s.d.Messages.Post(ctx, t); errors.Is(err, domain.ErrDuplicateRef) {
-		return nil
+	return s.postToThread(ctx, rec, domain.NewTranscript(domain.MessageID(s.d.NewID()), rec, text, s.d.Now()))
+}
+
+// postToThread posts a system reply and tells the members; nil when it was posted already.
+func (s *Service) postToThread(ctx context.Context, rec, reply *domain.Message) (*domain.Message, error) {
+	if err := s.d.Messages.Post(ctx, reply); errors.Is(err, domain.ErrDuplicateRef) {
+		return nil, nil
 	} else if err != nil {
-		return err
+		return nil, err
 	}
-	c, err := s.d.Conversations.ByID(ctx, rec.Conversation)
-	if err == nil {
-		s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *t})
+	if c, err := s.d.Conversations.ByID(ctx, rec.Conversation); err == nil {
+		s.d.Notifier.Notify(ctx, c.Members, domain.MessagePosted{Message: *reply})
 	}
-	return nil
+	return reply, nil
 }
 
 func (s *Service) WithBookmarks(b domain.Bookmarks) *Service { s.d.Bookmarks = b; return s }
