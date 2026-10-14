@@ -108,3 +108,25 @@ func TestMCPOAuth(t *testing.T) {
 		expect(t, code, 403, b)
 	})
 }
+
+// ADR-0016: anonymous registration is limited per client IP (10 per 15 minutes).
+func TestMCPOAuthRegistrationRateLimit(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		reg := map[string]any{"client_name": "Bot", "redirect_uris": []string{"http://localhost:7777/callback"}}
+		for range 10 {
+			code, b := anon.do("POST", "/api/v1/oauth/register", reg)
+			expect(t, code, 201, b)
+		}
+		res := anon.raw("POST", "/api/v1/oauth/register", reg, nil)
+		defer res.Body.Close()
+		var b map[string]any
+		_ = json.NewDecoder(res.Body).Decode(&b)
+		expect(t, res.StatusCode, 429, b)
+		if ra := res.Header.Get("Retry-After"); ra == "" || ra == "0" {
+			t.Fatalf("Retry-After = %q", ra)
+		}
+		if b["error"] != "too_many_requests" || b["error_description"] == "" {
+			t.Fatalf("body = %v", b)
+		}
+	})
+}

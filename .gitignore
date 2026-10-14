@@ -9,3 +9,5 @@ livekit.log
 screenshots.log
 /data/
 /.claude/worktrees/
+site/.vitepress/dist/
+site/.vitepress/cache/

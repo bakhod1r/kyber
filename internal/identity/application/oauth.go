@@ -26,9 +26,19 @@ const OAuthTokenDays = 90
 func WithOAuth(s domain.OAuthStore) Option { return func(svc *Service) { svc.oauth = s } }
 
 // RegisterClient registers a public client (RFC 7591 dynamic client registration).
-func (s *Service) RegisterClient(ctx context.Context, name string, redirects []string) (*domain.OAuthClient, error) {
+// Registration is anonymous, so it is limited per client IP with the login limiter's rule
+// (LoginAttempts per LoginWindow) under its own key; over it, TooManyAttemptsError.
+// A limiter outage fails closed.
+func (s *Service) RegisterClient(ctx context.Context, ip, name string, redirects []string) (*domain.OAuthClient, error) {
 	if s.oauth == nil {
 		return nil, ErrOAuthDisabled
+	}
+	allowed, retryAfter, err := s.limiter.Allow(ctx, "oauth-register:"+ip)
+	if err != nil {
+		return nil, fmt.Errorf("registration rate limiter: %w", err)
+	}
+	if !allowed {
+		return nil, &TooManyAttemptsError{RetryAfter: retryAfter}
 	}
 	c, err := domain.NewOAuthClient(domain.ClientID(s.newID()), name, redirects, s.clock.Now().UTC())
 	if err != nil {

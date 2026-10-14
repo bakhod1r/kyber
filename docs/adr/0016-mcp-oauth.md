@@ -35,5 +35,9 @@ authorization code flow with PKCE. Until now a user had to create a personal acc
 
 - Connecting an assistant is: add the URL, sign in, Allow.
 - Registration is open to anyone (as the spec expects); registered clients are inert until a user
-  approves one, and the general per-user rate limit does not cover anonymous registration yet.
+  approves one. Anonymous registration is limited per client IP with the login limiter's rule
+  (10 per 15 minutes, key `oauth-register:<ip>`, counted separately from logins; Redis-backed when
+  guard is configured, in-process otherwise). Over the limit the endpoint answers 429 with
+  `Retry-After` and `{"error":"too_many_requests"}`; a limiter outage fails closed. Ten
+  registrations per quarter-hour is ample for real assistants and bounds table growth per address.
 - Scoped tokens (read-only, per project) remain a possible extension of ADR-0012.

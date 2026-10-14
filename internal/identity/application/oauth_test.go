@@ -28,7 +28,7 @@ func TestOAuthAuthorizationCodeFlow(t *testing.T) {
 	s := application.NewService(repo, repo, &plainHasher{}, c, ids, application.WithPersonalTokens(repo), application.WithOAuth(repo))
 	u, _ := s.Signup(ctx, application.Signup{Email: "ali@x.uz", Name: "Ali", Password: "long enough pw"})
 
-	client, err := s.RegisterClient(ctx, "Claude", []string{"https://claude.ai/cb"})
+	client, err := s.RegisterClient(ctx, "203.0.113.1", "Claude", []string{"https://claude.ai/cb"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,12 +90,44 @@ func TestOAuthAuthorizationCodeFlow(t *testing.T) {
 			t.Errorf("%s: authorized", name)
 		}
 	}
-	if _, err := s.RegisterClient(ctx, "Evil", []string{"http://evil.example/cb"}); !errors.Is(err, domain.ErrInvalidOAuthClient) {
+	if _, err := s.RegisterClient(ctx, "203.0.113.1", "Evil", []string{"http://evil.example/cb"}); !errors.Is(err, domain.ErrInvalidOAuthClient) {
 		t.Fatalf("plain http redirect: %v", err)
 	}
 
 	off := application.NewService(repo, repo, &plainHasher{}, c, ids)
-	if _, err := off.RegisterClient(ctx, "X", []string{"https://x.example/cb"}); !errors.Is(err, application.ErrOAuthDisabled) {
+	if _, err := off.RegisterClient(ctx, "203.0.113.1", "X", []string{"https://x.example/cb"}); !errors.Is(err, application.ErrOAuthDisabled) {
 		t.Fatalf("disabled: %v", err)
+	}
+}
+
+// Anonymous registration is limited per client IP (ADR-0016): the shared LoginAttempts per LoginWindow.
+func TestRegisterClientIsRateLimitedPerIP(t *testing.T) {
+	ctx := context.Background()
+	n := 0
+	ids := func() string { n++; return "id-" + strings.Repeat("x", n) }
+	c := &clock{now: time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)}
+	repo := memory.NewRepository()
+	s := application.NewService(repo, repo, &plainHasher{}, c, ids, application.WithOAuth(repo))
+	for i := range application.LoginAttempts {
+		if _, err := s.RegisterClient(ctx, "198.51.100.7", "Bot", []string{"https://bot.example/cb"}); err != nil {
+			t.Fatalf("registration %d: %v", i+1, err)
+		}
+	}
+	_, err := s.RegisterClient(ctx, "198.51.100.7", "Bot", []string{"https://bot.example/cb"})
+	var tooMany *application.TooManyAttemptsError
+	if !errors.As(err, &tooMany) || tooMany.RetryAfter <= 0 {
+		t.Fatalf("over the limit: %v", err)
+	}
+	if _, err := s.RegisterClient(ctx, "198.51.100.8", "Bot", []string{"https://bot.example/cb"}); err != nil {
+		t.Fatalf("another IP: %v", err)
+	}
+	// Registrations and logins from the same IP are counted separately.
+	if _, err := s.Login(ctx, "nobody@x.uz", "whatever pw", "198.51.100.7"); errors.As(err, &tooMany) {
+		t.Fatalf("login throttled by registrations: %v", err)
+	}
+
+	broken := application.NewService(repo, repo, &plainHasher{}, c, ids, application.WithOAuth(repo), application.WithLoginLimiter(failingLimiter{}))
+	if _, err := broken.RegisterClient(ctx, "198.51.100.9", "Bot", []string{"https://bot.example/cb"}); err == nil || errors.As(err, &tooMany) {
+		t.Fatalf("limiter outage must fail closed: %v", err)
 	}
 }
