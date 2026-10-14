@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,10 +94,22 @@ func TestMiddleware(t *testing.T) {
 	if w := do(h, "GET", "/api/v1/projects", ""); w.Code != 204 {
 		t.Fatalf("anonymous requests are left to their own limits: %d", w.Code)
 	}
-	// A broken limiter fails open: the API stays up.
-	open := ratelimit.Middleware(failing{}, ratelimit.Rules{API: guard.Rule{Limit: 1, Window: time.Minute}}, log)(ok)
-	if w := do(open, "GET", "/api/v1/projects", "u-1"); w.Code != 204 {
-		t.Fatalf("fail open = %d", w.Code)
+	// A broken limiter (Redis down) degrades to this replica's own limits: the API stays up, but limited.
+	var logged strings.Builder
+	local := ratelimit.Middleware(failing{}, ratelimit.Rules{API: guard.Rule{Limit: 1, Window: time.Minute}}, slog.New(slog.NewTextHandler(&logged, nil)))(ok)
+	if w := do(local, "GET", "/api/v1/projects", "u-1"); w.Code != 204 {
+		t.Fatalf("fallback first = %d", w.Code)
+	}
+	if w := do(local, "GET", "/api/v1/projects", "u-1"); w.Code != 429 {
+		t.Fatalf("fallback over the limit = %d", w.Code)
+	}
+	if !strings.Contains(logged.String(), "redis down") {
+		t.Fatalf("limiter failure not logged: %q", logged.String())
+	}
+	// A rule neither limiter accepts leaves the request through.
+	invalid := ratelimit.Middleware(failing{}, ratelimit.Rules{API: guard.Rule{Limit: 1}}, log)(ok)
+	if w := do(invalid, "GET", "/api/v1/projects", "u-1"); w.Code != 204 {
+		t.Fatalf("invalid rule = %d", w.Code)
 	}
 	// A zero rule turns limiting off.
 	off := ratelimit.Middleware(lim, ratelimit.Rules{}, log)(ok)

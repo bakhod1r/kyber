@@ -140,6 +140,10 @@ func (h *Handler) authorize(w http.ResponseWriter, r *http.Request) {
 	if !h.sessionOnly(w, r) {
 		return
 	}
+	if !isJSON(r) { // no simple (form or text) cross-site posts can approve a client
+		httpx.Error(w, r, h.log, httpx.ErrBadJSON, codeFor)
+		return
+	}
 	var in struct {
 		ClientID    string `json:"client_id"`
 		RedirectURI string `json:"redirect_uri"`

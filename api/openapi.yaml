@@ -236,6 +236,7 @@ paths:
           content:
             application/json:
               schema: { type: object, required: [redirect_to], properties: { redirect_to: { type: string } } }
+        "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }

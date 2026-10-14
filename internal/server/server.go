@@ -568,6 +568,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 			}
 		}
 		return string(u.ID()), nil
+	}, func(ctx context.Context, user string) bool { // SCIM deactivation ends live streams too
+		u, err := d.users.ByID(ctx, identitydomain.UserID(user))
+		return err == nil && u.Active()
 	}, log)
 	if err != nil {
 		panic(fmt.Sprintf("mqtt broker: %v", err)) // only fails on programming errors (duplicate hook or listener ids)

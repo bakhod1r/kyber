@@ -94,6 +94,16 @@ func TestOAuthAuthorizationCodeFlow(t *testing.T) {
 		t.Fatalf("plain http redirect: %v", err)
 	}
 
+	// A user deactivated (SCIM) between consent and exchange gets no token.
+	pending := fresh()
+	u.Deactivate()
+	if err := repo.SaveUser(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.ExchangeCode(ctx, application.TokenRequest{Code: pending, ClientID: string(client.ID), RedirectURI: "https://claude.ai/cb", Verifier: verifier}); !errors.Is(err, application.ErrInvalidGrant) {
+		t.Fatalf("inactive user: %v", err)
+	}
+
 	off := application.NewService(repo, repo, &plainHasher{}, c, ids)
 	if _, err := off.RegisterClient(ctx, "X", []string{"https://x.example/cb"}); !errors.Is(err, application.ErrOAuthDisabled) {
 		t.Fatalf("disabled: %v", err)
