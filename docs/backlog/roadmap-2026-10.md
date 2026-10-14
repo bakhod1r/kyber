@@ -51,3 +51,19 @@ submissions become issues through the Issue Tracking ACL). Section D is complete
    invited is notified when it is scheduled or cancelled (inbox, email/Telegram, the project's Telegram
    groups), reminded once 15 minutes before (once across replicas), and answers going/maybe/declined.
    Rescheduling (moving a meeting) is not there yet.
+
+## F. Remaining plan items (2026-10-14)
+
+Migration numbers are reserved per item so parallel work does not collide.
+
+| # | Item | Scope | Migration |
+|---|---|---|---|
+| F1 | MQTT everywhere (ADR-0013) | embedded broker (mochi-mqtt); browser over WebSocket at /api/v1/mqtt; optional TCP listener with PATs; per-message project authorization; replaces SSE | — |
+| F2 | i18n (en/uz/ru) | web UI strings through a typed dictionary; language picker; Accept-Language for API problems | — |
+| F3 | Meetings: reschedule + time zones | PUT /meetings/{id} (re-notifies), user time zone preference, display in it | 0050 |
+| F4 | Comment reactions + presence | emoji reactions on comments; who is viewing an issue (over MQTT) | 0051 |
+| F5 | Webhooks | per-project outgoing webhooks (HMAC-SHA256 signed, retries via outbox); GitHub commit/PR linking by issue key | 0052 |
+| F6 | Generic OIDC + GitHub sign-in | KYBER_OIDC_* (any provider), GitHub OAuth; SAML/SCIM later | — |
+| F7 | Board swimlanes | by assignee / epic / none | — |
+| F8 | MCP: more tools + OAuth | transition_issue, assign_issue, list_sprints, get_comments, update_issue; OAuth 2.1 later | — |
+| F9 | Sync docs/PLAN.md checkboxes; recheck F5 workflow editor | docs | — |
