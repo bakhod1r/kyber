@@ -21,6 +21,8 @@ Source: the items left after Sprint 14 (2026-10-14, "go"). Planned first, then b
   presets, "clear after" and reminder choices, the Channels / Direct messages sections and the slash-command help.
   **Done:** translated where they are shown (the domain keeps its English); a preset you pick is set in your
   language; sections you name yourself stay as you named them.
-- **S98 README screenshots** — chat, huddle, whiteboard and docs, taken from the running app by a script.
+- ✅ **S98 README screenshots** — chat, huddle, whiteboard and docs, taken from the running app by a script.
+  **Done:** `make screenshots` seeds a styled whiteboard (through the ops API) and a doc with paragraph comments;
+  all 12 README images regenerated, plus a new Docs row.
 
 Order: S94, then S95, S96, S97, S98.
