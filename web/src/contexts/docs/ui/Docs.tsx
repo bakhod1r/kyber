@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { docsUseCases, type Page } from "../application";
+import { type DocComment, docsUseCases, type Page, paragraphs, placeComment, quoteOf } from "../application";
 import { Markdown } from "../../../shared/ui/Markdown";
 
 type Mode = { kind: "view" } | { kind: "edit"; page: Page | null } | { kind: "history" };
 
 /** Docs: the project's Markdown pages with their revision history. */
-export function Docs({ projectKey }: { projectKey: string }) {
+export function Docs({ projectKey, me = "", names = new Map() }: { projectKey: string; me?: string; names?: Map<string, string> }) {
   const qc = useQueryClient();
   const listKey = ["docs", projectKey];
   const pages = useQuery({ queryKey: listKey, queryFn: () => docsUseCases.pages(projectKey) });
@@ -81,7 +81,7 @@ export function Docs({ projectKey }: { projectKey: string }) {
               <p className="muted">
                 Version {current.version} · updated {current.updated_at.slice(0, 16).replace("T", " ")}
               </p>
-              {mode.kind === "history" ? <PageHistory id={current.id} /> : <Markdown source={current.body} />}
+              {mode.kind === "history" ? <PageHistory id={current.id} /> : <CommentedBody page={current} me={me} names={names} />}
             </article>
           ) : null}
         </div>
@@ -156,5 +156,77 @@ function PageHistory({ id }: { id: string }) {
       </ol>
       {shown && <Markdown source={shown.body} />}
     </section>
+  );
+}
+
+/** S86: the page paragraph by paragraph, each with its comments (💬); comments whose paragraph is gone are listed at the end. */
+function CommentedBody({ page, me, names }: { page: Page; me: string; names: Map<string, string> }) {
+  const comments = useQuery({ queryKey: ["doc-comments", page.id], queryFn: () => docsUseCases.comments(page.id) });
+  const [open, setOpen] = useState<number | null>(null);
+  const paras = paragraphs(page.body);
+  const at = new Map<number, DocComment[]>();
+  for (const c of comments.data ?? []) {
+    const i = placeComment(paras, c);
+    at.set(i, [...(at.get(i) ?? []), c]);
+  }
+  const earlier = at.get(-1) ?? [];
+  return (
+    <div className="doc-body">
+      {paras.map((p, i) => {
+        const n = at.get(i)?.length ?? 0;
+        return (
+          <div key={i} className="doc-para">
+            <div className="row between">
+              <Markdown source={p} />
+              <button type="button" className={n ? "doc-pin" : "doc-pin ghost"} aria-expanded={open === i} onClick={() => setOpen(open === i ? null : i)}
+                aria-label={n ? `${n} comment${n === 1 ? "" : "s"} on paragraph ${i + 1}` : `Comment on paragraph ${i + 1}`}>
+                💬{n ? ` ${n}` : ""}
+              </button>
+            </div>
+            {open === i && <ParagraphComments page={page.id} index={i} quote={quoteOf(p)} list={at.get(i) ?? []} me={me} names={names} />}
+          </div>
+        );
+      })}
+      {earlier.length > 0 && (
+        <section aria-label="Comments on earlier versions" className="muted">
+          <h4>Comments on earlier versions</h4>
+          <ul>
+            {earlier.map((c) => (
+              <li key={c.id}>
+                «{c.quote}» — <b>{who(c, me, names)}</b>: {c.body}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+const who = (c: DocComment, me: string, names: Map<string, string>) => (c.author_id === me ? "You" : (names.get(c.author_id) ?? "Someone"));
+
+function ParagraphComments({ page, index, quote, list, me, names }: { page: string; index: number; quote: string; list: DocComment[]; me: string; names: Map<string, string> }) {
+  const qc = useQueryClient();
+  const [body, setBody] = useState("");
+  const done = () => qc.invalidateQueries({ queryKey: ["doc-comments", page] });
+  const add = useMutation({ mutationFn: () => docsUseCases.comment(page, index, quote, body), onSuccess: () => { setBody(""); void done(); } });
+  const remove = useMutation({ mutationFn: (id: string) => docsUseCases.removeComment(id), onSuccess: done });
+  return (
+    <aside className="doc-comments panel" aria-label={`Comments on paragraph ${index + 1}`}>
+      {list.length === 0 && <p className="muted">No comments yet.</p>}
+      <ul>
+        {list.map((c) => (
+          <li key={c.id}>
+            <b>{who(c, me, names)}</b> {c.body}{" "}
+            {c.author_id === me && <button type="button" className="ghost" onClick={() => remove.mutate(c.id)}>Remove</button>}
+          </li>
+        ))}
+      </ul>
+      {(add.error ?? remove.error) && <p role="alert" className="error">{(add.error ?? remove.error)?.message}</p>}
+      <form className="row" onSubmit={(e) => { e.preventDefault(); add.mutate(); }}>
+        <input aria-label="Comment" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Comment… (@email to mention)" maxLength={2000} />
+        <button disabled={!body.trim() || add.isPending}>Comment</button>
+      </form>
+    </aside>
   );
 }

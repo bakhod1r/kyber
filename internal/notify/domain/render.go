@@ -40,6 +40,9 @@ func Render(n Notification, link string) (subject, text string) {
 		if n.Excerpt != "" {
 			text = fmt.Sprintf("📣 %s announced «%s»:\n\n%s", n.ActorName, n.IssueTitle, n.Excerpt)
 		}
+	case KindDoc:
+		subject = fmt.Sprintf("[%s] %s mentioned you on «%s»", n.Project, n.ActorName, n.IssueTitle)
+		text = fmt.Sprintf("%s mentioned you in a comment on «%s»:\n\n%s", n.ActorName, n.IssueTitle, n.Excerpt)
 	case KindAssigned:
 		subject = fmt.Sprintf("[%s] %s assigned you: %s", n.IssueKey, n.ActorName, n.IssueTitle)
 		text = fmt.Sprintf("%s assigned you %s «%s».", n.ActorName, n.IssueKey, n.IssueTitle)

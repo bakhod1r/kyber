@@ -55,6 +55,8 @@ func (s *Service) enqueue(ctx context.Context, n domain.Notification, project st
 		link = announcementLink(s.d.PublicURL, project)
 	case domain.KindMeeting:
 		link = s.d.PublicURL + "/meetings"
+	case domain.KindDoc:
+		link = fmt.Sprintf("%s/projects/%s/docs", s.d.PublicURL, url.PathEscape(project))
 	}
 	subject, text := domain.Render(n, link)
 	for _, ch := range []domain.Channel{domain.ChannelEmail, domain.ChannelTelegram} {

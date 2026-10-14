@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/docs/domain"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
 var (
 	ErrProjectNotFound = errors.New("project not found")
 	ErrForbidden       = errors.New("insufficient project role")
+	ErrNotAuthor       = errors.New("only its author removes a comment")
 )
 
 // Projects checks the actor's role on a project: reading needs browse, writing needs write
@@ -23,6 +25,7 @@ type Projects interface {
 type Deps struct {
 	Projects Projects
 	Pages    domain.Repository
+	Comments domain.Comments // S86
 	NewID    func() string
 	Now      func() time.Time
 }
@@ -101,4 +104,44 @@ func (s *Service) Delete(ctx context.Context, actor, id string) error {
 		return err
 	}
 	return s.d.Pages.Delete(ctx, p.ID)
+}
+
+// Comment adds the actor's remark on paragraph para of a page they may read (S86).
+func (s *Service) Comment(ctx context.Context, actor, page string, para int, quote, body string) (*domain.Comment, error) {
+	p, err := s.load(ctx, actor, page, false)
+	if err != nil {
+		return nil, err
+	}
+	c, err := p.Comment(domain.CommentID(s.d.NewID()), tenant.Workspace(ctx), para, quote, actor, body, s.d.Now())
+	if err != nil {
+		return nil, err
+	}
+	return c, s.d.Comments.Add(ctx, c)
+}
+
+// Comments lists a page's comments, oldest first.
+func (s *Service) Comments(ctx context.Context, actor, page string) ([]*domain.Comment, error) {
+	p, err := s.load(ctx, actor, page, false)
+	if err != nil {
+		return nil, err
+	}
+	return s.d.Comments.OnPage(ctx, p.ID)
+}
+
+// RemoveComment deletes the actor's own comment.
+func (s *Service) RemoveComment(ctx context.Context, actor, id string) error {
+	c, err := s.d.Comments.ByID(ctx, domain.CommentID(id))
+	if err != nil {
+		return err
+	}
+	if _, err := s.load(ctx, actor, string(c.Page), false); err != nil {
+		if errors.Is(err, domain.ErrPageNotFound) {
+			return domain.ErrCommentMissing
+		}
+		return err
+	}
+	if c.Author != actor {
+		return ErrNotAuthor
+	}
+	return s.d.Comments.Remove(ctx, c.ID)
 }

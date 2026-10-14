@@ -8,3 +8,8 @@ import (
 )
 
 func TestContract(t *testing.T) { repotest.Run(t, memory.NewRepository()) }
+
+func TestCommentsContract(t *testing.T) {
+	pages := memory.NewRepository()
+	repotest.RunComments(t, pages, memory.NewComments(pages))
+}

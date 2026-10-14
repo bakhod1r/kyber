@@ -25,11 +25,15 @@ built DDD + TDD (contract tests on memory and PostgreSQL, acceptance tests on ev
   new sections go last.
   **Done:** `GET/PUT /chat/sections` (migration 0070); drag a section header onto another (or ↑ for keyboards);
   unordered sections follow by name. API 0.62.0.
-- **S86 Comments on whiteboard elements and doc lines** — select an element (or a doc paragraph) and comment;
+- ✅ **S86 Comments on whiteboard elements and doc lines** — select an element (or a doc paragraph) and comment;
   comments show as a pin; mentions notify. AC: only people who may read the board/doc see them.
   **Done (whiteboards, S86a):** `GET/POST /whiteboards/{id}/comments`, `DELETE /whiteboard-comments/{id}` (author
   only; migration 0071); 💬 count badges on elements, a comment panel for the selected element; @mentions notify
-  like chat. API 0.63.0. Doc paragraphs (S86b) next.
+  like chat. API 0.63.0.
+  **Done (docs, S86b):** `GET/POST /docs/{id}/comments`, `DELETE /doc-comments/{id}` (readers comment, authors
+  remove; migration 0072). A comment keeps its paragraph index and the start of its text, so it follows the paragraph
+  through edits (or lists under "Comments on earlier versions"). @mentions of project members notify (kind `doc`,
+  email/Telegram link to the project's docs). API 0.64.0.
 - **S87 Recording summaries (optional)** — when an OpenAI-compatible chat model is configured (`KYBER_LLM_URL`),
   a recording's transcript also gets a short summary. Off by default; nothing leaves the server without it.
 

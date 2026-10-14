@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.63.0
+  version: 0.64.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -2852,6 +2852,44 @@ paths:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/PageRevision" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/docs/{id}/comments:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: listDocComments
+      description: Comments on the page's paragraphs (S86), oldest first; anyone who can read the page.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/DocComment" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: commentOnParagraph
+      description: >-
+        A reader comments on paragraph `paragraph` (its index among the page's blank-line separated blocks);
+        `quote` is the start of its text, so the comment can be placed after edits. @mentions of project members notify them.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paragraph, body]
+              properties: { paragraph: { type: integer, minimum: 0 }, quote: { type: string, maxLength: 200 }, body: { type: string, maxLength: 2000 } }
+      responses:
+        "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/DocComment" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/doc-comments/{id}:
+    delete:
+      operationId: removeDocComment
+      description: Only its author removes a comment.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/forms:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -3261,6 +3299,17 @@ components:
       properties:
         id: { type: string }
         element_id: { type: string }
+        author_id: { type: string }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+    DocComment:
+      type: object
+      required: [id, page_id, paragraph, quote, author_id, body, created_at]
+      properties:
+        id: { type: string }
+        page_id: { type: string }
+        paragraph: { type: integer, minimum: 0 }
+        quote: { type: string }
         author_id: { type: string }
         body: { type: string }
         created_at: { type: string, format: date-time }
@@ -3974,7 +4023,7 @@ components:
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [assigned, commented, mentioned, transitioned, announcement, meeting, reminder, message], description: "message: a message in a conversation you follow (level all; conversation_id, excerpt). reminder: a saved chat message's reminder (conversation_id, excerpt). meeting: a meeting you are invited to was scheduled or cancelled, or starts soon (excerpt: when). transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To). announcement: news to a project (project_key) or the workspace (project_key empty); issue_key is empty and issue_title holds its title." }
+        kind: { type: string, enum: [assigned, commented, mentioned, transitioned, announcement, meeting, reminder, message, doc], description: "doc: you were @mentioned in a comment on a doc page (project_key; issue_title holds the page title; excerpt the comment). message: a message in a conversation you follow (level all; conversation_id, excerpt). reminder: a saved chat message's reminder (conversation_id, excerpt). meeting: a meeting you are invited to was scheduled or cancelled, or starts soon (excerpt: when). transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To). announcement: news to a project (project_key) or the workspace (project_key empty); issue_key is empty and issue_title holds its title." }
         issue_key: { type: string }
         issue_title: { type: string }
         project_key: { type: string, description: The announced project; empty for issue notifications and workspace announcements. }

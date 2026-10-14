@@ -12,6 +12,7 @@ const VERB: Record<Notification["kind"], string> = {
   meeting: "📅",
   reminder: "⏰ Reminder",
   message: "wrote",
+  doc: "mentioned you in a comment on",
 };
 const where = (n: Notification) => (n.conversation_name ? `#${n.conversation_name}` : "a direct message");
 
@@ -75,7 +76,7 @@ export function NotificationBell() {
               <li key={n.id}>
                 <button type="button" className={`note${n.read ? "" : " unread"}`} onClick={() => openIssue(n)}>
                   <span className="note-line">
-                    <strong>{n.actor_name}</strong> {n.conversation_id && n.kind === "mentioned" ? "mentioned you" : VERB[n.kind]} <span className="key">{n.conversation_id ? `${n.kind === "reminder" ? "from" : "in"} ${where(n)}` : n.kind === "announcement" || n.kind === "meeting" ? n.project_key || (n.kind === "meeting" ? n.excerpt : "📣") : n.issue_key}</span>
+                    <strong>{n.actor_name}</strong> {n.conversation_id && n.kind === "mentioned" ? "mentioned you" : VERB[n.kind]} <span className="key">{n.conversation_id ? `${n.kind === "reminder" ? "from" : "in"} ${where(n)}` : n.kind === "doc" ? `«${n.issue_title}»` : n.kind === "announcement" || n.kind === "meeting" ? n.project_key || (n.kind === "meeting" ? n.excerpt : "📣") : n.issue_key}</span>
                   </span>
                   <span className="note-title">{n.issue_title}</span>
                   {n.excerpt && <span className="note-excerpt">{n.excerpt}</span>}

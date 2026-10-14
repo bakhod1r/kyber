@@ -567,3 +567,10 @@ label.button { cursor: pointer; }
 .draggable-section { cursor: grab; }
 .wb-comments { margin-top: 8px; }
 .wb-comments ul { list-style: none; padding: 0; }
+.doc-para { border-left: 2px solid transparent; padding-left: 6px; }
+.doc-para:hover { border-left-color: var(--border, #ddd); }
+.doc-pin { padding: 0 6px; font-size: 12px; align-self: flex-start; }
+.doc-pin.ghost { opacity: .45; }
+.doc-para:hover .doc-pin.ghost { opacity: 1; }
+.doc-comments { margin: 4px 0 8px; }
+.doc-comments ul { list-style: none; padding: 0; }

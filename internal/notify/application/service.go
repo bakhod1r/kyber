@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/notify/domain"
@@ -209,6 +210,57 @@ func (s *Service) OnMeetingEvent(ctx context.Context, m outbox.Message) error {
 		n := domain.Notification{
 			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Workspace: e.Workspace, Kind: domain.KindMeeting, Project: e.Project,
 			IssueTitle: e.Title, ActorName: actorName, Excerpt: domain.MeetingText(m.Name, e.Start, e.End), SourceEvent: m.ID, CreatedAt: s.d.Now(),
+		}
+		if err := s.d.Repo.Add(ctx, n); err != nil {
+			return err
+		}
+		if err := s.enqueue(ctx, n, e.Project); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// OnDocComment tells the people @mentioned in a comment on a doc page (doc.comment_added, S86), if they are
+// members of the page's project; never its author.
+func (s *Service) OnDocComment(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		Workspace string `json:"workspace"`
+		Project   string `json:"project"`
+		Title     string `json:"title"`
+		Author    string `json:"author_id"`
+		Body      string `json:"body"`
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil {
+		s.d.Log.ErrorContext(ctx, "notify: skipping malformed event", "id", m.ID, "name", m.Name)
+		return nil
+	}
+	members, err := s.d.Audience.ProjectMembers(ctx, e.Project)
+	if err != nil {
+		return err
+	}
+	var mentioned []domain.UserID
+	for _, email := range domain.ParseMentions(e.Body) {
+		id, ok, err := s.d.Users.UserIDByEmail(ctx, email)
+		if err != nil {
+			return err
+		}
+		if ok && slices.Contains(members, id) {
+			mentioned = append(mentioned, domain.UserID(id))
+		}
+	}
+	recipients := domain.AnnouncementRecipients(domain.UserID(e.Author), mentioned)
+	if len(recipients) == 0 {
+		return nil
+	}
+	actor, err := s.d.Users.DisplayName(ctx, e.Author)
+	if err != nil {
+		return err
+	}
+	for _, u := range recipients {
+		n := domain.Notification{
+			ID: domain.NotificationID(s.d.NewID()), Recipient: u, Workspace: e.Workspace, Kind: domain.KindDoc, Project: e.Project,
+			IssueTitle: e.Title, ActorName: actor, Excerpt: excerpt(e.Body), SourceEvent: m.ID, CreatedAt: s.d.Now(),
 		}
 		if err := s.d.Repo.Add(ctx, n); err != nil {
 			return err

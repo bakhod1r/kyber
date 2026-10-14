@@ -47,6 +47,7 @@ func deliverySetup(channels ...domain.Channel) (*application.Service, *memory.De
 		issues:  map[string]application.IssueInfo{"KYB-1": {Project: "KYB", Title: "Login page", Reporter: "alice", Assignee: "bob"}},
 		members: map[string]bool{"KYB/alice": true, "KYB/bob": true},
 		names:   map[string]string{"alice": "Alice", "bob": "Bob"},
+		emails:  map[string]string{"bob@x.uz": "bob"},
 	}
 	deliveries, prefs := memory.NewDeliveryRepository(), memory.NewPrefsRepository()
 	n := 0

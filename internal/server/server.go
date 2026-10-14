@@ -182,6 +182,7 @@ type deps struct {
 	filters       searchdomain.FilterRepository
 	goals         goaldomain.Repository
 	pages         docsdomain.Repository
+	docComments   docsdomain.Comments
 	attachments   attdomain.Repository
 	blobs         attapp.Blobs
 	forms         formdomain.Repository
@@ -335,6 +336,8 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	savedRepo := chatmemory.NewSaved(chatRepo)
 	remRepo := chatmemory.NewReminders()
 	wbCommentRepo := wbmemory.NewComments()
+	pageRepo := docsmemory.NewRepository()
+	docCommentRepo := docsmemory.NewComments(pageRepo)
 	callRepo := callmemory.NewRepository()
 	issueRepo := issuememory.NewRepository()
 	sprintRepo := agilememory.NewRepository()
@@ -344,13 +347,13 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), worklogs: issuememory.NewWorklogRepository(), fields: issuememory.NewCustomFieldRepository(),
-		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: docsmemory.NewRepository(), attachments: attmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
+		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: pageRepo, docComments: docCommentRepo, attachments: attmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
 		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), bots: chatmemory.NewBots(), sectionOrders: chatmemory.NewSectionOrders(), calls: callRepo, whiteboards: wbmemory.NewRepository(), wbComments: wbCommentRepo,
-		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(wbCommentRepo.Outbox, wbCommentRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(wbCommentRepo.Outbox, wbCommentRepo.OutboxMeta), events(docCommentRepo.Outbox, docCommentRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
@@ -392,7 +395,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), worklogs: issuepg.NewWorklogRepository(pool), fields: issuepg.NewCustomFieldRepository(pool),
-		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), attachments: attpg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
+		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), docComments: docspg.NewComments(pool), attachments: attpg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
@@ -451,7 +454,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	search := searchapp.NewService(searchapp.Deps{Projects: searchacl.NewProjects(projects), Issues: searchacl.NewIssues(issues),
 		Users: searchacl.NewUsers(d.users), Planning: searchacl.NewPlanning(agile), Filters: d.filters, NewID: id.New})
 	goals := goalapp.NewService(goalapp.Deps{Projects: goalacl.NewProjects(projects), Issues: goalacl.NewIssues(search), Goals: d.goals, NewID: id.New})
-	pages := docsapp.NewService(docsapp.Deps{Projects: docsacl.NewProjects(projects), Pages: d.pages, NewID: id.New, Now: time.Now})
+	pages := docsapp.NewService(docsapp.Deps{Projects: docsacl.NewProjects(projects), Pages: d.pages, Comments: d.docComments, NewID: id.New, Now: time.Now})
 	forms := formapp.NewService(formapp.Deps{Projects: formacl.NewProjects(projects), Issues: formacl.NewIssues(issues), Forms: d.forms, NewID: id.New})
 	insights := insightsapp.NewService(insightsapp.Deps{
 		Repo: d.activity, Access: insightsacl.NewAccess(projectcompat.NewGate(projects, access, accessdomain.BrowseProjects)), Issues: insightsacl.NewIssues(issues),
@@ -515,6 +518,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	relay.Handle("comment.added", notify.OnCommentAdded)
 	relay.Handle("chat.message_posted", notify.OnChatMessage)
 	relay.Handle("chat.reminder", notify.OnChatReminder)
+	relay.Handle("doc.comment_added", notify.OnDocComment)         // @mentions in doc comments (S86)
 	relay.Handle("whiteboard.comment_added", notify.OnChatMessage) // @mentions in board comments (S86), as in its conversation
 	relay.Handle("chat.message_posted", chat.OnRecordingPosted)    // transcripts (S77)
 	for _, name := range []string{"issue.created", "issue.transitioned", "sprint.started", "sprint.completed"} {

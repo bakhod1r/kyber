@@ -41,4 +41,3 @@ func Run(t *testing.T, s blob.Store) {
 		t.Fatalf("delete missing = %v (idempotent)", err)
 	}
 }
-

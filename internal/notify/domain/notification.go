@@ -31,6 +31,8 @@ const (
 	KindReminder Kind = "reminder"
 	// KindMessage: a message in a conversation someone follows (level "all", S71).
 	KindMessage Kind = "message"
+	// KindDoc: someone @mentioned you in a comment on a doc page of a project (S86; Project and IssueTitle set).
+	KindDoc Kind = "doc"
 )
 
 // Notification is one message to one recipient about one event. SourceEvent (the

@@ -1,5 +1,5 @@
 // notify: domain model (types and pure rules) — no I/O.
-export type NotificationKind = "assigned" | "commented" | "mentioned" | "transitioned" | "announcement" | "meeting" | "reminder" | "message";
+export type NotificationKind = "assigned" | "commented" | "mentioned" | "transitioned" | "announcement" | "meeting" | "reminder" | "message" | "doc";
 export type Notification = {
   id: string;
   kind: NotificationKind;
@@ -28,6 +28,7 @@ export type NotificationSettings = {
 export function notificationTarget(n: Pick<Notification, "kind" | "issue_key" | "project_key" | "conversation_id">): string {
   if (n.conversation_id) return `/chat/${encodeURIComponent(n.conversation_id)}`;
   if (n.kind === "meeting") return "/meetings";
+  if (n.kind === "doc") return `/projects/${encodeURIComponent(n.project_key ?? "")}/docs`;
   if (n.kind === "announcement") return n.project_key ? `/projects/${encodeURIComponent(n.project_key)}/announcements` : "/";
   const project = n.issue_key.slice(0, n.issue_key.lastIndexOf("-"));
   return `/projects/${encodeURIComponent(project)}?issue=${encodeURIComponent(n.issue_key)}`;
