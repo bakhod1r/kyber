@@ -41,5 +41,12 @@ built DDD + TDD (contract tests on memory and PostgreSQL, acceptance tests on ev
   **Done:** `chat/infrastructure/llm` (`KYBER_LLM_URL`, `_MODEL`, `_KEY`; input capped at 16000 characters); a
   "🧠 Summary" reply (message kind `summary`, migration 0074) after the transcript, once; a failed summary is retried
   without transcribing again. API 0.65.0.
+- ✅ **S88 MQTT for everything** (product request: "mqtt qo'sh hammasiga, sse o'rniga ham") — chat, calls
+  and whiteboards over MQTT instead of SSE. AC: MQTT carries every realtime event in the web app (no SSE);
+  a user receives only their own events; presence still works; `/api/v1/stream` stays for scripts.
+  **Done:** per-user topics `kyber/<ws>/users/<user>/events` on the embedded broker (own topic only, checked per
+  delivery); the realtime hub forwards to it on every replica; the web stream speaks MQTT (e2e: 0 SSE requests).
+  Board hints share the same connection: one MQTT WebSocket per tab (e2e: 122 → 92 connections).
+  ADR-0013 amended.
 
 Order: S82 → S83 (infrastructure first), then S84, S85, S86, S87.

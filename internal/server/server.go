@@ -555,6 +555,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	if err != nil {
 		panic(fmt.Sprintf("mqtt broker: %v", err)) // only fails on programming errors (duplicate hook or listener ids)
 	}
+	rt.Forward(hub) // S88: chat, calls and whiteboards also reach each user's MQTT topic
 	if d.mqttAddr != "" {
 		if err := hub.ListenTCP(d.mqttAddr); err != nil {
 			panic(fmt.Sprintf("mqtt listener %s: %v", d.mqttAddr, err))

@@ -37,3 +37,17 @@ WebSocket.
   and a new viewer triggers a `presence.changed` hint on the issue's project (project only, never the
   key, per the rule above). Presence is per replica: without sticky sessions a viewer is listed only
   by the replica that received their heartbeats; clients also poll every 20 s to notice people leaving.
+
+## Amendment (2026-10-14, S88): personal topics for chat, calls and whiteboards
+
+- **Topic.** `kyber/<workspace>/users/<user>/events`, payload `{"type", "data"}`: the same events the SSE
+  stream (`GET /api/v1/stream`, ADR-0009) carries. Unlike project hints these carry content (a chat message,
+  call signaling), so they go only to the people the event is addressed to.
+- **Authorization.** A client may subscribe with `+` for the workspace and/or the user; every delivery is a
+  concrete topic and must name the client's own workspace and user. Subscribing to another user's topic
+  by name is refused.
+- **Publishing.** The realtime hub hands every event to the broker as well (`Hub.Forward`); across replicas
+  the existing `NOTIFY kyber_realtime` feed reaches every node's hub, and each publishes into its own broker.
+- **Web app.** One MQTT connection per tab carries chat, calls, whiteboards and board hints; `onConnect` reloads after a reconnect
+  (QoS 0, no replay). `GET /api/v1/stream` stays for existing scripts; the web app no longer opens it.
+- **Presence** counts MQTT clients as well as SSE streams (on the replica that answers).
