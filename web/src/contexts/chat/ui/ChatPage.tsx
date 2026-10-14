@@ -6,6 +6,7 @@ import { projectUseCases } from "../../project/application";
 import {
   applyEvent, canManage, type ChannelWorkflow, type ChatEvent, localTime, utcMinute, type ConversationPrefs, type Level, moveSection, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, COMMAND_HELP, clipName, type ClipKind, type ClipRecorder, MAX_CLIP_MS, type Message, parseCommand, startClip, parseRemind, type SlashCommand, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
 } from "../application";
+import { msg, useT } from "../../../shared/i18n/i18n";
 
 const PAGE = 50;
 const TYPING_MS = 4000;
@@ -32,12 +33,13 @@ const Statuses = createContext<Map<string, UserStatus>>(new Map());
 
 /** A name with its status emoji (and 🌙 in Do Not Disturb). */
 function Who({ id, names }: { id: string; names: Map<string, string> }) {
+  const t = useT();
   const s = useContext(Statuses).get(id);
   return (
     <>
-      <b>{names.get(id) ?? "Someone"}</b>
+      <b>{names.get(id) ?? t("Someone")}</b>
       {s?.emoji && <span className="status-emoji" title={s.text}> {s.emoji}</span>}
-      {s?.dnd && <span title="Do not disturb" aria-label="Do not disturb"> 🌙</span>}
+      {s?.dnd && <span title={t("Do not disturb")} aria-label={t("Do not disturb")}> 🌙</span>}
     </>
   );
 }
@@ -57,6 +59,7 @@ export function ChatPage({ extras, activity, commands, issueMaker }: {
   extras?: ConversationSlot; /** Other contexts' activity (mentions), shown on the Activity view. */ activity?: ReactNode;
   commands?: CommandRunner; issueMaker?: IssueMaker;
 }) {
+  const t = useT();
   const { id } = useParams();
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: identityUseCases.me });
@@ -100,7 +103,7 @@ export function ChatPage({ extras, activity, commands, issueMaker }: {
   const people = [...new Set([...names.keys(), myId].filter(Boolean))].sort();
   const statuses = useQuery({ queryKey: ["chat", "statuses", people], queryFn: () => chatUseCases.statuses(people), refetchInterval: 60_000 });
   const statusMap = new Map((statuses.data ?? []).map((s) => [s.user_id, s]));
-  const typers = (typing[id ?? ""] ?? []).filter((x) => x.until > Date.now() && x.user !== myId).map((x) => names.get(x.user) ?? "Someone");
+  const typers = (typing[id ?? ""] ?? []).filter((x) => x.until > Date.now() && x.user !== myId).map((x) => names.get(x.user) ?? t("Someone"));
 
   return (
     <Commands.Provider value={commands}>
@@ -124,6 +127,7 @@ export function ChatPage({ extras, activity, commands, issueMaker }: {
 
 /** Set my status and Do Not Disturb (S66). */
 function MyStatus({ me }: { me: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const mine = useContext(Statuses).get(me);
   const [open, setOpen] = useState(false);
@@ -147,34 +151,34 @@ function MyStatus({ me }: { me: string }) {
   return (
     <div className="chat-status">
       <button className="ghost" onClick={() => { setOpen(!open); setEmoji(mine?.emoji ?? ""); setText(mine?.text ?? ""); }}>
-        {mine?.emoji || mine?.text ? `${mine.emoji} ${mine.text}` : "😀 Set a status"}{mine?.dnd ? " · 🌙 Do not disturb" : ""}
+        {mine?.emoji || mine?.text ? `${mine.emoji} ${mine.text}` : t("😀 Set a status")}{mine?.dnd ? t(" · 🌙 Do not disturb") : ""}
       </button>
       {open && (
-        <form onSubmit={save} aria-label="Status" className="chat-new">
+        <form onSubmit={save} aria-label={t("Status")} className="chat-new">
           <div className="row">
             {STATUS_PRESETS.map((p) => (
               <button type="button" key={p.text} className="ghost" title={p.text} onClick={() => { setEmoji(p.emoji); setText(p.text); }}>{p.emoji}</button>
             ))}
           </div>
-          <label>Emoji <input value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={8} style={{ width: "4em" }} /></label>
-          <label>Status <input value={text} onChange={(e) => setText(e.target.value)} maxLength={100} placeholder="What's your status?" /></label>
-          <label>Clear after{" "}
+          <label>{t("Emoji")} <input value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={8} style={{ width: "4em" }} /></label>
+          <label>{t("Status")} <input value={text} onChange={(e) => setText(e.target.value)} maxLength={100} placeholder={t("What's your status?")} /></label>
+          <label>{t("Clear after")}{" "}
             <select value={clear} onChange={(e) => setClear(Number(e.target.value))}>
               {clearAfter(new Date()).map((c, i) => <option key={c.label} value={i}>{c.label}</option>)}
             </select>
           </label>
-          <label>Do not disturb{" "}
+          <label>{t("Do not disturb")}{" "}
             <select value={dnd} onChange={(e) => setDnd(e.target.value)}>
-              <option value="">Off</option>
-              <option value="30">30 minutes</option>
-              <option value="60">1 hour</option>
-              <option value="240">4 hours</option>
-              <option value="720">12 hours</option>
+              <option value="">{t("Off")}</option>
+              <option value="30">{t("30 minutes")}</option>
+              <option value="60">{t("1 hour")}</option>
+              <option value="240">{t("4 hours")}</option>
+              <option value="720">{t("12 hours")}</option>
             </select>
           </label>
           <div className="row">
-            <button>Save</button>
-            <button type="button" className="ghost" onClick={() => set.mutate({ emoji: "", text: "", expires_at: null, dnd_until: null })}>Clear</button>
+            <button>{t("Save")}</button>
+            <button type="button" className="ghost" onClick={() => set.mutate({ emoji: "", text: "", expires_at: null, dnd_until: null })}>{t("Clear")}</button>
           </div>
           {set.error && <p role="alert" className="error">{set.error.message}</p>}
         </form>
@@ -185,6 +189,7 @@ function MyStatus({ me }: { me: string }) {
 
 /** S78: record a short video or voice message (at most five minutes) and post it. */
 function ClipButton({ onClip }: { onClip: (f: File) => void }) {
+  const t = useT();
   const [rec, setRec] = useState<{ kind: ClipKind; r: ClipRecorder; started: number } | null>(null);
   const [now, setNow] = useState(0);
   const [error, setError] = useState("");
@@ -210,25 +215,25 @@ function ClipButton({ onClip }: { onClip: (f: File) => void }) {
       setRec({ kind, r: await startClip(kind), started: Date.now() });
       setNow(Date.now());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No camera or microphone");
+      setError(e instanceof Error ? e.message : t("No camera or microphone"));
     }
   };
   if (rec) {
     const secs = Math.max(0, Math.floor((now - rec.started) / 1000));
     return (
-      <div className="chat-clip" role="group" aria-label="Recording a clip">
+      <div className="chat-clip" role="group" aria-label={t("Recording a clip")}>
         {rec.kind === "video" && <video ref={preview} autoPlay muted playsInline className="chat-clip-preview" />}
         <span className="huddle-recording">● {Math.floor(secs / 60)}:{String(secs % 60).padStart(2, "0")} / 5:00</span>
-        <button onClick={() => void stop()}>Stop and send</button>
+        <button onClick={() => void stop()}>{t("Stop and send")}</button>
       </div>
     );
   }
   return (
     <>
-      <select className="ghost" aria-label="Record a clip" value="" onChange={(e) => e.target.value && void start(e.target.value as ClipKind)}>
+      <select className="ghost" aria-label={t("Record a clip")} value="" onChange={(e) => e.target.value && void start(e.target.value as ClipKind)}>
         <option value="">🎬</option>
-        <option value="video">Video clip</option>
-        <option value="voice">Voice clip</option>
+        <option value="video">{t("Video clip")}</option>
+        <option value="voice">{t("Voice clip")}</option>
       </select>
       {error && <span role="alert" className="error"> {error}</span>}
     </>
@@ -237,6 +242,7 @@ function ClipButton({ onClip }: { onClip: (f: File) => void }) {
 
 /** S74: "Create issue" from a message; the new key is replied in its thread. */
 function IssueFromMessage({ m, onDone }: { m: Message; onDone: (m: Message) => void }) {
+  const t = useT();
   const maker = useContext(IssueMakerContext);
   const qc = useQueryClient();
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects, enabled: !!maker });
@@ -254,9 +260,9 @@ function IssueFromMessage({ m, onDone }: { m: Message; onDone: (m: Message) => v
   if (!maker || (projects.data?.length ?? 0) === 0) return null;
   return (
     <>
-      <select className="ghost" aria-label="Create issue from message" value="" onChange={(e) => e.target.value && make.mutate(e.target.value)}>
-        <option value="">📋 Issue…</option>
-        {projects.data!.map((p) => <option key={p.key} value={p.key}>Create in {p.key}</option>)}
+      <select className="ghost" aria-label={t("Create issue from message")} value="" onChange={(e) => e.target.value && make.mutate(e.target.value)}>
+        <option value="">{t("📋 Issue…")}</option>
+        {projects.data!.map((p) => <option key={p.key} value={p.key}>{t("Create in {key}", { key: p.key })}</option>)}
       </select>
       {make.error && <span role="alert" className="error"> {make.error.message}</span>}
     </>
@@ -265,14 +271,15 @@ function IssueFromMessage({ m, onDone }: { m: Message; onDone: (m: Message) => v
 
 /** Invite someone (or a bot) into the channel. */
 function InviteMember({ c, names, onDone }: { c: Conversation; names: Map<string, string>; onDone: () => void }) {
+  const t = useT();
   const invite = useMutation({ mutationFn: (u: string) => chatUseCases.invite(c.id, u), onSuccess: onDone });
   const others = [...names].filter(([u]) => !c.member_ids.includes(u));
   if (others.length === 0) return null;
   return (
     <label>
-      Invite{" "}
-      <select aria-label="Invite to channel" value="" onChange={(e) => e.target.value && invite.mutate(e.target.value)}>
-        <option value="">Someone…</option>
+      {t("Invite")}{" "}
+      <select aria-label={t("Invite to channel")} value="" onChange={(e) => e.target.value && invite.mutate(e.target.value)}>
+        <option value="">{t("Someone…")}</option>
         {others.map(([u, n]) => <option key={u} value={u}>{n}</option>)}
       </select>
       {invite.error && <span role="alert" className="error"> {invite.error.message}</span>}
@@ -282,6 +289,7 @@ function InviteMember({ c, names, onDone }: { c: Conversation; names: Map<string
 
 /** S84: bots — another system's user that posts through the API with its own token (shown once). */
 function Bots() {
+  const t = useT();
   const qc = useQueryClient();
   const list = useQuery({ queryKey: ["chat", "bots"], queryFn: chatUseCases.bots });
   const [name, setName] = useState("");
@@ -292,20 +300,20 @@ function Bots() {
   });
   return (
     <>
-      <h2>🤖 Bots</h2>
-      <ul aria-label="Bots">{(list.data ?? []).map((b) => <li key={b.user_id}>{b.name}</li>)}</ul>
+      <h2>{t("🤖 Bots")}</h2>
+      <ul aria-label={t("Bots")}>{(list.data ?? []).map((b) => <li key={b.user_id}>{b.name}</li>)}</ul>
       {shown && (
-        <div className="panel" role="status" aria-label="Bot token">
-          <p>Token for <b>{shown.name}</b> — copy it now, it is not shown again. Invite the bot to channels, then:</p>
-          <input readOnly value={shown.token} aria-label="Bot token value" style={{ width: "100%" }} onFocus={(e) => e.currentTarget.select()} />
+        <div className="panel" role="status" aria-label={t("Bot token")}>
+          <p>{t("Token for {name} — copy it now, it is not shown again. Invite the bot to channels, then:", { name: shown.name })}</p>
+          <input readOnly value={shown.token} aria-label={t("Bot token value")} style={{ width: "100%" }} onFocus={(e) => e.currentTarget.select()} />
           <pre className="muted">{`curl -X POST -H 'Authorization: Bearer ${shown.token}' -H 'Content-Type: application/json' \\
   -d '{"body":"Build passed"}' ${window.location.origin}/api/v1/conversations/<channel id>/messages`}</pre>
-          <button className="ghost" onClick={() => setShown(null)}>Done</button>
+          <button className="ghost" onClick={() => setShown(null)}>{t("Done")}</button>
         </div>
       )}
       <form className="row" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
-        <input aria-label="Bot name" placeholder="CI" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
-        <button disabled={!name.trim()}>Add bot</button>
+        <input aria-label={t("Bot name")} placeholder="CI" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
+        <button disabled={!name.trim()}>{t("Add bot")}</button>
       </form>
       {create.error && <p role="alert" className="error">{create.error.message}</p>}
     </>
@@ -314,6 +322,7 @@ function Bots() {
 
 /** S81: incoming webhooks — other systems (CI, monitoring) post here through a secret URL, shown once. */
 function Webhooks({ c }: { c: Conversation }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ["chat", "webhooks", c.id];
   const list = useQuery({ queryKey: key, queryFn: () => chatUseCases.webhooks(c.id) });
@@ -331,38 +340,39 @@ function Webhooks({ c }: { c: Conversation }) {
   });
   const remove = useMutation({ mutationFn: (id: string) => chatUseCases.removeWebhook(id), onSuccess: done });
   return (
-    <div role="group" aria-label="Webhooks">
-      <h3>🔌 Incoming webhooks</h3>
+    <div role="group" aria-label={t("Webhooks")}>
+      <h3>{t("🔌 Incoming webhooks")}</h3>
       <ul>
         {(list.data ?? []).map((h) => (
           <li key={h.id}>
             {h.name}{" "}
-            <button className="ghost" onClick={() => rotate.mutate(h)}>New URL</button>
-            <button className="ghost" onClick={() => remove.mutate(h.id)}>Remove</button>
+            <button className="ghost" onClick={() => rotate.mutate(h)}>{t("New URL")}</button>
+            <button className="ghost" onClick={() => remove.mutate(h.id)}>{t("Remove")}</button>
           </li>
         ))}
       </ul>
       {shown && (
-        <div className="panel" role="status" aria-label="Webhook URL">
-          <p>Copy the URL for <b>{shown.name}</b> now — it is not shown again:</p>
-          <input readOnly value={shown.url} aria-label="Webhook URL value" onFocus={(e) => e.currentTarget.select()} style={{ width: "100%" }} />
+        <div className="panel" role="status" aria-label={t("Webhook URL")}>
+          <p>{t("Copy the URL for {name} now — it is not shown again:", { name: shown.name })}</p>
+          <input readOnly value={shown.url} aria-label={t("Webhook URL value")} onFocus={(e) => e.currentTarget.select()} style={{ width: "100%" }} />
           <pre className="muted">{`curl -X POST -H 'Content-Type: application/json' -d '{"text":"Build passed"}' ${shown.url}`}</pre>
-          <button className="ghost" onClick={() => setShown(null)}>Done</button>
+          <button className="ghost" onClick={() => setShown(null)}>{t("Done")}</button>
         </div>
       )}
       <form className="row" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
-        <input aria-label="Webhook name" placeholder="CI" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
-        <button disabled={!name.trim()}>Add webhook</button>
+        <input aria-label={t("Webhook name")} placeholder="CI" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
+        <button disabled={!name.trim()}>{t("Add webhook")}</button>
       </form>
       {(create.error ?? rotate.error) && <p role="alert" className="error">{(create.error ?? rotate.error)!.message}</p>}
     </div>
   );
 }
 
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_NAMES = [msg("Sun"), msg("Mon"), msg("Tue"), msg("Wed"), msg("Thu"), msg("Fri"), msg("Sat")];
 
 /** S80: a welcome when someone joins, or a message on chosen days at a time. */
 function Workflows({ c }: { c: Conversation }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ["chat", "workflows", c.id];
   const list = useQuery({ queryKey: key, queryFn: () => chatUseCases.workflows(c.id) });
@@ -377,31 +387,31 @@ function Workflows({ c }: { c: Conversation }) {
   });
   const remove = useMutation({ mutationFn: (id: string) => chatUseCases.removeWorkflow(id), onSuccess: done });
   return (
-    <div aria-label="Workflows" role="group">
-      <h3>🤖 Workflows</h3>
+    <div aria-label={t("Workflows")} role="group">
+      <h3>{t("🤖 Workflows")}</h3>
       <ul>
         {(list.data ?? []).map((w) => (
           <li key={w.id}>
-            {w.trigger === "member_joined" ? "When someone joins" : `${w.days.map((d) => DAY_NAMES[d]).join(", ")} at ${localTime(w.minute)}`}: <i>{w.text}</i>{" "}
-            <button className="ghost" onClick={() => remove.mutate(w.id)}>Remove</button>
+            {w.trigger === "member_joined" ? t("When someone joins") : t("{days} at {time}", { days: w.days.map((d) => t(DAY_NAMES[d]!)).join(", "), time: localTime(w.minute) })}: <i>{w.text}</i>{" "}
+            <button className="ghost" onClick={() => remove.mutate(w.id)}>{t("Remove")}</button>
           </li>
         ))}
       </ul>
       <form className="row" onSubmit={(e) => { e.preventDefault(); add.mutate(); }}>
-        <select aria-label="Workflow trigger" value={trigger} onChange={(e) => setTrigger(e.target.value as ChannelWorkflow["trigger"])}>
-          <option value="member_joined">When someone joins</option>
-          <option value="schedule">On a schedule</option>
+        <select aria-label={t("Workflow trigger")} value={trigger} onChange={(e) => setTrigger(e.target.value as ChannelWorkflow["trigger"])}>
+          <option value="member_joined">{t("When someone joins")}</option>
+          <option value="schedule">{t("On a schedule")}</option>
         </select>
         {trigger === "schedule" && (
           <>
-            <input type="time" aria-label="At" value={at} onChange={(e) => setAt(e.target.value)} />
+            <input type="time" aria-label={t("At")} value={at} onChange={(e) => setAt(e.target.value)} />
             {DAY_NAMES.map((d, i) => (
-              <label key={d}><input type="checkbox" checked={days.includes(i)} onChange={(e) => setDays((x) => (e.target.checked ? [...x, i] : x.filter((y) => y !== i)))} />{d}</label>
+              <label key={d}><input type="checkbox" checked={days.includes(i)} onChange={(e) => setDays((x) => (e.target.checked ? [...x, i] : x.filter((y) => y !== i)))} />{t(d)}</label>
             ))}
           </>
         )}
-        <input aria-label="Workflow message" value={text} onChange={(e) => setText(e.target.value)} placeholder={trigger === "member_joined" ? "Welcome {name}!" : "Standup in 5 minutes"} />
-        <button disabled={!text.trim()}>Add workflow</button>
+        <input aria-label={t("Workflow message")} value={text} onChange={(e) => setText(e.target.value)} placeholder={trigger === "member_joined" ? t("Welcome {name}!") : t("Standup in 5 minutes")} />
+        <button disabled={!text.trim()}>{t("Add workflow")}</button>
       </form>
       {add.error && <p role="alert" className="error">{add.error.message}</p>}
     </div>
@@ -410,13 +420,14 @@ function Workflows({ c }: { c: Conversation }) {
 
 /** S73: post a project's news (issues created and moved, sprints) into the channel. */
 function ProjectLink({ c, onChange }: { c: Conversation; onChange: () => void }) {
+  const t = useT();
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
   const link = useMutation({ mutationFn: (key: string) => chatUseCases.linkProject(c.id, key), onSuccess: onChange });
   return (
     <label>
-      📋 Project news{" "}
-      <select aria-label="Project news" value={c.project_key ?? ""} disabled={c.archived} onChange={(e) => link.mutate(e.target.value)}>
-        <option value="">None</option>
+      {t("📋 Project news")}{" "}
+      <select aria-label={t("Project news")} value={c.project_key ?? ""} disabled={c.archived} onChange={(e) => link.mutate(e.target.value)}>
+        <option value="">{t("None")}</option>
         {(projects.data ?? []).map((p) => <option key={p.key} value={p.key}>{p.key} — {p.name}</option>)}
       </select>
       {link.error && <span role="alert" className="error"> {link.error.message}</span>}
@@ -442,6 +453,7 @@ function IssuePreviews({ m }: { m: Message }) {
 
 /** Owner and admins: rename, archive, admins and members (S69). Everyone else sees who runs the channel. */
 function ChannelSettings({ c, me, names }: { c: Conversation; me: string; names: Map<string, string> }) {
+  const t = useT();
   const qc = useQueryClient();
   const [name, setName] = useState(c.name);
   const [topic, setTopic] = useState(c.topic);
@@ -449,33 +461,33 @@ function ChannelSettings({ c, me, names }: { c: Conversation; me: string; names:
   const act = useMutation({ mutationFn: (f: () => Promise<Conversation>) => f(), onSuccess: done });
   const manager = canManage(c, me);
   const owner = c.owner_id === me;
-  const who = (u: string) => (u === me ? "You" : (names.get(u) ?? "Someone"));
+  const who = (u: string) => (u === me ? t("You") : (names.get(u) ?? t("Someone")));
   return (
-    <section className="chat-settings panel" aria-label="Channel settings">
+    <section className="chat-settings panel" aria-label={t("Channel settings")}>
       {manager && (
         <form className="row" onSubmit={(e) => { e.preventDefault(); act.mutate(() => chatUseCases.rename(c.id, name, topic)); }}>
-          <label>Name <input value={name} onChange={(e) => setName(e.target.value)} disabled={c.archived} /></label>
-          <label>Topic <input value={topic} onChange={(e) => setTopic(e.target.value)} disabled={c.archived} /></label>
-          <button disabled={c.archived}>Save</button>
+          <label>{t("Name")} <input value={name} onChange={(e) => setName(e.target.value)} disabled={c.archived} /></label>
+          <label>{t("Topic")} <input value={topic} onChange={(e) => setTopic(e.target.value)} disabled={c.archived} /></label>
+          <button disabled={c.archived}>{t("Save")}</button>
           {c.archived
-            ? <button type="button" className="ghost" onClick={() => act.mutate(() => chatUseCases.unarchive(c.id))}>Unarchive</button>
-            : <button type="button" className="danger" onClick={() => act.mutate(() => chatUseCases.archive(c.id))}>Archive channel</button>}
+            ? <button type="button" className="ghost" onClick={() => act.mutate(() => chatUseCases.unarchive(c.id))}>{t("Unarchive")}</button>
+            : <button type="button" className="danger" onClick={() => act.mutate(() => chatUseCases.archive(c.id))}>{t("Archive channel")}</button>}
         </form>
       )}
       {manager && <ProjectLink c={c} onChange={() => void done()} />}
       {manager && <Workflows c={c} />}
       {manager && <Webhooks c={c} />}
-      {!manager && c.project_key && <p className="muted">📋 Posts news of {c.project_key}</p>}
+      {!manager && c.project_key && <p className="muted">{t("📋 Posts news of {key}", { key: c.project_key })}</p>}
       {!c.archived && c.member && <InviteMember c={c} names={names} onDone={() => void done()} />}
-      <ul aria-label="Channel members">
+      <ul aria-label={t("Channel members")}>
         {c.member_ids.map((u) => (
           <li key={u}>
-            {who(u)} {u === c.owner_id ? <span className="muted">· owner</span> : (c.admin_ids ?? []).includes(u) ? <span className="muted">· admin</span> : null}
+            {who(u)} {u === c.owner_id ? <span className="muted">{t("· owner")}</span> : (c.admin_ids ?? []).includes(u) ? <span className="muted">{t("· admin")}</span> : null}
             {owner && u !== c.owner_id && ((c.admin_ids ?? []).includes(u)
-              ? <button className="ghost" onClick={() => act.mutate(() => chatUseCases.removeAdmin(c.id, u))}>Remove admin</button>
-              : <button className="ghost" onClick={() => act.mutate(() => chatUseCases.makeAdmin(c.id, u))}>Make admin</button>)}
+              ? <button className="ghost" onClick={() => act.mutate(() => chatUseCases.removeAdmin(c.id, u))}>{t("Remove admin")}</button>
+              : <button className="ghost" onClick={() => act.mutate(() => chatUseCases.makeAdmin(c.id, u))}>{t("Make admin")}</button>)}
             {manager && !c.archived && u !== c.owner_id && u !== me && (
-              <button className="ghost" onClick={() => act.mutate(() => chatUseCases.removeMember(c.id, u))}>Remove</button>
+              <button className="ghost" onClick={() => act.mutate(() => chatUseCases.removeMember(c.id, u))}>{t("Remove")}</button>
             )}
           </li>
         ))}
@@ -487,6 +499,7 @@ function ChannelSettings({ c, me, names }: { c: Conversation; me: string; names:
 
 /** User groups of the workspace (S70): make one, change its people, delete your own. */
 function Groups({ names, me }: { names: Map<string, string>; me: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const groups = useQuery({ queryKey: ["chat", "groups"], queryFn: chatUseCases.groups });
   const [editing, setEditing] = useState<UserGroup | "new" | null>(null);
@@ -511,26 +524,26 @@ function Groups({ names, me }: { names: Map<string, string>; me: string }) {
     setName(g === "new" ? "" : g.name);
     setPeople(g === "new" ? [] : g.member_ids);
   };
-  const who = (u: string) => (u === me ? "You" : (names.get(u) ?? "Someone"));
+  const who = (u: string) => (u === me ? t("You") : (names.get(u) ?? t("Someone")));
   return (
     <>
-      <h2>User groups</h2>
-      <ul aria-label="User groups">
+      <h2>{t("User groups")}</h2>
+      <ul aria-label={t("User groups")}>
         {(groups.data ?? []).map((g) => (
           <li key={g.id}>
-            <b>@{g.handle}</b> {g.name && <span className="muted">{g.name}</span>} · {g.member_ids.map(who).join(", ") || "nobody yet"}{" "}
-            <button className="ghost" onClick={() => open(g)}>Edit</button>
-            {g.created_by === me && <button className="ghost" onClick={() => remove.mutate(g.id)}>Delete</button>}
+            <b>@{g.handle}</b> {g.name && <span className="muted">{g.name}</span>} · {g.member_ids.map(who).join(", ") || t("nobody yet")}{" "}
+            <button className="ghost" onClick={() => open(g)}>{t("Edit")}</button>
+            {g.created_by === me && <button className="ghost" onClick={() => remove.mutate(g.id)}>{t("Delete")}</button>}
           </li>
         ))}
       </ul>
-      <button className="ghost" onClick={() => open("new")}>New group</button>
+      <button className="ghost" onClick={() => open("new")}>{t("New group")}</button>
       {editing && (
-        <form className="chat-new" aria-label="Group" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
-          <label>Handle @<input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="backend" required /></label>
-          <label>Name <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Backend team" /></label>
+        <form className="chat-new" aria-label={t("Group")} onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
+          <label>{t("Handle")} @<input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="backend" required /></label>
+          <label>{t("Name")} <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Backend team")} /></label>
           <fieldset>
-            <legend>People</legend>
+            <legend>{t("People")}</legend>
             {[...new Set([me, ...names.keys()])].filter(Boolean).map((u) => (
               <label key={u}>
                 <input type="checkbox" checked={people.includes(u)}
@@ -538,7 +551,7 @@ function Groups({ names, me }: { names: Map<string, string>; me: string }) {
               </label>
             ))}
           </fieldset>
-          <button>Save group</button> <button type="button" className="ghost" onClick={() => setEditing(null)}>Cancel</button>
+          <button>{t("Save group")}</button> <button type="button" className="ghost" onClick={() => setEditing(null)}>{t("Cancel")}</button>
           {save.error && <p role="alert" className="error">{save.error.message}</p>}
         </form>
       )}
@@ -551,6 +564,7 @@ const scheduledKey = ["chat", "scheduled"];
 
 /** My scheduled messages, soonest first, with Cancel (S67). */
 function ScheduledList({ title }: { title: (conversationId: string) => string }) {
+  const t = useT();
   const qc = useQueryClient();
   const list = useQuery({ queryKey: scheduledKey, queryFn: chatUseCases.scheduled, refetchInterval: 30_000 });
   const cancel = useMutation({ mutationFn: (id: string) => chatUseCases.cancelScheduled(id), onSuccess: () => qc.invalidateQueries({ queryKey: scheduledKey }) });
@@ -558,14 +572,14 @@ function ScheduledList({ title }: { title: (conversationId: string) => string })
   if (items.length === 0) return null;
   return (
     <>
-      <h2>Scheduled</h2>
-      <ul aria-label="Scheduled messages">
+      <h2>{t("Scheduled")}</h2>
+      <ul aria-label={t("Scheduled messages")}>
         {items.map((x) => (
           <li key={x.id}>
-            <Link to={`/chat/${x.conversation_id}`}>{title(x.conversation_id) || "Conversation"}</Link>{" "}
+            <Link to={`/chat/${x.conversation_id}`}>{title(x.conversation_id) || t("Conversation")}</Link>{" "}
             <span className="muted">🕒 {new Date(x.send_at).toLocaleString()}</span>
             <p>{x.body}</p>
-            <button className="ghost" onClick={() => cancel.mutate(x.id)}>Cancel</button>
+            <button className="ghost" onClick={() => cancel.mutate(x.id)}>{t("Cancel")}</button>
           </li>
         ))}
       </ul>
@@ -575,43 +589,45 @@ function ScheduledList({ title }: { title: (conversationId: string) => string })
 
 /** S65: save a message for later, optionally with a reminder; saved ones can be forgotten again. */
 function SaveMenu({ m }: { m: Message }) {
+  const t = useT();
   const qc = useQueryClient();
   const saved = useQuery({ queryKey: savedKey, queryFn: chatUseCases.saved });
   const mine = saved.data?.find((x) => x.message.id === m.id);
   const done = () => qc.invalidateQueries({ queryKey: savedKey });
   const save = useMutation({ mutationFn: (at: Date | null) => chatUseCases.save(m.id, at), onSuccess: done });
   const unsave = useMutation({ mutationFn: () => chatUseCases.unsave(m.id), onSuccess: done });
-  if (mine) return <button className="ghost" aria-pressed onClick={() => unsave.mutate()} title="Saved — click to remove">🔖 Saved</button>;
+  if (mine) return <button className="ghost" aria-pressed onClick={() => unsave.mutate()} title={t("Saved — click to remove")}>{t("🔖 Saved")}</button>;
   const presets = remindPresets(new Date());
   return (
-    <select className="ghost chat-save" aria-label="Save for later" value="" onChange={(e) => {
+    <select className="ghost chat-save" aria-label={t("Save for later")} value="" onChange={(e) => {
       const v = e.target.value;
       if (v) save.mutate(v === "none" ? null : presets[Number(v)]!.at);
     }}>
-      <option value="">🔖 Save</option>
-      <option value="none">Save for later</option>
-      {presets.map((p, i) => <option key={p.label} value={i}>Remind me: {p.label.toLowerCase()}</option>)}
+      <option value="">{t("🔖 Save")}</option>
+      <option value="none">{t("Save for later")}</option>
+      {presets.map((p, i) => <option key={p.label} value={i}>{t("Remind me: {when}", { when: p.label.toLowerCase() })}</option>)}
     </select>
   );
 }
 
 /** My saved messages, most recently saved first (S65). */
 function SavedList({ title }: { title: (conversationId: string) => string }) {
+  const t = useT();
   const qc = useQueryClient();
   const saved = useQuery({ queryKey: savedKey, queryFn: chatUseCases.saved });
   const unsave = useMutation({ mutationFn: (id: string) => chatUseCases.unsave(id), onSuccess: () => qc.invalidateQueries({ queryKey: savedKey }) });
   const items: SavedItem[] = saved.data ?? [];
   return (
     <>
-      <h2>Saved for later</h2>
-      {items.length === 0 ? <p className="muted">Nothing saved. Use 🔖 on a message.</p> : (
-        <ul aria-label="Saved messages">
+      <h2>{t("Saved for later")}</h2>
+      {items.length === 0 ? <p className="muted">{t("Nothing saved. Use 🔖 on a message.")}</p> : (
+        <ul aria-label={t("Saved messages")}>
           {items.map((x) => (
             <li key={x.message.id}>
-              <Link to={`/chat/${x.message.conversation_id}`}>{title(x.message.conversation_id) || "Conversation"}</Link>{" "}
-              {x.remind_at && <span className="muted">{x.reminded ? "⏰ reminded" : `⏰ ${new Date(x.remind_at).toLocaleString()}`}</span>}
-              <p>{x.message.deleted ? <i className="muted">deleted</i> : x.message.body}</p>
-              <button className="ghost" onClick={() => unsave.mutate(x.message.id)}>Remove</button>
+              <Link to={`/chat/${x.message.conversation_id}`}>{title(x.message.conversation_id) || t("Conversation")}</Link>{" "}
+              {x.remind_at && <span className="muted">{x.reminded ? t("⏰ reminded") : `⏰ ${new Date(x.remind_at).toLocaleString()}`}</span>}
+              <p>{x.message.deleted ? <i className="muted">{t("deleted")}</i> : x.message.body}</p>
+              <button className="ghost" onClick={() => unsave.mutate(x.message.id)}>{t("Remove")}</button>
             </li>
           ))}
         </ul>
@@ -624,22 +640,23 @@ function SavedList({ title }: { title: (conversationId: string) => string }) {
 function Activity({ conversations, title, activity, names, me }: {
   conversations: Conversation[]; title: (c: Conversation) => string; activity?: ReactNode; names: Map<string, string>; me: string;
 }) {
+  const t = useT();
   const unread = conversations.filter((c) => c.member && c.unread > 0);
   const titleOf = (id: string) => {
     const c = conversations.find((x) => x.id === id);
     return c ? title(c) : "";
   };
   return (
-    <section className="chat-activity" aria-label="Activity">
-      <h1>Activity</h1>
+    <section className="chat-activity" aria-label={t("Activity")}>
+      <h1>{t("Activity")}</h1>
       {activity}
       <ScheduledList title={titleOf} />
       <SavedList title={titleOf} />
-      <h2>Unread</h2>
-      {unread.length === 0 ? <p className="muted">You are all caught up.</p> : (
-        <ul aria-label="Unread conversations">
+      <h2>{t("Unread")}</h2>
+      {unread.length === 0 ? <p className="muted">{t("You are all caught up.")}</p> : (
+        <ul aria-label={t("Unread conversations")}>
           {unread.map((c) => (
-            <li key={c.id}><Link to={`/chat/${c.id}`}>{title(c)}</Link> <span className="badge" aria-label={`${c.unread} unread`}>{c.unread}</span></li>
+            <li key={c.id}><Link to={`/chat/${c.id}`}>{title(c)}</Link> <span className="badge" aria-label={t("{n} unread", { n: c.unread })}>{c.unread}</span></li>
           ))}
         </ul>
       )}
@@ -652,6 +669,7 @@ function Activity({ conversations, title, activity, names, me }: {
 function Sidebar({ conversations, current, title, names, me }: {
   conversations: Conversation[]; current?: string; title: (c: Conversation) => string; names: Map<string, string>; me: string;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [form, setForm] = useState<"channel" | "dm" | null>(null);
@@ -701,28 +719,28 @@ function Sidebar({ conversations, current, title, names, me }: {
         <Link to={`/chat/${c.id}`} className={`${c.id === current ? "active" : ""} ${c.unread > 0 && !muted ? "unread" : ""}`} aria-current={c.id === current ? "page" : undefined}>
           {title(c)}
           {peer(c)?.emoji && <span title={peer(c)?.text}> {peer(c)?.emoji}</span>}
-          {peer(c)?.dnd && <span aria-label="Do not disturb"> 🌙</span>}
-          {muted && <span aria-label="Muted"> 🔕</span>}
-          {p.level === "all" && <span aria-label="All messages"> 🔔</span>}
-          {c.unread > 0 && !muted && <span className="badge" aria-label={`${c.unread} unread`}>{c.unread}</span>}
+          {peer(c)?.dnd && <span aria-label={t("Do not disturb")}> 🌙</span>}
+          {muted && <span aria-label={t("Muted")}> 🔕</span>}
+          {p.level === "all" && <span aria-label={t("All messages")}> 🔔</span>}
+          {c.unread > 0 && !muted && <span className="badge" aria-label={t("{n} unread", { n: c.unread })}>{c.unread}</span>}
         </Link>
-        <select className="ghost conv-options" aria-label={`Options for ${title(c)}`} value="" onChange={(e) => {
+        <select className="ghost conv-options" aria-label={t("Options for {name}", { name: title(c) })} value="" onChange={(e) => {
           const v = e.target.value;
           if (v.startsWith("level:")) setPref.mutate({ id: c.id, level: v.slice(6) as Level, section: p.section });
           else if (v === "section:new") { setNaming(c.id); setSectionName(""); }
           else if (v.startsWith("section:")) setPref.mutate({ id: c.id, level: p.level, section: v.slice(8) });
         }}>
           <option value="">⋯</option>
-          <option value="level:all">🔔 Every message</option>
-          <option value="level:mentions">@ Mentions only</option>
-          <option value="level:muted">🔕 Mute</option>
-          {known.filter((k) => k !== p.section).map((k) => <option key={k} value={`section:${k}`}>Move to {k}</option>)}
-          {p.section && <option value="section:">Move back</option>}
-          <option value="section:new">New section…</option>
+          <option value="level:all">{t("🔔 Every message")}</option>
+          <option value="level:mentions">{t("@ Mentions only")}</option>
+          <option value="level:muted">{t("🔕 Mute")}</option>
+          {known.filter((k) => k !== p.section).map((k) => <option key={k} value={`section:${k}`}>{t("Move to {section}", { section: k })}</option>)}
+          {p.section && <option value="section:">{t("Move back")}</option>}
+          <option value="section:new">{t("New section…")}</option>
         </select>
         {naming === c.id && (
           <form onSubmit={(e) => { e.preventDefault(); setPref.mutate({ id: c.id, level: p.level, section: sectionName }); setNaming(null); }}>
-            <input aria-label="Section name" value={sectionName} onChange={(e) => setSectionName(e.target.value)} maxLength={40} autoFocus />
+            <input aria-label={t("Section name")} value={sectionName} onChange={(e) => setSectionName(e.target.value)} maxLength={40} autoFocus />
           </form>
         )}
       </li>
@@ -737,24 +755,24 @@ function Sidebar({ conversations, current, title, names, me }: {
     return c ? title(c) : "";
   };
   return (
-    <nav aria-label="Conversations" className="chat-sidebar panel">
+    <nav aria-label={t("Conversations")} className="chat-sidebar panel">
       <MyStatus me={me} />
       <form role="search" onSubmit={(e) => { e.preventDefault(); setQuery(q.trim()); }}>
-        <input type="search" aria-label="Search messages" placeholder="Search messages" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input type="search" aria-label={t("Search messages")} placeholder={t("Search messages")} value={q} onChange={(e) => setQ(e.target.value)} />
       </form>
       {query.length >= 2 && (
-        <ul className="chat-results" aria-label="Search results">
-          {results.data?.length === 0 && <li className="muted">No messages found.</li>}
+        <ul className="chat-results" aria-label={t("Search results")}>
+          {results.data?.length === 0 && <li className="muted">{t("No messages found.")}</li>}
           {results.data?.map((m) => (
             <li key={m.id}>
               <Link to={`/chat/${m.conversation_id}`} onClick={() => setQuery("")}>
-                <span className="muted">{titleOf(m.conversation_id)} · {names.get(m.author_id) ?? "Someone"}</span><br />{m.body}
+                <span className="muted">{titleOf(m.conversation_id)} · {names.get(m.author_id) ?? t("Someone")}</span><br />{m.body}
               </Link>
             </li>
           ))}
         </ul>
       )}
-      <Link to="/chat" className={`chat-activity-link ${current ? "" : "active"}`} aria-current={current ? undefined : "page"}>🔔 Activity</Link>
+      <Link to="/chat" className={`chat-activity-link ${current ? "" : "active"}`} aria-current={current ? undefined : "page"}>{t("🔔 Activity")}</Link>
       {sections(conversations, prefs.data ?? [], order.data ?? []).map((sec, i, all) => (
         <section key={sec.title} aria-label={sec.title}
           onDragOver={(e) => { if (dragging && known.includes(sec.title)) e.preventDefault(); }}
@@ -763,28 +781,28 @@ function Sidebar({ conversations, current, title, names, me }: {
             className={known.includes(sec.title) ? "draggable-section" : ""}>
             {sec.title}
             {known.includes(sec.title) && i > 0 && known.includes(all[i - 1]!.title) && (
-              <button className="ghost" aria-label={`Move ${sec.title} up`} onClick={() => reorder(sec.title, all[i - 1]!.title)}>↑</button>
+              <button className="ghost" aria-label={t("Move {section} up", { section: sec.title })} onClick={() => reorder(sec.title, all[i - 1]!.title)}>↑</button>
             )}
           </h2>
           <ul>{sec.items.map(item)}</ul>
         </section>
       ))}
       <div className="row">
-        <button className="ghost" onClick={() => setForm(form === "channel" ? null : "channel")}>New channel</button>
-        <button className="ghost" onClick={() => setForm(form === "dm" ? null : "dm")}>New message</button>
+        <button className="ghost" onClick={() => setForm(form === "channel" ? null : "channel")}>{t("New channel")}</button>
+        <button className="ghost" onClick={() => setForm(form === "dm" ? null : "dm")}>{t("New message")}</button>
       </div>
       {form && (
         <form onSubmit={submit} className="chat-new">
           {form === "channel" ? (
             <>
-              <label>Channel name <input value={name} onChange={(e) => setName(e.target.value)} placeholder="design" required /></label>
-              <label><input type="checkbox" checked={priv} onChange={(e) => setPriv(e.target.checked)} /> Private</label>
-              <button>Create</button>
+              <label>{t("Channel name")} <input value={name} onChange={(e) => setName(e.target.value)} placeholder="design" required /></label>
+              <label><input type="checkbox" checked={priv} onChange={(e) => setPriv(e.target.checked)} /> {t("Private")}</label>
+              <button>{t("Create")}</button>
             </>
           ) : (
             <>
               <fieldset>
-                <legend>People</legend>
+                <legend>{t("People")}</legend>
                 {[...names].filter(([uid]) => uid !== me).map(([uid, n]) => (
                   <label key={uid}>
                     <input type="checkbox" checked={picked.includes(uid)}
@@ -792,7 +810,7 @@ function Sidebar({ conversations, current, title, names, me }: {
                   </label>
                 ))}
               </fieldset>
-              <button disabled={picked.length === 0}>Open</button>
+              <button disabled={picked.length === 0}>{t("Open")}</button>
             </>
           )}
           {error && <p role="alert" className="error">{error.message}</p>}
@@ -806,6 +824,7 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
   id: string; conversation?: Conversation; title: string; names: Map<string, string>; me: string; typers: string[];
   onThread: (id: string) => void; extras?: ReactNode;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   const history = useQuery({ queryKey: historyKey(id), queryFn: () => chatUseCases.history(id) });
   const [showPins, setShowPins] = useState(false);
@@ -825,13 +844,13 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
   const later = useMutation({
     mutationFn: ({ body, at }: { body: string; at: Date }) => chatUseCases.schedule(id, body, at),
     onSuccess: (sc) => {
-      setNote(`🕒 Scheduled for ${new Date(sc.send_at).toLocaleString()}.`);
+      setNote(t("🕒 Scheduled for {time}.", { time: new Date(sc.send_at).toLocaleString() }));
       void qc.invalidateQueries({ queryKey: scheduledKey });
     },
   });
   const remind = useMutation({
     mutationFn: ({ text, at }: { text: string; at: Date }) => chatUseCases.remind(id, text, at),
-    onSuccess: (r) => setNote(`⏰ I'll remind you at ${new Date(r.at).toLocaleString()}: ${r.text}`),
+    onSuccess: (r) => setNote(t("⏰ I'll remind you at {time}: {text}", { time: new Date(r.at).toLocaleString(), text: r.text })),
   });
   const commands = useContext(Commands);
   const command = useMutation({ mutationFn: (c: SlashCommand) => commands!(c), onSuccess: setNote, onError: (e) => setNote(`⚠️ ${e.message}`) });
@@ -847,14 +866,14 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
     if (/^\/remind\b/i.test(body)) {
       const r = parseRemind(body, new Date());
       if (r) remind.mutate(r);
-      else setNote("Try: /remind me in 20 minutes to …, /remind me tomorrow …, /remind me at 15:30 …");
+      else setNote(t("Try: /remind me in 20 minutes to …, /remind me tomorrow …, /remind me at 15:30 …"));
       return;
     }
     post.mutate(body);
   };
   const upload = useMutation({
     mutationFn: (f: File) => {
-      if (f.size > MAX_FILE) throw new Error(`${f.name} is larger than 25 MB`);
+      if (f.size > MAX_FILE) throw new Error(t("{name} is larger than 25 MB", { name: f.name }));
       return chatUseCases.upload(id, f, f.name);
     },
     onSuccess: (m) => qc.setQueryData<Message[]>(historyKey(id), (list) => applyEvent(list ?? [], id, { type: "message.posted", message: m })),
@@ -879,52 +898,52 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
       <header className="chat-header">
         <h1>{title}</h1>
         {conversation?.topic && <p className="muted">{conversation.topic}</p>}
-        <button className="ghost" aria-expanded={showPins} onClick={() => setShowPins((v) => !v)}>📌 Pinned</button>
+        <button className="ghost" aria-expanded={showPins} onClick={() => setShowPins((v) => !v)}>{t("📌 Pinned")}</button>
         {conversation?.kind === "channel" && (
-          <button className="ghost" aria-expanded={showSettings} onClick={() => setShowSettings((v) => !v)}>⚙ Settings</button>
+          <button className="ghost" aria-expanded={showSettings} onClick={() => setShowSettings((v) => !v)}>{t("⚙ Settings")}</button>
         )}
       </header>
-      {conversation?.archived && <p className="chat-archived" role="status">🗄 This channel is archived — read-only.</p>}
+      {conversation?.archived && <p className="chat-archived" role="status">{t("🗄 This channel is archived — read-only.")}</p>}
       {showSettings && conversation && <ChannelSettings c={conversation} me={me} names={names} />}
       {showPins && (
-        <ul className="chat-pins panel" aria-label="Pinned messages">
-          {pins.data?.length === 0 && <li className="muted">Nothing pinned yet.</li>}
-          {pins.data?.map((p) => <li key={p.id}><b>{names.get(p.author_id) ?? "Someone"}</b>: {p.body}</li>)}
+        <ul className="chat-pins panel" aria-label={t("Pinned messages")}>
+          {pins.data?.length === 0 && <li className="muted">{t("Nothing pinned yet.")}</li>}
+          {pins.data?.map((p) => <li key={p.id}><b>{names.get(p.author_id) ?? t("Someone")}</b>: {p.body}</li>)}
         </ul>
       )}
       {extras}
-      <div role="log" aria-label="Messages" className="chat-log">
-        {(history.data?.length ?? 0) >= PAGE && !exhausted && <button className="ghost" onClick={() => void loadOlder()}>Load older</button>}
-        {history.data?.length === 0 && <p className="muted">No messages yet. Say hello!</p>}
+      <div role="log" aria-label={t("Messages")} className="chat-log">
+        {(history.data?.length ?? 0) >= PAGE && !exhausted && <button className="ghost" onClick={() => void loadOlder()}>{t("Load older")}</button>}
+        {history.data?.length === 0 && <p className="muted">{t("No messages yet. Say hello!")}</p>}
         {messages.map((m) => (
           <div key={m.id}>
             <MessageItem m={m} names={names} me={me} canAct={member} onChange={replace} onThread={() => onThread(m.id)} />
-            {m.id === seenId && <p className="chat-seen muted" aria-label="Seen">✓ Seen</p>}
+            {m.id === seenId && <p className="chat-seen muted" aria-label={t("Seen")}>{t("✓ Seen")}</p>}
           </div>
         ))}
       </div>
-      <p className="chat-typing muted" aria-live="polite">{typers.length > 0 ? `${typers.join(", ")} ${typers.length === 1 ? "is" : "are"} typing…` : " "}</p>
+      <p className="chat-typing muted" aria-live="polite">{typers.length > 0 ? t(typers.length === 1 ? "{names} is typing…" : "{names} are typing…", { names: typers.join(", ") }) : " "}</p>
       {conversation?.archived ? null : member ? (
         <div className="chat-compose-row">
-          <label className="ghost chat-attach" title="Attach a file (25 MB at most)">
+          <label className="ghost chat-attach" title={t("Attach a file (25 MB at most)")}>
             📎
-            <input type="file" hidden aria-label="Attach a file" onChange={(e) => {
+            <input type="file" hidden aria-label={t("Attach a file")} onChange={(e) => {
               const f = e.target.files?.[0];
               e.target.value = "";
               if (f) upload.mutate(f);
             }} />
           </label>
           <ClipButton onClip={(f) => upload.mutate(f)} />
-          <Composer label={`Message ${title}`} onSend={send} onSchedule={(body, at) => later.mutate({ body, at })}
+          <Composer label={t("Message {name}", { name: title })} onSend={send} onSchedule={(body, at) => later.mutate({ body, at })}
             onTyping={() => void chatUseCases.typing(id).catch(() => {})} />
         </div>
       ) : (
-        <button onClick={() => join.mutate()}>Join {title}</button>
+        <button onClick={() => join.mutate()}>{t("Join {name}", { name: title })}</button>
       )}
       {post.error && <p role="alert" className="error">{post.error.message}</p>}
       {(later.error ?? remind.error) && <p role="alert" className="error">{(later.error ?? remind.error)!.message}</p>}
       {note && <p role="status" className="muted">{note}</p>}
-      {upload.isPending && <p className="muted">Uploading…</p>}
+      {upload.isPending && <p className="muted">{t("Uploading…")}</p>}
       {upload.error && <p role="alert" className="error">{upload.error.message}</p>}
     </section>
   );
@@ -933,6 +952,7 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
 function MessageItem({ m, names, me, canAct, onChange, onThread }: {
   m: Message; names: Map<string, string>; me: string; canAct: boolean; onChange: (m: Message) => void; onThread?: () => void;
 }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const react = useMutation({ mutationFn: (emoji: string) => chatUseCases.react(m.id, emoji), onSuccess: onChange });
   const edit = useMutation({
@@ -947,28 +967,28 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
   const mine = m.author_id === me && !m.kind;
   if (m.kind === "webhook") {
     return (
-      <article className="chat-message chat-system" aria-label={`Webhook at ${time(m.created_at)}`}>
+      <article className="chat-message chat-system" aria-label={t("Webhook at {time}", { time: time(m.created_at) })}>
         <p className="chat-body">🔌 {m.body} <time className="muted" dateTime={m.created_at}>{time(m.created_at)}</time></p>
       </article>
     );
   }
   if (m.kind === "workflow") {
     return (
-      <article className="chat-message chat-system" aria-label={`Workflow at ${time(m.created_at)}`}>
+      <article className="chat-message chat-system" aria-label={t("Workflow at {time}", { time: time(m.created_at) })}>
         <p className="chat-body">🤖 {m.body} <time className="muted" dateTime={m.created_at}>{time(m.created_at)}</time></p>
       </article>
     );
   }
   if (m.kind === "transcript" || m.kind === "summary") {
     return (
-      <article className="chat-message chat-system" aria-label={`${m.kind === "summary" ? "Summary" : "Transcript"} at ${time(m.created_at)}`}>
+      <article className="chat-message chat-system" aria-label={t(m.kind === "summary" ? "Summary at {time}" : "Transcript at {time}", { time: time(m.created_at) })}>
         <p className="chat-body chat-transcript">{m.body}</p>
       </article>
     );
   }
   if (m.kind === "project_event") {
     return (
-      <article className="chat-message chat-system" aria-label={`Project news at ${time(m.created_at)}`}>
+      <article className="chat-message chat-system" aria-label={t("Project news at {time}", { time: time(m.created_at) })}>
         <p className="muted">📋 <Who id={m.author_id} names={names} /> {m.body} <time dateTime={m.created_at}>{time(m.created_at)}</time></p>
         <IssuePreviews m={m} />
       </article>
@@ -976,9 +996,9 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
   }
   if (m.kind) {
     return (
-      <article className="chat-message chat-system" aria-label={`Huddle at ${time(m.created_at)}`}>
+      <article className="chat-message chat-system" aria-label={t("Huddle at {time}", { time: time(m.created_at) })}>
         <p className="muted">
-          🎧 {m.kind === "huddle_recording" ? <><Who id={m.author_id} names={names} /> recorded the huddle</>
+          🎧 {m.kind === "huddle_recording" ? <><Who id={m.author_id} names={names} /> {t("recorded the huddle")}</>
             : m.kind === "huddle_started" ? <><Who id={m.author_id} names={names} /> {m.body}</> : m.body}{" "}
           <time dateTime={m.created_at}>{time(m.created_at)}</time>
         </p>
@@ -987,16 +1007,16 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
     );
   }
   return (
-    <article className="chat-message" aria-label={`${names.get(m.author_id) ?? "Someone"} at ${time(m.created_at)}`}>
+    <article className="chat-message" aria-label={t("{name} at {time}", { name: names.get(m.author_id) ?? t("Someone"), time: time(m.created_at) })}>
       <header>
         <Who id={m.author_id} names={names} /> <time className="muted" dateTime={m.created_at}>{time(m.created_at)}</time>
-        {m.edited_at && !m.deleted && <span className="muted"> (edited)</span>}
-        {m.pinned_by && <span className="muted" aria-label="pinned"> 📌</span>}
+        {m.edited_at && !m.deleted && <span className="muted">{t(" (edited)")}</span>}
+        {m.pinned_by && <span className="muted" aria-label={t("pinned")}> 📌</span>}
       </header>
       {m.deleted ? (
-        <p className="muted"><i>This message was deleted.</i></p>
+        <p className="muted"><i>{t("This message was deleted.")}</i></p>
       ) : editing ? (
-        <Composer label="Edit message" initial={m.body} onSend={(b) => edit.mutate(b)} onCancel={() => setEditing(false)} />
+        <Composer label={t("Edit message")} initial={m.body} onSend={(b) => edit.mutate(b)} onCancel={() => setEditing(false)} />
       ) : (
         <p className="chat-body">
           {splitMentions(m.body).map((s, i) => (s.kind === "text" ? <span key={i}>{s.text}</span> : <span key={i} className={`chat-${s.kind}`}>{s.text}</span>))}
@@ -1013,18 +1033,18 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
             </button>
           ))}
           {canAct && QUICK.filter((q) => !m.reactions.some((r) => r.emoji === q)).map((q) => (
-            <button key={q} className="ghost quick" aria-label={`React ${q}`} onClick={() => react.mutate(q)}>{q}</button>
+            <button key={q} className="ghost quick" aria-label={t("React {emoji}", { emoji: q })} onClick={() => react.mutate(q)}>{q}</button>
           ))}
           {onThread && (
             <button className="ghost" onClick={onThread}>
-              {m.reply_count > 0 ? `${m.reply_count} ${m.reply_count === 1 ? "reply" : "replies"}` : "Reply in thread"}
+              {m.reply_count > 0 ? t(m.reply_count === 1 ? "{n} reply" : "{n} replies", { n: m.reply_count }) : t("Reply in thread")}
             </button>
           )}
-          {canAct && <button className="ghost" onClick={() => pin.mutate()}>{m.pinned_by ? "Unpin" : "Pin"}</button>}
+          {canAct && <button className="ghost" onClick={() => pin.mutate()}>{m.pinned_by ? t("Unpin") : t("Pin")}</button>}
           <SaveMenu m={m} />
           {canAct && !m.thread_id && <IssueFromMessage m={m} onDone={onChange} />}
-          {mine && canAct && <button className="ghost" onClick={() => setEditing(true)}>Edit</button>}
-          {mine && canAct && <button className="ghost" onClick={() => remove.mutate()}>Delete</button>}
+          {mine && canAct && <button className="ghost" onClick={() => setEditing(true)}>{t("Edit")}</button>}
+          {mine && canAct && <button className="ghost" onClick={() => remove.mutate()}>{t("Delete")}</button>}
         </div>
       )}
     </article>
@@ -1042,6 +1062,7 @@ function Attachment({ file }: { file: NonNullable<Message["file"]> }) {
 }
 
 export function ThreadPanel({ parent, names, me, onClose }: { parent: string; names: Map<string, string>; me: string; onClose: () => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const replies = useQuery({ queryKey: threadKey(parent), queryFn: () => chatUseCases.replies(parent) });
   const refresh = () => qc.invalidateQueries({ queryKey: threadKey(parent) });
@@ -1050,13 +1071,13 @@ export function ThreadPanel({ parent, names, me, onClose }: { parent: string; na
     onSuccess: (m) => qc.setQueryData<Message[]>(threadKey(parent), (list) => (list?.some((x) => x.id === m.id) ? list : [...(list ?? []), m])),
   });
   return (
-    <aside aria-label="Thread" className="chat-thread panel">
+    <aside aria-label={t("Thread")} className="chat-thread panel">
       <header className="chat-thread-head">
-        <h2>Thread</h2>
-        <button className="ghost" aria-label="Close thread" onClick={onClose}>✕</button>
+        <h2>{t("Thread")}</h2>
+        <button className="ghost" aria-label={t("Close thread")} onClick={onClose}>✕</button>
       </header>
       {replies.data?.map((m) => <MessageItem key={m.id} m={m} names={names} me={me} canAct onChange={() => void refresh()} />)}
-      <Composer label="Reply" onSend={(b) => reply.mutate(b)} />
+      <Composer label={t("Reply")} onSend={(b) => reply.mutate(b)} />
       {reply.error && <p role="alert" className="error">{reply.error.message}</p>}
     </aside>
   );
@@ -1068,6 +1089,7 @@ function Composer({ label, initial = "", onSend, onSchedule, onTyping, onCancel 
   /** Send later (S67): offers times from now. */
   onSchedule?: (body: string, at: Date) => void;
 }) {
+  const t = useT();
   const [text, setText] = useState(initial);
   const lastTyping = useRef(0);
   const send = () => {
@@ -1092,16 +1114,16 @@ function Composer({ label, initial = "", onSend, onSchedule, onTyping, onCancel 
             onTyping();
           }
         }} />
-      <button onClick={send} disabled={!text.trim()}>Send</button>
+      <button onClick={send} disabled={!text.trim()}>{t("Send")}</button>
       {onSchedule && (
-        <select aria-label="Send later" value="" disabled={!text.trim()} onChange={(e) => {
+        <select aria-label={t("Send later")} value="" disabled={!text.trim()} onChange={(e) => {
           const p = remindPresets(new Date())[Number(e.target.value)];
           if (!p || !text.trim()) return;
           onSchedule(text.trim(), p.at);
           setText("");
         }}>
           <option value="">🕒</option>
-          {remindPresets(new Date()).map((p, i) => <option key={p.label} value={i}>Send {p.label.toLowerCase()}</option>)}
+          {remindPresets(new Date()).map((p, i) => <option key={p.label} value={i}>{t("Send {when}", { when: p.label.toLowerCase() })}</option>)}
         </select>
       )}
     </div>

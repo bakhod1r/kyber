@@ -10,11 +10,13 @@ import { projectUseCases } from "../contexts/project/application";
 import { whiteboardUseCases } from "../contexts/whiteboard/application";
 import { WhiteboardBoard, Whiteboards } from "../contexts/whiteboard/ui/Whiteboards";
 import { type Call } from "../contexts/call/application";
+import { useT } from "../shared/i18n/i18n";
 import { chatUseCases } from "../contexts/chat/application";
 import { ThreadPanel } from "../contexts/chat/ui/ChatPage";
 
 /** S79: docs and links kept in the conversation's header; a doc opens right here. */
 function Bookmarks({ conversationId, docs }: { conversationId: string; docs: Presentable[] }) {
+  const t = useT();
   const qc = useQueryClient();
   const key = ["chat", "bookmarks", conversationId];
   const list = useQuery({ queryKey: key, queryFn: () => chatUseCases.bookmarks(conversationId) });
@@ -27,32 +29,32 @@ function Bookmarks({ conversationId, docs }: { conversationId: string; docs: Pre
   const [title, setTitle] = useState("");
   return (
     <div className="chat-bookmarks">
-      <ul aria-label="Bookmarks" className="row">
+      <ul aria-label={t("Bookmarks")} className="row">
         {(list.data ?? []).map((b) => (
           <li key={b.id}>
             {b.kind === "doc"
               ? <button className="ghost" aria-pressed={open === b.ref} onClick={() => setOpen(open === b.ref ? null : b.ref)}>📄 {b.title}</button>
               : <a href={b.ref} target="_blank" rel="noopener noreferrer">🔗 {b.title}</a>}
-            <button className="ghost" aria-label={`Remove ${b.title}`} onClick={() => remove.mutate(b.id)}>✕</button>
+            <button className="ghost" aria-label={t("Remove {name}", { name: b.title })} onClick={() => remove.mutate(b.id)}>✕</button>
           </li>
         ))}
-        <li><button className="ghost" onClick={() => setAdding((v) => !v)}>+ Bookmark</button></li>
+        <li><button className="ghost" onClick={() => setAdding((v) => !v)}>+ {t("Bookmark")}</button></li>
       </ul>
       {adding && (
-        <div className="row chat-new" role="group" aria-label="Add a bookmark">
+        <div className="row chat-new" role="group" aria-label={t("Add a bookmark")}>
           {docs.length > 0 && (
-            <select aria-label="Add a doc" value="" onChange={(e) => {
+            <select aria-label={t("Add a doc")} value="" onChange={(e) => {
               const d = docs.find((x) => x.ref === e.target.value);
               if (d) add.mutate({ kind: "doc", ref: d.ref, title: d.title }, { onSuccess: () => setAdding(false) });
             }}>
-              <option value="">📄 Add a doc…</option>
+              <option value="">📄 {t("Add a doc…")}</option>
               {docs.map((d) => <option key={d.ref} value={d.ref}>{d.title}</option>)}
             </select>
           )}
           <form className="row" onSubmit={(e) => { e.preventDefault(); add.mutate({ kind: "link", ref: url, title }, { onSuccess: () => { setAdding(false); setUrl(""); setTitle(""); } }); }}>
-            <input aria-label="Link" placeholder="https://…" value={url} onChange={(e) => setUrl(e.target.value)} />
-            <input aria-label="Link title" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-            <button>Add link</button>
+            <input aria-label={t("Link")} placeholder="https://…" value={url} onChange={(e) => setUrl(e.target.value)} />
+            <input aria-label={t("Link title")} placeholder={t("Title")} value={title} onChange={(e) => setTitle(e.target.value)} />
+            <button>{t("Add link")}</button>
           </form>
           {add.error && <span role="alert" className="error">{add.error.message}</span>}
         </div>
@@ -64,6 +66,7 @@ function Bookmarks({ conversationId, docs }: { conversationId: string; docs: Pre
 
 /** The huddle's chat (S75): the thread of the conversation's "started a huddle" message for this call. */
 function HuddleChat({ call, me, names }: { call: Call; me: string; names: Map<string, string> }) {
+  const t = useT();
   const started = useQuery({
     queryKey: ["chat", "huddle-start", call.id],
     queryFn: async () => {
@@ -73,7 +76,7 @@ function HuddleChat({ call, me, names }: { call: Call; me: string; names: Map<st
     },
     refetchInterval: (q) => (q.state.data ? false : 2000), // the system message is written by the relay
   });
-  if (!started.data) return <p className="muted">Opening the huddle chat…</p>;
+  if (!started.data) return <p className="muted">{t("Opening the huddle chat…")}</p>;
   return <ThreadPanel parent={started.data} names={names} me={me} onClose={() => {}} />;
 }
 

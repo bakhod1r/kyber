@@ -1,5 +1,12 @@
 // English is the source language: each key is the English text itself.
+import { en as callEn } from "./parts/call";
+import { en as chatEn } from "./parts/chat";
+import { en as whiteboardEn } from "./parts/whiteboard";
+
 export const en = {
+  ...chatEn,
+  ...callEn,
+  ...whiteboardEn,
   " and ": " and ",
   "* added after the sprint started": "* added after the sprint started",
   "+ user": "+ user",
