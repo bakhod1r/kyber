@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COLORS, look, restyle, STICKY, STICKY_COLORS, template } from "./model";
+import { COLORS, erased, look, ordered, restyle, STICKY, STICKY_COLORS, template, toBack, toFront } from "./model";
 import { applyLocal, bounds, box, duplicate, fit, fromClipboard, HOME, inverseAll, MIN_SIZE, moveBy, moveEnd, newer, type Element, hit, inverse, linkedIssue, onScreen, panBy, reconcile, resize, stickyToIssue, toClipboard, viewBox, within, zoomAt } from "./model";
 
 const rect: Element = { id: "r", kind: "rect", x: 10, y: 10, w: 100, h: 50, points: [], text: "", color: "#000000", version: 1 };
@@ -152,5 +152,27 @@ describe("templates (S92)", () => {
     expect(template("kanban", { x: 0, y: 0 }).filter((e) => e.kind === "text").map((e) => e.text)).toEqual(["To do", "Doing", "Done"]);
     expect(template("swot", { x: 0, y: 0 }).filter((e) => e.kind === "text").map((e) => e.text)).toEqual(["Strengths", "Weaknesses", "Opportunities", "Threats"]);
     expect(new Set(template("swot", { x: 0, y: 0 }).map((e) => e.id)).size).toBe(8);
+  });
+});
+
+describe("eraser and order (S93)", () => {
+  it("draws by stored order first, then by last change", () => {
+    const a: Element = { ...rect, id: "a", updated_at: "2026-10-13T09:00:00Z" };
+    const b: Element = { ...rect, id: "b", updated_at: "2026-10-13T10:00:00Z" };
+    expect(ordered({ a, b }).map((e) => e.id)).toEqual(["a", "b"]);
+    expect(ordered({ a: { ...a, z: 1 }, b }).map((e) => e.id)).toEqual(["b", "a"]);
+  });
+
+  it("brings a selection to the front or sends it to the back, keeping its own order", () => {
+    const els = { a: { ...rect, id: "a", z: 0 }, b: { ...rect, id: "b", z: 5 }, c: { ...rect, id: "c", z: 2 } };
+    expect(toFront([els.a, els.c], els).map((e) => [e.id, e.z])).toEqual([["a", 6], ["c", 7]]);
+    expect(toBack([els.b, els.c], els).map((e) => [e.id, e.z])).toEqual([["c", -2], ["b", -1]]);
+    expect(toFront([], els)).toEqual([]);
+  });
+
+  it("erases what a stroke of the eraser passes over", () => {
+    const els = [rect, line, { ...rect, id: "far", x: 500 }];
+    expect(erased(els, [{ x: 0, y: 0 }, { x: 20, y: 20 }]).map((e) => e.id).sort()).toEqual(["l", "r"]);
+    expect(erased(els, [])).toEqual([]);
   });
 });

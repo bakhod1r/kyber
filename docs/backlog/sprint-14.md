@@ -26,7 +26,12 @@ styles. This sprint brings it closer to Miro/Excalidraw. Planned first, then bui
 - ✅ **S92 Templates** — start a board from Retrospective (went well / to improve / actions), Kanban
   (to do / doing / done), SWOT or a blank page; a template is a batch of ordinary elements anyone can edit.
   **Done:** `template()` in the domain; "Template…" inserts it in the middle of the view, selected, one undo step.
-- **S93 Eraser and order** — an eraser tool (drag over strokes to delete them, one undo step); bring to front /
+- ✅ **S93 Eraser and order** — an eraser tool (drag over strokes to delete them, one undo step); bring to front /
   send to back (stored order, not the last change).
+  **Done:** element `z` (migration 0078, API 0.67.0) orders shapes, ties by last change; ⬆/⬇ and Ctrl+]/[; the ⌫
+  Eraser fades what it touches and deletes it on release, one undo step. Also fixed: a fast drag on a busy
+  machine could save a stale shape (pointerup read state React had not rendered yet).
+- **Fix (S88 follow-up):** the web stream now reloads only after the broker granted its subscriptions on each
+  (re)connect; an event in that gap (e.g. "huddle started" right after opening a channel) was lost.
 
 Order: S89 → S90 (they change how every interaction maps to coordinates), then S91, S92, S93.

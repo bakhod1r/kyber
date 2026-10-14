@@ -5,6 +5,8 @@ export type Element = {
   id: string; kind: Kind; x: number; y: number; w: number; h: number; points: Point[]; text: string; color: string;
   /** S91 styles: 1 thin, 2 medium, 3 bold (absent = default); filled shapes; dashed lines. */
   stroke?: 0 | 1 | 2 | 3; fill?: boolean; dashed?: boolean;
+  /** S93: layer order, lowest drawn first; ties by last change. */
+  z?: number;
   version: number; updated_by?: string; updated_at?: string; deleted?: boolean;
 };
 export type Whiteboard = { id: string; conversation_id: string; title: string; created_by: string; created_at: string; elements?: Element[] };
@@ -76,7 +78,8 @@ function distToSegment(p: Point, a: Point, b: Point) {
 }
 
 /** Drawing order: oldest change first (newer shapes on top). */
-export const ordered = (els: Elements) => Object.values(els).sort((a, b) => (a.updated_at ?? "~").localeCompare(b.updated_at ?? "~"));
+export const ordered = (els: Elements) =>
+  Object.values(els).sort((a, b) => (a.z ?? 0) - (b.z ?? 0) || (a.updated_at ?? "~").localeCompare(b.updated_at ?? "~"));
 
 /** A sticky note as an issue: the first line is the title, the rest the description (S59). */
 export function stickyToIssue(text: string): { title: string; description: string } {
@@ -260,3 +263,17 @@ export function template(kind: Template, c: Point, id: () => string = newId): El
     el({ kind: "text", x: ox + p.x + 12, y: oy + p.y + 10, w: p.w - 24, h: 34, text: p.title, color: p.color }),
   ]);
 }
+
+/** S93: toFront / toBack restack a selection above or below everything else, keeping its own order. */
+export function toFront(sel: Element[], all: Elements): Element[] {
+  const top = Math.max(0, ...Object.values(all).map((e) => e.z ?? 0));
+  return ordered(Object.fromEntries(sel.map((e) => [e.id, e]))).map((e, i) => ({ ...e, z: top + 1 + i }));
+}
+export function toBack(sel: Element[], all: Elements): Element[] {
+  const bottom = Math.min(0, ...Object.values(all).map((e) => e.z ?? 0));
+  const s = ordered(Object.fromEntries(sel.map((e) => [e.id, e])));
+  return s.map((e, i) => ({ ...e, z: bottom - s.length + i }));
+}
+
+/** S93: the elements an eraser stroke (board points) passes over. */
+export const erased = (els: Element[], path: Point[]): Element[] => els.filter((e) => path.some((p) => hit(e, p, 8)));

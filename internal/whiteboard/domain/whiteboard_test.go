@@ -50,7 +50,9 @@ func TestOps(t *testing.T) {
 	thick.Stroke = domain.StrokeBold + 1 // S91: thin, medium or bold only
 	thin := rect("e-5")
 	thin.Stroke = -1
-	for _, e := range []domain.Element{bad, long, {Kind: domain.KindRect}, thick, thin} {
+	sunk := rect("e-7")
+	sunk.Z = -2e9 // S93: layer order stays within the coordinate range
+	for _, e := range []domain.Element{bad, long, {Kind: domain.KindRect}, thick, thin, sunk} {
 		if r := b.Apply("u-a", []domain.Op{{Kind: domain.OpAdd, Element: e}}, t0); r[0].Applied || !errors.Is(r[0].Error, domain.ErrInvalidElement) {
 			t.Errorf("invalid %+v = %+v", e.Kind, r)
 		}

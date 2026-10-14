@@ -180,12 +180,13 @@ test("resize, multi-select and duplicate on the whiteboard", async ({ page }) =>
   await page.mouse.click(c.x + 150, c.y + 130);
   const handle = canvas.getByLabel("Resize se");
   const h = (await handle.boundingBox())!;
-  const w0 = Number(await rects.first().getAttribute("width"));
+  const resized = canvas.locator(`rect[data-id="${await rects.first().getAttribute("data-id")}"]`); // by id: an edit restacks it
+  const w0 = Number(await resized.getAttribute("width"));
   await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
   await page.mouse.down();
   await page.mouse.move(h.x + 60, h.y + 40, { steps: 4 });
   await page.mouse.up();
-  await expect.poll(async () => Number(await rects.first().getAttribute("width"))).toBeGreaterThan(w0 + 30);
+  await expect.poll(async () => Number(await resized.getAttribute("width"))).toBeGreaterThan(w0 + 30);
 
   // A marquee around both selects them; Ctrl+D duplicates both.
   await page.mouse.move(c.x + 60, c.y + 60);
@@ -203,4 +204,52 @@ test("resize, multi-select and duplicate on the whiteboard", async ({ page }) =>
   await expect(rects).toHaveCount(2);
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(rects).toHaveCount(4);
+});
+
+// S93: layer order is stored (bring to front survives a reload); the eraser deletes what it passes over, one undo step.
+test("order and erase on the whiteboard", async ({ page }) => {
+  const id = Date.now().toString(36).slice(-5);
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  const call = (method: string, path: string, data?: unknown) =>
+    page.request.fetch(path, { method, data, headers: { "Content-Type": "application/json" } }).then((x) => (x.status() === 204 ? null : x.json()));
+  const email = `erase-${id}@example.com`;
+  await call("POST", "/api/v1/auth/signup", { email, name: "Eri", password: "a very long password" });
+  await call("POST", "/api/v1/auth/login", { email, password: "a very long password" });
+  const channel = await call("POST", "/api/v1/channels", { name: `erase-${id}` });
+  await call("POST", `/api/v1/conversations/${channel.id}/whiteboards`, { title: "Layers" });
+  const open = async () => {
+    await page.goto(`/chat/${channel.id}`);
+    await page.getByRole("button", { name: "Whiteboards" }).click();
+    await page.getByRole("button", { name: "Layers" }).click();
+    return page.getByRole("img", { name: "Canvas" });
+  };
+  let canvas = await open();
+  const c = (await canvas.boundingBox())!;
+  for (const [x, y] of [[100, 100], [160, 140]] as const) {
+    await page.getByRole("button", { name: "Rectangle" }).click();
+    await page.mouse.move(c.x + x, c.y + y);
+    await page.mouse.down();
+    await page.mouse.move(c.x + x + 120, c.y + y + 80, { steps: 4 });
+    await page.mouse.up();
+  }
+  const rects = canvas.locator("rect[data-id]");
+  await expect(rects).toHaveCount(2);
+  const firstId = await rects.first().getAttribute("data-id");
+  await page.getByRole("button", { name: "Select" }).click();
+  const first = (await canvas.locator(`rect[data-id="${firstId}"]`).boundingBox())!;
+  await page.mouse.click(first.x + 8, first.y + 8); // its top-left corner: the other rectangle does not reach it
+  await page.getByRole("button", { name: "Bring to front" }).click();
+  await expect.poll(() => rects.last().getAttribute("data-id")).toBe(firstId);
+  canvas = await open(); // stored, not just local
+  await expect.poll(() => canvas.locator("rect[data-id]").last().getAttribute("data-id")).toBe(firstId);
+
+  await page.getByRole("button", { name: "Eraser" }).click();
+  const cc = (await canvas.boundingBox())!;
+  await page.mouse.move(cc.x + 90, cc.y + 150);
+  await page.mouse.down();
+  await page.mouse.move(cc.x + 330, cc.y + 150, { steps: 12 }); // across both rectangles
+  await page.mouse.up();
+  await expect(canvas.locator("rect[data-id]")).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(canvas.locator("rect[data-id]")).toHaveCount(2);
 });

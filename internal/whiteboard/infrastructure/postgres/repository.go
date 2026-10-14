@@ -53,14 +53,14 @@ func (r *Repository) ByID(ctx context.Context, wid domain.WhiteboardID) (*domain
 	if err != nil {
 		return nil, err
 	}
-	rows, err = r.pool.Query(ctx, `SELECT element_id, kind, x, y, w, h, points, body, color, stroke, fill, dashed, version, updated_by, updated_at
+	rows, err = r.pool.Query(ctx, `SELECT element_id, kind, x, y, w, h, points, body, color, stroke, fill, dashed, z, version, updated_by, updated_at
 		FROM whiteboard_elements WHERE whiteboard_id = $1`, string(wid))
 	if err != nil {
 		return nil, err
 	}
 	var raw []byte
 	var e domain.Element
-	_, err = pgx.ForEachRow(rows, []any{&e.ID, &e.Kind, &e.X, &e.Y, &e.W, &e.H, &raw, &e.Text, &e.Color, &e.Stroke, &e.Fill, &e.Dashed, &e.Version, &e.UpdatedBy, &e.UpdatedAt}, func() error {
+	_, err = pgx.ForEachRow(rows, []any{&e.ID, &e.Kind, &e.X, &e.Y, &e.W, &e.H, &raw, &e.Text, &e.Color, &e.Stroke, &e.Fill, &e.Dashed, &e.Z, &e.Version, &e.UpdatedBy, &e.UpdatedAt}, func() error {
 		var pts []point
 		if err := json.Unmarshal(raw, &pts); err != nil {
 			return err
@@ -111,14 +111,14 @@ func (r *Repository) Save(ctx context.Context, wid domain.WhiteboardID, applied 
 			case e.Deleted:
 				sql = `DELETE FROM whiteboard_elements WHERE whiteboard_id = $1 AND element_id = $2 AND version = $3`
 			case e.Version == 1:
-				sql = `INSERT INTO whiteboard_elements (whiteboard_id, element_id, kind, x, y, w, h, points, body, color, version, updated_by, updated_at, stroke, fill, dashed)
-					SELECT $1, $2, $4, $5, $6, $7, $8, $9, $10, $11, $3 + 1, $12, $13, $14, $15, $16 ON CONFLICT DO NOTHING`
+				sql = `INSERT INTO whiteboard_elements (whiteboard_id, element_id, kind, x, y, w, h, points, body, color, version, updated_by, updated_at, stroke, fill, dashed, z)
+					SELECT $1, $2, $4, $5, $6, $7, $8, $9, $10, $11, $3 + 1, $12, $13, $14, $15, $16, $17 ON CONFLICT DO NOTHING`
 			default:
 				sql = `UPDATE whiteboard_elements SET kind = $4, x = $5, y = $6, w = $7, h = $8, points = $9, body = $10, color = $11,
-					version = $3 + 1, updated_by = $12, updated_at = $13, stroke = $14, fill = $15, dashed = $16 WHERE whiteboard_id = $1 AND element_id = $2 AND version = $3`
+					version = $3 + 1, updated_by = $12, updated_at = $13, stroke = $14, fill = $15, dashed = $16, z = $17 WHERE whiteboard_id = $1 AND element_id = $2 AND version = $3`
 			}
 			if !e.Deleted {
-				args = append(args, string(e.Kind), e.X, e.Y, e.W, e.H, raw, e.Text, e.Color, string(e.UpdatedBy), e.UpdatedAt, int(e.Stroke), e.Fill, e.Dashed)
+				args = append(args, string(e.Kind), e.X, e.Y, e.W, e.H, raw, e.Text, e.Color, string(e.UpdatedBy), e.UpdatedAt, int(e.Stroke), e.Fill, e.Dashed, e.Z)
 			}
 			tag, err := tx.Exec(ctx, sql, args...)
 			if err != nil {

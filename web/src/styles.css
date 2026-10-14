@@ -500,7 +500,8 @@ a.user:hover { text-decoration: underline; }
 .wb-swatch[aria-checked="true"] { border-color: var(--text, #000); }
 .wb-canvas { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; touch-action: none; background: #fff; display: block; }
 .wb-canvas.tool-select { cursor: default; }
-.wb-canvas:not(.tool-select):not(.tool-hand) { cursor: crosshair; }
+.wb-canvas:not(.tool-select):not(.tool-hand):not(.tool-eraser) { cursor: crosshair; }
+.wb-canvas.tool-eraser { cursor: cell; }
 .wb-canvas.tool-hand { cursor: grab; }
 .wb-canvas.tool-hand:active { cursor: grabbing; }
 

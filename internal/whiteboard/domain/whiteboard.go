@@ -85,7 +85,8 @@ type Element struct {
 	Stroke     Stroke // S91 styles
 	Fill       bool   // shapes filled with their colour (a light tint)
 	Dashed     bool
-	Version    int // incremented by every applied change
+	Z          float64 // S93: layer order, lowest first; ties by last change
+	Version    int     // incremented by every applied change
 	UpdatedBy  UserID
 	UpdatedAt  time.Time
 	Deleted    bool // only in an OpResult
@@ -110,6 +111,8 @@ func (e Element) valid() error {
 		return bad("color")
 	case e.Stroke < StrokeDefault || e.Stroke > StrokeBold:
 		return bad("stroke")
+	case !coord(e.Z):
+		return bad("order")
 	}
 	for _, p := range e.Points {
 		if !coord(p.X) || !coord(p.Y) {

@@ -4,15 +4,15 @@ import { Link } from "react-router-dom";
 import { issueUseCases } from "../../issue/application";
 import { projectUseCases } from "../../project/application";
 import {
-  bounds, box, COLORS, commentCounts, duplicate, type Element, fit, fromClipboard, type Handle, HANDLES, hit, HOME, type Kind, linkedIssue, moveBy, moveEnd, newId,
-  look, onScreen, onWhiteboardComments, ordered, panBy, resize, restyle, STICKY_COLORS, type Template, template, TEMPLATES, toClipboard, within,
+  bounds, box, COLORS, commentCounts, duplicate, type Element, erased, fit, fromClipboard, type Handle, HANDLES, hit, HOME, type Kind, linkedIssue, moveBy, moveEnd, newId,
+  look, onScreen, onWhiteboardComments, ordered, panBy, resize, restyle, STICKY_COLORS, type Template, template, TEMPLATES, toBack, toClipboard, toFront, within,
   type Point, STICKY, stickyToIssue, useWhiteboard, type View, viewBox, whiteboardUseCases, zoomAt,
 } from "../application";
 
 const W = 1600;
 const H = 900;
 const PAGE = { w: W, h: H };
-type Tool = "select" | "hand" | Kind;
+type Tool = "select" | "hand" | "eraser" | Kind;
 const TOOLS: { tool: Tool; label: string; icon: string }[] = [
   { tool: "select", label: "Select", icon: "↖" },
   { tool: "hand", label: "Hand", icon: "✋" },
@@ -23,6 +23,7 @@ const TOOLS: { tool: Tool; label: string; icon: string }[] = [
   { tool: "freehand", label: "Pen", icon: "✎" },
   { tool: "text", label: "Text", icon: "T" },
   { tool: "sticky", label: "Sticky note", icon: "🗒" },
+  { tool: "eraser", label: "Eraser", icon: "⌫" },
 ];
 const CURSOR_COLORS = ["#e11d48", "#7c3aed", "#0891b2", "#ca8a04", "#059669"];
 
@@ -216,7 +217,12 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
   const [view, setView] = useState<View>(HOME);
   const pan = useRef<{ x: number; y: number; from: View } | null>(null);
   const space = useRef(false);
-  const [draft, setDraft] = useState<Element | null>(null); // the shape being drawn
+  const [draft, setDraftState] = useState<Element | null>(null); // the shape being drawn (mirrored like moving, below)
+  const draftRef = useRef<Element | null>(null);
+  const setDraft = (next: Element | null | ((cur: Element | null) => Element | null)) => {
+    draftRef.current = typeof next === "function" ? next(draftRef.current) : next;
+    setDraftState(draftRef.current);
+  };
   /** What a drag in the select tool does: move the selection, resize a box, move a line end, or draw a marquee. */
   const drag = useRef<
     | { mode: "draw"; start: Point; origin: Element }
@@ -224,10 +230,31 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
     | { mode: "resize"; start: Point; origin: Element; handle: Handle }
     | { mode: "end"; origin: Element; index: number }
     | { mode: "marquee"; start: Point; add: string[] }
+    | { mode: "erase"; path: Point[] }
     | null
   >(null);
-  const [moving, setMoving] = useState<Element[] | null>(null); // elements being moved or reshaped, before they are sent
-  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  /**
+   * Elements being moved or reshaped, the marquee, and what the eraser passed over. Each is mirrored in a ref: pointerup
+   * must see the last pointermove even when React has not rendered it yet (a fast drag on a busy machine).
+   */
+  const [moving, setMovingState] = useState<Element[] | null>(null);
+  const movingRef = useRef<Element[] | null>(null);
+  const setMoving = (m: Element[] | null) => {
+    movingRef.current = m;
+    setMovingState(m);
+  };
+  const [erasing, setErasingState] = useState<string[]>([]); // S93
+  const erasingRef = useRef<string[]>([]);
+  const setErasing = (ids: string[]) => {
+    erasingRef.current = ids;
+    setErasingState(ids);
+  };
+  const [marquee, setMarqueeState] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const marqueeRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const setMarquee = (m: { x: number; y: number; w: number; h: number } | null) => {
+    marqueeRef.current = m;
+    setMarqueeState(m);
+  };
   /** The element whose text is being typed in place (S63); fresh when it is not on the board yet. */
   const [editing, setEditing] = useState<{ element: Element; fresh: boolean } | null>(null);
   const live = (id: string) => moving?.find((m) => m.id === id) ?? wb.elements[id];
@@ -277,6 +304,11 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
       drag.current = { mode: "move", start: p, origins: ids.map((x) => wb.elements[x]).filter((x): x is Element => !!x) };
       return;
     }
+    if (tool === "eraser") {
+      drag.current = { mode: "erase", path: [p] };
+      setErasing(erased(Object.values(wb.elements), [p]).map((x) => x.id));
+      return;
+    }
     const fillable = tool === "rect" || tool === "ellipse";
     const base: Element = { id: newId(), kind: tool, x: p.x, y: p.y, w: 0, h: 0, points: [] as Point[], text: "", color, version: 0,
       stroke: style.stroke, dashed: style.dashed, ...(fillable ? { fill: style.fill } : {}) };
@@ -305,6 +337,10 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
     if (d.mode === "resize") return setMoving([resize(d.origin, d.handle, p.x - d.start.x, p.y - d.start.y)]);
     if (d.mode === "end") return setMoving([moveEnd(d.origin, d.index, p)]);
     if (d.mode === "marquee") return setMarquee(box(d.start.x, d.start.y, p.x, p.y));
+    if (d.mode === "erase") {
+      d.path.push(p);
+      return setErasing([...new Set([...erasingRef.current, ...erased(Object.values(wb.elements), [p]).map((x) => x.id)])]);
+    }
     const o = d.origin;
     if (tool === "freehand") {
       setDraft((cur) => (cur ? { ...cur, points: [...cur.points, { x: p.x - o.x, y: p.y - o.y }] } : cur));
@@ -320,13 +356,18 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
     const d = drag.current;
     drag.current = null;
     if (d?.mode === "marquee") {
-      const area = marquee;
+      const area = marqueeRef.current;
       setMarquee(null);
       if (area && (area.w > 3 || area.h > 3)) setSelectedIds([...new Set([...d.add, ...within(Object.values(wb.elements), area).map((x) => x.id)])]);
       return;
     }
+    if (d?.mode === "erase") {
+      wb.changeAll(erasingRef.current.map((x) => wb.elements[x]).filter((x): x is Element => !!x).map((element) => ({ op: "delete", element })));
+      setErasing([]);
+      return;
+    }
     if (d && d.mode !== "draw") {
-      const changed = (moving ?? []).filter((m) => {
+      const changed = (movingRef.current ?? []).filter((m) => {
         const o = wb.elements[m.id];
         return o && (o.x !== m.x || o.y !== m.y || o.w !== m.w || o.h !== m.h || o.points !== m.points);
       });
@@ -334,7 +375,8 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
       setMoving(null);
       return;
     }
-    if (d && draft && (draft.points.length > 1 || draft.w > 3 || draft.h > 3)) wb.change({ op: "add", element: draft });
+    const drawn = draftRef.current;
+    if (d && drawn && (drawn.points.length > 1 || drawn.w > 3 || drawn.h > 3)) wb.change({ op: "add", element: drawn });
     setDraft(null);
   };
 
@@ -454,6 +496,8 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
         remove();
       }
       if (mod && e.key === "v") void paste();
+      if (mod && e.key === "]" && selection.length > 0) wb.changeAll(toFront(selection, wb.elements).map((element) => ({ op: "update", element })));
+      if (mod && e.key === "[" && selection.length > 0) wb.changeAll(toBack(selection, wb.elements).map((element) => ({ op: "update", element })));
       const step = e.shiftKey ? 10 : 1;
       const arrows: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
       if (arrows[e.key] && selection.length > 0) {
@@ -569,6 +613,14 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
           {selection.length > 1 && <span className="muted">{selection.length} selected</span>}
           {selection.length > 0 && <button className="ghost" onClick={() => addCopies(selection, 24)} title="Ctrl+D">Duplicate</button>}
           {selection.length > 0 && <button className="ghost" onClick={remove}>Delete</button>}
+          {selection.length > 0 && (
+            <>
+              <button className="ghost" aria-label="Bring to front" title="Bring to front (Ctrl+])"
+                onClick={() => wb.changeAll(toFront(selection, wb.elements).map((element) => ({ op: "update", element })))}>⬆</button>
+              <button className="ghost" aria-label="Send to back" title="Send to back (Ctrl+[)"
+                onClick={() => wb.changeAll(toBack(selection, wb.elements).map((element) => ({ op: "update", element })))}>⬇</button>
+            </>
+          )}
           <button className="ghost" onClick={() => void exportAs("svg")}>Export SVG</button>
           <button className="ghost" onClick={() => void exportAs("png")}>Export PNG</button>
           {onClose && <button className="ghost" aria-label="Close whiteboard" onClick={onClose}>✕</button>}
@@ -588,7 +640,9 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
         </defs>
         <rect className="wb-background" x={view.x} y={view.y} width={W / view.zoom} height={H / view.zoom} fill="#ffffff" />
         <rect className="wb-grid" x={view.x} y={view.y} width={W / view.zoom} height={H / view.zoom} fill="url(#wb-dots)" pointerEvents="none" />
-        {shapes.map((e) => <Shape key={e.id} e={e} selected={selected.includes(e.id)} />)}
+        {shapes.map((e) => (
+          <g key={e.id} opacity={erasing.includes(e.id) ? 0.25 : undefined}><Shape e={e} selected={selected.includes(e.id)} /></g>
+        ))}
         {sel && !editing && <Handles e={sel} zoom={view.zoom} />}
         {selection.length > 1 && (() => {
           const b = bounds(selection)!;
