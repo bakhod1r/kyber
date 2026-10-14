@@ -1,4 +1,4 @@
-.PHONY: test cover-strict lint run build docker cover web web-test e2e screenshots
+.PHONY: test cover-strict lint run build docker cover web web-test e2e screenshots docs
 
 COVER_MIN ?= 85
 
@@ -42,3 +42,7 @@ e2e: build ## runs Playwright against a fresh in-memory server on :18080
 
 docker:
 	docker build -t kyber:dev .
+
+docs: ## build the documentation site (VitePress) into site/.vitepress/dist
+	npm --prefix site ci --no-audit --no-fund
+	npm --prefix site run build

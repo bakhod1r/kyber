@@ -30,7 +30,7 @@
 
 Screenshots are generated from a seeded demo with `make screenshots`.
 
-> Roadmap: [`docs/PLAN.md`](docs/PLAN.md) · Backlog: [`docs/backlog`](docs/backlog) · QA: [`docs/qa`](docs/qa)
+> Documentation: [bakhod1r.github.io/kyber](https://bakhod1r.github.io/kyber/) · Roadmap: [`docs/PLAN.md`](docs/PLAN.md) · Backlog: [`docs/backlog`](docs/backlog) · QA: [`docs/qa`](docs/qa)
 
 ## Quick start
 
