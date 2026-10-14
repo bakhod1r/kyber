@@ -46,11 +46,23 @@ func TestOps(t *testing.T) {
 	bad := rect("e-2")
 	bad.Kind = "triangle"
 	long := domain.Element{ID: "e-3", Kind: domain.KindText, Text: string(make([]byte, domain.MaxText+1))}
-	for _, e := range []domain.Element{bad, long, {Kind: domain.KindRect}} {
+	thick := rect("e-4")
+	thick.Stroke = domain.StrokeBold + 1 // S91: thin, medium or bold only
+	thin := rect("e-5")
+	thin.Stroke = -1
+	sunk := rect("e-7")
+	sunk.Z = -2e9 // S93: layer order stays within the coordinate range
+	for _, e := range []domain.Element{bad, long, {Kind: domain.KindRect}, thick, thin, sunk} {
 		if r := b.Apply("u-a", []domain.Op{{Kind: domain.OpAdd, Element: e}}, t0); r[0].Applied || !errors.Is(r[0].Error, domain.ErrInvalidElement) {
 			t.Errorf("invalid %+v = %+v", e.Kind, r)
 		}
 	}
+	styled := rect("e-6")
+	styled.Stroke, styled.Fill, styled.Dashed = domain.StrokeBold, true, true
+	if r := b.Apply("u-a", []domain.Op{{Kind: domain.OpAdd, Element: styled}}, t0); !r[0].Applied || !r[0].Element.Fill || r[0].Element.Stroke != domain.StrokeBold {
+		t.Fatalf("styled = %+v", r)
+	}
+	delete(b.Elements, "e-6")
 	del := domain.Element{ID: "e-1", Version: 2}
 	if r := b.Apply("u-b", []domain.Op{{Kind: domain.OpDelete, Element: del}}, t0); !r[0].Applied || len(b.Elements) != 0 || !r[0].Element.Deleted {
 		t.Fatalf("delete = %+v", r)

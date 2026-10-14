@@ -95,3 +95,161 @@ test("two people draw on a whiteboard together", async ({ browser }) => {
   await expect(a.getByRole("complementary", { name: "Element comments" })).toContainText("Redis or in-process?");
   await expect(cb.getByLabel("1 comments on an element")).toBeVisible();
 });
+
+// S89: the board is infinite — wheel zooms around the pointer, the Hand tool pans, Fit brings everything back.
+test("zoom and pan the whiteboard", async ({ page }) => {
+  const id = Date.now().toString(36).slice(-5);
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  const call = (method: string, path: string, data?: unknown) =>
+    page.request.fetch(path, { method, data, headers: { "Content-Type": "application/json" } }).then((x) => (x.status() === 204 ? null : x.json()));
+  const email = `zoom-${id}@example.com`;
+  await call("POST", "/api/v1/auth/signup", { email, name: "Zoe", password: "a very long password" });
+  await call("POST", "/api/v1/auth/login", { email, password: "a very long password" });
+  const channel = await call("POST", "/api/v1/channels", { name: `zoom-${id}` });
+  await call("POST", `/api/v1/conversations/${channel.id}/whiteboards`, { title: "Map" });
+  await page.goto(`/chat/${channel.id}`);
+  await page.getByRole("button", { name: "Whiteboards" }).click();
+  await page.getByRole("button", { name: "Map" }).click();
+  const canvas = page.getByRole("img", { name: "Canvas" });
+  const zoom = page.getByRole("group", { name: "Zoom" });
+
+  await page.getByRole("button", { name: "Rectangle" }).click();
+  const c = (await canvas.boundingBox())!;
+  await page.mouse.move(c.x + 200, c.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 300, c.y + 260, { steps: 4 });
+  await page.mouse.up();
+  const rect = canvas.locator("rect[data-id]");
+  await expect(rect).toHaveCount(1);
+  const before = (await rect.boundingBox())!;
+
+  await page.mouse.move(c.x + 250, c.y + 230); // inside the rectangle
+  await page.mouse.wheel(0, -400);
+  await expect(zoom.getByRole("button", { name: "Reset zoom" })).not.toHaveText("100%");
+  const zoomed = (await rect.boundingBox())!;
+  expect(zoomed.width).toBeGreaterThan(before.width * 1.3);
+  expect(zoomed.x).toBeLessThan(c.x + 250); // the point under the pointer stays inside it
+  expect(zoomed.x + zoomed.width).toBeGreaterThan(c.x + 250);
+
+  await page.getByRole("button", { name: "Hand" }).click();
+  await page.mouse.move(c.x + 600, c.y + 400);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 700, c.y + 450, { steps: 4 });
+  await page.mouse.up();
+  const panned = (await rect.boundingBox())!;
+  expect(panned.x - zoomed.x).toBeGreaterThan(80);
+  expect(panned.y - zoomed.y).toBeGreaterThan(30);
+  await expect(rect).toHaveCount(1); // the Hand never draws
+
+  await zoom.getByRole("button", { name: "Fit to content" }).click();
+  const fitted = (await rect.boundingBox())!;
+  expect(fitted.x).toBeGreaterThan(c.x);
+  expect(fitted.x + fitted.width).toBeLessThan(c.x + c.width);
+});
+
+// S90: resize with a handle, select several with a marquee, move them together, duplicate, nudge, undo as one step.
+test("resize, multi-select and duplicate on the whiteboard", async ({ page }) => {
+  const id = Date.now().toString(36).slice(-5);
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  const call = (method: string, path: string, data?: unknown) =>
+    page.request.fetch(path, { method, data, headers: { "Content-Type": "application/json" } }).then((x) => (x.status() === 204 ? null : x.json()));
+  const email = `multi-${id}@example.com`;
+  await call("POST", "/api/v1/auth/signup", { email, name: "Mira", password: "a very long password" });
+  await call("POST", "/api/v1/auth/login", { email, password: "a very long password" });
+  const channel = await call("POST", "/api/v1/channels", { name: `multi-${id}` });
+  await call("POST", `/api/v1/conversations/${channel.id}/whiteboards`, { title: "Shapes" });
+  await page.goto(`/chat/${channel.id}`);
+  await page.getByRole("button", { name: "Whiteboards" }).click();
+  await page.getByRole("button", { name: "Shapes" }).click();
+  const canvas = page.getByRole("img", { name: "Canvas" });
+  const c = (await canvas.boundingBox())!;
+  const drawRect = async (x: number, y: number) => {
+    await page.getByRole("button", { name: "Rectangle" }).click();
+    await page.mouse.move(c.x + x, c.y + y);
+    await page.mouse.down();
+    await page.mouse.move(c.x + x + 100, c.y + y + 60, { steps: 4 });
+    await page.mouse.up();
+  };
+  await drawRect(100, 100);
+  await drawRect(300, 100);
+  const rects = canvas.locator("rect[data-id]");
+  await expect(rects).toHaveCount(2);
+
+  // Select the first and drag its south-east handle.
+  await page.getByRole("button", { name: "Select" }).click();
+  await page.mouse.click(c.x + 150, c.y + 130);
+  const handle = canvas.getByLabel("Resize se");
+  const h = (await handle.boundingBox())!;
+  const resized = canvas.locator(`rect[data-id="${await rects.first().getAttribute("data-id")}"]`); // by id: an edit restacks it
+  const w0 = Number(await resized.getAttribute("width"));
+  await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(h.x + 60, h.y + 40, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => Number(await resized.getAttribute("width"))).toBeGreaterThan(w0 + 30);
+
+  // A marquee around both selects them; Ctrl+D duplicates both.
+  await page.mouse.move(c.x + 60, c.y + 60);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 600, c.y + 400, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByText("2 selected")).toBeVisible();
+  await page.keyboard.press("Control+d");
+  await expect(rects).toHaveCount(4);
+  const xs = async () => (await rects.evaluateAll((els) => els.map((e) => Number(e.getAttribute("x"))))).reduce((a, b) => a + b, 0);
+  const x0 = await xs();
+  await page.keyboard.press("Shift+ArrowRight"); // the two selected copies move 10 px each
+  await expect.poll(xs).toBe(x0 + 20);
+  await page.keyboard.press("Delete");
+  await expect(rects).toHaveCount(2);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(rects).toHaveCount(4);
+});
+
+// S93: layer order is stored (bring to front survives a reload); the eraser deletes what it passes over, one undo step.
+test("order and erase on the whiteboard", async ({ page }) => {
+  const id = Date.now().toString(36).slice(-5);
+  await page.setViewportSize({ width: 1400, height: 1000 });
+  const call = (method: string, path: string, data?: unknown) =>
+    page.request.fetch(path, { method, data, headers: { "Content-Type": "application/json" } }).then((x) => (x.status() === 204 ? null : x.json()));
+  const email = `erase-${id}@example.com`;
+  await call("POST", "/api/v1/auth/signup", { email, name: "Eri", password: "a very long password" });
+  await call("POST", "/api/v1/auth/login", { email, password: "a very long password" });
+  const channel = await call("POST", "/api/v1/channels", { name: `erase-${id}` });
+  await call("POST", `/api/v1/conversations/${channel.id}/whiteboards`, { title: "Layers" });
+  const open = async () => {
+    await page.goto(`/chat/${channel.id}`);
+    await page.getByRole("button", { name: "Whiteboards" }).click();
+    await page.getByRole("button", { name: "Layers" }).click();
+    return page.getByRole("img", { name: "Canvas" });
+  };
+  let canvas = await open();
+  const c = (await canvas.boundingBox())!;
+  for (const [x, y] of [[100, 100], [160, 140]] as const) {
+    await page.getByRole("button", { name: "Rectangle" }).click();
+    await page.mouse.move(c.x + x, c.y + y);
+    await page.mouse.down();
+    await page.mouse.move(c.x + x + 120, c.y + y + 80, { steps: 4 });
+    await page.mouse.up();
+  }
+  const rects = canvas.locator("rect[data-id]");
+  await expect(rects).toHaveCount(2);
+  const firstId = await rects.first().getAttribute("data-id");
+  await page.getByRole("button", { name: "Select" }).click();
+  const first = (await canvas.locator(`rect[data-id="${firstId}"]`).boundingBox())!;
+  await page.mouse.click(first.x + 8, first.y + 8); // its top-left corner: the other rectangle does not reach it
+  await page.getByRole("button", { name: "Bring to front" }).click();
+  await expect.poll(() => rects.last().getAttribute("data-id")).toBe(firstId);
+  canvas = await open(); // stored, not just local
+  await expect.poll(() => canvas.locator("rect[data-id]").last().getAttribute("data-id")).toBe(firstId);
+
+  await page.getByRole("button", { name: "Eraser" }).click();
+  const cc = (await canvas.boundingBox())!;
+  await page.mouse.move(cc.x + 90, cc.y + 150);
+  await page.mouse.down();
+  await page.mouse.move(cc.x + 330, cc.y + 150, { steps: 12 }); // across both rectangles
+  await page.mouse.up();
+  await expect(canvas.locator("rect[data-id]")).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(canvas.locator("rect[data-id]")).toHaveCount(2);
+});
