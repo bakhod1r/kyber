@@ -1,0 +1,61 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/bakhod1r/kyber
+  tag: "" # defaults to the chart's appVersion
+  pullPolicy: IfNotPresent
+
+# Secrets are referenced, never stored in values. The secret must hold KYBER_DATABASE_URL (connect as
+# a non-superuser role so row-level security applies, ADR-0010) and may hold KYBER_REDIS_URL,
+# KYBER_S3_ACCESS_KEY, KYBER_S3_SECRET_KEY, KYBER_SMTP_PASSWORD, KYBER_TELEGRAM_BOT_TOKEN, OAuth secrets.
+existingSecret: kyber
+
+# Plain settings (see the README configuration table).
+env:
+  KYBER_PUBLIC_URL: https://kyber.example.com
+  KYBER_COOKIE_SECURE: "true"
+  # KYBER_BASE_DOMAIN: kyber.example.com
+  # KYBER_S3_BUCKET: kyber-attachments
+  # KYBER_S3_ENDPOINT: s3.amazonaws.com
+
+# Attachments: with more than one replica use S3 (env above) or a ReadWriteMany volume.
+attachments:
+  persistence:
+    enabled: false
+    storageClass: ""
+    accessMode: ReadWriteMany
+    size: 20Gi
+
+# Optional plain MQTT for integrations (ADR-0013); browsers use WebSocket on the HTTP port.
+mqtt:
+  enabled: false
+  port: 1883
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: kyber.example.com
+  tls: []
+
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { memory: 512Mi }
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: { drop: [ALL] }
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

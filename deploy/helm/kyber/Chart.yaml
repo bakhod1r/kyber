@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kyber
+description: Kyber — self-hosted issue and project tracker
+type: application
+version: 0.1.0
+appVersion: "0.42.0"

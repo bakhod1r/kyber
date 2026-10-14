@@ -597,4 +597,12 @@ export const ru: Record<MessageKey, string> = {
   "in": "в",
   "Huddle in": "Хадл в",
   "No huddle": "Без хадла",
+  "Assignees": "Исполнители",
+  "Board filters": "Фильтры доски",
+  "Group": "Группировка",
+  "Search board": "Поиск по доске",
+  "Filter by {name}": "Фильтр: {name}",
+  "Filter by kind": "Фильтр по виду",
+  "Board insights": "Аналитика доски",
+  "Configure board": "Настроить доску",
 };

@@ -1,0 +1,25 @@
+# Release binaries (linux/darwin, amd64/arm64) with the web UI embedded. Images are built by
+# .github/workflows/release.yml (multi-arch, ghcr.io).
+version: 2
+project_name: kyber
+before:
+  hooks:
+    - make web
+builds:
+  - id: kyber
+    main: ./cmd/kyber
+    binary: kyber
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags: [-s -w]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+archives:
+  - formats: [tar.gz]
+    files: [README.md, LICENSE*, docs/operations/*]
+checksum:
+  name_template: checksums.txt
+changelog:
+  use: github
+  filters:
+    exclude: ["^docs:", "^test:", "^chore:"]

@@ -597,4 +597,12 @@ export const uz: Record<MessageKey, string> = {
   "in": "da",
   "Huddle in": "Huddle kanali",
   "No huddle": "Huddlesiz",
+  "Assignees": "Ijrochilar",
+  "Board filters": "Doska filtrlari",
+  "Group": "Guruhlash",
+  "Search board": "Doskadan qidirish",
+  "Filter by {name}": "{name} bo‘yicha filtr",
+  "Filter by kind": "Turi bo‘yicha filtr",
+  "Board insights": "Doska tahlili",
+  "Configure board": "Doskani sozlash",
 };

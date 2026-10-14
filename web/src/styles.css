@@ -579,3 +579,20 @@ label.button { cursor: pointer; }
 /* Swimlanes */
 .swimlane { margin-top: 1rem; }
 .swimlane > h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+
+/* Board toolbar (Jira-style) */
+/* One row of fixed height: filters loading in must not shift the board under the pointer. */
+.board-toolbar { display: flex; flex-wrap: nowrap; overflow-x: auto; align-items: center; gap: 0.5rem; height: 2.75rem; margin: 0.5rem 0 0.75rem; }
+.board-toolbar > * { flex-shrink: 0; }
+.board-search { min-width: 14rem; }
+.avatar-filter { display: flex; }
+.avatar-filter .avatar { margin-left: -0.35rem; border: 2px solid var(--bg, #fff); cursor: pointer; }
+.avatar-filter .avatar:first-child { margin-left: 0; }
+.avatar-filter .avatar[aria-pressed="true"] { outline: 2px solid var(--accent, #4c9aff); z-index: 1; }
+.multi-pick { position: relative; }
+.multi-pick > summary { list-style: none; cursor: pointer; padding: 0.35rem 0.6rem; border: 1px solid var(--border, #ccc); border-radius: 6px; }
+.multi-pick > summary::-webkit-details-marker { display: none; }
+.multi-pick-menu { position: absolute; z-index: 10; top: 100%; left: 0; min-width: 12rem; max-height: 18rem; overflow: auto; margin-top: 0.25rem;
+  padding: 0.5rem; display: grid; gap: 0.25rem; background: var(--panel, #fff); border: 1px solid var(--border, #ccc); border-radius: 6px; }
+.toolbar-spacer { flex: 1; }
+.icon-link { text-decoration: none; padding: 0.25rem 0.4rem; border: 1px solid var(--border, #ccc); border-radius: 6px; }

@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // D3: start and due dates on an issue put it on the project's timeline.
 test("timeline shows scheduled issues", async ({ page }) => {
   const id = Date.now().toString(36).toUpperCase().slice(-5);
-  const key = `T${id}`.slice(0, 6);
+  const key = `K${id}`.slice(0, 6);
   await page.goto("/signup");
   await page.getByLabel("Name").fill("Planner Of Things");
   await page.getByLabel("Email").fill(`timeline-${id.toLowerCase()}@example.com`);

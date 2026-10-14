@@ -1,0 +1,4 @@
+Kyber {{ .Chart.AppVersion }} is starting ({{ .Values.replicaCount }} replicas).
+Migrations run at startup under an advisory lock, so replicas may start together.
+Health: /healthz (liveness), /readyz (database).
+Backups: see docs/operations/backup.md in the Kyber repository.

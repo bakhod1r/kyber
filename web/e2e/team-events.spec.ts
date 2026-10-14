@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // E2: a meeting for a whole project lands on the time table with its audience.
 test("team event for a project", async ({ page }) => {
   const id = Date.now().toString(36).toUpperCase().slice(-5);
-  const key = `E${id}`.slice(0, 6);
+  const key = `M${id}`.slice(0, 6);
   await page.goto("/signup");
   await page.getByLabel("Name").fill("Event Host");
   await page.getByLabel("Email").fill(`events-${id.toLowerCase()}@example.com`);

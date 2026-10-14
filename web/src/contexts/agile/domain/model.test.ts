@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addColumn, assignStatus, type BoardColumn, boardProblems, columnOf, moveColumn, swimlanes } from "./model";
+import { addColumn, assignStatus, type BoardColumn, boardProblems, columnOf, moveColumn, swimlanes, type BoardFilter, NO_BOARD_FILTER, filterBoard, boardFilterActive, toggle } from "./model";
 
 const cols: BoardColumn[] = [
   { name: "To Do", statuses: ["todo"], min: 0, max: 0 },
@@ -54,5 +54,28 @@ describe("swimlanes", () => {
   });
   it("keeps one lane without swimlanes", () => {
     expect(swimlanes(list, "none")).toEqual([{ id: "", items: list }]);
+  });
+});
+
+describe("board filters", () => {
+  const i = (key: string, title: string, type: string, assignee_id: string | null, parent_key: string | null, fix_versions: string[] = []) => ({ key, title, type, assignee_id, parent_key, fix_versions });
+  const list = [i("A-1", "Login form", "story", "u-1", "A-9", ["v1"]), i("A-2", "Crash", "bug", null, null), i("A-3", "Logout", "task", "u-2", "A-9", ["v2"])];
+  const keys = (f: Partial<BoardFilter>) => filterBoard(list, { ...NO_BOARD_FILTER, ...f }).map((x) => x.key);
+  it("filters by text, assignee, version, epic and type together", () => {
+    expect(keys({})).toEqual(["A-1", "A-2", "A-3"]);
+    expect(keys({ text: " log" })).toEqual(["A-1", "A-3"]);
+    expect(keys({ text: "a-2" })).toEqual(["A-2"]);
+    expect(keys({ assignees: [""] })).toEqual(["A-2"]);
+    expect(keys({ assignees: ["u-1", "u-2"] })).toEqual(["A-1", "A-3"]);
+    expect(keys({ versions: ["v2"] })).toEqual(["A-3"]);
+    expect(keys({ epics: [""] })).toEqual(["A-2"]);
+    expect(keys({ epics: ["A-9"], types: ["story"] })).toEqual(["A-1"]);
+  });
+  it("knows when a filter is on and toggles values", () => {
+    expect(boardFilterActive(NO_BOARD_FILTER)).toBe(false);
+    expect(boardFilterActive({ ...NO_BOARD_FILTER, text: "  " })).toBe(false);
+    expect(boardFilterActive({ ...NO_BOARD_FILTER, types: ["bug"] })).toBe(true);
+    expect(toggle(["a"], "b")).toEqual(["a", "b"]);
+    expect(toggle(["a", "b"], "a")).toEqual(["b"]);
   });
 });

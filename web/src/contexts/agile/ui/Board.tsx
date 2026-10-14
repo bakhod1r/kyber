@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type DragEvent, type FormEvent, useState } from "react";
-import { agileUseCases, type BoardColumn, SWIMLANE_MODES, swimlanes, type SwimlaneMode } from "../application";
+import { Link } from "react-router-dom";
+import { agileUseCases, type BoardColumn, type BoardFilter, boardFilterActive, filterBoard, NO_BOARD_FILTER, SWIMLANE_MODES, swimlanes, type SwimlaneMode, toggle, type Version } from "../application";
 import { issueUseCases, DEFAULT_WORKFLOW, ISSUE_TYPES, type Issue, type IssueType, type Status } from "../../issue/application";
 import { projectUseCases, type Member } from "../../project/application";
 import { announceIssueDone } from "../../../shared/events";
@@ -63,12 +64,25 @@ export function Board({
   // Kanban backlog (S48): the first column's issues wait in a list below instead of on the board.
   const kanbanBacklog = !active && !!board?.kanban_backlog && columns.length > 1;
   const boardColumns = kanbanBacklog ? columns.slice(1) : columns;
-  const waiting = kanbanBacklog ? (issues.data ?? []).filter((i) => columns[0]?.statuses.includes(i.status) && (!visibleKeys || visibleKeys.has(i.key))) : [];
   const selectTo = columns[1]?.statuses[0];
   const byId = new Map<string, Member>((members.data ?? []).map((m) => [m.user_id, m]));
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [mode, setMode] = useState<SwimlaneMode>(() => storedMode(projectKey));
+  const [filter, setFilter] = useState<BoardFilter>(NO_BOARD_FILTER);
+  // Versions load when the Version filter is first opened, not with the board.
+  const [wantVersions, setWantVersions] = useState(false);
+  const versions = useQuery({ queryKey: ["versions", projectKey], queryFn: () => agileUseCases.versions(projectKey), enabled: wantVersions });
+  const passing = new Set(filterBoard(issues.data ?? [], filter).map((i) => i.key));
+  /** Quick filters (from the app) and the toolbar's filters both apply. */
+  const isShown = (i: Issue): boolean => (!visibleKeys || visibleKeys.has(i.key)) && passing.has(i.key);
+  const waiting = kanbanBacklog ? (issues.data ?? []).filter((i) => columns[0]?.statuses.includes(i.status) && isShown(i)) : [];
+  const complete = useMutation({
+    mutationFn: (id: string) => agileUseCases.completeSprint(id),
+    onMutate: () => setError(null),
+    onError: (err) => setError(err.message),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["sprints", projectKey] }),
+  });
   const toggleBacklog = useMutation({
     mutationFn: (on: boolean) => agileUseCases.updateBoard(board!, { kanban_backlog: on }),
     onMutate: () => setError(null),
@@ -118,7 +132,7 @@ export function Board({
 
   const renderColumns = (laneIssues: Issue[], lane?: string) =>
     boardColumns.map((col) => {
-      const shown = (i: Issue) => col.statuses.includes(i.status) && (!visibleKeys || visibleKeys.has(i.key));
+      const shown = (i: Issue) => col.statuses.includes(i.status) && isShown(i);
       const cards = laneIssues.filter(shown);
       const total = laneIssues === issues.data ? cards.length : issues.data.filter(shown).length; // WIP counts the whole column
       const wip = col.max > 0 && total > col.max ? " wip-over" : col.min > 0 && total < col.min ? " wip-under" : "";
@@ -208,29 +222,28 @@ export function Board({
           {error}
         </p>
       )}
-      <label className="board-picker">
-        {t("Swimlanes")}{" "}
-        <select
-          aria-label={t("Swimlanes")}
-          value={mode}
-          onChange={(e) => {
-            const m = SWIMLANE_MODES.find((x) => x === e.target.value) ?? "none";
-            setMode(m);
-            storeMode(projectKey, m);
-          }}
-        >
-          <option value="none">{t("None")}</option>
-          <option value="assignee">{t("Assignee")}</option>
-          <option value="epic">{t("Epic")}</option>
-        </select>
-      </label>
+      <BoardToolbar
+        projectKey={projectKey}
+        issues={issues.data}
+        members={members.data ?? []}
+        versions={versions.data ?? []}
+        onVersionsOpen={() => setWantVersions(true)}
+        filter={filter}
+        onFilter={setFilter}
+        mode={mode}
+        onMode={(m) => {
+          setMode(m);
+          storeMode(projectKey, m);
+        }}
+        sprint={active ? { name: active.name, completing: complete.isPending, onComplete: () => complete.mutate(active.id) } : undefined}
+      />
       {mode === "none" ? (
         <div className="board">{renderColumns(issues.data)}</div>
       ) : (
         swimlanes(issues.data, mode).map((l) => (
           <section key={l.id || "none"} className="swimlane" aria-label={laneLabel(l.id)}>
             <h3>
-              {laneLabel(l.id)} <span className="count">{l.items.filter((i) => !visibleKeys || visibleKeys.has(i.key)).length}</span>
+              {laneLabel(l.id)} <span className="count">{l.items.filter(isShown).length}</span>
             </h3>
             <div className="board">{renderColumns(l.items, laneLabel(l.id))}</div>
           </section>
@@ -262,6 +275,144 @@ export function Board({
         </section>
       )}
     </div>
+  );
+}
+
+/** BoardToolbar: Jira's board header — search, people, version/epic/type filters, grouping and
+ * sprint completion. */
+function BoardToolbar({
+  projectKey,
+  issues,
+  members,
+  versions,
+  onVersionsOpen,
+  filter,
+  onFilter,
+  mode,
+  onMode,
+  sprint,
+}: {
+  projectKey: string;
+  issues: Issue[];
+  members: Member[];
+  versions: Version[];
+  onVersionsOpen: () => void;
+  filter: BoardFilter;
+  onFilter: (f: BoardFilter) => void;
+  mode: SwimlaneMode;
+  onMode: (m: SwimlaneMode) => void;
+  sprint?: { name: string; completing: boolean; onComplete: () => void };
+}) {
+  const t = useT();
+  const set = (patch: Partial<BoardFilter>) => onFilter({ ...filter, ...patch });
+  const epics = issues.filter((i) => i.type === "epic");
+  const types = [...new Set(issues.map((i) => i.type))];
+  const enc = encodeURIComponent(projectKey);
+  return (
+    <div className="board-toolbar" role="toolbar" aria-label={t("Board filters")}>
+      <input
+        type="search"
+        className="board-search"
+        aria-label={t("Search board")}
+        placeholder={t("Search board")}
+        value={filter.text}
+        onChange={(e) => set({ text: e.target.value })}
+      />
+      <div className="avatar-filter" role="group" aria-label={t("Assignees")}>
+        {members.map((m) => (
+          <button
+            key={m.user_id}
+            type="button"
+            className="avatar"
+            title={m.name}
+            aria-label={m.name}
+            aria-pressed={filter.assignees.includes(m.user_id)}
+            onClick={() => set({ assignees: toggle(filter.assignees, m.user_id) })}
+          >
+            {initials(m.name)}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="avatar unassigned"
+          title={t("Unassigned")}
+          aria-label={t("Unassigned")}
+          aria-pressed={filter.assignees.includes("")}
+          onClick={() => set({ assignees: toggle(filter.assignees, "") })}
+        >
+          ?
+        </button>
+      </div>
+      <MultiPick label={t("Version")} aria={t("Filter by {name}", { name: t("Version") })} onOpen={onVersionsOpen} options={versions.map((v) => ({ id: v.name, label: v.name }))} value={filter.versions} onChange={(versions) => set({ versions })} />
+      <MultiPick
+        label={t("Epic")}
+        aria={t("Filter by {name}", { name: t("Epic") })}
+        options={[...epics.map((e) => ({ id: e.key, label: `${e.key} ${e.title}` })), { id: "", label: t("No epic") }]}
+        value={filter.epics}
+        onChange={(epics) => set({ epics })}
+      />
+      <MultiPick label={t("Type")} aria={t("Filter by kind")} options={types.map((ty) => ({ id: ty, label: ty }))} value={filter.types} onChange={(types) => set({ types })} />
+      {boardFilterActive(filter) && (
+        <button type="button" className="ghost" onClick={() => onFilter(NO_BOARD_FILTER)}>
+          {t("Clear filters")}
+        </button>
+      )}
+      <span className="toolbar-spacer" />
+      {sprint && (
+        <button type="button" disabled={sprint.completing} onClick={sprint.onComplete} title={sprint.name}>
+          {t("Complete sprint")}
+        </button>
+      )}
+      <label className="board-picker">
+        {t("Group")}{" "}
+        <select aria-label={t("Group")} value={mode} onChange={(e) => onMode(SWIMLANE_MODES.find((x) => x === e.target.value) ?? "none")}>
+          <option value="none">{t("None")}</option>
+          <option value="assignee">{t("Assignee")}</option>
+          <option value="epic">{t("Epic")}</option>
+        </select>
+      </label>
+      <Link className="icon-link" to={`/projects/${enc}/reports`} title={t("Reports")} aria-label={t("Board insights")}>
+        📈
+      </Link>
+      <Link className="icon-link" to={`/projects/${enc}/board-settings`} title={t("Board settings")} aria-label={t("Configure board")}>
+        ⚙
+      </Link>
+    </div>
+  );
+}
+
+/** MultiPick: a dropdown of checkboxes; the button shows how many values are picked. */
+function MultiPick({
+  label,
+  aria,
+  options,
+  value,
+  onChange,
+  onOpen,
+}: {
+  label: string;
+  aria: string;
+  options: { id: string; label: string }[];
+  value: string[];
+  onChange: (v: string[]) => void;
+  onOpen?: () => void;
+}) {
+  return (
+    <details className="multi-pick" onToggle={(e) => e.currentTarget.open && onOpen?.()}>
+      <summary aria-label={aria}>
+        {label}
+        {value.length > 0 && <span className="count"> {value.length}</span>} ▾
+      </summary>
+      <div className="multi-pick-menu" role="group" aria-label={aria}>
+        {options.length === 0 && <span className="muted">—</span>}
+        {options.map((o) => (
+          <label key={o.id || "none"} className="check">
+            <input type="checkbox" checked={value.includes(o.id)} onChange={() => onChange(toggle(value, o.id))} />
+            {o.label}
+          </label>
+        ))}
+      </div>
+    </details>
   );
 }
 
