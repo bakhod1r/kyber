@@ -92,3 +92,114 @@ export function commentCounts(comments: ElementComment[]): Map<string, number> {
   for (const c of comments) out.set(c.element_id, (out.get(c.element_id) ?? 0) + 1);
   return out;
 }
+
+/** S89: what part of the infinite board is shown — the top-left corner (board units) and the zoom (1 = 100 %). */
+export type View = { x: number; y: number; zoom: number };
+export const HOME: View = { x: 0, y: 0, zoom: 1 };
+export const MIN_ZOOM = 0.1;
+export const MAX_ZOOM = 4;
+const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+
+/** zoomAt scales the view by factor, keeping the board point p under the pointer where it is. */
+export function zoomAt(v: View, factor: number, p: Point): View {
+  const zoom = clampZoom(v.zoom * factor);
+  const k = v.zoom / zoom;
+  return { x: p.x - (p.x - v.x) * k, y: p.y - (p.y - v.y) * k, zoom };
+}
+
+/** panBy moves the view by a distance dragged on screen (in page units: the board drags along). */
+export const panBy = (v: View, dx: number, dy: number): View => ({ ...v, x: v.x - dx / v.zoom, y: v.y - dy / v.zoom });
+
+/** viewBox is the SVG viewBox showing v on a page of the given size. */
+export const viewBox = (v: View, page: { w: number; h: number }) => `${v.x} ${v.y} ${page.w / v.zoom} ${page.h / v.zoom}`;
+
+/** onScreen places a board point on the page, in percent (for HTML laid over the canvas). */
+export const onScreen = (v: View, page: { w: number; h: number }, p: Point) => ({
+  left: (((p.x - v.x) * v.zoom) / page.w) * 100,
+  top: (((p.y - v.y) * v.zoom) / page.h) * 100,
+});
+
+/** bounds is the box around every element (strokes by their points); undefined for an empty board. */
+export function bounds(els: Element[]): { x: number; y: number; w: number; h: number } | undefined {
+  if (els.length === 0) return undefined;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const e of els) {
+    const pts = e.points.length > 0 ? e.points.map((q) => ({ x: e.x + q.x, y: e.y + q.y })) : [{ x: e.x, y: e.y }, { x: e.x + e.w, y: e.y + e.h }];
+    for (const p of pts) {
+      x0 = Math.min(x0, p.x);
+      y0 = Math.min(y0, p.y);
+      x1 = Math.max(x1, p.x);
+      y1 = Math.max(y1, p.y);
+    }
+  }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+/** fit shows every element with a margin, centred, never zoomed in past 400 %. */
+export function fit(els: Element[], page: { w: number; h: number }, margin = 40): View {
+  const b = bounds(els);
+  if (!b) return HOME;
+  const zoom = clampZoom(Math.min(page.w / (b.w + 2 * margin), page.h / (b.h + 2 * margin)));
+  return { x: b.x + b.w / 2 - page.w / zoom / 2, y: b.y + b.h / 2 - page.h / zoom / 2, zoom };
+}
+
+/** S90: the eight handles that resize a box. */
+export type Handle = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+export const HANDLES: Handle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+export const MIN_SIZE = 8;
+
+/** resize drags handle h of a box by (dx, dy); the opposite side stays put and the box never turns inside out. */
+export function resize(e: Element, h: Handle, dx: number, dy: number): Element {
+  let { x, y, w, h: height } = e;
+  if (h.includes("e")) w = Math.max(MIN_SIZE, w + dx);
+  if (h.includes("s")) height = Math.max(MIN_SIZE, height + dy);
+  if (h.includes("w")) {
+    const right = x + w;
+    w = Math.max(MIN_SIZE, w - dx);
+    x = right - w;
+  }
+  if (h.includes("n")) {
+    const bottom = y + height;
+    height = Math.max(MIN_SIZE, height - dy);
+    y = bottom - height;
+  }
+  return { ...e, x, y, w, h: height };
+}
+
+/** moveEnd puts point i of a line or arrow at board point p. */
+export function moveEnd(e: Element, i: number, p: Point): Element {
+  return { ...e, points: e.points.map((q, j) => (j === i ? { x: p.x - e.x, y: p.y - e.y } : q)) };
+}
+
+/** moveBy shifts every element by (dx, dy). */
+export const moveBy = (els: Element[], dx: number, dy: number): Element[] => els.map((e) => ({ ...e, x: e.x + dx, y: e.y + dy }));
+
+/** within lists the elements a marquee covers completely. */
+export function within(els: Element[], area: { x: number; y: number; w: number; h: number }): Element[] {
+  return els.filter((e) => {
+    const b = bounds([e])!;
+    return b.x >= area.x && b.y >= area.y && b.x + b.w <= area.x + area.w && b.y + b.h <= area.y + area.h;
+  });
+}
+
+/** duplicate copies elements under fresh ids, offset so the copy is visible, as new (version 0). */
+export const duplicate = (els: Element[], offset: number, id: () => string = newId): Element[] =>
+  els.map(({ updated_at: _at, updated_by: _by, ...e }) => ({ ...e, id: id(), x: e.x + offset, y: e.y + offset, version: 0 }));
+
+/** toClipboard / fromClipboard carry elements as text, so they paste across boards and tabs. */
+export const toClipboard = (els: Element[]) => JSON.stringify({ kyber: "whiteboard", elements: els });
+export function fromClipboard(text: string): Element[] {
+  try {
+    const v = JSON.parse(text) as { kyber?: unknown; elements?: unknown };
+    if (v.kyber !== "whiteboard" || !Array.isArray(v.elements)) return [];
+    const ok = (e: unknown): e is Element =>
+      typeof e === "object" && e !== null && typeof (e as Element).id === "string" && typeof (e as Element).kind === "string" &&
+      typeof (e as Element).x === "number" && typeof (e as Element).y === "number" && Array.isArray((e as Element).points);
+    return v.elements.every(ok) ? v.elements : [];
+  } catch {
+    return [];
+  }
+}
+
+/** inverseAll undoes a batch of changes: each one inverted, last first. */
+export const inverseAll = (ops: Op[], before: Elements): Op[] => ops.map((op) => inverse(op, before[op.element.id])).reverse();
