@@ -3,6 +3,8 @@ export type Kind = "rect" | "ellipse" | "arrow" | "line" | "freehand" | "text" |
 export type Point = { x: number; y: number };
 export type Element = {
   id: string; kind: Kind; x: number; y: number; w: number; h: number; points: Point[]; text: string; color: string;
+  /** S91 styles: 1 thin, 2 medium, 3 bold (absent = default); filled shapes; dashed lines. */
+  stroke?: 0 | 1 | 2 | 3; fill?: boolean; dashed?: boolean;
   version: number; updated_by?: string; updated_at?: string; deleted?: boolean;
 };
 export type Whiteboard = { id: string; conversation_id: string; title: string; created_by: string; created_at: string; elements?: Element[] };
@@ -12,8 +14,12 @@ export type OpResult = { applied: boolean; error: "" | "stale" | "not_found" | "
 
 export type Elements = Record<string, Element>;
 
-export const COLORS = ["#1f2937", "#0b6fd8", "#16a34a", "#dc2626", "#f59e0b", "#9333ea"];
+export const COLORS = [
+  "#1f2937", "#64748b", "#0b6fd8", "#0891b2", "#16a34a", "#65a30d", "#f59e0b", "#ea580c", "#dc2626", "#db2777", "#9333ea", "#7c3aed",
+];
 export const STICKY = "#fde68a";
+/** S91: sticky note colours (yellow first, the default). */
+export const STICKY_COLORS = [STICKY, "#fbcfe8", "#bbf7d0", "#bfdbfe", "#fed7aa", "#e9d5ff"];
 
 /** A fresh id for a new element (unique enough within one board). */
 export const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -203,3 +209,54 @@ export function fromClipboard(text: string): Element[] {
 
 /** inverseAll undoes a batch of changes: each one inverted, last first. */
 export const inverseAll = (ops: Op[], before: Elements): Op[] => ops.map((op) => inverse(op, before[op.element.id])).reverse();
+
+/** S91: how an element's style is drawn — stroke width, a light fill tint of its colour, dashes. */
+export function look(e: Pick<Element, "kind" | "color" | "stroke" | "fill" | "dashed">) {
+  const strokeWidth = ({ 0: 2, 1: 1, 2: 3, 3: 6 } as const)[e.stroke ?? 0];
+  const fillable = e.kind === "rect" || e.kind === "ellipse";
+  return { strokeWidth, fill: fillable && e.fill ? `${e.color || "#1f2937"}33` : "none", dash: e.dashed ? "10 6" : undefined };
+}
+
+/** restyle applies a style to the elements it means something for (sticky notes and text have no stroke). */
+export function restyle(els: Element[], style: Pick<Element, "stroke" | "fill" | "dashed">): Element[] {
+  return els
+    .filter((e) => e.kind !== "sticky" && e.kind !== "text")
+    .map((e) => {
+      const fillable = e.kind === "rect" || e.kind === "ellipse";
+      const next = { ...e, ...style };
+      if (!fillable) delete next.fill;
+      return next;
+    });
+}
+
+/** S92: boards to start from. */
+export type Template = "retro" | "kanban" | "swot";
+export const TEMPLATES: { id: Template; label: string }[] = [
+  { id: "retro", label: "Retrospective" },
+  { id: "kanban", label: "Kanban" },
+  { id: "swot", label: "SWOT" },
+];
+
+/** template lays a template out as ordinary new elements (columns or quadrants with a heading), centred on c. */
+export function template(kind: Template, c: Point, id: () => string = newId): Element[] {
+  const el = (e: Pick<Element, "kind" | "x" | "y" | "w" | "h"> & Partial<Element>): Element => ({ points: [], text: "", color: "#1f2937", version: 0, ...e, id: id() });
+  const panels: { title: string; x: number; y: number; w: number; h: number; color: string }[] = [];
+  if (kind === "swot") {
+    const titles: [string, string][] = [["Strengths", "#16a34a"], ["Weaknesses", "#dc2626"], ["Opportunities", "#0b6fd8"], ["Threats", "#f59e0b"]];
+    titles.forEach(([title, color], i) => panels.push({ title, color, x: (i % 2) * 520, y: Math.floor(i / 2) * 380, w: 500, h: 360 }));
+  } else {
+    const titles: [string, string][] =
+      kind === "retro"
+        ? [["Went well", "#16a34a"], ["To improve", "#f59e0b"], ["Actions", "#0b6fd8"]]
+        : [["To do", "#64748b"], ["Doing", "#0b6fd8"], ["Done", "#16a34a"]];
+    titles.forEach(([title, color], i) => panels.push({ title, color, x: i * 420, y: 0, w: 400, h: 640 }));
+  }
+  const w = Math.max(...panels.map((p) => p.x + p.w));
+  const h = Math.max(...panels.map((p) => p.y + p.h));
+  const ox = c.x - w / 2;
+  const oy = c.y - h / 2;
+  return panels.flatMap((p) => [
+    el({ kind: "rect", x: ox + p.x, y: oy + p.y, w: p.w, h: p.h, color: p.color, fill: true }),
+    el({ kind: "text", x: ox + p.x + 12, y: oy + p.y + 10, w: p.w - 24, h: 34, text: p.title, color: p.color }),
+  ]);
+}

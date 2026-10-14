@@ -28,11 +28,12 @@ func TestWhiteboard(t *testing.T) {
 		url := "/api/v1/whiteboards/" + b["id"].(string)
 		devStream := dev.stream("")
 
-		box := map[string]any{"id": "api", "kind": "rect", "x": 10, "y": 20, "w": 120, "h": 60, "text": "API", "color": "#0b6fd8", "points": []any{}, "version": 0}
+		box := map[string]any{"id": "api", "kind": "rect", "x": 10, "y": 20, "w": 120, "h": 60, "text": "API", "color": "#0b6fd8", "points": []any{}, "version": 0,
+			"stroke": 3, "fill": true, "dashed": true} // S91 styles
 		code, r := lead.do("POST", url+"/ops", map[string]any{"ops": []any{map[string]any{"op": "add", "element": box}}})
 		expect(t, code, 200, r)
 		res := r["results"].([]any)[0].(map[string]any)
-		if res["applied"] != true || res["element"].(map[string]any)["version"] != float64(1) {
+		if el := res["element"].(map[string]any); res["applied"] != true || el["version"] != float64(1) || el["stroke"] != float64(3) || el["fill"] != true || el["dashed"] != true {
 			t.Fatalf("add = %v", r)
 		}
 		if e := next(t, devStream, "whiteboard.ops"); !strings.Contains(e.data, `"text":"API"`) {

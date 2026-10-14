@@ -68,6 +68,9 @@ type ElementDTO struct {
 	Points    []PointDTO `json:"points"`
 	Text      string     `json:"text"`
 	Color     string     `json:"color"`
+	Stroke    int        `json:"stroke,omitempty"` // S91: 1 thin, 2 medium, 3 bold; 0 = default
+	Fill      bool       `json:"fill,omitempty"`
+	Dashed    bool       `json:"dashed,omitempty"`
 	Version   int        `json:"version"`
 	UpdatedBy string     `json:"updated_by,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
@@ -76,7 +79,7 @@ type ElementDTO struct {
 
 func ToDTO(e domain.Element) ElementDTO {
 	d := ElementDTO{ID: string(e.ID), Kind: string(e.Kind), X: e.X, Y: e.Y, W: e.W, H: e.H, Points: []PointDTO{}, Text: e.Text,
-		Color: e.Color, Version: e.Version, UpdatedBy: string(e.UpdatedBy), Deleted: e.Deleted}
+		Color: e.Color, Stroke: int(e.Stroke), Fill: e.Fill, Dashed: e.Dashed, Version: e.Version, UpdatedBy: string(e.UpdatedBy), Deleted: e.Deleted}
 	if !e.UpdatedAt.IsZero() {
 		d.UpdatedAt = &e.UpdatedAt
 	}
@@ -88,7 +91,7 @@ func ToDTO(e domain.Element) ElementDTO {
 
 func fromDTO(d ElementDTO) domain.Element {
 	e := domain.Element{ID: domain.ElementID(d.ID), Kind: domain.ElementKind(d.Kind), X: d.X, Y: d.Y, W: d.W, H: d.H, Text: d.Text,
-		Color: d.Color, Version: d.Version}
+		Color: d.Color, Stroke: domain.Stroke(d.Stroke), Fill: d.Fill, Dashed: d.Dashed, Version: d.Version}
 	for _, p := range d.Points {
 		e.Points = append(e.Points, domain.Point(p))
 	}

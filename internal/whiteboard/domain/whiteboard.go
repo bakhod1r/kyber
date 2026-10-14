@@ -64,6 +64,16 @@ var (
 
 type Point struct{ X, Y float64 }
 
+// Stroke is a line weight (S91); 0 draws the default.
+type Stroke int
+
+const (
+	StrokeDefault Stroke = iota
+	StrokeThin
+	StrokeMedium
+	StrokeBold
+)
+
 // Element is one shape. W/H size boxes; Points draw lines, arrows and freehand strokes (relative to X/Y).
 type Element struct {
 	ID         ElementID
@@ -72,6 +82,9 @@ type Element struct {
 	Points     []Point
 	Text       string
 	Color      string
+	Stroke     Stroke // S91 styles
+	Fill       bool   // shapes filled with their colour (a light tint)
+	Dashed     bool
 	Version    int // incremented by every applied change
 	UpdatedBy  UserID
 	UpdatedAt  time.Time
@@ -95,6 +108,8 @@ func (e Element) valid() error {
 		return bad("text too long")
 	case e.Color != "" && !color.MatchString(e.Color):
 		return bad("color")
+	case e.Stroke < StrokeDefault || e.Stroke > StrokeBold:
+		return bad("stroke")
 	}
 	for _, p := range e.Points {
 		if !coord(p.X) || !coord(p.Y) {

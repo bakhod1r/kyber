@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { COLORS, look, restyle, STICKY, STICKY_COLORS, template } from "./model";
 import { applyLocal, bounds, box, duplicate, fit, fromClipboard, HOME, inverseAll, MIN_SIZE, moveBy, moveEnd, newer, type Element, hit, inverse, linkedIssue, onScreen, panBy, reconcile, resize, stickyToIssue, toClipboard, viewBox, within, zoomAt } from "./model";
 
 const rect: Element = { id: "r", kind: "rect", x: 10, y: 10, w: 100, h: 50, points: [], text: "", color: "#000000", version: 1 };
@@ -117,5 +118,39 @@ describe("editing several elements (S90)", () => {
       { op: "delete", element: line },
       { op: "update", element: rect },
     ]);
+  });
+});
+
+describe("styles (S91)", () => {
+  it("maps a style to how a shape is drawn", () => {
+    expect(look(rect)).toEqual({ strokeWidth: 2, fill: "none", dash: undefined });
+    expect(look({ ...rect, stroke: 3, fill: true, dashed: true, color: "#dc2626" })).toEqual({ strokeWidth: 6, fill: "#dc262633", dash: "10 6" });
+    expect(look({ ...rect, stroke: 1 }).strokeWidth).toBe(1);
+    expect(look({ ...line, fill: true }).fill).toBe("none"); // lines are never filled
+    expect(COLORS).toHaveLength(12);
+    expect(STICKY_COLORS[0]).toBe(STICKY);
+  });
+
+  it("restyles a selection, leaving what a style does not apply to", () => {
+    const note: Element = { ...rect, id: "n", kind: "sticky", color: STICKY };
+    const out = restyle([rect, line, note], { stroke: 3, fill: true });
+    expect(out.map((e) => [e.id, e.stroke, e.fill])).toEqual([["r", 3, true], ["l", 3, undefined]]); // a sticky has no stroke style
+  });
+});
+
+describe("templates (S92)", () => {
+  it("builds each template as ordinary new elements around a point", () => {
+    let n = 0;
+    const id = () => `t${++n}`;
+    const retro = template("retro", { x: 1000, y: 500 }, id);
+    expect(retro.filter((e) => e.kind === "rect")).toHaveLength(3);
+    expect(retro.filter((e) => e.kind === "text").map((e) => e.text)).toEqual(["Went well", "To improve", "Actions"]);
+    expect(retro.every((e) => e.version === 0 && e.id.startsWith("t"))).toBe(true);
+    const b = bounds(retro)!;
+    expect(Math.abs(b.x + b.w / 2 - 1000)).toBeLessThan(1); // centred on the point
+    expect(Math.abs(b.y + b.h / 2 - 500)).toBeLessThan(1);
+    expect(template("kanban", { x: 0, y: 0 }).filter((e) => e.kind === "text").map((e) => e.text)).toEqual(["To do", "Doing", "Done"]);
+    expect(template("swot", { x: 0, y: 0 }).filter((e) => e.kind === "text").map((e) => e.text)).toEqual(["Strengths", "Weaknesses", "Opportunities", "Threats"]);
+    expect(new Set(template("swot", { x: 0, y: 0 }).map((e) => e.id)).size).toBe(8);
   });
 });

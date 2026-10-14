@@ -5,7 +5,7 @@ import { issueUseCases } from "../../issue/application";
 import { projectUseCases } from "../../project/application";
 import {
   bounds, box, COLORS, commentCounts, duplicate, type Element, fit, fromClipboard, type Handle, HANDLES, hit, HOME, type Kind, linkedIssue, moveBy, moveEnd, newId,
-  onScreen, onWhiteboardComments, ordered, panBy, resize, toClipboard, within,
+  look, onScreen, onWhiteboardComments, ordered, panBy, resize, restyle, STICKY_COLORS, type Template, template, TEMPLATES, toClipboard, within,
   type Point, STICKY, stickyToIssue, useWhiteboard, type View, viewBox, whiteboardUseCases, zoomAt,
 } from "../application";
 
@@ -73,7 +73,8 @@ export function Whiteboards({ conversationId, me, names }: { conversationId: str
 
 function Shape({ e, selected }: { e: Element; selected: boolean }) {
   const stroke = e.color || "#1f2937";
-  const common = { "data-id": e.id, stroke, strokeWidth: selected ? 3 : 2, fill: "none" } as const;
+  const l = look(e);
+  const common = { "data-id": e.id, stroke, strokeWidth: l.strokeWidth + (selected ? 1 : 0), fill: l.fill, strokeDasharray: l.dash } as const;
   const pts = e.points.map((p) => `${e.x + p.x},${e.y + p.y}`).join(" ");
   switch (e.kind) {
     case "rect":
@@ -81,13 +82,19 @@ function Shape({ e, selected }: { e: Element; selected: boolean }) {
     case "ellipse":
       return <g><ellipse {...common} cx={e.x + e.w / 2} cy={e.y + e.h / 2} rx={e.w / 2} ry={e.h / 2} /><Label e={e} /></g>;
     case "line":
-      return <polyline {...common} points={pts} />;
+      return <polyline {...common} fill="none" points={pts} />;
     case "arrow":
-      return <polyline {...common} points={pts} markerEnd="url(#wb-arrow)" />;
+      return <polyline {...common} fill="none" points={pts} markerEnd="url(#wb-arrow)" />;
     case "freehand":
-      return <polyline {...common} points={pts} strokeLinecap="round" strokeLinejoin="round" />;
+      return <polyline {...common} fill="none" points={pts} strokeLinecap="round" strokeLinejoin="round" />;
     case "sticky":
-      return <g><rect {...common} x={e.x} y={e.y} width={e.w} height={e.h} fill={STICKY} stroke={selected ? stroke : "#d4b84a"} /><Label e={e} /></g>;
+      return (
+        <g>
+          <rect data-id={e.id} x={e.x} y={e.y} width={e.w} height={e.h} fill={STICKY_COLORS.includes(e.color) ? e.color : STICKY}
+            stroke={selected ? "#1f2937" : "#00000022"} strokeWidth={selected ? 2 : 1} />
+          <Label e={e} />
+        </g>
+      );
     case "text":
       return <g><rect data-id={e.id} x={e.x} y={e.y} width={e.w} height={e.h} fill="transparent" stroke={selected ? "#94a3b8" : "none"} strokeDasharray="4" /><Label e={e} /></g>;
   }
@@ -200,6 +207,8 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
   const svg = useRef<SVGSVGElement>(null);
   const [tool, setTool] = useState<Tool>("select");
   const [color, setColor] = useState(COLORS[0]!);
+  /** S91: the style new shapes get; changing it restyles the selection too. */
+  const [style, setStyle] = useState<Pick<Element, "stroke" | "fill" | "dashed">>({ stroke: 0, fill: false, dashed: false });
   /** S90: the selected elements (Shift+click or a marquee selects several). */
   const [selected, setSelectedIds] = useState<string[]>([]);
   const setSelected = (id: string | null) => setSelectedIds(id ? [id] : []);
@@ -268,7 +277,9 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
       drag.current = { mode: "move", start: p, origins: ids.map((x) => wb.elements[x]).filter((x): x is Element => !!x) };
       return;
     }
-    const base = { id: newId(), kind: tool, x: p.x, y: p.y, w: 0, h: 0, points: [] as Point[], text: "", color, version: 0 };
+    const fillable = tool === "rect" || tool === "ellipse";
+    const base: Element = { id: newId(), kind: tool, x: p.x, y: p.y, w: 0, h: 0, points: [] as Point[], text: "", color, version: 0,
+      stroke: style.stroke, dashed: style.dashed, ...(fillable ? { fill: style.fill } : {}) };
     if (tool === "text" || tool === "sticky") {
       e.preventDefault(); // keep the focus for the editor
       const el: Element = { ...base, w: tool === "sticky" ? 180 : 240, h: tool === "sticky" ? 120 : 34, color: tool === "sticky" ? STICKY : color };
@@ -379,6 +390,18 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
       wb.change({ op: "update", element: { ...(wb.elements[el.id] ?? el), text } });
     }
   };
+  /** S92: lays a template out in the middle of what is on screen, selected so it can be moved at once. */
+  const insertTemplate = (kind: Template) => {
+    const els = template(kind, { x: view.x + W / view.zoom / 2, y: view.y + H / view.zoom / 2 });
+    wb.changeAll(els.map((element) => ({ op: "add", element })));
+    setSelectedIds(els.map((e) => e.id));
+  };
+  const applyStyle = (patch: Pick<Element, "stroke" | "fill" | "dashed">) => {
+    setStyle((s) => ({ ...s, ...patch }));
+    wb.changeAll(restyle(selection, patch).map((element) => ({ op: "update", element })));
+  };
+  const recolorNotes = (c: string) =>
+    wb.changeAll(selection.filter((x) => x.kind === "sticky").map((x) => ({ op: "update", element: { ...x, color: c } })));
   const recolor = (c: string) => {
     setColor(c);
     wb.changeAll(selection.filter((x) => x.kind !== "sticky").map((x) => ({ op: "update", element: { ...x, color: c } })));
@@ -503,12 +526,34 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
               onClick={() => setTool(t.tool)}>{t.icon}</button>
           ))}
         </div>
+        <div className="row" role="group" aria-label="Style">
+          {([1, 2, 3] as const).map((w) => (
+            <button key={w} className={(style.stroke || 2) === w ? "active" : "ghost"} aria-pressed={(style.stroke || 2) === w}
+              aria-label={["Thin", "Medium", "Bold"][w - 1]} title={["Thin", "Medium", "Bold"][w - 1]} onClick={() => applyStyle({ stroke: w })}>
+              <span className="wb-weight" style={{ height: w === 1 ? 1 : w === 2 ? 3 : 6 }} />
+            </button>
+          ))}
+          <button className={style.fill ? "active" : "ghost"} aria-pressed={!!style.fill} aria-label="Fill" title="Fill shapes" onClick={() => applyStyle({ fill: !style.fill })}>◼</button>
+          <button className={style.dashed ? "active" : "ghost"} aria-pressed={!!style.dashed} aria-label="Dashed" title="Dashed lines" onClick={() => applyStyle({ dashed: !style.dashed })}>┄</button>
+        </div>
+        {selection.some((x) => x.kind === "sticky") && (
+          <div className="row" role="radiogroup" aria-label="Sticky colour">
+            {STICKY_COLORS.map((c) => (
+              <button key={c} role="radio" aria-checked={selection.every((x) => x.kind !== "sticky" || x.color === c)} aria-label={`Sticky ${c}`}
+                className="wb-swatch" style={{ background: c }} onClick={() => recolorNotes(c)} />
+            ))}
+          </div>
+        )}
         <div className="row" role="radiogroup" aria-label="Color">
           {COLORS.map((c) => (
             <button key={c} role="radio" aria-checked={color === c} aria-label={`Color ${c}`} className="wb-swatch" style={{ background: c }} onClick={() => recolor(c)} />
           ))}
         </div>
         <div className="row">
+          <select aria-label="Insert template" value="" onChange={(e) => e.target.value && insertTemplate(e.target.value as Template)}>
+            <option value="">Template…</option>
+            {TEMPLATES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
           <button className="ghost" onClick={wb.undo} disabled={!wb.canUndo}>Undo</button>
           <button className="ghost" onClick={wb.redo} disabled={!wb.canRedo}>Redo</button>
           {sel && editable(sel) && <button className="ghost" onClick={editText}>Edit text</button>}

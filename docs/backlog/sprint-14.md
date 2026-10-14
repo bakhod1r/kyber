@@ -19,10 +19,13 @@ styles. This sprint brings it closer to Miro/Excalidraw. Planned first, then bui
   **Done:** `resize`, `moveEnd`, `moveBy`, `within`, `duplicate`, clipboard and `inverseAll` in the domain;
   `changeAll` makes a batch one undo step; handles, marquee, Shift+click, Ctrl+A/D/C/X/V, Esc, arrows; copies draw
   on top. e2e: resize by handle, marquee, duplicate, nudge, delete and undo.
-- **S91 Styles** — stroke width (thin/medium/bold), filled or outlined shapes, dashed lines, and a larger palette
+- ✅ **S91 Styles** — stroke width (thin/medium/bold), filled or outlined shapes, dashed lines, and a larger palette
   (12 colours, sticky colours). AC: stored with the element (server validates), drawn the same in export.
-- **S92 Templates** — start a board from Retrospective (went well / to improve / actions), Kanban
+  **Done:** element `stroke` (0–3), `fill`, `dashed` (domain validation, migration 0077, API 0.66.0); Style bar
+  (Thin/Medium/Bold, Fill, Dashed) restyles the selection and new shapes; 12 colours; six sticky colours.
+- ✅ **S92 Templates** — start a board from Retrospective (went well / to improve / actions), Kanban
   (to do / doing / done), SWOT or a blank page; a template is a batch of ordinary elements anyone can edit.
+  **Done:** `template()` in the domain; "Template…" inserts it in the middle of the view, selected, one undo step.
 - **S93 Eraser and order** — an eraser tool (drag over strokes to delete them, one undo step); bring to front /
   send to back (stored order, not the last change).
 

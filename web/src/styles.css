@@ -546,6 +546,7 @@ label.button { cursor: pointer; }
 .wb-stage { overflow: hidden; }
 .wb-zoom { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 2px; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 8px; padding: 2px; box-shadow: 0 1px 4px rgb(0 0 0 / 0.12); }
 .wb-zoom button { min-width: 2.2rem; }
+.wb-weight { display: inline-block; width: 16px; background: currentColor; border-radius: 3px; vertical-align: middle; }
 .wb-handle { fill: #fff; stroke: #2563eb; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .wb-handle-n, .wb-handle-s { cursor: ns-resize; }
 .wb-handle-e, .wb-handle-w { cursor: ew-resize; }

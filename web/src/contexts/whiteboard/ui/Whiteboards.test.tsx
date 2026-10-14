@@ -91,4 +91,57 @@ describe("Whiteboards (S59)", () => {
     expect(await within(canvas).findAllByText("Queue?")).toHaveLength(2);
     expect(calls.filter((c) => c.key === "POST /api/v1/whiteboards/b-1/ops").length).toBeGreaterThanOrEqual(6);
   });
+
+  it("restyles the selection: weight, fill, dashes and sticky colours (S91)", async () => {
+    const box = { ...sticky, id: "e-3", kind: "rect", text: "", color: "#0b6fd8" };
+    const calls = mockApi({
+      "GET /api/v1/conversations/c-1/whiteboards": { status: 200, body: { items: [board] } },
+      "GET /api/v1/whiteboards/b-1": { status: 200, body: { ...board, elements: [sticky, box] } },
+      "POST /api/v1/whiteboards/b-1/ops": (init) => {
+        const ops = (JSON.parse(String(init?.body)) as { ops: { element: Record<string, unknown> }[] }).ops;
+        return { status: 200, body: { results: ops.map((o) => ({ applied: true, error: "", element: { ...o.element, version: 2 } })) } };
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<Whiteboards conversationId="c-1" me="u-1" names={names} />);
+    await user.click(screen.getByRole("button", { name: "Whiteboards" }));
+    await user.click(await screen.findByRole("button", { name: "Architecture" }));
+    const canvas = await screen.findByRole("img", { name: "Canvas" });
+    await within(canvas).findByText("Cache?");
+    await user.keyboard("{Control>}a{/Control}");
+    const style = screen.getByRole("group", { name: "Style" });
+    await user.click(within(style).getByRole("button", { name: "Bold" }));
+    await user.click(within(style).getByRole("button", { name: "Fill" }));
+    await user.click(within(style).getByRole("button", { name: "Dashed" }));
+    await user.click(within(screen.getByRole("radiogroup", { name: "Sticky colour" })).getByRole("radio", { name: "Sticky #fbcfe8" }));
+    const sent = calls.filter((c) => c.key === "POST /api/v1/whiteboards/b-1/ops").flatMap((c) => (c.body as { ops: { element: Record<string, unknown> }[] }).ops.map((o) => o.element));
+    await waitFor(() => expect(sent.filter((e) => e.id === "e-3").at(-1)).toMatchObject({ stroke: 3, fill: true, dashed: true }));
+    expect(sent.filter((e) => e.id === "e-1").map((e) => e.color)).toEqual(["#fbcfe8"]); // the note only changed colour
+    const drawn = canvas.querySelector('rect[data-id="e-3"]');
+    await waitFor(() => expect(drawn?.getAttribute("stroke-dasharray")).toBe("10 6"));
+    expect(drawn?.getAttribute("fill")).toBe("#0b6fd833");
+  });
+
+  it("starts from a template (S92)", async () => {
+    const calls = mockApi({
+      "GET /api/v1/conversations/c-1/whiteboards": { status: 200, body: { items: [board] } },
+      "GET /api/v1/whiteboards/b-1": { status: 200, body: { ...board, elements: [] } },
+      "POST /api/v1/whiteboards/b-1/ops": (init) => {
+        const ops = (JSON.parse(String(init?.body)) as { ops: { op: string; element: Record<string, unknown> }[] }).ops;
+        return { status: 200, body: { results: ops.map((o) => ({ applied: true, error: "", element: { ...o.element, version: 1, deleted: o.op === "delete" } })) } };
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<Whiteboards conversationId="c-1" me="u-1" names={names} />);
+    await user.click(screen.getByRole("button", { name: "Whiteboards" }));
+    await user.click(await screen.findByRole("button", { name: "Architecture" }));
+    const canvas = await screen.findByRole("img", { name: "Canvas" });
+    await user.selectOptions(screen.getByLabelText("Insert template"), "retro");
+    expect(await within(canvas).findByText("Went well")).toBeInTheDocument();
+    expect(within(canvas).getByText("Actions")).toBeInTheDocument();
+    expect(screen.getByText("6 selected")).toBeInTheDocument();
+    await waitFor(() => expect(calls.filter((c) => c.key === "POST /api/v1/whiteboards/b-1/ops")).toHaveLength(6));
+    await user.click(screen.getByRole("button", { name: "Undo" })); // one step removes the whole template
+    await waitFor(() => expect(within(canvas).queryByText("Went well")).not.toBeInTheDocument());
+  });
 });
