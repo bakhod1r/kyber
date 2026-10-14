@@ -48,7 +48,7 @@ func TestMCP(t *testing.T) {
 			t.Fatalf("initialize = %v", init)
 		}
 		tools := rpc(lead, "tools/list", nil)["result"].(map[string]any)["tools"].([]any)
-		if len(tools) != 5 {
+		if len(tools) != 11 {
 			t.Fatalf("tools = %v", tools)
 		}
 
@@ -87,5 +87,51 @@ func TestMCP(t *testing.T) {
 		}
 		failed(lead, "add_comment", map[string]string{"key": "KYB-1", "body": ""})
 		failed(lead, "add_comment", false)
+
+		cs, _ := call(vic, "get_comments", map[string]string{"key": "KYB-1"})
+		if list := cs["comments"].([]any); len(list) != 1 || list[0].(map[string]any)["body"] != "Looking into it" {
+			t.Fatalf("comments = %v", cs)
+		}
+		failed(vic, "get_comments", map[string]string{"key": "NOPE-1"})
+		failed(vic, "get_comments", 1)
+
+		moved, msg := call(lead, "transition_issue", map[string]string{"key": "KYB-1", "to": "in_progress"})
+		if msg != "" || moved["status"] != "in_progress" {
+			t.Fatalf("transition = %v %s", moved, msg)
+		}
+		failed(lead, "transition_issue", map[string]string{"key": "KYB-1", "to": "nowhere"})
+		failed(lead, "transition_issue", 1)
+
+		up, msg := call(lead, "update_issue", map[string]string{"key": "KYB-1", "priority": "high", "title": "Crash on login (iOS)"})
+		if msg != "" || up["priority"] != "high" || up["title"] != "Crash on login (iOS)" || up["description"] != "Stack trace" {
+			t.Fatalf("update = %v %s", up, msg)
+		}
+		failed(vic, "update_issue", map[string]string{"key": "KYB-1", "title": "x"})
+		failed(lead, "update_issue", map[string]string{"key": "NOPE-1"})
+		failed(lead, "update_issue", 1)
+
+		ms, _ := call(vic, "list_members", map[string]string{"project": "KYB"})
+		members := ms["members"].([]any)
+		if len(members) != 2 {
+			t.Fatalf("members = %v", ms)
+		}
+		failed(vic, "list_members", map[string]string{"project": "NOPE"})
+		failed(vic, "list_members", 1)
+		mine, msg := call(lead, "assign_issue", map[string]string{"key": "KYB-1", "assignee": "me"})
+		if msg != "" || mine["assignee"] == "" {
+			t.Fatalf("assign = %v %s", mine, msg)
+		}
+		if none, _ := call(lead, "assign_issue", map[string]string{"key": "KYB-1", "assignee": ""}); none["assignee"] != "" {
+			t.Fatalf("unassign = %v", none)
+		}
+		failed(lead, "assign_issue", 1)
+
+		lead.do("POST", "/api/v1/projects/KYB/sprints", map[string]string{"name": "Sprint 1", "goal": "Ship"})
+		sp, _ := call(vic, "list_sprints", map[string]string{"project": "KYB"})
+		if list := sp["sprints"].([]any); len(list) != 1 || list[0].(map[string]any)["state"] != "planned" {
+			t.Fatalf("sprints = %v", sp)
+		}
+		failed(vic, "list_sprints", map[string]string{"project": "NOPE"})
+		failed(vic, "list_sprints", 1)
 	})
 }

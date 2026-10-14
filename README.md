@@ -90,8 +90,7 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/probl
 ## AI assistants (MCP)
 
 Kyber is a [Model Context Protocol](https://modelcontextprotocol.io) server at `POST /api/v1/mcp`
-(Streamable HTTP, ADR-0009). Tools: `list_projects`, `search_issues` (JQL), `get_issue`,
-`create_issue`, `add_comment`; each runs with your own permissions. Create a personal access token
+(Streamable HTTP, ADR-0009). Tools: `list_projects`, `search_issues` (JQL), `get_issue`, `create_issue`, `update_issue`, `transition_issue`, `assign_issue`, `add_comment`, `get_comments`, `list_members`, `list_sprints`; each runs with your own permissions. Create a personal access token
 in **Settings → Access tokens** (ADR-0012) and keep it out of shared config files:
 
 ```sh

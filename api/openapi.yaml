@@ -337,7 +337,8 @@ paths:
       description: >-
         Model Context Protocol endpoint (Streamable HTTP, JSON responses; ADR-0009). One JSON-RPC 2.0 message per request
         (initialize, ping, tools/list, tools/call); notifications are acknowledged with 202. Tools - list_projects,
-        search_issues, get_issue, create_issue, add_comment - run with the caller's permissions.
+        search_issues, get_issue, create_issue, update_issue, transition_issue, assign_issue, add_comment, get_comments,
+        list_members, list_sprints - run with the caller's permissions.
       requestBody:
         required: true
         content: { application/json: { schema: { type: object, required: [jsonrpc, method], properties: { jsonrpc: { type: string, enum: ["2.0"] }, id: {}, method: { type: string }, params: { type: object } } } } }
