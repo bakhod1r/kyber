@@ -10,6 +10,8 @@ export type Notification = {
   /** Set for a mention in chat (issue_key empty); conversation_name is the channel ("" for a DM). */
   conversation_id?: string;
   conversation_name?: string;
+  /** S95: the commented doc page (kind "doc"). */
+  page_id?: string;
   actor_name: string;
   excerpt: string;
   read: boolean;
@@ -27,10 +29,13 @@ export type NotificationSettings = {
 };
 
 /** Where a notification leads: the conversation (chat mentions, reminders), the issue, a project's announcements, or home for the workspace's. */
-export function notificationTarget(n: Pick<Notification, "kind" | "issue_key" | "project_key" | "conversation_id">): string {
+export function notificationTarget(n: Pick<Notification, "kind" | "issue_key" | "project_key" | "conversation_id" | "page_id">): string {
   if (n.conversation_id) return `/chat/${encodeURIComponent(n.conversation_id)}`;
   if (n.kind === "meeting") return "/meetings";
-  if (n.kind === "doc") return `/projects/${encodeURIComponent(n.project_key ?? "")}/docs`;
+  if (n.kind === "doc") {
+    const docs = `/projects/${encodeURIComponent(n.project_key ?? "")}/docs`;
+    return n.page_id ? `${docs}?page=${encodeURIComponent(n.page_id)}` : docs;
+  }
   if (n.kind === "announcement") return n.project_key ? `/projects/${encodeURIComponent(n.project_key)}/announcements` : "/";
   const project = n.issue_key.slice(0, n.issue_key.lastIndexOf("-"));
   return `/projects/${encodeURIComponent(project)}?issue=${encodeURIComponent(n.issue_key)}`;

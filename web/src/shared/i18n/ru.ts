@@ -1,7 +1,13 @@
 // Russian translations. Typed against en: a missing key fails the build.
 import type { MessageKey } from "./en";
+import { ru as call } from "./parts/call";
+import { ru as chat } from "./parts/chat";
+import { ru as whiteboard } from "./parts/whiteboard";
 
 export const ru: Record<MessageKey, string> = {
+  ...chat,
+  ...call,
+  ...whiteboard,
   " and ": " и ",
   "* added after the sprint started": "* добавлено после начала спринта",
   "+ user": "+ пользователь",

@@ -66,6 +66,18 @@ func Run(t *testing.T, newRepo func(t *testing.T) domain.Repository) {
 		}
 	})
 
+	t.Run("doc comment keeps its page (S95)", func(t *testing.T) {
+		repo := newRepo(t)
+		n := mk(8, Alice, 12)
+		n.Kind, n.IssueKey, n.Project, n.PageID = domain.KindDoc, "", "KYB", "82000000-0000-4000-8000-000000000001"
+		if err := repo.Add(ctx, n); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := repo.ListFor(ctx, inbox(Alice), false, 50); len(got) != 1 || got[0].PageID != n.PageID || got[0].Kind != domain.KindDoc {
+			t.Fatalf("doc = %+v", got)
+		}
+	})
+
 	t.Run("chat mention round trip", func(t *testing.T) {
 		repo := newRepo(t)
 		n := mk(5, Alice, 9)

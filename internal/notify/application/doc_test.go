@@ -24,7 +24,7 @@ func TestDocCommentMentions(t *testing.T) {
 		}
 	}
 	items, _, _ := s.List(ctx, "dave", false)
-	if items[0].Project != "KYB" || items[0].IssueTitle != "Guide" || !strings.Contains(items[0].Excerpt, "look") {
+	if items[0].Project != "KYB" || items[0].IssueTitle != "Guide" || items[0].PageID != "p-1" || !strings.Contains(items[0].Excerpt, "look") {
 		t.Fatalf("dave = %+v", items[0])
 	}
 	if err := s.OnDocComment(ctx, msg(12, "doc.comment_added", `nope`)); err != nil {
@@ -41,7 +41,7 @@ func TestDocCommentEmailLinksToTheDocs(t *testing.T) {
 		t.Fatal(err)
 	}
 	all := deliveries.All()
-	if len(all) == 0 || all[0].Subject != "[KYB] Alice mentioned you on «Guide»" || !strings.HasSuffix(all[0].Body, "https://kyber.example/projects/KYB/docs") {
+	if len(all) == 0 || all[0].Subject != "[KYB] Alice mentioned you on «Guide»" || !strings.HasSuffix(all[0].Body, "https://kyber.example/projects/KYB/docs?page=p-1") {
 		t.Fatalf("deliveries = %+v", all)
 	}
 }

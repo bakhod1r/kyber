@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { type DocComment, docsUseCases, type Page, paragraphs, placeComment, quoteOf } from "../application";
 import { Markdown } from "../../../shared/ui/Markdown";
 import { useT } from "../../../shared/i18n/i18n";
@@ -12,7 +13,8 @@ export function Docs({ projectKey, me = "", names = new Map() }: { projectKey: s
   const qc = useQueryClient();
   const listKey = ["docs", projectKey];
   const pages = useQuery({ queryKey: listKey, queryFn: () => docsUseCases.pages(projectKey) });
-  const [selected, setSelected] = useState<string | null>(null);
+  const location = useLocation();
+  const [selected, setSelected] = useState<string | null>(() => new URLSearchParams(location.search).get("page")); // S95: a notification links here
   const [mode, setMode] = useState<Mode>({ kind: "view" });
   const [error, setError] = useState("");
   const current = pages.data?.find((p) => p.id === selected) ?? pages.data?.[0] ?? null;

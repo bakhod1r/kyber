@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.67.0
+  version: 0.68.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -4773,6 +4773,7 @@ components:
         project_key: { type: string, description: The announced project; empty for issue notifications and workspace announcements. }
         conversation_id: { type: string, description: "Set (and issue_key empty) for a mention in chat." }
         conversation_name: { type: string, description: "The channel of a chat mention; empty for a direct message." }
+        page_id: { type: string, description: "S95: the commented doc page (kind doc)." }
         actor_name: { type: string }
         excerpt: { type: string, description: Start of the comment (commented/mentioned). }
         read: { type: boolean }
