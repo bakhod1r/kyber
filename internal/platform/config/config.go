@@ -71,6 +71,11 @@ type Config struct {
 	// Calls (WebRTC): comma-separated stun:/turn:/turns: URLs, and coturn's static-auth-secret for TURN.
 	ICEServers string `env:"KYBER_ICE_SERVERS"`
 	TURNSecret string `env:"KYBER_TURN_SECRET"`
+	// A media server (LiveKit, ADR-0017) for calls of more than six people: its ws(s):// URL as browsers reach it,
+	// and the API key and secret Kyber signs room tokens with. Unset (the default), calls are a browser mesh.
+	LiveKitURL    string `env:"KYBER_LIVEKIT_URL"`
+	LiveKitKey    string `env:"KYBER_LIVEKIT_KEY"`
+	LiveKitSecret string `env:"KYBER_LIVEKIT_SECRET"`
 	// FilesDir keeps chat files and huddle recordings on disk (back it up with the database).
 	FilesDir string `env:"KYBER_FILES_DIR"`
 	// STTURL turns on transcripts of huddle recordings (S77): an OpenAI-compatible speech-to-text endpoint, e.g.

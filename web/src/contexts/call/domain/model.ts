@@ -1,5 +1,6 @@
-// call: domain model — huddles (ADR-0009). Media flows browser to browser over a WebRTC mesh; the server
-// keeps the participants and relays signaling. Pure types and rules, no I/O.
+// call: domain model — huddles (ADR-0009). Media flows browser to browser over a WebRTC mesh, or through the
+// media server in a room call (ADR-0017); the server keeps the participants and relays mesh signaling. Pure
+// types and rules, no I/O.
 export type Media = { audio: boolean; video: boolean; screen: boolean };
 export type Participant = Media & { user_id: string; joined_at: string; /** S75 */ hand?: boolean };
 /** An emoji someone in the huddle sent (S75); shown for a few seconds, never stored. */
@@ -12,6 +13,8 @@ export type Call = {
   presentation?: Presentation | null;
   /** Who is recording the huddle, if anyone (S62); everyone sees the banner. */
   recording?: Recording | null;
+  /** Media goes through the media server (S99): everyone uploads once, up to MAX_ROOM_PARTICIPANTS people. */
+  room?: boolean;
 };
 export type Recording = { by: string; since: string };
 /** Something that can be presented to everyone in a huddle. */
@@ -37,6 +40,26 @@ export type SignalData = {
 export type IceServer = { urls: string[]; username?: string; credential?: string };
 
 export const MAX_PARTICIPANTS = 6;
+export const MAX_ROOM_PARTICIPANTS = 50;
+
+/** How many people the call takes. */
+export const capacity = (call: Call | null | undefined) => (call?.room ? MAX_ROOM_PARTICIPANTS : MAX_PARTICIPANTS);
+
+/** Where the browser connects for a room call and the signed token that lets it in. */
+export type RoomTicket = { url: string; token: string; expires_at: string };
+
+/** What the media server tells about the others: a participant's camera or screen stream (undefined = gone). */
+export type RoomEvents = {
+  track(user: string, kind: "camera" | "screen", stream: MediaStream | undefined): void;
+  left(user: string): void;
+};
+
+/** This browser's connection to a room: it publishes its own tracks once; the server forwards the others'. */
+export type RoomConnection = {
+  publish(track: MediaStreamTrack, screen: boolean): Promise<void>;
+  unpublish(track: MediaStreamTrack): Promise<void>;
+  close(): void;
+};
 
 export const me = (call: Call | null | undefined, user: string) => call?.participants.find((p) => p.user_id === user);
 
@@ -70,4 +93,5 @@ export type Platform = {
   userMedia(c: MediaStreamConstraints): Promise<MediaStream>;
   displayMedia(): Promise<MediaStream>;
   devices(): Promise<MediaDeviceInfo[]>;
+  room(url: string, token: string, events: RoomEvents): Promise<RoomConnection>;
 };

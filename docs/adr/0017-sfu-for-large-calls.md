@@ -1,6 +1,6 @@
 # ADR-0017: A media server (SFU) for calls larger than six
 
-Status: proposed (2026-10-14) — awaiting the product owner's choice of option
+Status: accepted (2026-10-14) — option B, LiveKit as an optional media server (product owner's choice)
 
 ## Context
 
@@ -59,29 +59,30 @@ signaling, scaling and recording. Rejected for stack fit.
 
 ### D. Janus — mature, but C, GPL-3.0 and plugin-based operations. Rejected for licence and stack fit.
 
-## Recommendation
+## Decision
 
-**A as the default, behind a port; B as an optional adapter later.** The calls application layer gets a
-`MediaRouter` port ("join this participant, return an SDP answer / room token"). The mesh stays for small
-calls; above six (or when the operator sets `KYBER_CALLS_SFU=always`) the call uses the embedded Pion SFU. Because
-it is a port, a LiveKit adapter can be added for operators who already run LiveKit, without touching the domain.
+**B: LiveKit, optional, behind a port.** Chosen for "large calls working well soon": LiveKit already does
+simulcast, dynacast, congestion control and multi-node, which option A would take weeks to match.
 
-If the priority is "large calls working well soon" over "one binary", choose **B** first instead.
+- The calls application layer has a `Rooms` port (`Ticket(room, user, now)`); `internal/call/infrastructure/livekit`
+  implements it by signing a HS256 JWT with LiveKit's video grant (room join, publish, subscribe, data — never
+  room admin) for one call's room, valid 15 minutes. No LiveKit SDK on the server; the secret stays in memory.
+- With `KYBER_LIVEKIT_URL`/`_KEY`/`_SECRET` set, **every new call is a room** (`calls.room`, migration 0084), up
+  to `MaxRoomParticipants = 50`; without them every call is a mesh (6), as before. A live call never switches
+  mode (moving 6 browsers from mesh to SFU mid-call is fragile; an all-hands simply starts as a room).
+- `POST /api/v1/calls/{id}/room` gives a participant `{url, token, expires_at}` (409 for a mesh call or a
+  member not in the call). Mesh signaling is refused in a room.
+- Kyber stays the source of truth for who is in the call (join, leave, media flags, hands, presentation,
+  recording banner — unchanged); LiveKit only carries media. The web app keeps one UI: the huddle engine
+  publishes the same tracks to the room instead of to peers; `livekit-client` loads lazily, only in room calls.
+- The CSP's `connect-src` adds the LiveKit origin (and `worker-src blob:` for its client) only when configured.
+- A pure-Go embedded SFU (option A) stays possible later as another adapter of the same port.
 
 ## Consequences
 
-- `MaxParticipants` becomes a per-mode limit (mesh 6, SFU configurable, default 50).
-- New config: `KYBER_MEDIA_UDP` (port), `KYBER_MEDIA_PUBLIC_IP` (for ICE candidates behind NAT); the
-  docker-compose and Helm chart open one UDP port. TURN (coturn) stays for strict networks.
-- Signaling messages gain an `sfu` offer/answer pair; the web call context gets an SFU transport next to
-  the mesh one (same UI).
-- Server CPU/bandwidth now matter: ~0.5 core and ~1.5 Mbit/s × viewers per 10 video participants;
-  documented in `docs/ops/calls.md`, with Prometheus metrics (tracks, bitrate, layer switches).
-- Server-side recording becomes possible (later sprint); browser recording stays for mesh calls.
-
-## Plan (if A is chosen) — Sprint 16
-- S99 `MediaRouter` port, mode selection, per-mode limit (domain + application, TDD).
-- S100 Pion SFU adapter: join/leave, forward audio+video, renegotiation; integration test with two Pion clients.
-- S101 Simulcast and layer selection; speaker detection (audio levels).
-- S102 Web SFU transport (one upload, many tracks), e2e with 8 fake participants.
-- S103 Replicas: route a call's signaling to its owner replica; ops docs, Helm/compose UDP port, metrics.
+- One more service for operators who want large calls (`docker compose --profile rooms`); none for those who
+  do not. Ops: `docs/ops/calls.md`.
+- Someone who leaves the call keeps their LiveKit connection until their browser disconnects (the engine does
+  on leave); a removed member's token expires within 15 minutes. Kicking via LiveKit's server API is a follow-up.
+- Server-side recording (LiveKit Egress) is possible later; browser recording works in rooms as in a mesh.
+- CI runs the room e2e against a real `livekit-server --dev` (`make e2e-rooms`).

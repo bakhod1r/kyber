@@ -29,6 +29,11 @@ services:
       # direct connection is impossible. See docs/ops/calls.md. Replace turn.example.com with your host.
       KYBER_ICE_SERVERS: stun:turn.example.com:3478,turn:turn.example.com:3478?transport=udp,turn:turn.example.com:3478?transport=tcp
       KYBER_TURN_SECRET: change-me-to-a-long-random-secret
+      # Huddles of more than six people (ADR-0017): with `--profile rooms` (livekit below), uncomment. The key and
+      # secret must match LIVEKIT_KEYS; use your host's wss:// address behind TLS.
+      # KYBER_LIVEKIT_URL: ws://localhost:7880
+      # KYBER_LIVEKIT_KEY: kyber
+      # KYBER_LIVEKIT_SECRET: change-me-to-a-long-random-secret-of-32-chars-or-more
       # With `--profile dev` (minio + mailpit below), uncomment to store attachments in S3 and send email:
       # KYBER_S3_ENDPOINT: minio:9000
       # KYBER_S3_BUCKET: kyber
@@ -64,6 +69,14 @@ services:
       - --denied-peer-ip=172.16.0.0-172.31.255.255
       - --denied-peer-ip=192.168.0.0-192.168.255.255
     profiles: ["calls"] # docker compose --profile calls up
+  # Media server for large huddles (ADR-0017, docs/ops/calls.md). host networking: media uses UDP 7882 and TCP 7881.
+  livekit:
+    image: livekit/livekit-server:v1.9.1
+    network_mode: host
+    command: ["--bind", "0.0.0.0"]
+    environment:
+      LIVEKIT_KEYS: "kyber: change-me-to-a-long-random-secret-of-32-chars-or-more" # the same as KYBER_LIVEKIT_*
+    profiles: ["rooms"] # docker compose --profile rooms up
   # Development services: S3-compatible storage and a mail catcher (docker compose --profile dev up).
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z

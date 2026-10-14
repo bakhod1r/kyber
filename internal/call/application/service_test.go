@@ -163,3 +163,53 @@ func TestHandsAndReactions(t *testing.T) {
 		t.Fatal("someone outside the call reacted")
 	}
 }
+
+// rooms is a fake media server: it hands out a ticket naming the room and the user.
+type rooms struct{ fail error }
+
+func (r rooms) Ticket(room, user string, now time.Time) (app.RoomTicket, error) {
+	return app.RoomTicket{URL: "wss://sfu.test", Token: room + "/" + user, Expires: now.Add(time.Hour)}, r.fail
+}
+
+func TestRoomCalls(t *testing.T) {
+	_, ctx, _ := setup()
+	n := 0
+	deps := app.Deps{Calls: memory.NewRepository(), Conversations: convs{"dev": {"lead", "dev"}},
+		NewID: func() string { n++; return fmt.Sprintf("k-%d", n) }, Now: func() time.Time { return time.Unix(0, 0) }}
+	mesh := app.NewService(deps)
+	c, _ := mesh.Join(ctx, "lead", "dev")
+	if c.Room {
+		t.Fatal("without a media server calls are a mesh")
+	}
+	if _, err := mesh.EnterRoom(ctx, "lead", string(c.ID)); !errors.Is(err, domain.ErrNotRoom) {
+		t.Fatalf("mesh room = %v", err)
+	}
+	_ = mesh.Leave(ctx, "lead", string(c.ID))
+
+	deps.Rooms = rooms{}
+	svc := app.NewService(deps)
+	c, _ = svc.Join(ctx, "lead", "dev")
+	if !c.Room {
+		t.Fatal("with a media server new calls are rooms")
+	}
+	tk, err := svc.EnterRoom(ctx, "lead", string(c.ID))
+	if err != nil || tk.URL != "wss://sfu.test" || tk.Token != string(c.ID)+"/lead" || !tk.Expires.Equal(time.Unix(3600, 0)) {
+		t.Fatalf("ticket = %+v %v", tk, err)
+	}
+	if _, err := svc.EnterRoom(ctx, "dev", string(c.ID)); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("member not in the call = %v", err)
+	}
+	if _, err := svc.EnterRoom(ctx, "qa", string(c.ID)); !errors.Is(err, domain.ErrCallNotFound) {
+		t.Fatalf("outsider = %v", err)
+	}
+	broken := errors.New("no signing key")
+	deps.Rooms = rooms{fail: broken}
+	if _, err := app.NewService(deps).EnterRoom(ctx, "lead", string(c.ID)); !errors.Is(err, broken) {
+		t.Fatalf("ticket failure = %v", err)
+	}
+	// The media server was turned off while a room call is live: nobody can enter it.
+	deps.Rooms = nil
+	if _, err := app.NewService(deps).EnterRoom(ctx, "lead", string(c.ID)); !errors.Is(err, app.ErrNoMediaServer) {
+		t.Fatalf("media server gone = %v", err)
+	}
+}

@@ -32,6 +32,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/calls/{id}/leave", h.leave)
 	mux.HandleFunc("PUT /api/v1/calls/{id}/media", h.media)
 	mux.HandleFunc("POST /api/v1/calls/{id}/signal", h.signal)
+	mux.HandleFunc("POST /api/v1/calls/{id}/room", h.room)
 	mux.HandleFunc("GET /api/v1/calls/ice", h.iceServers)
 	mux.HandleFunc("PUT /api/v1/calls/{id}/presentation", h.present)
 	mux.HandleFunc("DELETE /api/v1/calls/{id}/presentation", h.stopPresenting)
@@ -52,7 +53,8 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeCallNotFound, true
 	case errors.Is(err, domain.ErrCallFull):
 		return httpx.CodeCallFull, true
-	case errors.Is(err, domain.ErrNotInCall), errors.Is(err, domain.ErrCallEnded), errors.Is(err, domain.ErrConflict):
+	case errors.Is(err, domain.ErrNotInCall), errors.Is(err, domain.ErrCallEnded), errors.Is(err, domain.ErrConflict),
+		errors.Is(err, domain.ErrNotRoom), errors.Is(err, application.ErrNoMediaServer):
 		return httpx.CodeCallState, true
 	case errors.Is(err, domain.ErrAlreadyRecording):
 		return httpx.CodeCallRecording, true
@@ -84,6 +86,7 @@ type CallDTO struct {
 	StartedBy      string           `json:"started_by"`
 	StartedAt      string           `json:"started_at"`
 	Live           bool             `json:"live"`
+	Room           bool             `json:"room"` // media goes through the media server (ADR-0017)
 	Participants   []ParticipantDTO `json:"participants"`
 	Presentation   *PresentationDTO `json:"presentation"`
 	Recording      *RecordingDTO    `json:"recording"`
@@ -102,7 +105,7 @@ type PresentationDTO struct {
 
 func ToDTO(c *domain.Call) CallDTO {
 	d := CallDTO{ID: string(c.ID), ConversationID: string(c.Conversation), StartedBy: string(c.StartedBy),
-		StartedAt: c.StartedAt.Format(time.RFC3339Nano), Live: c.Live(), Participants: []ParticipantDTO{}}
+		StartedAt: c.StartedAt.Format(time.RFC3339Nano), Live: c.Live(), Room: c.Room, Participants: []ParticipantDTO{}}
 	if r := c.Recording; r != nil {
 		d.Recording = &RecordingDTO{By: string(r.By), Since: r.Since}
 	}
@@ -184,6 +187,17 @@ func (h *Handler) signal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// room hands a participant of a room call the ticket to its media-server room (S99).
+func (h *Handler) room(w http.ResponseWriter, r *http.Request) {
+	t, err := h.svc.EnterRoom(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	httpx.JSON(w, http.StatusOK, map[string]any{"url": t.URL, "token": t.Token, "expires_at": t.Expires.UTC().Format(time.RFC3339)})
 }
 
 func (h *Handler) iceServers(w http.ResponseWriter, r *http.Request) {

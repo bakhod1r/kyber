@@ -41,9 +41,9 @@ func writeParticipants(ctx context.Context, tx pgx.Tx, c *domain.Call) error {
 
 func (r *Repository) Create(ctx context.Context, c *domain.Call) error {
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `INSERT INTO calls (id, workspace_id, conversation_id, started_by, started_at, ended_at, version)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`, string(c.ID), string(c.Workspace), string(c.Conversation), string(c.StartedBy),
-			c.StartedAt, ended(c), c.Version); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO calls (id, workspace_id, conversation_id, started_by, started_at, ended_at, version, room)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, string(c.ID), string(c.Workspace), string(c.Conversation), string(c.StartedBy),
+			c.StartedAt, ended(c), c.Version, c.Room); err != nil {
 			return err
 		}
 		if err := writeParticipants(ctx, tx, c); err != nil {
@@ -84,7 +84,7 @@ func (r *Repository) Save(ctx context.Context, c *domain.Call) error {
 }
 
 const cols = `c.id, c.workspace_id, c.conversation_id, c.started_by, c.started_at, c.ended_at, c.version,
-	c.presentation_kind, c.presentation_ref, c.presentation_by::text, c.recording_by::text, c.recording_since`
+	c.presentation_kind, c.presentation_ref, c.presentation_by::text, c.recording_by::text, c.recording_since, c.room`
 
 func presentation(c *domain.Call) (kind, ref, by *string) {
 	if p := c.Presentation; p != nil {
@@ -100,7 +100,7 @@ func (r *Repository) one(ctx context.Context, where string, arg string) (*domain
 	var pKind, pRef, pBy, recBy *string
 	var recSince *time.Time
 	err := r.pool.QueryRow(ctx, `SELECT `+cols+` FROM calls c WHERE `+where, arg).
-		Scan(&c.ID, &c.Workspace, &c.Conversation, &c.StartedBy, &c.StartedAt, &end, &c.Version, &pKind, &pRef, &pBy, &recBy, &recSince)
+		Scan(&c.ID, &c.Workspace, &c.Conversation, &c.StartedBy, &c.StartedAt, &end, &c.Version, &pKind, &pRef, &pBy, &recBy, &recSince, &c.Room)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrCallNotFound
 	}

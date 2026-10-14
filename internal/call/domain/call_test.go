@@ -202,3 +202,42 @@ func TestHandsAndReactions(t *testing.T) {
 		t.Fatalf("outsider reacts = %v", err)
 	}
 }
+
+func TestRoomCall(t *testing.T) {
+	mesh := domain.Start("k-1", "w-1", "c-1", "u-0", t0)
+	if mesh.Room || mesh.Limit() != domain.MaxParticipants {
+		t.Fatalf("mesh = %+v limit %d", mesh, mesh.Limit())
+	}
+	if err := mesh.EnterRoom("u-0"); !errors.Is(err, domain.ErrNotRoom) {
+		t.Fatalf("mesh room = %v", err)
+	}
+
+	c := domain.StartRoom("k-2", "w-1", "c-1", "u-0", t0)
+	if !c.Room || c.Limit() != domain.MaxRoomParticipants || len(c.PullEvents()) != 1 {
+		t.Fatalf("room = %+v", c)
+	}
+	for i := 1; i < domain.MaxRoomParticipants; i++ {
+		if err := c.Join(domain.UserID(fmt.Sprint("u-", i)), t0); err != nil {
+			t.Fatalf("join %d: %v", i, err)
+		}
+	}
+	if err := c.Join("u-late", t0); !errors.Is(err, domain.ErrCallFull) {
+		t.Fatalf("over the limit = %v", err)
+	}
+	if err := c.EnterRoom("u-1"); err != nil {
+		t.Fatalf("enter = %v", err)
+	}
+	if err := c.EnterRoom("u-late"); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("outsider enters = %v", err)
+	}
+	// Media goes through the media server: nothing to relay between browsers.
+	if _, err := c.Signal("u-0", "u-1", "offer", "x"); !errors.Is(err, domain.ErrInvalidSignal) {
+		t.Fatalf("signal in a room = %v", err)
+	}
+	for i := 0; i < domain.MaxRoomParticipants; i++ {
+		_ = c.Leave(domain.UserID(fmt.Sprint("u-", i)), t0)
+	}
+	if err := c.EnterRoom("u-0"); !errors.Is(err, domain.ErrNotInCall) {
+		t.Fatalf("ended room = %v", err)
+	}
+}

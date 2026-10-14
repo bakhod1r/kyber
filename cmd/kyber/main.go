@@ -27,6 +27,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/bakhod1r/kyber/internal/call/infrastructure/ice"
+	"github.com/bakhod1r/kyber/internal/call/infrastructure/livekit"
 	"github.com/bakhod1r/kyber/internal/chat/infrastructure/llm"
 	"github.com/bakhod1r/kyber/internal/chat/infrastructure/stt"
 	blobs3chat "github.com/bakhod1r/kyber/internal/platform/blob/s3"
@@ -115,6 +116,13 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		server.WithICE(ice.Parse(cfg.ICEServers), cfg.TURNSecret),
 		server.WithWebhooks(cfg.WebhookAllowPrivate, 0), server.WithGitHubSecret(cfg.GitHubWebhookSecret),
 		server.WithRateLimits(cfg.APIRateLimit, cfg.UploadRateLimit)}, telegramBot(cfg)...)
+	if cfg.LiveKitURL != "" {
+		lk, err := livekit.New(livekit.Config{URL: cfg.LiveKitURL, Key: cfg.LiveKitKey, Secret: cfg.LiveKitSecret})
+		if err != nil {
+			return nil, nil, err
+		}
+		common = append(common, server.WithMediaServer(lk))
+	}
 	if cfg.S3Bucket != "" {
 		blobs, err := blobs3.New(ctx, blobs3.Config{Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, Region: cfg.S3Region,
 			AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, TLS: cfg.S3TLS})

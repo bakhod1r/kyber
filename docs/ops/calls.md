@@ -7,7 +7,8 @@ Design: [ADR-0009](../adr/0009-chat-and-calls.md).
 ## How media flows
 
 Kyber never touches audio or video. Browsers connect to each other (WebRTC, a full mesh of at most 6 people);
-Kyber only relays the signaling (who wants to talk to whom) over MQTT (each user's own topic, ADR-0013).
+Kyber only relays the signaling (who wants to talk to whom) over MQTT (each user's own topic, ADR-0013). With a
+media server configured (below), calls go through it instead and take up to 50 people.
 
 | Situation | What is needed |
 |---|---|
@@ -37,6 +38,36 @@ docker compose --profile calls up -d
 Check: open `GET /api/v1/calls/ice` while signed in — it lists the servers and a fresh TURN credential.
 In the browser, `chrome://webrtc-internals` shows whether a call uses `host`, `srflx` (STUN) or `relay` (TURN)
 candidates.
+
+## Large huddles: a media server (LiveKit)
+
+In a mesh every browser sends its video to every other one, so a call stops at 6 people. With
+[LiveKit](https://livekit.io) (open source, Apache-2.0) configured, every **new** huddle is a *room* on it:
+each browser uploads once (simulcast) and LiveKit forwards to the others — up to 50 people (ADR-0017). Calls
+already live keep their mode. Kyber still decides who may join: it signs a LiveKit token for one call's room,
+valid for 15 minutes (LiveKit refreshes it for connected browsers), and only for people in the call.
+
+```sh
+docker compose --profile rooms up -d   # livekit-server, host networking: TCP 7880 (signaling), 7881, UDP 7882
+```
+
+| Setting | Value |
+|---|---|
+| `KYBER_LIVEKIT_URL` | where **browsers** reach LiveKit: `wss://sfu.example.com` behind TLS (`ws://` only on a LAN) |
+| `KYBER_LIVEKIT_KEY` | an API key from LiveKit's `keys:` (or `LIVEKIT_KEYS="key: secret"`) |
+| `KYBER_LIVEKIT_SECRET` | its secret — at least 32 random characters; environment only, never in files or logs |
+
+Kyber refuses to start when the URL is set but is not `ws://`/`wss://` or the key or secret is missing. The
+web app's Content-Security-Policy allows that origin (and a `blob:` worker LiveKit's client uses) only then.
+
+- Put LiveKit behind TLS (a reverse proxy for 7880, or LiveKit's own `turn`/`tls` settings); open UDP 7882 and
+  TCP 7881 to the internet. Behind NAT set LiveKit's `rtc.use_external_ip: true` or `node_ip`.
+- Strict networks: LiveKit has an embedded TURN server (`turn.enabled`), or keep coturn.
+- Sizing: LiveKit forwards, it does not transcode — roughly 1.5 Mbit/s per viewer per shown video; a small VM
+  handles a few 20-person calls.
+- Recording stays in the browser of the one who records (it records what that browser receives).
+- Several LiveKit nodes need Redis (LiveKit's own `redis:` setting); Kyber replicas need nothing extra.
+- Turning LiveKit off: room calls still live cannot be entered (409); new calls are a mesh again.
 
 ## Several Kyber replicas
 
@@ -81,5 +112,5 @@ like `KYBER_STT_KEY`. At most 16000 characters of a transcript are sent. Unset, 
 | `kyber_calls_active` | live huddles in all workspaces |
 
 Upload bandwidth per participant grows with the call size in a mesh (n − 1 streams): plan about 1.5 Mbit/s up
-per video peer; the 6-person cap keeps a call within ordinary home connections. A media server (SFU) for
-bigger calls and recording is a later ADR.
+per video peer; the 6-person cap keeps a call within ordinary home connections. For bigger calls configure a
+media server (above): each participant then uploads once.

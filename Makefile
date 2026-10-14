@@ -1,4 +1,4 @@
-.PHONY: test cover-strict lint run build docker cover web web-test e2e screenshots
+.PHONY: test cover-strict lint run build docker cover web web-test e2e e2e-rooms screenshots
 
 COVER_MIN ?= 85
 
@@ -39,6 +39,14 @@ screenshots: web build ## regenerates the README screenshots in docs/assets from
 e2e: build ## runs Playwright against a fresh in-memory server on :18080
 	@KYBER_ADDR=:18080 KYBER_COOKIE_SECURE=false KYBER_ADMIN_EMAILS=admin@e2e.test KYBER_ATTACHMENTS_DIR=$$(mktemp -d) ./bin/kyber > e2e.log 2>&1 & pid=$$!; \
 	sleep 1; KYBER_E2E_URL=http://localhost:18080 npm --prefix web run e2e; rc=$$?; kill $$pid; exit $$rc
+
+LIVEKIT_SERVER ?= livekit-server
+e2e-rooms: build ## runs the media-server e2e (S99) against livekit-server --dev and a server on :18081
+	@$(LIVEKIT_SERVER) --dev --bind 127.0.0.1 > livekit.log 2>&1 & lk=$$!; \
+	KYBER_ADDR=:18081 KYBER_COOKIE_SECURE=false KYBER_LIVEKIT_URL=ws://localhost:7880 KYBER_LIVEKIT_KEY=devkey \
+	KYBER_LIVEKIT_SECRET=secret ./bin/kyber > e2e-rooms.log 2>&1 & pid=$$!; \
+	for i in $$(seq 50); do curl -fs http://localhost:7880 > /dev/null && break; sleep 0.2; done; \
+	sleep 1; KYBER_E2E_ROOM_URL=http://localhost:18081 npm --prefix web run e2e -- room.spec.ts; rc=$$?; kill $$pid $$lk; exit $$rc
 
 docker:
 	docker build -t kyber:dev .

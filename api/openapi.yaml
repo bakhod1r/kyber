@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.69.0
+  version: 0.70.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -1185,6 +1185,27 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/room:
+    post:
+      operationId: enterCallRoom
+      description: |
+        A ticket to the call's room on the media server (LiveKit, ADR-0017; only when the call has `room: true`):
+        where the browser connects and a signed token, valid for a few minutes, that lets this participant join this
+        room only. 409 when the caller is not in the call, the call uses a browser mesh, or no media server is set.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, token, expires_at]
+                properties: { url: { type: string }, token: { type: string }, expires_at: { type: string, format: date-time } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/calls/ice:
     get:
       operationId: getIceServers
@@ -4160,13 +4181,16 @@ components:
         dnd_until: { type: [string, "null"], format: date-time }
     Call:
       type: object
-      required: [id, conversation_id, started_by, started_at, live, participants, presentation, recording]
+      required: [id, conversation_id, started_by, started_at, live, room, participants, presentation, recording]
       properties:
         id: { type: string }
         conversation_id: { type: string }
         started_by: { type: string }
         started_at: { type: string, format: date-time }
         live: { type: boolean }
+        room:
+          type: boolean
+          description: Media goes through the media server (up to 50 people) instead of a browser mesh (up to 6).
         presentation:
           oneOf:
             - { type: "null" }

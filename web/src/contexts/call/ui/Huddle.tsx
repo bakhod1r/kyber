@@ -1,7 +1,7 @@
 import { useT } from "../../../shared/i18n/i18n";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
-  type Call, fromFraction, MAX_PARTICIPANTS, type Platform, type Presentable, type Presentation, presenter, REACTIONS, toFraction, useHuddle, useSpeaking,
+  type Call, fromFraction, capacity, type Platform, type Presentable, type Presentation, presenter, REACTIONS, toFraction, useHuddle, useSpeaking,
 } from "../application";
 
 /** The app shell renders presented files (docs, whiteboards), which belong to other contexts. */
@@ -97,11 +97,11 @@ export function Huddle({ conversationId, me, names, platform, presentables = [],
 
   if (!state.joined) {
     const people = call?.participants ?? [];
-    const full = people.length >= MAX_PARTICIPANTS;
+    const full = people.length >= capacity(call);
     return (
       <div className="huddle-bar">
         {people.length > 0 && <span className="muted">🎧 {t("Huddle:")} {people.map((p) => name(p.user_id)).join(", ")}</span>}
-        <button onClick={() => void h.join()} disabled={full} title={full ? t("The huddle is full (6 people)") : undefined}>
+        <button onClick={() => void h.join()} disabled={full} title={full ? t("The huddle is full ({count} people)", { count: capacity(call) }) : undefined}>
           {people.length > 0 ? t("Join huddle ({count})", { count: people.length }) : t("Start huddle")}
         </button>
         {state.error && <span role="alert" className="error">{state.error}</span>}

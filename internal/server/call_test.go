@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bakhod1r/kyber/internal/call/infrastructure/livekit"
 	"github.com/bakhod1r/kyber/internal/server"
 )
 
@@ -306,6 +307,64 @@ func TestMeetingHuddle(t *testing.T) {
 		_, day := dev.do("GET", "/api/v1/meetings?from="+start.Add(-time.Hour).Format(time.RFC3339)+"&to="+start.Add(time.Hour).Format(time.RFC3339), nil)
 		if items := day["items"].([]any); len(items) != 1 || items[0].(map[string]any)["conversation_id"] != ch["id"] {
 			t.Fatalf("dev's time table = %v", day)
+		}
+	})
+}
+
+// S99 (ADR-0017): with a media server (LiveKit) calls are rooms: more than six people, and each participant gets
+// a short-lived ticket for that room only; there is nothing to relay between browsers.
+func TestRoomHuddle(t *testing.T) {
+	lk, err := livekit.New(livekit.Config{URL: "wss://sfu.example.com", Key: "APIkey", Secret: "s3cret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		eve := anon.signedIn("eve@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "all"})
+		url := "/api/v1/conversations/" + ch["id"].(string)
+		code, call := lead.do("POST", url+"/call", nil)
+		expect(t, code, 200, call)
+		if call["room"] != true {
+			t.Fatalf("room call = %v", call)
+		}
+		callURL := "/api/v1/calls/" + call["id"].(string)
+		var last *client
+		for i := range 9 {
+			last = anon.signedIn(fmt.Sprintf("p%d@x.uz", i))
+			last.do("POST", url+"/join", nil)
+			code, b := last.do("POST", url+"/call", nil)
+			expect(t, code, 200, b)
+		}
+		code, b := lead.do("POST", callURL+"/room", nil)
+		expect(t, code, 200, b)
+		if b["url"] != "wss://sfu.example.com" || strings.Count(b["token"].(string), ".") != 2 || b["expires_at"] == "" {
+			t.Fatalf("ticket = %v", b)
+		}
+		code, b = eve.do("POST", callURL+"/room", nil)
+		expect(t, code, 404, b)
+		eve.do("POST", url+"/join", nil) // a member who has not joined the call
+		code, b = eve.do("POST", callURL+"/room", nil)
+		expect(t, code, 409, b)
+		_, leadMe := lead.do("GET", "/api/v1/me", nil)
+		code, b = last.do("POST", callURL+"/signal", map[string]string{"to": leadMe["id"].(string), "kind": "offer", "data": "x"})
+		expect(t, code, 422, b)
+	}, server.WithMediaServer(lk))
+}
+
+// Without a media server calls stay a browser mesh and have no room.
+func TestMeshHasNoRoom(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "dev"})
+		_, call := lead.do("POST", "/api/v1/conversations/"+ch["id"].(string)+"/call", nil)
+		if call["room"] != false {
+			t.Fatalf("mesh call = %v", call)
+		}
+		code, b := lead.do("POST", "/api/v1/calls/"+call["id"].(string)+"/room", nil)
+		expect(t, code, 409, b)
+		if b["code"] != "CALL_STATE" {
+			t.Fatalf("no room = %v", b)
 		}
 	})
 }

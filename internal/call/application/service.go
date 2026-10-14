@@ -16,7 +16,21 @@ import (
 var (
 	ErrNoConversation = errors.New("conversation not found")
 	ErrNotMember      = errors.New("join the conversation first")
+	// ErrNoMediaServer: the call is a room but no media server is configured (any more).
+	ErrNoMediaServer = errors.New("the media server is not configured")
 )
+
+// Rooms is the media server (SFU, ADR-0017). When it is set, new calls are rooms on it; a participant
+// enters with a short-lived ticket for that room only.
+type Rooms interface {
+	Ticket(room, user string, now time.Time) (RoomTicket, error)
+}
+
+// RoomTicket is where the browser connects and the signed token that lets it in.
+type RoomTicket struct {
+	URL, Token string
+	Expires    time.Time
+}
 
 // Conversations is the port to the Chat context: the members of a conversation actor belongs to
 // (ErrNoConversation when actor may not read it, ErrNotMember when actor may read but did not join).
@@ -53,6 +67,7 @@ type Deps struct {
 	Conversations Conversations
 	Notifier      Notifier // optional
 	Signals       Signals  // optional
+	Rooms         Rooms    // optional: without it every call is a browser mesh
 	NewID         func() string
 	Now           func() time.Time
 }
@@ -94,7 +109,11 @@ func (s *Service) Join(ctx context.Context, actor, conv string) (*domain.Call, e
 		c, err := s.d.Calls.LiveIn(ctx, domain.ConversationID(conv))
 		switch {
 		case errors.Is(err, domain.ErrCallNotFound):
-			c = domain.Start(domain.CallID(s.d.NewID()), domain.WorkspaceID(tenant.Workspace(ctx)), domain.ConversationID(conv), domain.UserID(actor), s.d.Now())
+			start := domain.Start
+			if s.d.Rooms != nil {
+				start = domain.StartRoom
+			}
+			c = start(domain.CallID(s.d.NewID()), domain.WorkspaceID(tenant.Workspace(ctx)), domain.ConversationID(conv), domain.UserID(actor), s.d.Now())
 			err = s.d.Calls.Create(ctx, c)
 			if errors.Is(err, domain.ErrCallLive) {
 				continue // someone else started it first: join theirs
@@ -145,6 +164,21 @@ func (s *Service) Signal(ctx context.Context, actor, id, to, kind, data string) 
 	}
 	s.d.Signals.Relay(ctx, sig)
 	return nil
+}
+
+// EnterRoom hands a participant of a room call the ticket to its media-server room.
+func (s *Service) EnterRoom(ctx context.Context, actor, id string) (RoomTicket, error) {
+	c, _, err := s.load(ctx, actor, id)
+	if err != nil {
+		return RoomTicket{}, err
+	}
+	if err := c.EnterRoom(domain.UserID(actor)); err != nil {
+		return RoomTicket{}, err
+	}
+	if s.d.Rooms == nil {
+		return RoomTicket{}, ErrNoMediaServer
+	}
+	return s.d.Rooms.Ticket(string(c.ID), actor, s.d.Now())
 }
 
 // change applies fn to a call of a conversation actor belongs to, retrying on conflicts.

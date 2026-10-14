@@ -1,7 +1,7 @@
 // Package domain is the Call context (ADR-0009): huddles — live audio/video calls with screen
-// sharing in a chat conversation. Media flows browser to browser (WebRTC mesh); the server
-// keeps who is in the call and relays signaling. At most MaxParticipants people per call, one
-// live call per conversation, and the call ends when the last participant leaves.
+// sharing in a chat conversation. Media flows browser to browser (WebRTC mesh, at most MaxParticipants), or
+// through the media server when one is configured (a room, ADR-0017); the server keeps who is in the call and
+// relays mesh signaling. One live call per conversation, and the call ends when the last participant leaves.
 package domain
 
 import (
@@ -24,6 +24,12 @@ var (
 
 // MaxParticipants keeps a full-mesh call within every participant's upload bandwidth.
 const MaxParticipants = 6
+
+// MaxRoomParticipants bounds a call whose media goes through the media server (ADR-0017): everyone uploads once.
+const MaxRoomParticipants = 50
+
+// ErrNotRoom: the call's media flows browser to browser, so there is no media-server room to enter.
+var ErrNotRoom = errors.New("this call does not use the media server")
 
 type (
 	CallID         string
@@ -52,6 +58,7 @@ type Call struct {
 	Participants []Participant // in joining order
 	Presentation *Presentation // what everyone looks at together, if anything
 	Recording    *Recording    // someone is recording the call (everyone sees it)
+	Room         bool          // media goes through the media server (SFU, ADR-0017), not a browser mesh
 	Version      int           // optimistic locking
 	events       []Event
 }
@@ -169,6 +176,32 @@ func Start(id CallID, ws WorkspaceID, conv ConversationID, by UserID, now time.T
 		events:       []Event{CallStarted{Call: id, Conversation: conv, By: by}}}
 }
 
+// StartRoom opens a call whose media goes through the media server (ADR-0017).
+func StartRoom(id CallID, ws WorkspaceID, conv ConversationID, by UserID, now time.Time) *Call {
+	c := Start(id, ws, conv, by, now)
+	c.Room = true
+	return c
+}
+
+// Limit is how many people the call takes.
+func (c *Call) Limit() int {
+	if c.Room {
+		return MaxRoomParticipants
+	}
+	return MaxParticipants
+}
+
+// EnterRoom checks that u may connect to the call's media-server room.
+func (c *Call) EnterRoom(u UserID) error {
+	switch {
+	case !c.Room:
+		return ErrNotRoom
+	case !c.Live() || !c.In(u):
+		return ErrNotInCall
+	}
+	return nil
+}
+
 func (c *Call) Live() bool { return c.EndedAt.IsZero() }
 
 func (c *Call) index(u UserID) int {
@@ -184,7 +217,7 @@ func (c *Call) Join(u UserID, now time.Time) error {
 		return ErrCallEnded
 	case c.In(u):
 		return nil
-	case len(c.Participants) >= MaxParticipants:
+	case len(c.Participants) >= c.Limit():
 		return ErrCallFull
 	}
 	c.Participants = append(c.Participants, Participant{User: u, JoinedAt: now.UTC(), Media: Media{Audio: true}})
@@ -286,7 +319,7 @@ func (c *Call) Signal(from, to UserID, kind, data string) (Signal, error) {
 		return Signal{}, ErrNotInCall
 	}
 	k := SignalKind(kind)
-	if from == to || (k != SignalOffer && k != SignalAnswer && k != SignalCandidate) || data == "" || len(data) > MaxSignal {
+	if c.Room || from == to || (k != SignalOffer && k != SignalAnswer && k != SignalCandidate) || data == "" || len(data) > MaxSignal {
 		return Signal{}, ErrInvalidSignal
 	}
 	return Signal{Call: c.ID, From: from, To: to, Kind: k, Data: data}, nil

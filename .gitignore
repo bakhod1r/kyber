@@ -4,6 +4,8 @@ coverage.out
 .env.*
 node_modules/
 e2e.log
+e2e-rooms.log
+livekit.log
 screenshots.log
 /data/
 /.claude/worktrees/
