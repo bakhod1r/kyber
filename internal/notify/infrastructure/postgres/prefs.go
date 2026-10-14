@@ -16,7 +16,8 @@ func NewPrefsRepository(pool *pgxpool.Pool) *PrefsRepository { return &PrefsRepo
 
 func (r *PrefsRepository) Prefs(ctx context.Context, user domain.UserID) (domain.Prefs, error) {
 	var p domain.Prefs
-	err := r.pool.QueryRow(ctx, `SELECT email, telegram FROM notification_prefs WHERE user_id = $1`, string(user)).Scan(&p.Email, &p.Telegram)
+	err := r.pool.QueryRow(ctx, `SELECT email, telegram, time_zone FROM notification_prefs WHERE user_id = $1`, string(user)).
+		Scan(&p.Email, &p.Telegram, &p.TimeZone)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.DefaultPrefs(), nil
 	}
@@ -24,7 +25,8 @@ func (r *PrefsRepository) Prefs(ctx context.Context, user domain.UserID) (domain
 }
 
 func (r *PrefsRepository) SetPrefs(ctx context.Context, user domain.UserID, p domain.Prefs) error {
-	_, err := r.pool.Exec(ctx, `INSERT INTO notification_prefs (user_id, email, telegram) VALUES ($1, $2, $3)
-		ON CONFLICT (user_id) DO UPDATE SET email = EXCLUDED.email, telegram = EXCLUDED.telegram`, string(user), p.Email, p.Telegram)
+	_, err := r.pool.Exec(ctx, `INSERT INTO notification_prefs (user_id, email, telegram, time_zone) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (user_id) DO UPDATE SET email = EXCLUDED.email, telegram = EXCLUDED.telegram, time_zone = EXCLUDED.time_zone`,
+		string(user), p.Email, p.Telegram, p.TimeZone)
 	return err
 }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.40.0
+  version: 0.41.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -468,6 +468,29 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/meetings/{id}:
+    put:
+      operationId: rescheduleMeeting
+      description: The organizer changes the title and time (not in the past); attendees are told and reminded again before the new start.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [title, starts_at, ends_at]
+              properties:
+                title: { type: string }
+                starts_at: { type: string, format: date-time }
+                ends_at: { type: string, format: date-time }
+      responses:
+        "200": { description: Rescheduled, content: { application/json: { schema: { $ref: "#/components/schemas/Meeting" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
     delete:
       operationId: cancelMeeting
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
@@ -2063,10 +2086,12 @@ paths:
               properties:
                 email: { type: boolean }
                 telegram: { type: boolean }
+                time_zone: { type: string, description: "IANA name (the browser's zone), or empty for UTC" }
       responses:
         "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationSettings" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/notifications:
     get:
       operationId: listNotifications
@@ -2585,8 +2610,9 @@ components:
     NotificationSettings:
       type: object
       additionalProperties: false
-      required: [email, telegram, email_available, telegram_available, telegram_connected]
+      required: [email, telegram, email_available, telegram_available, telegram_connected, time_zone]
       properties:
+        time_zone: { type: string, description: "The user's IANA time zone for meeting times in messages; empty = UTC" }
         email: { type: boolean }
         telegram: { type: boolean }
         email_available: { type: boolean, description: SMTP is configured on this server }

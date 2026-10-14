@@ -80,6 +80,18 @@ func TestS41S42PomodoroAndMeetings(t *testing.T) {
 			t.Fatalf("issue log = %v", log)
 		}
 
+		// Only the organizer reschedules, never into the past.
+		mid := m["id"].(string)
+		mStart, mEnd := m["starts_at"], m["ends_at"]
+		code, b = dev.do("PUT", "/api/v1/meetings/"+mid, map[string]any{"title": "Moved", "starts_at": mStart, "ends_at": mEnd})
+		expect(t, code, 403, b)
+		code, b = lead.do("PUT", "/api/v1/meetings/"+mid, map[string]any{"title": "Moved", "starts_at": time.Now().Add(-3 * time.Hour), "ends_at": time.Now().Add(-2 * time.Hour)})
+		expect(t, code, 422, b)
+		code, b = lead.do("PUT", "/api/v1/meetings/"+mid, map[string]any{"title": "Planning (moved)", "starts_at": mStart, "ends_at": mEnd})
+		if code != 200 || b["title"] != "Planning (moved)" {
+			t.Fatalf("reschedule = %d %v", code, b)
+		}
+
 		// AC4 only the organizer cancels; afterwards dev can focus for 25 minutes.
 		code, b = dev.do("DELETE", "/api/v1/meetings/"+m["id"].(string), nil)
 		expect(t, code, 403, b)

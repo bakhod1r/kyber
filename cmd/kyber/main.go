@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata" // users' time zones work in images without /usr/share/zoneinfo
 
 	"github.com/redis/go-redis/v9"
 

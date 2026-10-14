@@ -1,6 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mockApi, renderWithProviders } from "../../../shared/test/test-utils";
 import { MeetingsPage } from "./MeetingsPage";
 
@@ -36,6 +36,39 @@ describe("Time table (KYB-S42)", () => {
 
     await user.click(within(table).getByRole("button", { name: "Cancel Planning" }));
     expect(calls.some((c) => c.key === "DELETE /api/v1/meetings/m-1")).toBe(true);
+  });
+
+  it("shows times in the browser's zone, remembers it, and lets the organizer reschedule", async () => {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const calls = mockApi({
+      "GET /api/v1/meetings": { status: 200, body: { items: [meeting] } },
+      "GET /api/v1/me": { status: 200, body: { id: "u-1", email: "a@x.uz", name: "Ali" } },
+      "GET /api/v1/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/me/notification-settings": { status: 200, body: { email: true, telegram: true, email_available: false,
+        telegram_available: false, telegram_connected: false, time_zone: "" } },
+      "PUT /api/v1/me/notification-settings": { status: 200, body: {} },
+      "PUT /api/v1/meetings/m-1": { status: 200, body: { ...meeting, title: "Planning v2" } },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<MeetingsPage />);
+    const table = await screen.findByRole("list", { name: "Meetings" });
+    expect(await within(table).findByText(new RegExp(`\\(${zone.replace("/", "\\/")}\\)`))).toBeInTheDocument();
+    await vi.waitFor(() => expect(calls.find((c) => c.key === "PUT /api/v1/me/notification-settings")?.body).toEqual({ time_zone: zone }));
+
+    await user.click(within(table).getByRole("button", { name: "Reschedule Planning" }));
+    const form = within(table).getByRole("form", { name: "Reschedule Planning" });
+    expect(within(form).getByLabelText("Minutes")).toHaveValue(60);
+    await user.clear(within(form).getByLabelText("Title"));
+    await user.type(within(form).getByLabelText("Title"), "Planning v2");
+    await user.clear(within(form).getByLabelText("Starts"));
+    await user.type(within(form).getByLabelText("Starts"), "2026-10-14T11:00");
+    await user.click(within(form).getByRole("button", { name: "Save" }));
+    await vi.waitFor(() => expect(calls.some((c) => c.key === "PUT /api/v1/meetings/m-1")).toBe(true));
+    const body = calls.find((c) => c.key === "PUT /api/v1/meetings/m-1")?.body as { title: string; starts_at: string; ends_at: string };
+    expect(body.title).toBe("Planning v2");
+    expect(body.starts_at).toBe(new Date("2026-10-14T11:00").toISOString());
+    expect(Date.parse(body.ends_at) - Date.parse(body.starts_at)).toBe(60 * 60_000);
+    await vi.waitFor(() => expect(within(table).queryByRole("form")).not.toBeInTheDocument());
   });
 
   it("invites a whole project and answers invitations", async () => {

@@ -71,6 +71,28 @@ func TestEmailNotifications(t *testing.T) {
 		if n := len(mail.to("bob@x.uz")); n != 1 {
 			t.Fatalf("opted-out user got %d emails", n)
 		}
+
+		// Meeting times in messages follow the recipient's browser time zone.
+		code, s = bob.do("PUT", "/api/v1/me/notification-settings", map[string]any{"time_zone": "Mars/Base"})
+		expect(t, code, 422, s)
+		code, s = bob.do("PUT", "/api/v1/me/notification-settings", map[string]any{"email": true, "time_zone": "Asia/Tashkent"})
+		if code != 200 || s["time_zone"] != "Asia/Tashkent" || s["email"] != true {
+			t.Fatalf("time zone = %d %v", code, s)
+		}
+		start := time.Date(time.Now().Year()+1, 3, 2, 10, 0, 0, 0, time.UTC)
+		_, m := lead.do("POST", "/api/v1/meetings", map[string]any{"title": "Demo", "starts_at": start, "ends_at": start.Add(time.Hour),
+			"attendee_ids": []any{me["id"]}})
+		code, m = lead.do("PUT", "/api/v1/meetings/"+m["id"].(string), map[string]any{"title": "Demo", "starts_at": start.Add(time.Hour),
+			"ends_at": start.Add(2 * time.Hour)})
+		expect(t, code, 200, m)
+		waitFor(t, func() bool {
+			for _, e := range mail.to("bob@x.uz") {
+				if strings.Contains(e.Subject, "Moved to") && strings.Contains(e.Subject, "16:00–17:00 Asia/Tashkent") {
+					return true
+				}
+			}
+			return false
+		})
 	}, server.WithMailer(mail), server.WithPublicURL("https://kyber.test"), server.WithDispatchEvery(20*time.Millisecond))
 }
 

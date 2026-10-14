@@ -408,7 +408,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	relay.Handle("issue.assigned", notify.OnIssueAssigned)
 	relay.Handle("announcement.published", notify.OnAnnouncement)
 	relay.Handle("announcement.published", notify.OnProjectEvent)
-	for _, name := range []string{"meeting.scheduled", "meeting.cancelled", "meeting.reminder"} {
+	for _, name := range []string{"meeting.scheduled", "meeting.rescheduled", "meeting.cancelled", "meeting.reminder"} {
 		relay.Handle(name, notify.OnMeetingEvent)
 		relay.Handle(name, notify.OnProjectEvent)
 	}

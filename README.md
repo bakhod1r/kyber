@@ -81,6 +81,9 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/probl
 | GET | `/api/v1/sprints/{id}/burndown` | Remaining story points (step line) + ideal line |
 | GET | `/api/v1/notifications[?unread=true]` | Your notifications (assigned, commented, `@email` mentioned) + unread count |
 | POST | `/api/v1/notifications/{id}/read` · `/read-all` | Mark one · all as read |
+| GET · PUT | `/api/v1/me/notification-settings` | Email/Telegram channels and your IANA `time_zone` (meeting times in messages; UTC when unset) |
+| GET · POST | `/api/v1/meetings` | Your time table · schedule a meeting (people, a project or the workspace) |
+| PUT · DELETE | `/api/v1/meetings/{id}` | Reschedule (title/start/end, organizer only; attendees are told and reminded again) · cancel |
 | POST | `/api/v1/issues/{KEY-N}/transitions` | Move issue (`todo ⇄ in_progress ⇄ done`) |
 
 ## AI assistants (MCP)
