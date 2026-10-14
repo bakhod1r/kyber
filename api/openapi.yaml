@@ -162,6 +162,16 @@ paths:
                   grant_types: { type: array, items: { type: string } }
                   response_types: { type: array, items: { type: string } }
         "400": { $ref: "#/components/responses/OAuthError" }
+        "429":
+          description: Too many registrations from this client IP (error `too_many_requests`); retry after `Retry-After` seconds.
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties: { error: { type: string }, error_description: { type: string } }
   /api/v1/oauth/token:
     post:
       operationId: exchangeOAuthCode
