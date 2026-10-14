@@ -4,7 +4,8 @@ import { Link } from "react-router-dom";
 import { issueUseCases } from "../../issue/application";
 import { projectUseCases } from "../../project/application";
 import {
-  box, COLORS, type Element, hit, type Kind, linkedIssue, newId, ordered, type Point, STICKY, stickyToIssue, useWhiteboard, whiteboardUseCases,
+  box, COLORS, commentCounts, type Element, hit, type Kind, linkedIssue, newId, onWhiteboardComments, ordered, type Point, STICKY, stickyToIssue,
+  useWhiteboard, whiteboardUseCases,
 } from "../application";
 
 const W = 1600;
@@ -128,8 +129,44 @@ export function WhiteboardBoard(props: { id: string; me: string; names: Map<stri
   return <Board {...props} />;
 }
 
+/** S86: the comments on the selected element; anyone in the conversation adds one, its author removes it. */
+function ElementComments({ board, element, me, names }: { board: string; element: string; me: string; names: Map<string, string> }) {
+  const qc = useQueryClient();
+  const key = ["whiteboard", "comments", board];
+  const list = useQuery({ queryKey: key, queryFn: () => whiteboardUseCases.comments(board) });
+  const [body, setBody] = useState("");
+  const done = () => qc.invalidateQueries({ queryKey: key });
+  const add = useMutation({ mutationFn: () => whiteboardUseCases.comment(board, element, body), onSuccess: () => { setBody(""); void done(); } });
+  const remove = useMutation({ mutationFn: (id: string) => whiteboardUseCases.removeComment(id), onSuccess: done });
+  const mine = (list.data ?? []).filter((c) => c.element_id === element);
+  return (
+    <aside className="wb-comments panel" aria-label="Element comments">
+      <h3>💬 Comments</h3>
+      {mine.length === 0 && <p className="muted">No comments yet.</p>}
+      <ul>
+        {mine.map((c) => (
+          <li key={c.id}>
+            <b>{c.author_id === me ? "You" : (names.get(c.author_id) ?? "Someone")}</b> {c.body}{" "}
+            {c.author_id === me && <button className="ghost" onClick={() => remove.mutate(c.id)}>Remove</button>}
+          </li>
+        ))}
+      </ul>
+      <form className="row" onSubmit={(e) => { e.preventDefault(); add.mutate(); }}>
+        <input aria-label="Comment" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Comment… (@email to mention)" maxLength={2000} />
+        <button disabled={!body.trim()}>Comment</button>
+      </form>
+    </aside>
+  );
+}
+
 function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<string, string>; onClose?: () => void }) {
   const wb = useWhiteboard(id, me);
+  const qc = useQueryClient();
+  const comments = useQuery({ queryKey: ["whiteboard", "comments", id], queryFn: () => whiteboardUseCases.comments(id) });
+  useEffect(() => onWhiteboardComments((board) => {
+    if (board === id) void qc.invalidateQueries({ queryKey: ["whiteboard", "comments", id] });
+  }), [id, qc]);
+  const counts = commentCounts(comments.data ?? []);
   const svg = useRef<SVGSVGElement>(null);
   const [tool, setTool] = useState<Tool>("select");
   const [color, setColor] = useState(COLORS[0]!);
@@ -320,6 +357,12 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
         </defs>
         <rect width={W} height={H} fill="#ffffff" />
         {shapes.map((e) => <Shape key={e.id} e={e} selected={e.id === selected} />)}
+        {shapes.filter((e) => counts.has(e.id)).map((e) => (
+          <g key={`c-${e.id}`} pointerEvents="none" aria-label={`${counts.get(e.id)} comments on an element`}>
+            <circle cx={e.x + Math.max(e.w, 0) + 6} cy={e.y - 6} r={12} fill="#2563eb" />
+            <text x={e.x + Math.max(e.w, 0) + 6} y={e.y - 1} fontSize={13} fill="#fff" textAnchor="middle">{counts.get(e.id)}</text>
+          </g>
+        ))}
         {Object.entries(wb.cursors).filter(([, c]) => Date.now() - c.at < 10_000).map(([u, c]) => (
           <g key={u} transform={`translate(${c.x} ${c.y})`} pointerEvents="none" aria-label={`${names.get(u) ?? "Someone"}'s cursor`}>
             <path d="M0 0 L0 18 L5 13 L12 13 Z" fill={cursorColor(u)} />
@@ -329,6 +372,7 @@ function Board({ id, me, names, onClose }: { id: string; me: string; names: Map<
       </svg>
       {editing && <TextEditor key={editing.element.id} e={editing.element} onDone={finishEditing} />}
       </div>
+      {sel && !draft && <ElementComments board={id} element={sel.id} me={me} names={names} />}
       {wb.error && <p role="status" className="muted">{wb.error}</p>}
       {toIssue.error && <p role="alert" className="error">{toIssue.error.message}</p>}
     </section>

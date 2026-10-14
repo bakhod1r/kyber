@@ -7,6 +7,7 @@ import { applyLocal, type Element, type Elements, inverse, newer, type Op, recon
 import { onWhiteboardEvents, whiteboardGateway } from "../infrastructure/gateway";
 
 export * from "../domain/model";
+export { onWhiteboardComments } from "../infrastructure/gateway";
 export const whiteboardUseCases = whiteboardGateway;
 
 export type Cursor = { x: number; y: number; at: number };

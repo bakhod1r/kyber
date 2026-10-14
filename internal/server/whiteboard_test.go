@@ -68,3 +68,29 @@ func TestWhiteboard(t *testing.T) {
 		}
 	})
 }
+
+// S86: comments pinned to elements; @mentions notify people who may read the conversation.
+func TestWhiteboardComments(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		lead := anon.signedIn("lead@x.uz")
+		dev := anon.signedIn("dev@x.uz")
+		eve := anon.signedIn("eve@x.uz")
+		_, ch := lead.do("POST", "/api/v1/channels", map[string]any{"name": "design"})
+		conv := ch["id"].(string)
+		dev.do("POST", "/api/v1/conversations/"+conv+"/join", nil)
+		_, b := lead.do("POST", "/api/v1/conversations/"+conv+"/whiteboards", map[string]string{"title": "Architecture"})
+		url := "/api/v1/whiteboards/" + b["id"].(string) + "/comments"
+		code, c := lead.do("POST", url, map[string]string{"element_id": "e-1", "body": "@dev@x.uz is this cached?"})
+		expect(t, code, 201, c)
+		code, x := eve.do("POST", url, map[string]string{"element_id": "e-1", "body": "hi"})
+		expect(t, code, 404, x)
+		if _, l := dev.do("GET", url, nil); len(l["items"].([]any)) != 1 {
+			t.Fatalf("comments = %v", l)
+		}
+		eventuallyJSON(t, dev, "/api/v1/notifications", func(n map[string]any) bool { return len(n["items"].([]any)) == 1 })
+		code, x = dev.do("DELETE", "/api/v1/whiteboard-comments/"+c["id"].(string), nil)
+		expect(t, code, 403, x)
+		code, x = lead.do("DELETE", "/api/v1/whiteboard-comments/"+c["id"].(string), nil)
+		expect(t, code, 204, x)
+	})
+}

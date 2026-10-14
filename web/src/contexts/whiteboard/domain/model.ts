@@ -82,3 +82,13 @@ export function stickyToIssue(text: string): { title: string; description: strin
 export function linkedIssue(text: string): string | undefined {
   return /(?:^|\n)→ ([A-Z][A-Z0-9]{1,9}-[1-9][0-9]*)\s*$/.exec(text)?.[1];
 }
+
+/** A comment pinned to an element (S86). */
+export type ElementComment = { id: string; element_id: string; author_id: string; body: string; created_at: string };
+
+/** How many comments each element has. */
+export function commentCounts(comments: ElementComment[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const c of comments) out.set(c.element_id, (out.get(c.element_id) ?? 0) + 1);
+  return out;
+}

@@ -33,3 +33,9 @@ func (n Notifier) Ops(ctx context.Context, to []string, board domain.WhiteboardI
 func (n Notifier) Cursor(ctx context.Context, to []string, board domain.WhiteboardID, by string, x, y float64) {
 	_ = n.hub.Publish(tenant.Workspace(ctx), to, "whiteboard.cursor", map[string]any{"whiteboard_id": string(board), "user_id": by, "x": x, "y": y})
 }
+
+// Commented sends whiteboard.comment (added or removed) to the members.
+func (n Notifier) Commented(ctx context.Context, to []string, c *domain.Comment, removed bool) {
+	_ = n.hub.Publish(tenant.Workspace(ctx), to, "whiteboard.comment", map[string]any{"whiteboard_id": string(c.Board), "id": string(c.ID),
+		"element_id": string(c.Element), "author_id": string(c.Author), "body": c.Body, "created_at": c.CreatedAt, "removed": removed})
+}

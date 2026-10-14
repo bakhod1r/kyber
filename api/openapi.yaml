@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.62.0
+  version: 0.63.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -599,7 +599,7 @@ paths:
       operationId: openStream
       description: |
         Server-Sent Events of this workspace for the caller (`message.posted`, `message.edited`,
-        `message.deleted`, `message.reacted`, `message.pinned`, `typing`, `conversation.read` (DMs: who read up to when), `conversation.updated` (a channel was renamed, archived or its members changed), `call.updated`, `call.signal`, `call.follow`, `call.reaction` (an emoji from a participant, not stored), `whiteboard.ops`, `whiteboard.cursor`; each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
+        `message.deleted`, `message.reacted`, `message.pinned`, `typing`, `conversation.read` (DMs: who read up to when), `conversation.updated` (a channel was renamed, archived or its members changed), `call.updated`, `call.signal`, `call.follow`, `call.reaction` (an emoji from a participant, not stored), `whiteboard.ops`, `whiteboard.cursor`, `whiteboard.comment` (added or removed); each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
         what was missed. Keeping the stream open marks the caller online.
       parameters:
         - { name: Last-Event-ID, in: header, schema: { type: string } }
@@ -1410,6 +1410,36 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/whiteboards/{id}/comments:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: listWhiteboardComments
+      description: Comments pinned to the board's elements (S86), oldest first.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/WhiteboardComment" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: commentOnElement
+      description: A member pins a comment to an element; @mentions in it notify people who may read the conversation.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [element_id, body], properties: { element_id: { type: string }, body: { type: string } } } } }
+      responses:
+        "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/WhiteboardComment" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/whiteboard-comments/{id}:
+    delete:
+      operationId: removeWhiteboardComment
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/chat/saved:
     get:
       operationId: listSavedMessages
@@ -3225,6 +3255,15 @@ components:
         updated_by: { type: string }
         updated_at: { type: string, format: date-time }
         deleted: { type: boolean }
+    WhiteboardComment:
+      type: object
+      required: [id, element_id, author_id, body, created_at]
+      properties:
+        id: { type: string }
+        element_id: { type: string }
+        author_id: { type: string }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
     SectionOrder:
       type: object
       required: [order]

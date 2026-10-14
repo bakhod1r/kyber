@@ -27,6 +27,9 @@ built DDD + TDD (contract tests on memory and PostgreSQL, acceptance tests on ev
   unordered sections follow by name. API 0.62.0.
 - **S86 Comments on whiteboard elements and doc lines** — select an element (or a doc paragraph) and comment;
   comments show as a pin; mentions notify. AC: only people who may read the board/doc see them.
+  **Done (whiteboards, S86a):** `GET/POST /whiteboards/{id}/comments`, `DELETE /whiteboard-comments/{id}` (author
+  only; migration 0071); 💬 count badges on elements, a comment panel for the selected element; @mentions notify
+  like chat. API 0.63.0. Doc paragraphs (S86b) next.
 - **S87 Recording summaries (optional)** — when an OpenAI-compatible chat model is configured (`KYBER_LLM_URL`),
   a recording's transcript also gets a short summary. Off by default; nothing leaves the server without it.
 

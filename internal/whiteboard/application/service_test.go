@@ -32,6 +32,9 @@ func (t *told) Ops(_ context.Context, to []string, _ domain.WhiteboardID, by str
 func (t *told) Cursor(_ context.Context, to []string, _ domain.WhiteboardID, by string, x, y float64) {
 	*t = append(*t, fmt.Sprintf("cursor %v by %s at %v,%v", to, by, x, y))
 }
+func (t *told) Commented(_ context.Context, to []string, c *domain.Comment, removed bool) {
+	*t = append(*t, fmt.Sprintf("comment %v on %s removed=%v", to, c.Element, removed))
+}
 
 // flaky loses the first save to another writer, to prove the reload-and-reapply.
 type flaky struct {
@@ -86,5 +89,32 @@ func TestWhiteboard(t *testing.T) {
 	want := "[ops [lead dev] by dev: 1 cursor [dev] by lead at 10,20]"
 	if fmt.Sprint(*tl) != want {
 		t.Fatalf("told = %v, want %v", *tl, want)
+	}
+}
+
+// S86: comments pinned to elements, for the conversation's members; only the author removes one.
+func TestElementComments(t *testing.T) {
+	tl := &told{}
+	n := 0
+	svc := app.NewService(app.Deps{Boards: memory.NewRepository(), Comments: memory.NewComments(), Conversations: convs{"dev": {"lead", "dev"}}, Notifier: tl,
+		NewID: func() string { n++; return fmt.Sprint("x-", n) }, Now: func() time.Time { return time.Unix(0, 0) }})
+	ctx := tenant.With(context.Background(), "w1")
+	b, _ := svc.Create(ctx, "lead", "dev", "Architecture")
+	*tl = nil
+	c, err := svc.Comment(ctx, "dev", string(b.ID), "e-1", "Is this cached?")
+	if err != nil || len(*tl) != 1 || (*tl)[0] != "comment [lead dev] on e-1 removed=false" {
+		t.Fatalf("comment = %+v %v %v", c, err, *tl)
+	}
+	if _, err := svc.Comment(ctx, "eve", string(b.ID), "e-1", "x"); !errors.Is(err, domain.ErrWhiteboardMissing) {
+		t.Fatalf("outsider = %v", err)
+	}
+	if list, _ := svc.Comments(ctx, "lead", string(b.ID)); len(list) != 1 || list[0].Body != "Is this cached?" {
+		t.Fatalf("comments = %+v", list)
+	}
+	if err := svc.RemoveComment(ctx, "lead", string(c.ID)); !errors.Is(err, app.ErrNotAuthor) {
+		t.Fatalf("someone else removes = %v", err)
+	}
+	if err := svc.RemoveComment(ctx, "dev", string(c.ID)); err != nil {
+		t.Fatal(err)
 	}
 }

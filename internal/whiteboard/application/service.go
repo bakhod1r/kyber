@@ -11,7 +11,10 @@ import (
 	"github.com/bakhod1r/kyber/internal/whiteboard/domain"
 )
 
-var ErrNoConversation = errors.New("conversation not found")
+var (
+	ErrNoConversation = errors.New("conversation not found")
+	ErrNotAuthor      = errors.New("only its author can remove a comment")
+)
 
 // MaxOps bounds one request.
 const MaxOps = 200
@@ -27,15 +30,19 @@ type Conversations interface {
 type Notifier interface {
 	Ops(ctx context.Context, to []string, board domain.WhiteboardID, by string, applied []domain.OpResult)
 	Cursor(ctx context.Context, to []string, board domain.WhiteboardID, by string, x, y float64)
+	// Commented tells about a comment added (or removed) on an element (S86).
+	Commented(ctx context.Context, to []string, c *domain.Comment, removed bool)
 }
 
 type nobody struct{}
 
 func (nobody) Ops(context.Context, []string, domain.WhiteboardID, string, []domain.OpResult)   {}
 func (nobody) Cursor(context.Context, []string, domain.WhiteboardID, string, float64, float64) {}
+func (nobody) Commented(context.Context, []string, *domain.Comment, bool)                      {}
 
 type Deps struct {
 	Boards        domain.Repository
+	Comments      domain.Comments // optional: element comments (S86)
 	Conversations Conversations
 	Notifier      Notifier // optional
 	NewID         func() string
@@ -125,5 +132,51 @@ func (s *Service) Cursor(ctx context.Context, actor, id string, x, y float64) er
 	}
 	others := slices.DeleteFunc(slices.Clone(members), func(m string) bool { return m == actor })
 	s.d.Notifier.Cursor(ctx, others, b.ID, actor, x, y)
+	return nil
+}
+
+// Comment pins a remark to an element (S86); the members hear about it, and @mentions in it notify.
+func (s *Service) Comment(ctx context.Context, actor, board, element, body string) (*domain.Comment, error) {
+	b, members, err := s.load(ctx, actor, board)
+	if err != nil {
+		return nil, err
+	}
+	c, err := b.Comment(domain.CommentID(s.d.NewID()), domain.ElementID(element), domain.UserID(actor), body, s.d.Now())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.d.Comments.Add(ctx, c); err != nil {
+		return nil, err
+	}
+	s.d.Notifier.Commented(ctx, members, c, false)
+	return c, nil
+}
+
+// Comments lists a board's comments, oldest first.
+func (s *Service) Comments(ctx context.Context, actor, board string) ([]*domain.Comment, error) {
+	b, _, err := s.load(ctx, actor, board)
+	if err != nil {
+		return nil, err
+	}
+	return s.d.Comments.OnBoard(ctx, b.ID)
+}
+
+// RemoveComment: only its author.
+func (s *Service) RemoveComment(ctx context.Context, actor, id string) error {
+	c, err := s.d.Comments.ByID(ctx, domain.CommentID(id))
+	if err != nil {
+		return err
+	}
+	_, members, err := s.load(ctx, actor, string(c.Board))
+	if err != nil {
+		return domain.ErrCommentMissing
+	}
+	if string(c.Author) != actor {
+		return ErrNotAuthor
+	}
+	if err := s.d.Comments.Remove(ctx, c.ID); err != nil {
+		return err
+	}
+	s.d.Notifier.Commented(ctx, members, c, true)
 	return nil
 }

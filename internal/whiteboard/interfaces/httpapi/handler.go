@@ -27,6 +27,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/whiteboards/{id}", h.get)
 	mux.HandleFunc("POST /api/v1/whiteboards/{id}/ops", h.ops)
 	mux.HandleFunc("POST /api/v1/whiteboards/{id}/cursor", h.cursor)
+	mux.HandleFunc("GET /api/v1/whiteboards/{id}/comments", h.comments)
+	mux.HandleFunc("POST /api/v1/whiteboards/{id}/comments", h.comment)
+	mux.HandleFunc("DELETE /api/v1/whiteboard-comments/{id}", h.removeComment)
 }
 
 func codeFor(err error) (string, bool) {
@@ -35,7 +38,11 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeConversationNotFound, true
 	case errors.Is(err, domain.ErrWhiteboardMissing):
 		return httpx.CodeWhiteboardNotFound, true
-	case errors.Is(err, domain.ErrInvalidTitle), errors.Is(err, application.ErrTooManyOps):
+	case errors.Is(err, domain.ErrCommentMissing):
+		return httpx.CodeCommentNotFound, true
+	case errors.Is(err, application.ErrNotAuthor):
+		return httpx.CodeNotCommentAuthor, true
+	case errors.Is(err, domain.ErrInvalidTitle), errors.Is(err, application.ErrTooManyOps), errors.Is(err, domain.ErrInvalidComment):
 		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrStale):
 		return httpx.CodeWhiteboardBusy, true
@@ -210,6 +217,57 @@ func (h *Handler) cursor(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.svc.Cursor(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.X, in.Y); err != nil {
 		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type commentDTO struct {
+	ID        string    `json:"id"`
+	ElementID string    `json:"element_id"`
+	AuthorID  string    `json:"author_id"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func toComment(c *domain.Comment) commentDTO {
+	return commentDTO{ID: string(c.ID), ElementID: string(c.Element), AuthorID: string(c.Author), Body: c.Body, CreatedAt: c.CreatedAt}
+}
+
+func (h *Handler) comments(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.Comments(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	out := make([]commentDTO, len(list))
+	for i, c := range list {
+		out[i] = toComment(c)
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+// comment: {"element_id", "body"} (S86).
+func (h *Handler) comment(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		ElementID string `json:"element_id"`
+		Body      string `json:"body"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	c, err := h.svc.Comment(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.ElementID, in.Body)
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, toComment(c))
+}
+
+func (h *Handler) removeComment(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.RemoveComment(r.Context(), auth.Actor(r.Context()), r.PathValue("id")); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

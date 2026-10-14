@@ -80,3 +80,33 @@ func Run(t *testing.T, r domain.Repository) {
 		}
 	}
 }
+
+// RunComments checks element comments (S86) over the store of r.
+func RunComments(t *testing.T, r domain.Repository, comments domain.Comments) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)
+	b, _ := domain.New("75000000-0000-4000-8000-000000000091", WS, Conv, "Comments", Lead, t0)
+	if err := r.Create(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := b.Comment("7c000000-0000-4000-8000-000000000001", "e-1", Dev, "Cache this?", t0)
+	second, _ := b.Comment("7c000000-0000-4000-8000-000000000002", "e-2", Lead, "Yes", t0.Add(time.Minute))
+	for _, c := range []*domain.Comment{first, second} {
+		if err := comments.Add(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, err := comments.OnBoard(ctx, b.ID)
+	if err != nil || len(list) != 2 || list[0].Body != "Cache this?" || list[0].Element != "e-1" || list[1].Author != Lead ||
+		!list[1].CreatedAt.Equal(t0.Add(time.Minute)) || list[0].Conversation != Conv || list[0].Workspace != WS {
+		t.Fatalf("OnBoard = %+v %v", list, err)
+	}
+	if err := comments.Remove(ctx, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []domain.CommentID{first.ID, "nope"} {
+		if _, err := comments.ByID(ctx, id); !errors.Is(err, domain.ErrCommentMissing) {
+			t.Fatalf("ByID %s = %v", id, err)
+		}
+	}
+}

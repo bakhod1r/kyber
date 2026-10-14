@@ -40,6 +40,8 @@ const (
 	CodeWorkflowNotFound     = "WORKFLOW_NOT_FOUND"
 	CodeWebhookNotFound      = "WEBHOOK_NOT_FOUND"
 	CodeWebhookRateLimited   = "WEBHOOK_RATE_LIMITED"
+	CodeCommentNotFound      = "WHITEBOARD_COMMENT_NOT_FOUND"
+	CodeNotCommentAuthor     = "NOT_COMMENT_AUTHOR"
 	CodeWorkspaceSlugTaken   = "WORKSPACE_SLUG_TAKEN"
 	CodeOTPPending           = "AUTH_OTP_PENDING"
 	CodeProjectNotFound      = "PROJECT_NOT_FOUND"
@@ -133,6 +135,8 @@ var codes = []code{
 	{CodeCallNotPresenter, "6109", 403, "Only the presenter can do that.", "Buni faqat taqdimotchi qila oladi.", "Это может сделать только докладчик.", errorx.CategoryBusiness},
 	{CodeCallRecording, "6110", 409, "Someone is already recording this call.", "Bu qo'ng'iroqni allaqachon kimdir yozib olyapti.", "Этот звонок уже кто-то записывает.", errorx.CategoryBusiness},
 	{CodeGroupHandleTaken, "6113", 409, "That group handle is taken.", "Bu guruh nomi band.", "Это имя группы уже занято.", errorx.CategoryBusiness},
+	{CodeCommentNotFound, "6119", 404, "Comment not found.", "Izoh topilmadi.", "Комментарий не найден.", errorx.CategoryBusiness},
+	{CodeNotCommentAuthor, "6120", 403, "Only its author can remove a comment.", "Izohni faqat muallifi o'chira oladi.", "Удалить комментарий может только его автор.", errorx.CategoryBusiness},
 	{CodeWebhookNotFound, "6117", 404, "Webhook not found.", "Vebhuk topilmadi.", "Вебхук не найден.", errorx.CategoryBusiness},
 	{CodeWebhookRateLimited, "6118", 429, "Too many messages from this webhook; slow down.", "Bu vebhukdan juda ko'p xabar; sekinroq.", "Слишком много сообщений от этого вебхука; помедленнее.", errorx.CategoryBusiness},
 	{CodeWorkflowNotFound, "6116", 404, "Workflow not found.", "Ish jarayoni topilmadi.", "Сценарий не найден.", errorx.CategoryBusiness},

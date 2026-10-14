@@ -88,4 +88,10 @@ test("two people draw on a whiteboard together", async ({ browser }) => {
   expect(issue.title).toBe("Cache the board");
   expect(issue.description).toBe("Use Redis");
   await expect(a.getByRole("link", { name: `Open ${key}-1` })).toBeVisible();
+
+  // S86: Ali comments on the sticky note (still selected); Bobur sees the pin live.
+  await a.getByLabel("Comment", { exact: true }).fill("Redis or in-process?");
+  await a.getByRole("button", { name: "Comment", exact: true }).click();
+  await expect(a.getByRole("complementary", { name: "Element comments" })).toContainText("Redis or in-process?");
+  await expect(cb.getByLabel("1 comments on an element")).toBeVisible();
 });
