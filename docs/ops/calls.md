@@ -84,7 +84,7 @@ the media server records instead: one MP4 with everyone in a grid, independent o
 
 When the recording stops (or its recorder leaves), Kyber stops the egress, waits up to 30 seconds for the file,
 posts it to the conversation as the recorder's "huddle recording" (transcript and summary follow when configured)
-and deletes it from the directory. A file still being written is retried by the outbox. Kyber only opens plain
+and deletes it, and the `<egress id>.json` manifest Egress writes next to it, from the directory. A file still being written is retried by the outbox. Kyber only opens plain
 file names inside that directory, as LiveKit reports them. Egress needs about one CPU core per recording
 (it runs Chrome); give it `SYS_ADMIN` or see LiveKit's docs for running without.
 - Turning LiveKit off: room calls still live cannot be entered (409); new calls are a mesh again.
