@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { onConnect, setStreamConnector, subscribe, USER_TOPIC } from "./stream";
+import { liveClient, onConnect, setStreamConnector, subscribe, subscribeTopic, USER_TOPIC } from "./stream";
 import { FakeStreamClient, flush } from "./test/fakeStream";
 
 afterEach(() => setStreamConnector(undefined));
@@ -31,6 +31,41 @@ describe("shared stream (S88: MQTT)", () => {
     await flush();
     expect(fake.connects).toBe(2);
     stopAgain();
+  });
+
+  it("carries board hints and personal events on the same connection", async () => {
+    const fake = new FakeStreamClient();
+    setStreamConnector(fake.connector());
+    const hints: string[] = [];
+    const stopEvents = subscribe(["typing"], () => {});
+    const stopHints = subscribeTopic("kyber/+/projects/+/events", (topic) => hints.push(topic));
+    await flush();
+    const late = subscribeTopic("kyber/+/projects/+/events", () => hints.push("late"));
+    expect(fake.connects).toBe(1);
+    expect(fake.topics).toEqual([USER_TOPIC, "kyber/+/projects/+/events"]); // one SUBSCRIBE per filter
+    fake.message("kyber/w/projects/KYB/events", "{}");
+    fake.emit("typing", {}); // a personal event is not a hint
+    expect(hints).toEqual(["kyber/w/projects/KYB/events", "late"]);
+    late();
+    stopHints();
+    stopEvents();
+    await flush();
+    expect(fake.ended).toBe(true);
+  });
+
+  it("offers live.ts a client over the shared connection", async () => {
+    const fake = new FakeStreamClient();
+    setStreamConnector(fake.connector());
+    const c = await liveClient();
+    let n = 0;
+    c.on("message", () => n++);
+    c.subscribe("kyber/+/projects/+/events");
+    await flush();
+    fake.message("kyber/w/projects/KYB/events", "{}");
+    expect(n).toBe(1);
+    c.end();
+    await flush();
+    expect(fake.ended).toBe(true);
   });
 
   it("tells listeners whenever the connection (re)connects, so they reload what they may have missed", async () => {

@@ -44,6 +44,6 @@ WebSocket.
   by name is refused.
 - **Publishing.** The realtime hub hands every event to the broker as well (`Hub.Forward`); across replicas
   the existing `NOTIFY kyber_realtime` feed reaches every node's hub, and each publishes into its own broker.
-- **Web app.** One MQTT connection carries chat, calls and whiteboards (board hints keep theirs for now); `onConnect` reloads after a reconnect
+- **Web app.** One MQTT connection per tab carries chat, calls, whiteboards and board hints; `onConnect` reloads after a reconnect
   (QoS 0, no replay). `GET /api/v1/stream` stays for existing scripts; the web app no longer opens it.
 - **Presence** counts MQTT clients as well as SSE streams (on the replica that answers).

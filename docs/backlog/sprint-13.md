@@ -46,7 +46,7 @@ built DDD + TDD (contract tests on memory and PostgreSQL, acceptance tests on ev
   a user receives only their own events; presence still works; `/api/v1/stream` stays for scripts.
   **Done:** per-user topics `kyber/<ws>/users/<user>/events` on the embedded broker (own topic only, checked per
   delivery); the realtime hub forwards to it on every replica; the web stream speaks MQTT (e2e: 0 SSE requests).
-  Board hints still use their own MQTT connection (two per tab); sharing one is a follow-up.
+  Board hints share the same connection: one MQTT WebSocket per tab (e2e: 122 → 92 connections).
   ADR-0013 amended.
 
 Order: S82 → S83 (infrastructure first), then S84, S85, S86, S87.
