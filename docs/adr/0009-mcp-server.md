@@ -29,6 +29,6 @@ through ad-hoc prompts.
 ## Consequences
 
 - Assistants can work on issues without new permissions or a separate credential type.
-- Personal access tokens (ADR-0012) give MCP clients long-lived credentials; OAuth for MCP
-  clients is a follow-up.
+- Personal access tokens (ADR-0012) give MCP clients long-lived credentials; clients that
+  support MCP authorization use OAuth 2.1 instead (ADR-0016).
 - New tools are a few lines in `internal/server/mcp.go`, tested through the full HTTP stack.

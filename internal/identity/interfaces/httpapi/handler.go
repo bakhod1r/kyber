@@ -25,6 +25,7 @@ type Handler struct {
 	log          *slog.Logger
 	cookieSecure bool
 	social       Social
+	publicURL    string // base URL in OAuth metadata; "" = derived from the request
 }
 
 func New(svc *application.Service, log *slog.Logger, cookieSecure bool) *Handler {
@@ -36,6 +37,7 @@ func (h *Handler) RegisterPublic(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/signup", h.signup)
 	mux.HandleFunc("POST /api/v1/auth/login", h.login)
 	h.registerSocial(mux)
+	h.registerOAuth(mux)
 }
 
 // RegisterProtected mounts routes that require RequireAuth.
@@ -46,6 +48,8 @@ func (h *Handler) RegisterProtected(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/me/tokens", h.tokens)
 	mux.HandleFunc("POST /api/v1/me/tokens", h.createToken)
 	mux.HandleFunc("DELETE /api/v1/me/tokens/{id}", h.revokeToken)
+	mux.HandleFunc("GET /api/v1/oauth/clients/{id}", h.oauthClient)
+	mux.HandleFunc("POST /api/v1/oauth/authorize", h.authorize)
 }
 
 // telegramConnect returns the deep link that connects the caller's Telegram for notifications.
@@ -89,6 +93,12 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrTokenNotFound):
 		return httpx.CodeTokenNotFound, true
+	case errors.Is(err, domain.ErrInvalidOAuthRequest), errors.Is(err, domain.ErrInvalidOAuthClient):
+		return httpx.CodeValidation, true
+	case errors.Is(err, domain.ErrOAuthClientNotFound):
+		return httpx.CodeNotFound, true
+	case errors.Is(err, application.ErrOAuthDisabled):
+		return httpx.CodeProviderDisabled, true
 	case errors.Is(err, errTokenScope):
 		return httpx.CodeTokenScope, true
 	case errors.Is(err, application.ErrUnauthenticated):
@@ -166,11 +176,15 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 		if token == "" {
+			h.challenge(w, r)
 			httpx.Error(w, r, h.log, application.ErrUnauthenticated, codeFor)
 			return
 		}
 		u, err := h.svc.Authenticate(r.Context(), token)
 		if err != nil {
+			if errors.Is(err, application.ErrUnauthenticated) {
+				h.challenge(w, r)
+			}
 			httpx.Error(w, r, h.log, err, codeFor)
 			return
 		}

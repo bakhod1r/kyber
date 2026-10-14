@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"math"
 	"sort"
 	"time"
 )
@@ -67,6 +68,65 @@ type Cycle struct {
 
 // CycleTimes measures issues that reached done within (now-window, now].
 func CycleTimes(entries []Entry, now time.Time, window time.Duration) Cycle {
+	ps := cyclePoints(entries, now, window)
+	if len(ps) == 0 {
+		return Cycle{}
+	}
+	ds := make([]time.Duration, len(ps))
+	for i, p := range ps {
+		ds[i] = p.Cycle
+	}
+	sort.Slice(ds, func(i, j int) bool { return ds[i] < ds[j] })
+	median := ds[len(ds)/2]
+	if len(ds)%2 == 0 {
+		median = (ds[len(ds)/2-1] + ds[len(ds)/2]) / 2
+	}
+	return Cycle{Count: len(ds), Average: mean(ds), Median: median}
+}
+
+// CyclePoint is one issue on the control chart: when it was done and how long it took.
+type CyclePoint struct {
+	Issue   string // issue id
+	Done    time.Time
+	Cycle   time.Duration
+	Rolling time.Duration // average of this and the previous issues (up to the rolling size)
+}
+
+// ControlReport is Jira's control chart: cycle time per done issue with a rolling average.
+type ControlReport struct {
+	Points          []CyclePoint // ordered by completion
+	Average, StdDev time.Duration
+}
+
+// ControlChart plots the issues done within (now-window, now]; rolling is the averaging size.
+func ControlChart(entries []Entry, now time.Time, window time.Duration, rolling int) ControlReport {
+	ps := cyclePoints(entries, now, window)
+	if len(ps) == 0 {
+		return ControlReport{}
+	}
+	ds := make([]time.Duration, len(ps))
+	for i := range ps {
+		ds[i] = ps[i].Cycle
+		ps[i].Rolling = mean(ds[max(0, i+1-rolling) : i+1])
+	}
+	avg := mean(ds)
+	var sq float64
+	for _, d := range ds {
+		sq += math.Pow(float64(d-avg), 2)
+	}
+	return ControlReport{Points: ps, Average: avg, StdDev: time.Duration(math.Sqrt(sq / float64(len(ds))))}
+}
+
+func mean(ds []time.Duration) time.Duration {
+	var sum time.Duration
+	for _, d := range ds {
+		sum += d
+	}
+	return sum / time.Duration(len(ds))
+}
+
+// cyclePoints measures first "in progress" → done for issues done within (now-window, now].
+func cyclePoints(entries []Entry, now time.Time, window time.Duration) []CyclePoint {
 	started := map[string]time.Time{}
 	finished := map[string]time.Time{}
 	for _, e := range sorted(entries) {
@@ -84,27 +144,21 @@ func CycleTimes(entries []Entry, now time.Time, window time.Duration) Cycle {
 			delete(finished, e.Issue) // re-opened: wait for the next done
 		}
 	}
-	var ds []time.Duration
+	var out []CyclePoint
 	for id, end := range finished {
 		start, ok := started[id]
 		if !ok || !end.After(now.Add(-window)) || end.Before(start) {
 			continue
 		}
-		ds = append(ds, end.Sub(start))
+		out = append(out, CyclePoint{Issue: id, Done: end, Cycle: end.Sub(start)})
 	}
-	if len(ds) == 0 {
-		return Cycle{}
-	}
-	sort.Slice(ds, func(i, j int) bool { return ds[i] < ds[j] })
-	var sum time.Duration
-	for _, d := range ds {
-		sum += d
-	}
-	median := ds[len(ds)/2]
-	if len(ds)%2 == 0 {
-		median = (ds[len(ds)/2-1] + ds[len(ds)/2]) / 2
-	}
-	return Cycle{Count: len(ds), Average: sum / time.Duration(len(ds)), Median: median}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].Done.Equal(out[j].Done) {
+			return out[i].Done.Before(out[j].Done)
+		}
+		return out[i].Issue < out[j].Issue
+	})
+	return out
 }
 
 // Sample is a point of a burndown line (points in tenths).

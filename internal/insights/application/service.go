@@ -298,6 +298,51 @@ func (s *Service) CreatedVsResolved(ctx context.Context, actor, project string, 
 	return domain.CreatedVsResolved(entries, s.d.Now(), days), nil
 }
 
+// ControlPoint is a done issue on the control chart.
+type ControlPoint struct {
+	Key, Title string
+	domain.CyclePoint
+}
+
+// Control is the control chart of the issues the actor can see.
+type Control struct {
+	Points          []ControlPoint
+	Average, StdDev time.Duration
+}
+
+// ControlChart covers issues done in the last `days` days (cycle time: first in progress → done),
+// with a rolling average over five issues. Issues the actor cannot see are left out.
+func (s *Service) ControlChart(ctx context.Context, actor, project string, days int) (Control, error) {
+	if err := s.d.Access.Authorize(ctx, actor, project); err != nil {
+		return Control{}, err
+	}
+	rows, err := s.d.Issues.Issues(ctx, actor, project)
+	if err != nil {
+		return Control{}, err
+	}
+	visible := map[string]IssueRow{}
+	for _, r := range rows {
+		visible[r.ID] = r
+	}
+	entries, err := s.d.Repo.ForProject(ctx, project)
+	if err != nil {
+		return Control{}, err
+	}
+	kept := entries[:0:0]
+	for _, e := range entries {
+		if _, ok := visible[e.Issue]; ok {
+			kept = append(kept, e)
+		}
+	}
+	r := domain.ControlChart(kept, s.d.Now(), time.Duration(days)*24*time.Hour, 5)
+	out := Control{Average: r.Average, StdDev: r.StdDev}
+	for _, p := range r.Points {
+		row := visible[p.Issue]
+		out.Points = append(out.Points, ControlPoint{Key: row.Key, Title: row.Title, CyclePoint: p})
+	}
+	return out, nil
+}
+
 type Burndown struct {
 	Sprint SprintInfo
 	Report domain.BurndownReport

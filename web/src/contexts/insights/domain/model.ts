@@ -31,3 +31,11 @@ export type SprintReport = {
   not_completed: SprintReportIssue[];
   removed: SprintReportIssue[];
 };
+
+/** Control chart: each done issue's cycle time with a rolling average (hours). */
+export type ControlChart = {
+  days: number;
+  average_hours: number;
+  stddev_hours: number;
+  points: { key: string; title: string; done_at: string; cycle_hours: number; rolling_hours: number }[];
+};

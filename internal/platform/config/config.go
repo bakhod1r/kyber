@@ -36,6 +36,10 @@ type Config struct {
 	// GitHubWebhookSecret enables POST /api/v1/integrations/github (commits and pull requests that
 	// mention issue keys); GitHub signs each delivery with it (X-Hub-Signature-256).
 	GitHubWebhookSecret string `env:"KYBER_GITHUB_WEBHOOK_SECRET"`
+	// APIRateLimit / UploadRateLimit are each signed-in user's requests (uploads) per minute; 0 = off.
+	// With KYBER_REDIS_URL the budget is shared by all replicas.
+	APIRateLimit    int `env:"KYBER_API_RATE_LIMIT" default:"1200"`
+	UploadRateLimit int `env:"KYBER_UPLOAD_RATE_LIMIT" default:"60"`
 	// BaseDomain enables workspaces on subdomains (<slug>.<BaseDomain>, ADR-0004); empty = single-tenant.
 	BaseDomain string `env:"KYBER_BASE_DOMAIN"`
 	// AdminEmails (comma-separated) administer the default workspace: they publish workspace-wide

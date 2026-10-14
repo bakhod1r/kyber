@@ -50,6 +50,8 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 | `KYBER_S3_BUCKET` · `KYBER_S3_ENDPOINT` · `KYBER_S3_REGION` · `KYBER_S3_ACCESS_KEY` · `KYBER_S3_SECRET_KEY` · `KYBER_S3_TLS` | — · `s3.amazonaws.com` · — · — · — · `true` | Store attachments in an existing S3/MinIO bucket instead of the directory (endpoint is `host[:port]`) |
 | `KYBER_MQTT_ADDR` | — | Also serve plain MQTT for integrations (e.g. `:1883`; username = workspace id, password = access token). Browsers use MQTT over WebSocket at `/api/v1/mqtt` (ADR-0013) |
 | `KYBER_GITHUB_WEBHOOK_SECRET` | — | Enables `POST /api/v1/integrations/github`: add it as a GitHub webhook (content type JSON, events *Pushes* and *Pull requests*) with this secret; commits and PRs mentioning `KEY-123` appear under **Development** on the issue (ADR-0014) |
+| `KYBER_API_RATE_LIMIT` | `1200` | API requests per signed-in user per minute; over it the API answers 429 `RATE_LIMITED` with `Retry-After` (0 = off; shared across replicas with `KYBER_REDIS_URL`) |
+| `KYBER_UPLOAD_RATE_LIMIT` | `60` | Attachment/file uploads per user per minute (0 = off) |
 | `KYBER_WEBHOOK_ALLOW_PRIVATE` | `false` | Let project webhooks reach loopback/private/link-local addresses (refused by default against SSRF; ADR-0014) |
 | `KYBER_DATABASE_URL` | — | PostgreSQL URL; unset = in-memory dev mode. Connect as a non-superuser role so row-level security (ADR-0010) applies |
 | `KYBER_REDIS_URL` | — | Optional; shares the login limiter across replicas (guard) |
@@ -111,6 +113,11 @@ in **Settings → Access tokens** (ADR-0012) and keep it out of shared config fi
 claude mcp add --transport http kyber https://kyber.example.com/api/v1/mcp \
   --header "Authorization: Bearer $KYBER_TOKEN"
 ```
+
+Clients that support MCP authorization need no token at all: add the URL, and the client discovers
+Kyber's OAuth 2.1 server, registers itself and opens a consent page where you approve it (PKCE,
+ADR-0016). The access token it receives appears under **Settings → Access tokens** as
+`MCP: <client>`, where you can revoke it. Set `KYBER_PUBLIC_URL` so the metadata carries your external URL.
 
 ## Development
 

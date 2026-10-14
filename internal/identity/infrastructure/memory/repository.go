@@ -17,6 +17,8 @@ type Repository struct {
 	otps     map[string]domain.OTPChallenge
 	connect  map[string]domain.ConnectToken
 	tokens   map[domain.TokenID]domain.PersonalToken
+	clients  map[domain.ClientID]domain.OAuthClient
+	codes    map[string]domain.AuthCode
 }
 
 func NewRepository() *Repository {

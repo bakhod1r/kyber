@@ -111,3 +111,13 @@ func TestTokensContract(t *testing.T) {
 	}
 	externaltest.RunTokens(t, r, ids[0], ids[1])
 }
+
+func TestOAuthContract(t *testing.T) {
+	ctx := context.Background()
+	r := postgres.NewRepository(dbtest.New(t))
+	u, _ := domain.NewUser("30000000-0000-4000-8000-0000000000b1", "oauth@x.uz", "U", "")
+	if err := r.Create(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	externaltest.RunOAuth(t, r, u.ID())
+}

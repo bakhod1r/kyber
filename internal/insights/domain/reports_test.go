@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -132,5 +133,35 @@ func TestVelocity(t *testing.T) {
 func TestPointsHelpers(t *testing.T) {
 	if math.Abs(domain.Tenths(25)-2.5) > 1e-9 {
 		t.Fatal("Tenths")
+	}
+}
+
+func TestControlChart(t *testing.T) {
+	entries := []domain.Entry{
+		status(1, at(0, 0), "a", "todo", "in_progress"), status(2, at(1, 0), "a", "in_progress", "done"), // 24h, done day 1
+		status(3, at(0, 0), "b", "todo", "in_progress"), status(4, at(3, 0), "b", "in_progress", "done"), // 72h, done day 3
+		status(5, at(1, 0), "c", "todo", "in_progress"), status(6, at(2, 0), "c", "in_progress", "done"), // 24h, done day 2
+		status(7, at(-40, 0), "old", "todo", "in_progress"), status(8, at(-39, 0), "old", "in_progress", "done"),
+	}
+	r := domain.ControlChart(entries, at(5, 0), 30*24*time.Hour, 2)
+	if len(r.Points) != 3 {
+		t.Fatalf("points = %+v", r.Points)
+	}
+	var order []string
+	for _, p := range r.Points {
+		order = append(order, p.Issue)
+	}
+	if strings.Join(order, ",") != "a,c,b" {
+		t.Fatalf("ordered by completion = %v", order)
+	}
+	if r.Points[1].Rolling != 24*time.Hour || r.Points[2].Rolling != 48*time.Hour {
+		t.Fatalf("rolling = %v %v", r.Points[1].Rolling, r.Points[2].Rolling)
+	}
+	// Mean 40h; deviations -16, -16, +32 → variance (256+256+1024)/3 = 512 → σ ≈ 22.63h.
+	if r.Average != 40*time.Hour || r.StdDev.Round(time.Minute) != (22*time.Hour+38*time.Minute) {
+		t.Fatalf("average %v stddev %v", r.Average, r.StdDev)
+	}
+	if empty := domain.ControlChart(nil, at(5, 0), time.Hour, 5); len(empty.Points) != 0 || empty.Average != 0 {
+		t.Fatalf("empty = %+v", empty)
 	}
 }

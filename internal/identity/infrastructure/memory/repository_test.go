@@ -28,3 +28,5 @@ func TestConnectContract(t *testing.T) {
 func TestTokensContract(t *testing.T) {
 	externaltest.RunTokens(t, memory.NewRepository(), "u-1", "u-2")
 }
+
+func TestOAuthContract(t *testing.T) { externaltest.RunOAuth(t, memory.NewRepository(), "u-1") }

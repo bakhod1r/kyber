@@ -1,14 +1,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { SocialSignIn } from "./SocialSignIn";
-import { identityUseCases } from "../application";
+import { identityUseCases, safeNext } from "../application";
 import { useT } from "../../../shared/i18n/i18n";
 
 export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const t = useT();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const next = safeNext(useSearchParams()[0].get("next"));
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,7 +24,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
       // Replace any cached "anonymous" result before routing, or RequireUser
       // would redirect straight back to /login.
       await qc.fetchQuery({ queryKey: ["me"], queryFn: identityUseCases.me });
-      navigate("/");
+      navigate(next);
     },
   });
 
@@ -69,9 +70,9 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
         <SocialSignIn />
         <p className="muted">
           {signup ? (
-            <>{t("Already have an account?")} <Link to="/login">{t("Log in")}</Link></>
+            <>{t("Already have an account?")} <Link to={next === "/" ? "/login" : `/login?next=${encodeURIComponent(next)}`}>{t("Log in")}</Link></>
           ) : (
-            <>{t("New to Kyber?")} <Link to="/signup">{t("Create an account")}</Link></>
+            <>{t("New to Kyber?")} <Link to={next === "/" ? "/signup" : `/signup?next=${encodeURIComponent(next)}`}>{t("Create an account")}</Link></>
           )}
         </p>
       </form>

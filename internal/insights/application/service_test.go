@@ -24,8 +24,8 @@ func (fakes) Authorize(_ context.Context, actor, project string) error {
 func (fakes) Issues(_ context.Context, _, project string) ([]application.IssueRow, error) {
 	five, three := 50, 30
 	return []application.IssueRow{
-		{Key: "KYB-1", Type: "bug", Status: "todo", Category: "todo", Priority: "high", Assignee: "u-a", Points: &five},
-		{Key: "KYB-2", Type: "task", Status: "closed", Category: "done", StatusOrder: 3, Priority: "medium", Assignee: "u-a", Points: &three},
+		{ID: "i-1", Key: "KYB-1", Title: "Crash", Type: "bug", Status: "todo", Category: "todo", Priority: "high", Assignee: "u-a", Points: &five},
+		{ID: "i-2", Key: "KYB-2", Title: "Docs", Type: "task", Status: "closed", Category: "done", StatusOrder: 3, Priority: "medium", Assignee: "u-a", Points: &three},
 		{Key: "KYB-3", Type: "task", Status: "review", Category: "in_progress", StatusOrder: 2, Priority: "medium"},
 		{Key: "KYB-4", Type: "task", Status: "progress", Category: "in_progress", StatusOrder: 1, Priority: "medium", Assignee: "u-a"},
 	}, nil
@@ -169,5 +169,30 @@ func TestIngestCustomStatusesByCategory(t *testing.T) {
 	got, _ := repo.ForProject(ctx, "KYB")
 	if len(got) != 2 || got[0].From != "todo" || got[0].To != "in_progress" || got[1].To != "done" {
 		t.Fatalf("entries = %+v", got)
+	}
+}
+
+func TestControlChartShowsOnlyVisibleIssues(t *testing.T) {
+	ctx := context.Background()
+	s, repo := setup()
+	st := func(ev int64, at time.Time, issue, from, to string) domain.Entry {
+		return domain.Entry{Event: ev, At: at, Project: "KYB", Issue: issue, Kind: domain.KindStatus, From: from, To: to}
+	}
+	_ = repo.Record(ctx,
+		st(1, t0, "i-1", "todo", "in_progress"), st(2, t0.Add(10*time.Hour), "i-1", "in_progress", "done"),
+		st(3, t0, "i-2", "todo", "in_progress"), st(4, t0.Add(20*time.Hour), "i-2", "in_progress", "done"),
+		st(5, t0, "hidden", "todo", "in_progress"), st(6, t0.Add(5*time.Hour), "hidden", "in_progress", "done"))
+	r, err := s.ControlChart(ctx, "dev", "KYB", 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Points) != 2 || r.Points[0].Key != "KYB-1" || r.Points[0].Title != "Crash" || r.Points[1].Key != "KYB-2" {
+		t.Fatalf("points = %+v", r.Points)
+	}
+	if r.Average != 15*time.Hour {
+		t.Fatalf("average over visible issues = %v", r.Average)
+	}
+	if _, err := s.ControlChart(ctx, "stranger", "KYB", 30); !errors.Is(err, application.ErrProjectNotFound) {
+		t.Fatalf("outsider err = %v", err)
 	}
 }
