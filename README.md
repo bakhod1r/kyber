@@ -44,6 +44,8 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 | `KYBER_ATTACHMENTS_DIR` | `./data/attachments` | Uploaded files (`<dir>/<workspace>/<id>`, at most 25 MiB each); back it up together with the database |
 | `KYBER_S3_BUCKET` · `KYBER_S3_ENDPOINT` · `KYBER_S3_REGION` · `KYBER_S3_ACCESS_KEY` · `KYBER_S3_SECRET_KEY` · `KYBER_S3_TLS` | — · `s3.amazonaws.com` · — · — · — · `true` | Store attachments in an existing S3/MinIO bucket instead of the directory (endpoint is `host[:port]`) |
 | `KYBER_MQTT_ADDR` | — | Also serve plain MQTT for integrations (e.g. `:1883`; username = workspace id, password = access token). Browsers use MQTT over WebSocket at `/api/v1/mqtt` (ADR-0013) |
+| `KYBER_GITHUB_WEBHOOK_SECRET` | — | Enables `POST /api/v1/integrations/github`: add it as a GitHub webhook (content type JSON, events *Pushes* and *Pull requests*) with this secret; commits and PRs mentioning `KEY-123` appear under **Development** on the issue (ADR-0014) |
+| `KYBER_WEBHOOK_ALLOW_PRIVATE` | `false` | Let project webhooks reach loopback/private/link-local addresses (refused by default against SSRF; ADR-0014) |
 | `KYBER_DATABASE_URL` | — | PostgreSQL URL; unset = in-memory dev mode. Connect as a non-superuser role so row-level security (ADR-0010) applies |
 | `KYBER_REDIS_URL` | — | Optional; shares the login limiter across replicas (guard) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | Enables OpenTelemetry tracing (OTLP/HTTP, e.g. `http://otel-collector:4318`); unset = tracing off. The standard `OTEL_*` variables apply (`OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_SDK_DISABLED`). See ADR-0006 |
@@ -75,6 +77,10 @@ Errors are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/probl
 | GET · POST | `/api/v1/issues/{KEY-N}/comments` | List · add comments |
 | GET · POST | `/api/v1/issues/{KEY-N}/attachments` | List · upload files (multipart `file`, ≤ 25 MiB) |
 | GET · DELETE | `/api/v1/attachments/{id}` | Download (images/PDF inline, others as attachment) · remove |
+| GET · POST · PUT · DELETE | `/api/v1/projects/{key}/webhooks[/{id}]` | Project webhooks (admins): signed JSON POSTs of project events (`X-Kyber-Signature: sha256=…`, identifiers only, retried with backoff); secret shown once (ADR-0014) |
+| GET | `/api/v1/projects/{key}/webhooks/{id}/deliveries` | The webhook's 20 latest deliveries (status, attempts, last response) |
+| GET | `/api/v1/issues/{KEY-N}/development` | Commits and pull requests that mention the issue |
+| POST | `/api/v1/integrations/github` | GitHub webhook receiver (verified with `X-Hub-Signature-256`) |
 | POST | `/api/v1/issues/{KEY-N}/rank` | Move in the backlog (`after` / `before` another issue) |
 | GET · POST | `/api/v1/projects/{key}/sprints` | List · create sprints |
 | POST | `/api/v1/sprints/{id}/start` · `/complete` | Start · complete (unfinished issues return to the backlog) |

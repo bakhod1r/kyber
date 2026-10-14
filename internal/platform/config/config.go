@@ -30,6 +30,12 @@ type Config struct {
 	// MQTTAddr also serves plain MQTT (e.g. ":1883") for external clients: username = workspace id,
 	// password = personal access token (ADR-0013). Browsers use MQTT over WebSocket at /api/v1/mqtt.
 	MQTTAddr string `env:"KYBER_MQTT_ADDR"`
+	// WebhookAllowPrivate lets outgoing webhooks reach loopback, private and link-local addresses
+	// (refused by default against SSRF; tests and trusted networks only).
+	WebhookAllowPrivate bool `env:"KYBER_WEBHOOK_ALLOW_PRIVATE" default:"false"`
+	// GitHubWebhookSecret enables POST /api/v1/integrations/github (commits and pull requests that
+	// mention issue keys); GitHub signs each delivery with it (X-Hub-Signature-256).
+	GitHubWebhookSecret string `env:"KYBER_GITHUB_WEBHOOK_SECRET"`
 	// BaseDomain enables workspaces on subdomains (<slug>.<BaseDomain>, ADR-0004); empty = single-tenant.
 	BaseDomain string `env:"KYBER_BASE_DOMAIN"`
 	// AdminEmails (comma-separated) administer the default workspace: they publish workspace-wide

@@ -39,3 +39,6 @@
 ./internal/attachment/domain
 ./internal/attachment/application
 ./internal/attachment/infrastructure/memory
+./internal/webhook/domain
+./internal/webhook/application
+./internal/webhook/infrastructure/memory
