@@ -6,6 +6,7 @@ import { mockApi, renderWithProviders } from "../../../shared/test/test-utils";
 import { ChatPage } from "./ChatPage";
 import { setStreamConnector } from "../../../shared/stream";
 import { FakeStreamClient, flush } from "../../../shared/test/fakeStream";
+import { I18nProvider } from "../../../shared/i18n/i18n";
 
 let stream = new FakeStreamClient();
 
@@ -173,5 +174,26 @@ describe("Chat pins and search (S54a)", () => {
     await user.type(screen.getByRole("searchbox", { name: "Search messages" }), "ready{Enter}");
     const results = await screen.findByRole("list", { name: "Search results" });
     expect(await within(results).findByRole("link", { name: /# general · Bobur\s*KYB-1 is ready/ })).toHaveAttribute("href", "/chat/c-1");
+  });
+
+  it("shows its built-in labels in the user's language (S97)", async () => {
+    routes();
+    const user = userEvent.setup();
+    renderWithProviders(
+      <I18nProvider initial="uz">
+        <Routes>
+          <Route path="/chat/:id" element={<ChatPage />} />
+        </Routes>
+      </I18nProvider>,
+      "/chat/c-1",
+    );
+    const nav = await screen.findByRole("navigation", { name: "Suhbatlar" });
+    expect(await within(nav).findByRole("heading", { name: /^Kanallar/ })).toBeInTheDocument();
+    expect(within(nav).getByRole("heading", { name: /^Shaxsiy xabarlar/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Holat/ }));
+    const presets = screen.getByRole("form", { name: "Holat" });
+    await user.click(within(presets).getByTitle("Tushlik"));
+    expect(within(presets).getByDisplayValue("Tushlik")).toBeInTheDocument(); // what you pick is what you set
+    expect(within(presets).getByRole("option", { name: "Bugun" })).toBeInTheDocument();
   });
 });
