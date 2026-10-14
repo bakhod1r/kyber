@@ -116,6 +116,22 @@ func TestPomodoroFlow(t *testing.T) {
 	}
 }
 
+// S66: a running Pomodoro counts as focusing (chat mentions stay quiet); paused or none does not.
+func TestFocusing(t *testing.T) {
+	s, _, _, ctx := setup()
+	if on, err := s.Focusing(ctx, "ann"); err != nil || on {
+		t.Fatalf("no session = %v %v", on, err)
+	}
+	_, _ = s.Start(ctx, "ann", "KYB-1", 25)
+	if on, _ := s.Focusing(ctx, "ann"); !on {
+		t.Fatal("running is focusing")
+	}
+	_, _ = s.Pause(ctx, "ann")
+	if on, _ := s.Focusing(ctx, "ann"); on {
+		t.Fatal("paused is not focusing")
+	}
+}
+
 func TestMeetingsBlockFocus(t *testing.T) {
 	s, c, cal, ctx := setup()
 	cal.meetings["ann"] = []domain.Busy{{Title: "Planning", Start: t0.Add(20 * time.Minute), End: t0.Add(time.Hour)}}
@@ -229,6 +245,9 @@ func TestStorageAndCalendarErrors(t *testing.T) {
 	repo.op = "active"
 	if _, err := s.Start(ctx, "ann", "KYB-1", 25); !errors.Is(err, errDB) {
 		t.Fatalf("active err = %v", err)
+	}
+	if _, err := s.Focusing(ctx, "ann"); !errors.Is(err, errDB) {
+		t.Fatalf("focusing err = %v", err)
 	}
 	repo.op = "list"
 	if _, _, err := s.IssueLog(ctx, "ann", "KYB-1"); !errors.Is(err, errDB) {

@@ -16,3 +16,11 @@ func TestContract(t *testing.T) {
 	}
 	repotest.Run(t, postgres.NewRepository(pool))
 }
+
+func TestCommentsContract(t *testing.T) {
+	pool := dbtest.New(t)
+	if _, err := pool.Exec(context.Background(), `INSERT INTO workspaces (id, slug, name) VALUES ($1, 'other', 'Other')`, repotest.OtherWorkspace); err != nil {
+		t.Fatal(err)
+	}
+	repotest.RunComments(t, postgres.NewRepository(pool), postgres.NewComments(pool))
+}

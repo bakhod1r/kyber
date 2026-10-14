@@ -25,6 +25,14 @@ import { ProjectSummary } from "../contexts/insights/ui/ProjectSummary";
 import { IssueList } from "../contexts/search/ui/IssueList";
 import { type QuickFilterState, QuickFilters } from "../contexts/search/ui/QuickFilters";
 import { useState } from "react";
+import { identityUseCases } from "../contexts/identity/application";
+
+/** Docs with who I am and the project's people, so paragraph comments show names (S86). */
+function ProjectDocs({ projectKey }: { projectKey: string }) {
+  const me = useQuery({ queryKey: ["me"], queryFn: identityUseCases.me });
+  const members = useQuery({ queryKey: ["members", projectKey], queryFn: () => projectUseCases.members(projectKey) });
+  return <Docs projectKey={projectKey} me={me.data?.id ?? ""} names={new Map((members.data ?? []).map((m) => [m.user_id, m.name || m.email]))} />;
+}
 import { useT } from "../shared/i18n/i18n";
 
 export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "docs" | "forms" | "announcements" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" }) {
@@ -91,7 +99,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         {view === "board-settings" && <BoardSettings projectKey={key} />}
         {view === "releases" && <Releases projectKey={key} />}
         {view === "goals" && <Goals projectKey={key} />}
-        {view === "docs" && <Docs projectKey={key} />}
+        {view === "docs" && <ProjectDocs projectKey={key} />}
         {view === "announcements" && <Announcements projectKey={key} />}
         {view === "forms" && <Forms projectKey={key} onOpen={setOpen} />}
         {view === "permissions" && <PermissionScheme projectKey={key} />}

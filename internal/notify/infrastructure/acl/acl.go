@@ -5,10 +5,13 @@ package acl
 import (
 	"context"
 	"errors"
+	"strings"
 
 	accessapp "github.com/bakhod1r/kyber/internal/access/application"
 	accessdomain "github.com/bakhod1r/kyber/internal/access/domain"
 	agiledomain "github.com/bakhod1r/kyber/internal/agile/domain"
+	chatapp "github.com/bakhod1r/kyber/internal/chat/application"
+	chatdomain "github.com/bakhod1r/kyber/internal/chat/domain"
 	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
 	issueapp "github.com/bakhod1r/kyber/internal/issue/application"
 	issuedomain "github.com/bakhod1r/kyber/internal/issue/domain"
@@ -130,6 +133,9 @@ func (c Contacts) Email(ctx context.Context, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if strings.HasSuffix(string(u.Email()), ".invalid") { // placeholders: Google/Telegram accounts, bots (S84)
+		return "", nil
+	}
 	return string(u.Email()), nil
 }
 
@@ -197,4 +203,74 @@ func (l Lookups) SprintName(ctx context.Context, id string) (string, string, err
 		return "", "", err
 	}
 	return sp.Project(), sp.Name(), nil
+}
+
+// Chat is the port to the Chat context: whether a user may read a conversation, and its name.
+type Chat interface {
+	Conversation(ctx context.Context, actor, id string) (chatapp.View, error)
+}
+
+type Conversations struct{ chat Chat }
+
+func NewConversations(chat Chat) Conversations { return Conversations{chat: chat} }
+
+func (c Conversations) Readable(ctx context.Context, user, conversation string) (string, bool, error) {
+	v, err := c.chat.Conversation(ctx, user, conversation)
+	if errors.Is(err, chatdomain.ErrConversationNotFound) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return v.Name, true, nil
+}
+
+// DND is what Quiet asks Chat: is the user in Do Not Disturb now.
+type DND interface {
+	InDND(ctx context.Context, user string) (bool, error)
+}
+
+// Focusing is what Quiet asks Focus: is a Pomodoro running for the user.
+type Focusing interface {
+	Focusing(ctx context.Context, user string) (bool, error)
+}
+
+// Quiet: someone in Do Not Disturb or in a running Pomodoro is not disturbed (S66).
+type Quiet struct {
+	dnd   DND
+	focus Focusing
+}
+
+func NewQuiet(dnd DND, focus Focusing) Quiet { return Quiet{dnd: dnd, focus: focus} }
+
+func (q Quiet) Quiet(ctx context.Context, user string) (bool, error) {
+	if on, err := q.dnd.InDND(ctx, user); err != nil || on {
+		return on, err
+	}
+	if q.focus == nil {
+		return false, nil
+	}
+	return q.focus.Focusing(ctx, user)
+}
+
+// GroupMembers is what GroupMentions asks Chat: the people of a workspace group.
+type GroupMembers interface {
+	GroupMembers(ctx context.Context, handle string) ([]string, error)
+}
+
+// GroupMentions finds @group handles in a message (Chat's rules) and their members (S70).
+type GroupMentions struct{ chat GroupMembers }
+
+func NewGroupMentions(chat GroupMembers) GroupMentions { return GroupMentions{chat: chat} }
+
+func (g GroupMentions) Mentioned(ctx context.Context, body string) ([]string, error) {
+	var out []string
+	for _, h := range chatdomain.GroupMentions(body) {
+		ids, err := g.chat.GroupMembers(ctx, h)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ids...)
+	}
+	return out, nil
 }

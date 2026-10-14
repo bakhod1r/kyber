@@ -10,18 +10,24 @@ import (
 	"github.com/bakhod1r/kyber/internal/docs/application"
 	"github.com/bakhod1r/kyber/internal/docs/domain"
 	"github.com/bakhod1r/kyber/internal/docs/infrastructure/memory"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
 const (
 	lead   = "u-lead"
 	viewer = "u-viewer"
 	out    = "u-outsider"
+	broken = "u-broken" // the project check fails
 )
+
+var errDown = errors.New("db down")
 
 type projects struct{}
 
 func (projects) Authorize(_ context.Context, actor, project string, change bool) error {
 	switch {
+	case actor == broken:
+		return errDown
 	case project != "KYB" || actor == out:
 		return application.ErrProjectNotFound
 	case change && actor == viewer:
@@ -107,5 +113,55 @@ func TestPages(t *testing.T) {
 	}
 	if err := s.Delete(ctx, lead, id); !errors.Is(err, domain.ErrPageNotFound) {
 		t.Fatalf("delete twice: %v", err)
+	}
+}
+
+// S86: anyone who may read a page may comment on its paragraphs; only the author removes a comment.
+func TestParagraphComments(t *testing.T) {
+	ctx := tenant.With(context.Background(), tenant.Default)
+	n := 0
+	pages := memory.NewRepository()
+	comments := memory.NewComments(pages)
+	s := application.NewService(application.Deps{Projects: projects{}, Pages: pages, Comments: comments,
+		NewID: func() string { n++; return fmt.Sprintf("x-%d", n) }, Now: time.Now})
+	p, _ := s.Create(ctx, lead, "KYB", "Guide", "a\n\nb")
+	id := string(p.ID)
+
+	c, err := s.Comment(ctx, viewer, id, 1, "b", "Why? @lead@x.uz")
+	if err != nil || c.Author != viewer || c.Paragraph != 1 {
+		t.Fatalf("comment = %+v %v", c, err)
+	}
+	if ev := comments.Outbox(); len(ev) != 1 || ev[0].Workspace != tenant.Default || ev[0].Title != "Guide" {
+		t.Fatalf("outbox = %+v", ev)
+	}
+	if _, err := s.Comment(ctx, out, id, 0, "", "x"); !errors.Is(err, domain.ErrPageNotFound) {
+		t.Fatalf("outsider comments: %v", err)
+	}
+	if _, err := s.Comment(ctx, lead, id, -1, "", "x"); !errors.Is(err, domain.ErrInvalidComment) {
+		t.Fatalf("bad paragraph: %v", err)
+	}
+	if list, err := s.Comments(ctx, lead, id); err != nil || len(list) != 1 {
+		t.Fatalf("comments = %v %v", list, err)
+	}
+	if _, err := s.Comments(ctx, out, id); !errors.Is(err, domain.ErrPageNotFound) {
+		t.Fatalf("outsider lists: %v", err)
+	}
+	if err := s.RemoveComment(ctx, lead, string(c.ID)); !errors.Is(err, application.ErrNotAuthor) {
+		t.Fatalf("someone else removes: %v", err)
+	}
+	if err := s.RemoveComment(ctx, out, string(c.ID)); !errors.Is(err, domain.ErrCommentMissing) {
+		t.Fatalf("outsider removes: %v", err)
+	}
+	if err := s.RemoveComment(ctx, broken, string(c.ID)); !errors.Is(err, errDown) {
+		t.Fatalf("failing check: %v", err)
+	}
+	if err := s.RemoveComment(ctx, viewer, "nope"); !errors.Is(err, domain.ErrCommentMissing) {
+		t.Fatalf("missing: %v", err)
+	}
+	if err := s.RemoveComment(ctx, viewer, string(c.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := s.Comments(ctx, lead, id); len(list) != 0 {
+		t.Fatalf("after remove: %v", list)
 	}
 }

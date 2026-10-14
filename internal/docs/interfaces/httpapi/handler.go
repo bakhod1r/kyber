@@ -27,11 +27,14 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/docs/{id}", h.revise)
 	mux.HandleFunc("DELETE /api/v1/docs/{id}", h.delete)
 	mux.HandleFunc("GET /api/v1/docs/{id}/history", h.history)
+	mux.HandleFunc("GET /api/v1/docs/{id}/comments", h.comments)
+	mux.HandleFunc("POST /api/v1/docs/{id}/comments", h.comment)
+	mux.HandleFunc("DELETE /api/v1/doc-comments/{id}", h.removeComment)
 }
 
 func codeFor(err error) (string, bool) {
 	switch {
-	case errors.Is(err, domain.ErrInvalidPage), errors.Is(err, httpx.ErrBadJSON):
+	case errors.Is(err, domain.ErrInvalidPage), errors.Is(err, domain.ErrInvalidComment), errors.Is(err, httpx.ErrBadJSON):
 		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrPageNotFound):
 		return httpx.CodePageNotFound, true
@@ -39,6 +42,10 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodePageConflict, true
 	case errors.Is(err, application.ErrProjectNotFound):
 		return httpx.CodeProjectNotFound, true
+	case errors.Is(err, domain.ErrCommentMissing):
+		return httpx.CodeCommentNotFound, true
+	case errors.Is(err, application.ErrNotAuthor):
+		return httpx.CodeNotCommentAuthor, true
 	case errors.Is(err, application.ErrForbidden):
 		return httpx.CodeForbidden, true
 	}
@@ -144,4 +151,57 @@ func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
 		items = append(items, revisionDTO{Number: v.Number, Title: v.Title, Body: v.Body, By: v.By, At: v.At})
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+type commentDTO struct {
+	ID        string    `json:"id"`
+	PageID    string    `json:"page_id"`
+	Paragraph int       `json:"paragraph"`
+	Quote     string    `json:"quote"`
+	AuthorID  string    `json:"author_id"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func commentOut(c *domain.Comment) commentDTO {
+	return commentDTO{ID: string(c.ID), PageID: string(c.Page), Paragraph: c.Paragraph, Quote: c.Quote, AuthorID: c.Author, Body: c.Body, CreatedAt: c.CreatedAt}
+}
+
+func (h *Handler) comments(w http.ResponseWriter, r *http.Request) {
+	list, err := h.svc.Comments(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	items := make([]commentDTO, 0, len(list))
+	for _, c := range list {
+		items = append(items, commentOut(c))
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *Handler) comment(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Paragraph int    `json:"paragraph"`
+		Quote     string `json:"quote"`
+		Body      string `json:"body"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	c, err := h.svc.Comment(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Paragraph, in.Quote, in.Body)
+	if err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, commentOut(c))
+}
+
+func (h *Handler) removeComment(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.RemoveComment(r.Context(), auth.Actor(r.Context()), r.PathValue("id")); err != nil {
+		httpx.Error(w, r, h.log, err, codeFor)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -265,3 +265,132 @@ func TestWatchersAreNotified(t *testing.T) {
 		}
 	}
 }
+
+// chats is a fake Chat port: conversation id → name and who may read it.
+type chats map[string]struct {
+	name    string
+	readers []string
+}
+
+func (c chats) Readable(_ context.Context, user, conv string) (string, bool, error) {
+	ch, ok := c[conv]
+	if !ok {
+		return "", false, nil
+	}
+	for _, r := range ch.readers {
+		if r == user {
+			return ch.name, true, nil
+		}
+	}
+	return "", false, nil
+}
+
+func TestChatMention(t *testing.T) {
+	ctx := tenant.With(context.Background(), tenant.Default)
+	s, _ := setup()
+	s = s.WithConversations(chats{"c-1": {name: "general", readers: []string{"carol", "dave"}}})
+	body := `{"id":"m-1","conversation_id":"c-1","thread_id":"","author_id":"carol","body":"@dave@x.uz @eve@x.uz @carol@x.uz look"}`
+	m := msg(7, "chat.message_posted", body)
+	m.Workspace = tenant.Default
+	for range 2 { // redelivery is idempotent
+		if err := s.OnChatMessage(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items, _, _ := s.List(ctx, "dave", false)
+	if len(items) != 1 || items[0].Kind != domain.KindMentioned || items[0].ConversationID != "c-1" || items[0].ConversationName != "general" ||
+		items[0].ActorName != "Carol" || items[0].Excerpt != "@dave@x.uz @eve@x.uz @carol@x.uz look" || items[0].IssueKey != "" {
+		t.Fatalf("dave = %+v", items)
+	}
+	if got := inbox(t, s, "eve"); got != "" {
+		t.Fatalf("cannot read the conversation: %s", got)
+	}
+	if got := inbox(t, s, "carol"); got != "" {
+		t.Fatalf("author: %s", got)
+	}
+	if err := s.OnChatMessage(ctx, msg(8, "chat.message_posted", `{`)); err != nil {
+		t.Fatalf("poison message must be skipped: %v", err)
+	}
+}
+
+func TestRenderChatMention(t *testing.T) {
+	subject, text := domain.Render(domain.Notification{Kind: domain.KindMentioned, ConversationID: "c-1", ConversationName: "general",
+		ActorName: "Carol", Excerpt: "look"}, "https://k/chat/c-1")
+	if subject != "Carol mentioned you in #general" || text != "Carol mentioned you in #general:\n\nlook\n\nhttps://k/chat/c-1" {
+		t.Fatalf("%q / %q", subject, text)
+	}
+	subject, _ = domain.Render(domain.Notification{Kind: domain.KindMentioned, ConversationID: "c-2", ActorName: "Carol"}, "")
+	if subject != "Carol mentioned you in a direct message" {
+		t.Fatalf("dm subject = %q", subject)
+	}
+}
+
+// groups is a fake GroupMentions: @handle → members.
+type groups map[string][]string
+
+func (g groups) Mentioned(_ context.Context, body string) ([]string, error) {
+	var out []string
+	for h, ids := range g {
+		if strings.Contains(body, "@"+h) {
+			out = append(out, ids...)
+		}
+	}
+	return out, nil
+}
+
+// S70: an @group mention notifies its members who may read the conversation, once each, never the author.
+func TestChatGroupMention(t *testing.T) {
+	ctx := tenant.With(context.Background(), tenant.Default)
+	s, _ := setup()
+	s = s.WithConversations(chats{"c-1": {name: "general", readers: []string{"carol", "dave"}}}).
+		WithGroupMentions(groups{"backend": {"carol", "dave", "eve"}})
+	m := msg(9, "chat.message_posted", `{"id":"m-1","conversation_id":"c-1","author_id":"carol","body":"@backend @dave@x.uz deploy?"}`)
+	m.Workspace = tenant.Default
+	if err := s.OnChatMessage(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	if items, _, _ := s.List(ctx, "dave", false); len(items) != 1 {
+		t.Fatalf("dave (in the group and mentioned by e-mail) = %+v", items)
+	}
+	if got := inbox(t, s, "eve"); got != "" {
+		t.Fatalf("eve cannot read the conversation: %s", got)
+	}
+	if got := inbox(t, s, "carol"); got != "" {
+		t.Fatalf("author: %s", got)
+	}
+}
+
+// prefs is a fake ChatPrefs.
+type prefs struct {
+	muted     map[string]bool
+	followers []string
+}
+
+func (p prefs) Muted(_ context.Context, user, _ string) (bool, error) { return p.muted[user], nil }
+func (p prefs) Followers(context.Context, string) ([]string, error)   { return p.followers, nil }
+
+// S71: muted conversations never notify; followers get every message (once, even when also mentioned).
+func TestChatLevels(t *testing.T) {
+	ctx := tenant.With(context.Background(), tenant.Default)
+	s, _ := setup()
+	s = s.WithConversations(chats{"c-1": {name: "general", readers: []string{"carol", "dave", "erin", "frank"}}}).
+		WithChatPrefs(prefs{muted: map[string]bool{"dave": true}, followers: []string{"erin", "frank", "carol"}})
+	s = s.WithGroupMentions(groups{"team": {"dave", "frank"}})
+	m := msg(10, "chat.message_posted", `{"id":"m-1","conversation_id":"c-1","author_id":"carol","body":"@team ship it"}`)
+	m.Workspace = tenant.Default
+	if err := s.OnChatMessage(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	if got := inbox(t, s, "dave"); got != "" {
+		t.Fatalf("muted: %s", got)
+	}
+	if items, _, _ := s.List(ctx, "frank", false); len(items) != 1 || items[0].Kind != domain.KindMentioned {
+		t.Fatalf("frank (mentioned and following) = %+v", items)
+	}
+	if items, _, _ := s.List(ctx, "erin", false); len(items) != 1 || items[0].Kind != domain.KindMessage {
+		t.Fatalf("erin (following) = %+v", items)
+	}
+	if got := inbox(t, s, "carol"); got != "" {
+		t.Fatalf("author: %s", got)
+	}
+}

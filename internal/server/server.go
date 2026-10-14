@@ -57,6 +57,21 @@ import (
 	calendarmemory "github.com/bakhod1r/kyber/internal/calendar/infrastructure/memory"
 	calendarpg "github.com/bakhod1r/kyber/internal/calendar/infrastructure/postgres"
 	calendarhttp "github.com/bakhod1r/kyber/internal/calendar/interfaces/httpapi"
+	callapp "github.com/bakhod1r/kyber/internal/call/application"
+	calldomain "github.com/bakhod1r/kyber/internal/call/domain"
+	callacl "github.com/bakhod1r/kyber/internal/call/infrastructure/acl"
+	"github.com/bakhod1r/kyber/internal/call/infrastructure/ice"
+	callmemory "github.com/bakhod1r/kyber/internal/call/infrastructure/memory"
+	callpg "github.com/bakhod1r/kyber/internal/call/infrastructure/postgres"
+	callrealtime "github.com/bakhod1r/kyber/internal/call/infrastructure/realtime"
+	callhttp "github.com/bakhod1r/kyber/internal/call/interfaces/httpapi"
+	chatapp "github.com/bakhod1r/kyber/internal/chat/application"
+	chatdomain "github.com/bakhod1r/kyber/internal/chat/domain"
+	chatacl "github.com/bakhod1r/kyber/internal/chat/infrastructure/acl"
+	chatmemory "github.com/bakhod1r/kyber/internal/chat/infrastructure/memory"
+	chatpg "github.com/bakhod1r/kyber/internal/chat/infrastructure/postgres"
+	chatrealtime "github.com/bakhod1r/kyber/internal/chat/infrastructure/realtime"
+	chathttp "github.com/bakhod1r/kyber/internal/chat/interfaces/httpapi"
 	docsapp "github.com/bakhod1r/kyber/internal/docs/application"
 	docsdomain "github.com/bakhod1r/kyber/internal/docs/domain"
 	docsacl "github.com/bakhod1r/kyber/internal/docs/infrastructure/acl"
@@ -117,12 +132,14 @@ import (
 	notifypg "github.com/bakhod1r/kyber/internal/notify/infrastructure/postgres"
 	"github.com/bakhod1r/kyber/internal/notify/infrastructure/telegramsend"
 	notifyhttp "github.com/bakhod1r/kyber/internal/notify/interfaces/httpapi"
+	"github.com/bakhod1r/kyber/internal/platform/blob"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 	"github.com/bakhod1r/kyber/internal/platform/id"
 	"github.com/bakhod1r/kyber/internal/platform/live"
 	"github.com/bakhod1r/kyber/internal/platform/metrics"
 	"github.com/bakhod1r/kyber/internal/platform/otel"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
+	"github.com/bakhod1r/kyber/internal/platform/realtime"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 	projectapp "github.com/bakhod1r/kyber/internal/project/application"
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
@@ -136,6 +153,13 @@ import (
 	searchmemory "github.com/bakhod1r/kyber/internal/search/infrastructure/memory"
 	searchpg "github.com/bakhod1r/kyber/internal/search/infrastructure/postgres"
 	searchhttp "github.com/bakhod1r/kyber/internal/search/interfaces/httpapi"
+	wbapp "github.com/bakhod1r/kyber/internal/whiteboard/application"
+	wbdomain "github.com/bakhod1r/kyber/internal/whiteboard/domain"
+	wbacl "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/acl"
+	wbmemory "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/memory"
+	wbpg "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/postgres"
+	wbrealtime "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/realtime"
+	wbhttp "github.com/bakhod1r/kyber/internal/whiteboard/interfaces/httpapi"
 	workspaceapp "github.com/bakhod1r/kyber/internal/workspace/application"
 	workspacedomain "github.com/bakhod1r/kyber/internal/workspace/domain"
 	workspacememory "github.com/bakhod1r/kyber/internal/workspace/infrastructure/memory"
@@ -160,6 +184,7 @@ type deps struct {
 	filters       searchdomain.FilterRepository
 	goals         goaldomain.Repository
 	pages         docsdomain.Repository
+	docComments   docsdomain.Comments
 	attachments   attdomain.Repository
 	blobs         attapp.Blobs
 	forms         formdomain.Repository
@@ -192,7 +217,28 @@ type deps struct {
 	workspaces    workspacedomain.Repository
 	meetings      calendardomain.Repository
 	focusSessions focusdomain.Repository
-	baseDomain    string // "" = single-tenant (ADR-0004)
+	conversations chatdomain.Repository
+	messages      chatdomain.Messages
+	saved         chatdomain.SavedMessages
+	statuses      chatdomain.Statuses
+	scheduled     chatdomain.ScheduledMessages
+	reminders     chatdomain.Reminders
+	userGroups    chatdomain.Groups // chat @groups (S70); groups are Telegram groups
+	chatPrefs     chatdomain.Prefs
+	transcriber   chatapp.Transcriber
+	summarizer    chatapp.Summarizer
+	bookmarks     chatdomain.Bookmarks
+	chatWorkflows chatdomain.Workflows
+	webhooks      chatdomain.Webhooks
+	bots          chatdomain.Bots
+	sectionOrders chatdomain.SectionOrders
+	calls         calldomain.Repository
+	whiteboards   wbdomain.Repository
+	wbComments    wbdomain.Comments
+	chatStore     blob.Store // chat files on S3 (S82)
+	chatBlobs     blob.Store // chat files; memory unless WithFilesDir
+	baseDomain    string     // "" = single-tenant (ADR-0004)
+	ice           ice.Config
 	outbox        outbox.Store
 	livePool      *pgxpool.Pool   // set: hints cross replicas through NOTIFY
 	ctx           context.Context // lifetime of background work (outbox relay)
@@ -263,6 +309,30 @@ func (d *deps) siteAdmin(ctx context.Context, user string) (bool, error) {
 
 func WithBaseDomain(domain string) Option { return func(d *deps) { d.baseDomain = domain } }
 
+// WithICE sets the STUN/TURN servers for calls; TURN gets short-lived credentials from secret
+// (coturn use-auth-secret).
+func WithICE(urls []string, turnSecret string) Option {
+	return func(d *deps) { d.ice = ice.Config{URLs: urls, Secret: turnSecret} }
+}
+
+// WithTranscriber transcribes huddle recordings into their threads (S77).
+func WithTranscriber(t chatapp.Transcriber) Option { return func(d *deps) { d.transcriber = t } }
+
+// WithSummarizer adds a short summary to those transcripts (S87).
+func WithSummarizer(s chatapp.Summarizer) Option { return func(d *deps) { d.summarizer = s } }
+
+// WithChatFiles keeps chat files and recordings in s (e.g. S3, S82); it wins over WithFilesDir.
+func WithChatFiles(s blob.Store) Option { return func(d *deps) { d.chatStore = s } }
+
+// WithFilesDir keeps chat files on disk under dir (default: in memory, lost on restart).
+func WithFilesDir(dir string) Option {
+	return func(d *deps) {
+		if s, err := blob.NewDisk(dir); err == nil {
+			d.chatBlobs = s
+		}
+	}
+}
+
 // Option configures optional infrastructure.
 type Option func(*deps)
 
@@ -272,6 +342,13 @@ func WithRedis(rdb redis.UniversalClient) Option { return func(d *deps) { d.redi
 // NewInMemory builds the API on in-memory adapters (dev mode and tests).
 func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	ids := identitymemory.NewRepository()
+	chatRepo := chatmemory.NewRepository()
+	savedRepo := chatmemory.NewSaved(chatRepo)
+	remRepo := chatmemory.NewReminders()
+	wbCommentRepo := wbmemory.NewComments()
+	pageRepo := docsmemory.NewRepository()
+	docCommentRepo := docsmemory.NewComments(pageRepo)
+	callRepo := callmemory.NewRepository()
 	issueRepo := issuememory.NewRepository()
 	sprintRepo := agilememory.NewRepository()
 	versionRepo := agilememory.NewVersionRepository()
@@ -280,12 +357,13 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	d := deps{
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), worklogs: issuememory.NewWorklogRepository(), fields: issuememory.NewCustomFieldRepository(),
-		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: docsmemory.NewRepository(), attachments: attmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
+		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: pageRepo, docComments: docCommentRepo, attachments: attmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
-		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta)),
+		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), bots: chatmemory.NewBots(), sectionOrders: chatmemory.NewSectionOrders(), calls: callRepo, whiteboards: wbmemory.NewRepository(), wbComments: wbCommentRepo,
+		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(wbCommentRepo.Outbox, wbCommentRepo.OutboxMeta), events(docCommentRepo.Outbox, docCommentRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
 		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
@@ -327,11 +405,12 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 	d := deps{
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), worklogs: issuepg.NewWorklogRepository(pool), fields: issuepg.NewCustomFieldRepository(pool),
-		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), attachments: attpg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
+		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), docComments: docspg.NewComments(pool), attachments: attpg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
+		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), scheduled: chatpg.NewScheduled(pool), reminders: chatpg.NewReminders(pool), userGroups: chatpg.NewGroups(pool), chatPrefs: chatpg.NewPrefs(pool), bookmarks: chatpg.NewBookmarks(pool), chatWorkflows: chatpg.NewWorkflows(pool), webhooks: chatpg.NewWebhooks(pool), bots: chatpg.NewBots(pool), sectionOrders: chatpg.NewSectionOrders(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool), wbComments: wbpg.NewComments(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
@@ -385,7 +464,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	search := searchapp.NewService(searchapp.Deps{Projects: searchacl.NewProjects(projects), Issues: searchacl.NewIssues(issues),
 		Users: searchacl.NewUsers(d.users), Planning: searchacl.NewPlanning(agile), Filters: d.filters, NewID: id.New})
 	goals := goalapp.NewService(goalapp.Deps{Projects: goalacl.NewProjects(projects), Issues: goalacl.NewIssues(search), Goals: d.goals, NewID: id.New})
-	pages := docsapp.NewService(docsapp.Deps{Projects: docsacl.NewProjects(projects), Pages: d.pages, NewID: id.New, Now: time.Now})
+	pages := docsapp.NewService(docsapp.Deps{Projects: docsacl.NewProjects(projects), Pages: d.pages, Comments: d.docComments, NewID: id.New, Now: time.Now})
 	forms := formapp.NewService(formapp.Deps{Projects: formacl.NewProjects(projects), Issues: formacl.NewIssues(issues), Forms: d.forms, NewID: id.New})
 	insights := insightsapp.NewService(insightsapp.Deps{
 		Repo: d.activity, Access: insightsacl.NewAccess(projectcompat.NewGate(projects, access, accessdomain.BrowseProjects)), Issues: insightsacl.NewIssues(issues),
@@ -400,6 +479,34 @@ func build(log *slog.Logger, d deps) http.Handler {
 	calendar := calendarapp.NewService(d.meetings, calendaracl.NewMembers(workspaces, d.users), id.New, time.Now).WithTeams(teams, teams)
 	focus := focusapp.NewService(focusapp.Deps{Sessions: d.focusSessions, Calendar: focusacl.NewCalendar(calendar),
 		Issues: focusacl.NewIssues(issues, projectcompat.NewGate(projects, access, accessdomain.AssignableUser)), NewID: id.New, Clock: systemClock{}})
+	rt := realtime.NewHub(1024)
+	// What contexts publish reaches every replica's streams in PostgreSQL mode (NOTIFY), this node's otherwise.
+	var publish interface {
+		Publish(ws string, users []string, typ string, data any) error
+	} = rt
+	if d.livePool != nil {
+		fanout := realtime.NewPostgres(d.livePool, rt, log)
+		go fanout.Listen(d.liveCtx())
+		publish = fanout
+	}
+	if d.chatStore != nil {
+		d.chatBlobs = d.chatStore
+	}
+	if d.chatBlobs == nil {
+		log.Warn("KYBER_FILES_DIR not set: chat files are kept in memory and lost on restart")
+		d.chatBlobs = blob.NewMemory()
+	}
+	chat := chatapp.NewService(chatapp.Deps{Blobs: d.chatBlobs, Notifier: chatrealtime.New(publish), Conversations: d.conversations, Messages: d.messages, Saved: d.saved, Statuses: d.statuses, Scheduled: d.scheduled, Reminders: d.reminders, Groups: d.userGroups, Prefs: d.chatPrefs, Projects: chatacl.NewProjects(projects), Transcriber: d.transcriber, Summarizer: d.summarizer, Bookmarks: d.bookmarks, Workflows: d.chatWorkflows, Webhooks: d.webhooks, SectionOrders: d.sectionOrders, Directory: chatacl.NewMembers(workspaces, d.users),
+		Members: chatacl.NewMembers(workspaces, d.users), NewID: id.New, Now: time.Now})
+	chat.WithIssues(chatacl.NewIssues(issues))
+	calendar.WithConversations(calendaracl.NewConversations(chat)) // meetings in a channel's huddle (S76)
+	callEvents := callrealtime.New(publish, func(c *calldomain.Call) any { return callhttp.ToDTO(c) })
+	calls := callapp.NewService(callapp.Deps{Calls: d.calls, Conversations: callacl.NewConversations(chat),
+		Notifier: callEvents, Signals: callEvents, NewID: id.New, Now: time.Now})
+	notify.WithConversations(notifyacl.NewConversations(chat))
+	notify.WithQuiet(notifyacl.NewQuiet(chat, focus))
+	notify.WithGroupMentions(notifyacl.NewGroupMentions(chat))
+	notify.WithChatPrefs(chat)
 	relay := outbox.NewRelay(d.outbox, log)
 	var identity *identityapp.Service // built below; the broker's Login runs only after startup
 	hub, err := live.NewBroker(func(ctx context.Context, user, project string) bool {
@@ -441,6 +548,16 @@ func build(log *slog.Logger, d deps) http.Handler {
 		relay.Handle(name, notify.OnProjectEvent)
 	}
 	relay.Handle("comment.added", notify.OnCommentAdded)
+	relay.Handle("chat.message_posted", notify.OnChatMessage)
+	relay.Handle("chat.reminder", notify.OnChatReminder)
+	relay.Handle("doc.comment_added", notify.OnDocComment)         // @mentions in doc comments (S86)
+	relay.Handle("whiteboard.comment_added", notify.OnChatMessage) // @mentions in board comments (S86), as in its conversation
+	relay.Handle("chat.message_posted", chat.OnRecordingPosted)    // transcripts (S77) and their summaries (S87)
+	for _, name := range []string{"issue.created", "issue.transitioned", "sprint.started", "sprint.completed"} {
+		relay.Handle(name, chat.OnProjectEvent) // project channels (S73)
+	}
+	relay.Handle("call.started", chat.OnCallEvent)
+	relay.Handle("call.ended", chat.OnCallEvent)
 	relay.Handle("issue.changed", notify.OnIssueChanged)
 	for _, name := range []string{"issue.created", "issue.assigned", "comment.added"} {
 		relay.Handle(name, issues.OnWatchTrigger)
@@ -466,7 +583,10 @@ func build(log *slog.Logger, d deps) http.Handler {
 	}
 	go relay.Run(d.ctx, d.relayEvery)
 	go dispatch(d.ctx, log, notify, d.senders(), d.dispatchEvery)
-	go remindMeetings(d.ctx, log, calendar, d.reminderEvery)
+	go remindMeetings(d.ctx, log, calendar.RemindDue, d.reminderEvery)
+	go remindMeetings(d.ctx, log, chat.RemindDue, d.reminderEvery)    // saved messages (S65), /remind (S67)
+	go remindMeetings(d.ctx, log, chat.SendDue, d.reminderEvery)      // scheduled messages (S67)
+	go remindMeetings(d.ctx, log, chat.RunWorkflows, d.reminderEvery) // channel workflows (S80)
 	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
@@ -488,6 +608,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 				return identity.OnTelegramStart(ctx, nonce, strconv.FormatInt(from.ID, 10), chat, from.DisplayName())
 			})
 	}
+	chat.WithBots(d.bots, chatacl.NewBotMaker(identity), chatacl.NewWorkspace(workspaces, d.siteAdmin)) // bot users (S84)
 	auth := identityhttp.New(identity, log, d.cookieSecure).WithSocial(d.social)
 	m := metrics.NewHTTP()
 
@@ -521,6 +642,21 @@ func build(log *slog.Logger, d deps) http.Handler {
 	api.Handle("GET /api/v1/mqtt", hub.Handler())
 	calendarhttp.New(calendar, log, time.Now).Register(api)
 	focushttp.New(focus, log, time.Now).Register(api)
+	chatAPI := chathttp.New(chat, log)
+	chatAPI.Register(api)
+	rt.Register(api, 25*time.Second) // board hints go over MQTT (ADR-0013)
+	whiteboards := wbapp.NewService(wbapp.Deps{Boards: d.whiteboards, Comments: d.wbComments, Conversations: wbacl.NewConversations(chat),
+		Notifier: wbrealtime.New(publish, func(e wbdomain.Element) any { return wbhttp.ToDTO(e) }), NewID: id.New, Now: time.Now})
+	wbhttp.New(whiteboards, log).Register(api)
+	m.Gauge("kyber_stream_connections", "Realtime streams open on this replica.", func() float64 { return float64(rt.Connections()) })
+	m.Gauge("kyber_calls_active", "Live huddles in all workspaces.", func() float64 {
+		n, err := calls.LiveCalls(context.Background())
+		if err != nil {
+			return -1
+		}
+		return float64(n)
+	})
+	callhttp.New(calls, log, func(user string, now time.Time) any { return d.ice.Servers(user, now) }).Register(api)
 	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
 		auditacl.NewOwners(agile, d.boards, d.links), log)
 	audit.Register(api)
@@ -542,9 +678,18 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
+	chatAPI.RegisterPublic(mux) // incoming webhooks (S81): the secret in the URL is the credential
 	mux.Handle("/api/v1/", auth.RequireAuth(tenancy.RequireMember(audit.Record(problemFallback(otel.Routed(api))))))
 	mux.Handle("/", web.Handler(web.Dist()))
 	return otel.Middleware(observe(log, m, recoverer(log, tenancy.Resolve(otel.Routed(mux)))))
+}
+
+// loggedPath is the request path as logged: incoming webhook URLs carry their secret, so it is cut (S81).
+func loggedPath(p string) string {
+	if strings.HasPrefix(p, "/api/v1/hooks/") {
+		return "/api/v1/hooks/…"
+	}
+	return p
 }
 
 func observe(log *slog.Logger, m *metrics.HTTP, next http.Handler) http.Handler {
@@ -554,7 +699,7 @@ func observe(log *slog.Logger, m *metrics.HTTP, next http.Handler) http.Handler 
 		next.ServeHTTP(rec, r)
 		d := time.Since(start)
 		m.Observe(r.Method, rec.status, d)
-		log.InfoContext(r.Context(), "http", "method", r.Method, "path", r.URL.Path, "status", rec.status, "dur", d)
+		log.InfoContext(r.Context(), "http", "method", r.Method, "path", loggedPath(r.URL.Path), "status", rec.status, "dur", d)
 	})
 }
 
@@ -575,7 +720,7 @@ func recoverer(log *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if v := recover(); v != nil {
-				log.ErrorContext(r.Context(), "panic", "value", fmt.Sprint(v), "path", r.URL.Path, "stack", string(debug.Stack()))
+				log.ErrorContext(r.Context(), "panic", "value", fmt.Sprint(v), "path", loggedPath(r.URL.Path), "stack", string(debug.Stack()))
 				httpx.Problem(w, r, errorx.New(httpx.CodeInternal, "internal error"))
 			}
 		}()
@@ -648,8 +793,9 @@ func (d deps) senders() map[notifydomain.Channel]notifyapp.Sender {
 }
 
 // dispatch sends due email/Telegram deliveries until ctx ends.
-// remindMeetings sends due meeting reminders until ctx ends (once per meeting, across replicas).
-func remindMeetings(ctx context.Context, log *slog.Logger, calendar *calendarapp.Service, every time.Duration) {
+// remindMeetings sends due reminders (meetings, saved messages) with remindDue until ctx ends (once each, across
+// replicas).
+func remindMeetings(ctx context.Context, log *slog.Logger, remindDue func(context.Context) (int, error), every time.Duration) {
 	if every == 0 {
 		every = 30 * time.Second
 	}
@@ -660,8 +806,8 @@ func remindMeetings(ctx context.Context, log *slog.Logger, calendar *calendarapp
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if _, err := calendar.RemindDue(ctx); err != nil {
-				log.WarnContext(ctx, "meeting reminders: will retry", "err", err)
+			if _, err := remindDue(ctx); err != nil {
+				log.WarnContext(ctx, "reminders: will retry", "err", err)
 			}
 		}
 	}

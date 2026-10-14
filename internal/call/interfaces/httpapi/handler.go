@@ -1,0 +1,285 @@
+// Package httpapi exposes huddles (calls in a conversation) over REST.
+package httpapi
+
+import (
+	"errors"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/bakhod1r/kyber/internal/call/application"
+	"github.com/bakhod1r/kyber/internal/call/domain"
+	"github.com/bakhod1r/kyber/internal/platform/auth"
+	"github.com/bakhod1r/kyber/internal/platform/httpx"
+)
+
+// ICE lists the STUN/TURN servers (with credentials) a user's browser should use.
+type ICE func(user string, now time.Time) any
+
+type Handler struct {
+	svc *application.Service
+	log *slog.Logger
+	ice ICE
+}
+
+func New(svc *application.Service, log *slog.Logger, ice ICE) *Handler {
+	return &Handler{svc: svc, log: log, ice: ice}
+}
+
+func (h *Handler) Register(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/v1/conversations/{id}/call", h.live)
+	mux.HandleFunc("POST /api/v1/conversations/{id}/call", h.join)
+	mux.HandleFunc("POST /api/v1/calls/{id}/leave", h.leave)
+	mux.HandleFunc("PUT /api/v1/calls/{id}/media", h.media)
+	mux.HandleFunc("POST /api/v1/calls/{id}/signal", h.signal)
+	mux.HandleFunc("GET /api/v1/calls/ice", h.iceServers)
+	mux.HandleFunc("PUT /api/v1/calls/{id}/presentation", h.present)
+	mux.HandleFunc("DELETE /api/v1/calls/{id}/presentation", h.stopPresenting)
+	mux.HandleFunc("POST /api/v1/calls/{id}/presentation/follow", h.follow)
+	mux.HandleFunc("PUT /api/v1/calls/{id}/recording", h.startRecording)
+	mux.HandleFunc("PUT /api/v1/calls/{id}/hand", h.hand)
+	mux.HandleFunc("POST /api/v1/calls/{id}/reactions", h.react)
+	mux.HandleFunc("DELETE /api/v1/calls/{id}/recording", h.stopRecording)
+}
+
+func codeFor(err error) (string, bool) {
+	switch {
+	case errors.Is(err, application.ErrNoConversation):
+		return httpx.CodeConversationNotFound, true
+	case errors.Is(err, application.ErrNotMember):
+		return httpx.CodeChatForbidden, true
+	case errors.Is(err, domain.ErrCallNotFound):
+		return httpx.CodeCallNotFound, true
+	case errors.Is(err, domain.ErrCallFull):
+		return httpx.CodeCallFull, true
+	case errors.Is(err, domain.ErrNotInCall), errors.Is(err, domain.ErrCallEnded), errors.Is(err, domain.ErrConflict):
+		return httpx.CodeCallState, true
+	case errors.Is(err, domain.ErrAlreadyRecording):
+		return httpx.CodeCallRecording, true
+	case errors.Is(err, domain.ErrNotRecorder):
+		return httpx.CodeCallNotRecorder, true
+	case errors.Is(err, domain.ErrNotPresenter):
+		return httpx.CodeCallNotPresenter, true
+	case errors.Is(err, domain.ErrInvalidSignal), errors.Is(err, domain.ErrInvalidPresentation), errors.Is(err, domain.ErrInvalidReaction):
+		return httpx.CodeValidation, true
+	case errors.Is(err, httpx.ErrBadJSON):
+		return httpx.CodeBadRequest, true
+	}
+	return "", false
+}
+
+// ParticipantDTO and CallDTO are also the shape of call.updated stream events.
+type ParticipantDTO struct {
+	UserID   string `json:"user_id"`
+	JoinedAt string `json:"joined_at"`
+	Audio    bool   `json:"audio"`
+	Video    bool   `json:"video"`
+	Screen   bool   `json:"screen"`
+	Hand     bool   `json:"hand"`
+}
+
+type CallDTO struct {
+	ID             string           `json:"id"`
+	ConversationID string           `json:"conversation_id"`
+	StartedBy      string           `json:"started_by"`
+	StartedAt      string           `json:"started_at"`
+	Live           bool             `json:"live"`
+	Participants   []ParticipantDTO `json:"participants"`
+	Presentation   *PresentationDTO `json:"presentation"`
+	Recording      *RecordingDTO    `json:"recording"`
+}
+
+type RecordingDTO struct {
+	By    string    `json:"by"`
+	Since time.Time `json:"since"`
+}
+
+type PresentationDTO struct {
+	Kind string `json:"kind"`
+	Ref  string `json:"ref"`
+	By   string `json:"by"`
+}
+
+func ToDTO(c *domain.Call) CallDTO {
+	d := CallDTO{ID: string(c.ID), ConversationID: string(c.Conversation), StartedBy: string(c.StartedBy),
+		StartedAt: c.StartedAt.Format(time.RFC3339Nano), Live: c.Live(), Participants: []ParticipantDTO{}}
+	if r := c.Recording; r != nil {
+		d.Recording = &RecordingDTO{By: string(r.By), Since: r.Since}
+	}
+	if p := c.Presentation; p != nil {
+		d.Presentation = &PresentationDTO{Kind: string(p.Kind), Ref: p.Ref, By: string(p.By)}
+	}
+	for _, p := range c.Participants {
+		d.Participants = append(d.Participants, ParticipantDTO{UserID: string(p.User), JoinedAt: p.JoinedAt.Format(time.RFC3339Nano),
+			Audio: p.Media.Audio, Video: p.Media.Video, Screen: p.Media.Screen, Hand: p.Hand})
+	}
+	return d
+}
+
+func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
+	httpx.Error(w, r, h.log, err, codeFor)
+}
+
+func (h *Handler) live(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.Live(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var out *CallDTO
+	if c != nil {
+		d := ToDTO(c)
+		out = &d
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"call": out})
+}
+
+func (h *Handler) join(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.Join(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+func (h *Handler) leave(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.Leave(r.Context(), auth.Actor(r.Context()), r.PathValue("id")); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) media(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Audio  bool `json:"audio"`
+		Video  bool `json:"video"`
+		Screen bool `json:"screen"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	c, err := h.svc.SetMedia(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), domain.Media{Audio: in.Audio, Video: in.Video, Screen: in.Screen})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+func (h *Handler) signal(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		To   string `json:"to"`
+		Kind string `json:"kind"`
+		Data string `json:"data"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := h.svc.Signal(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.To, in.Kind, in.Data); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) iceServers(w http.ResponseWriter, r *http.Request) {
+	httpx.JSON(w, http.StatusOK, map[string]any{"ice_servers": h.ice(auth.Actor(r.Context()), time.Now())})
+}
+
+func (h *Handler) present(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Kind string `json:"kind"`
+		Ref  string `json:"ref"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	c, err := h.svc.Present(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), domain.PresentKind(in.Kind), in.Ref)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+func (h *Handler) stopPresenting(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.StopPresenting(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+func (h *Handler) follow(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		X    float64 `json:"x"`
+		Y    float64 `json:"y"`
+		Zoom float64 `json:"zoom"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := h.svc.Follow(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), application.View{X: in.X, Y: in.Y, Zoom: in.Zoom}); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) startRecording(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.StartRecording(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+func (h *Handler) stopRecording(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.StopRecording(r.Context(), auth.Actor(r.Context()), r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+// hand: {"raised": true|false} (S75).
+func (h *Handler) hand(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Raised bool `json:"raised"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	c, err := h.svc.RaiseHand(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Raised)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, ToDTO(c))
+}
+
+// react: {"emoji": "🎉"} shown to the others as call.reaction (S75).
+func (h *Handler) react(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Emoji string `json:"emoji"`
+	}
+	if err := httpx.Decode(r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := h.svc.React(r.Context(), auth.Actor(r.Context()), r.PathValue("id"), in.Emoji); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

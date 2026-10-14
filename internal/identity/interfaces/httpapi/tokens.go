@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/bakhod1r/kyber/internal/identity/application"
 	"github.com/bakhod1r/kyber/internal/identity/domain"
 	"github.com/bakhod1r/kyber/internal/platform/auth"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
@@ -13,8 +14,6 @@ import (
 // errTokenScope: a request authenticated by a personal access token tried to manage tokens. A
 // leaked token must not be able to mint successors or hide its revocation.
 var errTokenScope = errors.New("personal access tokens cannot manage tokens")
-
-type viaTokenKey struct{}
 
 type tokenDTO struct {
 	ID         string     `json:"id"`
@@ -28,9 +27,10 @@ func tokenOut(t *domain.PersonalToken) tokenDTO {
 	return tokenDTO{ID: string(t.ID), Name: t.Name, CreatedAt: t.CreatedAt, ExpiresAt: t.ExpiresAt, LastUsedAt: t.LastUsedAt}
 }
 
-// sessionOnly rejects token management from personal-access-token requests.
+// sessionOnly rejects token management from personal-access-token requests (read from the request
+// itself, not stored in the context: personal tokens only ever arrive as Bearer tokens).
 func (h *Handler) sessionOnly(w http.ResponseWriter, r *http.Request) bool {
-	if via, _ := r.Context().Value(viaTokenKey{}).(bool); via {
+	if token, fromCookie := tokenFrom(r); !fromCookie && application.IsPersonalToken(token) {
 		httpx.Error(w, r, h.log, errTokenScope, codeFor)
 		return false
 	}

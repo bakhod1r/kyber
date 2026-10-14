@@ -10,6 +10,8 @@ export type Meeting = {
   attendee_ids: string[];
   scope?: Scope;
   project_key?: string | null;
+  /** S76: the chat channel whose huddle the meeting happens in. */
+  conversation_id?: string | null;
   /** Attendee id → answer, for those who answered. */
   responses?: Record<string, MeetingResponse>;
 };
@@ -20,6 +22,7 @@ export type MeetingInput = {
   attendee_ids: string[];
   scope?: Scope;
   project_key?: string;
+  conversation_id?: string;
 };
 
 /** A meeting's new title and time (organizer only). */

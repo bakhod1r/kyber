@@ -49,7 +49,8 @@ function violations(): string[] {
           if (to.area === "app") bad("infrastructure never depends on the app shell");
           break;
         case "application":
-          if (to.area === "contexts" && !(to.layer === "domain" || (own && to.layer === "infrastructure"))) bad("use cases depend on domain models and their own gateway");
+          if (to.area === "contexts" && !(to.layer === "domain" || (own && (to.layer === "infrastructure" || to.layer === "application"))))
+            bad("use cases depend on domain models, their own gateway and their own use cases");
           break;
         case "ui":
           if (to.layer === "infrastructure") bad("the UI goes through the application layer, never infrastructure");

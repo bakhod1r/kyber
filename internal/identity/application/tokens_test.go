@@ -125,3 +125,23 @@ func TestPersonalTokenFailures(t *testing.T) {
 		t.Fatalf("disabled: %v", err)
 	}
 }
+
+// S84: a bot is a user without a password (it never signs in) and with a token of its own.
+func TestCreateBot(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := tokenService(plain)
+	bot, secret, err := s.CreateBot(ctx, "CI bot")
+	if err != nil || bot.Name() != "CI bot" || !strings.HasSuffix(string(bot.Email()), ".invalid") || bot.PasswordHash() != "" {
+		t.Fatalf("bot = %+v %v", bot, err)
+	}
+	got, err := s.Authenticate(ctx, secret)
+	if err != nil || got.ID() != bot.ID() {
+		t.Fatalf("token = %v %v", got, err)
+	}
+	if _, err := s.Login(ctx, string(bot.Email()), "", "1.2.3.4"); err == nil {
+		t.Fatal("a bot signed in")
+	}
+	if _, _, err := s.CreateBot(ctx, " "); !errors.Is(err, domain.ErrEmptyName) {
+		t.Fatalf("no name = %v", err)
+	}
+}

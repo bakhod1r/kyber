@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.42.0
+  version: 0.65.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -461,6 +461,7 @@ paths:
                 attendee_ids: { type: array, items: { type: string } }
                 scope: { type: string, enum: ["", people, project, workspace] }
                 project_key: { type: string }
+                conversation_id: { type: string, description: "Optional: a channel the organizer may read; the meeting happens in its huddle (S76)." }
       responses:
         "201": { description: Scheduled, content: { application/json: { schema: { $ref: "#/components/schemas/Meeting" } } } }
         "400": { $ref: "#/components/responses/Error" }
@@ -516,6 +517,1045 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations:
+    get:
+      operationId: listConversations
+      description: Public channels of this workspace and every channel or DM the caller belongs to, with unread counts.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Conversation" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/channels:
+    post:
+      operationId: createChannel
+      description: Creates a channel (name `[a-z0-9_-]{1,80}`, unique per workspace); the creator joins it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties: { name: { type: string }, topic: { type: string }, private: { type: boolean } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/dms:
+    post:
+      operationId: openDM
+      description: Opens the direct message between the caller and 1–7 workspace members (the same people get the same DM).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [user_ids], properties: { user_ids: { type: array, items: { type: string } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}:
+    get:
+      operationId: getConversation
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: renameChannel
+      description: Owner or admins rename a channel and set its topic (S69).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string }, topic: { type: string } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/join:
+    post:
+      operationId: joinConversation
+      description: Joins a public channel.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Joined }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/leave:
+    post:
+      operationId: leaveConversation
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Left }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/members:
+    post:
+      operationId: inviteToConversation
+      description: A member adds a workspace member to a channel (the only way into a private one).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [user_id], properties: { user_id: { type: string } } }
+      responses:
+        "204": { description: Invited }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/stream:
+    get:
+      operationId: openStream
+      description: |
+        Server-Sent Events of this workspace for the caller (`message.posted`, `message.edited`,
+        `message.deleted`, `message.reacted`, `message.pinned`, `typing`, `conversation.read` (DMs: who read up to when), `conversation.updated` (a channel was renamed, archived or its members changed), `call.updated`, `call.signal`, `call.follow`, `call.reaction` (an emoji from a participant, not stored), `whiteboard.ops`, `whiteboard.cursor`, `whiteboard.comment` (added or removed); each `data:` is JSON). Send `Last-Event-ID` on reconnect to receive
+        what was missed. Keeping the stream open marks the caller online.
+      parameters:
+        - { name: Last-Event-ID, in: header, schema: { type: string } }
+      responses:
+        "200": { description: Event stream, content: { text/event-stream: { schema: { type: string } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/presence:
+    get:
+      operationId: getPresence
+      description: Which of the given users have Kyber open in this workspace.
+      parameters:
+        - { name: user_id, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [online], properties: { online: { type: array, items: { type: string } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/typing:
+    post:
+      operationId: sendTyping
+      description: Tells the other members that the caller is typing (not stored).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Sent }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/read:
+    post:
+      operationId: markConversationRead
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Marked read }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/messages:
+    get:
+      operationId: listMessages
+      description: History, newest first. Page with `before` (a message id of this conversation).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: before, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: postMessage
+      description: Posts a message (1–4000 characters); only members post — join a public channel first.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { $ref: "#/components/requestBodies/MessageBody" }
+      responses:
+        "201": { description: Posted, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/messages/{id}/replies:
+    get:
+      operationId: listReplies
+      description: The thread of a top-level message, oldest first.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: replyToMessage
+      description: Replies in the thread of a top-level message (members only).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { $ref: "#/components/requestBodies/MessageBody" }
+      responses:
+        "201": { description: Posted, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/messages/{id}/reactions:
+    post:
+      operationId: toggleReaction
+      description: Toggles the caller's emoji reaction (members only).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [emoji], properties: { emoji: { type: string } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/messages/{id}:
+    patch:
+      operationId: editMessage
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { $ref: "#/components/requestBodies/MessageBody" }
+      responses:
+        "200": { description: Edited, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteMessage
+      description: The author deletes a message; it stays in history as deleted.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/call:
+    get:
+      operationId: getLiveCall
+      description: The conversation's live huddle, or null.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [call], properties: { call: { oneOf: [{ $ref: "#/components/schemas/Call" }, { type: "null" }] } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: joinCall
+      description: |
+        Starts the conversation's huddle, or joins the live one (members only; at most 6 people; the microphone
+        starts on). Members hear `call.updated` on the stream whenever the call changes.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: In the call, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/leave:
+    post:
+      operationId: leaveCall
+      description: Leaves the call; it ends with its last participant.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Left }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/media:
+    put:
+      operationId: setCallMedia
+      description: What the caller sends (microphone, camera, screen). Starting a screen share stops anyone else's.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { audio: { type: boolean }, video: { type: boolean }, screen: { type: boolean } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/signal:
+    post:
+      operationId: sendCallSignal
+      description: |
+        Relays WebRTC signaling (an SDP offer/answer or an ICE candidate, opaque to the server, at most 64 KB) to
+        another participant of the call, who receives it as `call.signal` on the stream. Never stored.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to, kind, data]
+              properties: { to: { type: string }, kind: { type: string, enum: [offer, answer, candidate] }, data: { type: string } }
+      responses:
+        "204": { description: Relayed }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/ice:
+    get:
+      operationId: getIceServers
+      description: STUN/TURN servers for RTCPeerConnection; TURN comes with credentials valid for 12 hours.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ice_servers]
+                properties:
+                  ice_servers:
+                    type: array
+                    items:
+                      type: object
+                      required: [urls]
+                      properties: { urls: { type: array, items: { type: string } }, username: { type: string }, credential: { type: string } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/whiteboards:
+    get:
+      operationId: listWhiteboards
+      description: The conversation's whiteboards, newest first (members only).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Whiteboard" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createWhiteboard
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [title], properties: { title: { type: string } } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Whiteboard" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/whiteboards/{id}:
+    get:
+      operationId: getWhiteboard
+      description: The whiteboard with all its elements, in drawing order.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Whiteboard" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/whiteboards/{id}/ops:
+    post:
+      operationId: applyWhiteboardOps
+      description: |
+        Adds, updates or deletes elements (at most 200 per request). Updates and deletes name the version they
+        were made on; each op applies or fails on its own (error stale, not_found, exists, full or invalid) and
+        returns the element's current state. Applied changes reach the members as `whiteboard.ops`.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ops]
+              properties:
+                ops:
+                  type: array
+                  items: { type: object, required: [op, element], properties: { op: { type: string, enum: [add, update, delete] }, element: { $ref: "#/components/schemas/WhiteboardElement" } } }
+      responses:
+        "200":
+          description: Results, in op order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [applied, error, element]
+                      properties:
+                        applied: { type: boolean }
+                        error: { type: string, enum: ["", stale, not_found, exists, full, invalid] }
+                        element: { $ref: "#/components/schemas/WhiteboardElement" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/whiteboards/{id}/cursor:
+    post:
+      operationId: shareWhiteboardCursor
+      description: Shows the caller's pointer to the other members (`whiteboard.cursor`; not stored).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [x, y], properties: { x: { type: number }, y: { type: number } } } } }
+      responses:
+        "204": { description: Shared }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/presentation:
+    put:
+      operationId: presentToCall
+      description: Opens a doc or whiteboard for everyone in the call (replacing the current presentation). Each viewer opens it with their own permissions.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [kind, ref], properties: { kind: { type: string, enum: [doc, whiteboard] }, ref: { type: string } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: stopPresenting
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/presentation/follow:
+    post:
+      operationId: followPresenter
+      description: The presenter's view (scroll position as fractions, and zoom) for the others, as `call.follow`; not stored.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [x, y, zoom], properties: { x: { type: number }, y: { type: number }, zoom: { type: number } } } } }
+      responses:
+        "204": { description: Sent }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/recording:
+    put:
+      operationId: startRecording
+      description: Starts recording the call (one recorder at a time); everyone sees `recording` on the call.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: stopRecording
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/hand:
+    put:
+      operationId: raiseHand
+      description: Raises or lowers my hand in the huddle (S75).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [raised], properties: { raised: { type: boolean } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/reactions:
+    post:
+      operationId: reactInCall
+      description: Shows an emoji to the others in the huddle as `call.reaction` (not stored).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [emoji], properties: { emoji: { type: string } } } } }
+      responses:
+        "204": { description: Sent }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/messages/{id}/save:
+    put:
+      operationId: saveMessage
+      description: Saves a message for later (S65), optionally with a reminder time in the future; saving again replaces it.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { remind_at: { type: [string, "null"], format: date-time } } } } }
+      responses:
+        "200":
+          description: Saved
+          content: { application/json: { schema: { type: object, required: [saved_at, remind_at], properties: { saved_at: { type: string, format: date-time }, remind_at: { type: [string, "null"], format: date-time } } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: unsaveMessage
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Forgotten }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/me/status:
+    put:
+      operationId: setStatus
+      description: |
+        My status in the workspace (S66): an emoji and up to 100 characters until expires_at, and Do Not Disturb
+        until dnd_until (chat mentions then stay in the inbox, without email or Telegram; a running Pomodoro does
+        the same). Empty emoji and text clear the status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                emoji: { type: string }
+                text: { type: string }
+                expires_at: { type: [string, "null"], format: date-time }
+                dnd_until: { type: [string, "null"], format: date-time }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserStatus" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/chat/statuses:
+    get:
+      operationId: listStatuses
+      description: The current statuses of the given people in the workspace (people without one are left out).
+      parameters:
+        - { name: user_id, in: query, schema: { type: array, items: { type: string }, maxItems: 200 }, style: form, explode: true }
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/UserStatus" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/scheduled:
+    post:
+      operationId: scheduleMessage
+      description: Schedules a message (members only) to be posted at send_at (1 minute to 120 days ahead); only I see it before.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ScheduleInput" } } } }
+      responses:
+        "201": { description: Scheduled, content: { application/json: { schema: { $ref: "#/components/schemas/ScheduledMessage" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/chat/scheduled:
+    get:
+      operationId: listScheduledMessages
+      description: My scheduled messages, soonest first.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ScheduledMessage" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/scheduled/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    patch:
+      operationId: rescheduleMessage
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ScheduleInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ScheduledMessage" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: cancelScheduledMessage
+      responses:
+        "204": { description: Cancelled }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/reminders:
+    post:
+      operationId: remindMe
+      description: A personal reminder (/remind me), told to me as a notification of kind reminder at `at`.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [text, at], properties: { text: { type: string }, at: { type: string, format: date-time } } } } }
+      responses:
+        "201":
+          description: Set
+          content: { application/json: { schema: { type: object, required: [id, text, at], properties: { id: { type: string }, text: { type: string }, at: { type: string, format: date-time } } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/receipts:
+    get:
+      operationId: readReceipts
+      description: How far each member of a DM has read it (S68), for "Seen"; empty for channels.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { type: object, required: [user_id, read_at], properties: { user_id: { type: string }, read_at: { type: string, format: date-time } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/archive:
+    post:
+      operationId: archiveChannel
+      description: Owner or admins make the channel read-only (S69).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/unarchive:
+    post:
+      operationId: unarchiveChannel
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/admins/{user}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: user, in: path, required: true, schema: { type: string } }
+    put:
+      operationId: makeChannelAdmin
+      description: The owner lets a member manage the channel.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: removeChannelAdmin
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/project:
+    put:
+      operationId: linkChannelProject
+      description: |
+        Owner or admins who may browse the project post its news here (S73): issues created and moved, sprints
+        started and completed, as system messages naming issues by key only. An empty project_key unlinks.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [project_key], properties: { project_key: { type: string } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/bookmarks:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: listBookmarks
+      description: Docs and links kept at hand in the conversation's header (S79), in the order added.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Bookmark" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: addBookmark
+      description: A member adds a doc (by id) or an http(s) link; at most 20 per conversation.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [kind, ref, title], properties: { kind: { type: string, enum: [doc, link] }, ref: { type: string }, title: { type: string } } } } }
+      responses:
+        "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/Bookmark" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/workflows:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: listWorkflows
+      description: A channel's automations (S80).
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ChannelWorkflow" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: addWorkflow
+      description: |
+        Owner and admins: member_joined posts text ({name} = the newcomer) when someone joins; schedule posts text on
+        the given days (0 = Sunday … 6 = Saturday) at minute (after midnight UTC), once per occurrence.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [trigger, text]
+              properties:
+                trigger: { type: string, enum: [member_joined, schedule] }
+                minute: { type: integer, minimum: 0, maximum: 1439 }
+                days: { type: array, items: { type: integer, minimum: 0, maximum: 6 } }
+                text: { type: string }
+      responses:
+        "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/ChannelWorkflow" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/workflows/{id}:
+    delete:
+      operationId: removeWorkflow
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/webhooks:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: listWebhooks
+      description: The channel's incoming webhooks (S81), for its owner and admins; secrets are never shown again.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Webhook" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createWebhook
+      description: Owner and admins; the answer carries the URL (with its secret) once.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string } } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/webhooks/{id}/rotate:
+    post:
+      operationId: rotateWebhook
+      description: A new secret (the old URL stops working), shown once.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [url], properties: { url: { type: string } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/webhooks/{id}:
+    delete:
+      operationId: removeWebhook
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/hooks/{secret}:
+    post:
+      operationId: postViaWebhook
+      security: []
+      description: |
+        Another system posts into the webhook's channel (no session: the secret in the URL is the credential), as
+        Slack's incoming webhooks: {"text": "…"}. At most 30 messages a minute per webhook.
+      parameters: [{ name: secret, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [text], properties: { text: { type: string } } } } }
+      responses:
+        "204": { description: Posted }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /api/v1/bookmarks/{id}:
+    delete:
+      operationId: removeBookmark
+      description: Whoever added it, or the channel's owner and admins.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/members/{user}:
+    delete:
+      operationId: removeChannelMember
+      description: Owner or admins take someone (not the owner) out of the channel.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: user, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Conversation" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/groups:
+    get:
+      operationId: listGroups
+      description: The workspace's user groups (S70); mentioning @handle in chat notifies their members.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/UserGroup" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createGroup
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GroupInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/UserGroup" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/groups/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    patch:
+      operationId: updateGroup
+      description: Anyone in the workspace renames a group or changes its members.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GroupInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/UserGroup" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteGroup
+      description: Only whoever made the group.
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/prefs:
+    put:
+      operationId: setConversationPrefs
+      description: |
+        My settings for a conversation (S71): level all (a notification for every message), mentions (default) or
+        muted (nothing), and my sidebar section ("" for the default lists).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { level: { type: string, enum: [all, mentions, muted] }, section: { type: string, maxLength: 40 } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ConversationPrefs" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/chat/prefs:
+    get:
+      operationId: listConversationPrefs
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ConversationPrefs" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/bots:
+    get:
+      operationId: listBots
+      description: The workspace's bot users (S84).
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Bot" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createBot
+      description: |
+        A workspace admin makes a bot: a user that never signs in, with a personal access token (returned once) to call
+        the API — e.g. post to the channels it is invited to. It shows a 🤖 status and is never emailed.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name], properties: { name: { type: string } } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Bot" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/chat/sections:
+    get:
+      operationId: getSectionOrder
+      description: The order of my own sidebar sections (S85); empty until set (sections then sort by name).
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SectionOrder" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+    put:
+      operationId: setSectionOrder
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SectionOrder" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SectionOrder" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/whiteboards/{id}/comments:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: listWhiteboardComments
+      description: Comments pinned to the board's elements (S86), oldest first.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/WhiteboardComment" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: commentOnElement
+      description: A member pins a comment to an element; @mentions in it notify people who may read the conversation.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [element_id, body], properties: { element_id: { type: string }, body: { type: string } } } } }
+      responses:
+        "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/WhiteboardComment" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/whiteboard-comments/{id}:
+    delete:
+      operationId: removeWhiteboardComment
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/chat/saved:
+    get:
+      operationId: listSavedMessages
+      description: My saved messages (still readable), most recently saved first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [message, saved_at, remind_at, reminded]
+                      properties:
+                        message: { $ref: "#/components/schemas/Message" }
+                        saved_at: { type: string, format: date-time }
+                        remind_at: { type: [string, "null"], format: date-time }
+                        reminded: { type: boolean }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/messages/{id}/pin:
+    post:
+      operationId: pinMessage
+      description: Pins a message for everyone in the conversation (members only); members hear `message.pinned`.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Pinned, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: unpinMessage
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Unpinned, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/pins:
+    get:
+      operationId: listPinnedMessages
+      description: The conversation's pinned messages, most recently pinned first.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/chat/search:
+    get:
+      operationId: searchMessages
+      description: Messages containing every word of q (case-insensitive, at least 2 characters) in the conversations the caller may read, newest first (at most 50).
+      parameters: [{ name: q, in: query, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Message" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/conversations/{id}/files:
+    post:
+      operationId: uploadFile
+      description: |
+        Posts a file (the request body, at most 25 MB) to the conversation (members only). Its type is detected
+        from the content. Cookie sessions must send `X-Kyber-Request: 1` (CSRF guard).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: recording, in: query, description: "1 posts the huddle recording (WebM, at most 1 GB) of the caller's recording.", schema: { type: string, enum: ["1"] } }
+        - { name: X-Kyber-Request, in: header, schema: { type: string, enum: ["1"] } }
+      requestBody:
+        required: true
+        content: { application/octet-stream: { schema: { type: string, format: binary } } }
+      responses:
+        "201": { description: Posted, content: { application/json: { schema: { $ref: "#/components/schemas/Message" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/messages/{id}/file:
+    get:
+      operationId: downloadFile
+      description: |
+        The message's file, for people who may read the conversation. Images, video, audio and PDF are shown
+        inline; everything else is downloaded. Served with nosniff and a sandboxing CSP.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: The file, content: { "*/*": { schema: { type: string, format: binary } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/focus:
     get:
       operationId: currentFocus
@@ -1833,6 +2873,44 @@ paths:
               schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/PageRevision" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/docs/{id}/comments:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: listDocComments
+      description: Comments on the page's paragraphs (S86), oldest first; anyone who can read the page.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/DocComment" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: commentOnParagraph
+      description: >-
+        A reader comments on paragraph `paragraph` (its index among the page's blank-line separated blocks);
+        `quote` is the start of its text, so the comment can be placed after edits. @mentions of project members notify them.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paragraph, body]
+              properties: { paragraph: { type: integer, minimum: 0 }, quote: { type: string, maxLength: 200 }, body: { type: string, maxLength: 2000 } }
+      responses:
+        "201": { description: Added, content: { application/json: { schema: { $ref: "#/components/schemas/DocComment" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/doc-comments/{id}:
+    delete:
+      operationId: removeDocComment
+      description: Only its author removes a comment.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/forms:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -2121,6 +3199,9 @@ paths:
   /api/v1/notifications/read-all:
     post:
       operationId: markAllNotificationsRead
+      description: Marks every notification read, or with conversation_id only the chat mentions in that conversation.
+      parameters:
+        - { name: conversation_id, in: query, schema: { type: string } }
       responses:
         "204": { description: All marked as read. }
         "401": { $ref: "#/components/responses/Error" }
@@ -2201,11 +3282,228 @@ components:
             type: object
             required: [status]
             properties: { status: { type: string, enum: [ok, unavailable] } }
+  requestBodies:
+    MessageBody:
+      required: true
+      content:
+        application/json:
+          schema: { type: object, required: [body], properties: { body: { type: string } } }
   schemas:
+    Whiteboard:
+      type: object
+      required: [id, conversation_id, title, created_by, created_at]
+      properties:
+        id: { type: string }
+        conversation_id: { type: string }
+        title: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        elements: { type: array, items: { $ref: "#/components/schemas/WhiteboardElement" } }
+    WhiteboardElement:
+      type: object
+      required: [id, kind, x, y, w, h, points, text, color, version]
+      properties:
+        id: { type: string }
+        kind: { type: string, description: "rect, ellipse, arrow, line, freehand, text or sticky" }
+        x: { type: number }
+        y: { type: number }
+        w: { type: number }
+        h: { type: number }
+        points: { type: array, items: { type: object, required: [x, y], properties: { x: { type: number }, y: { type: number } } } }
+        text: { type: string }
+        color: { type: string }
+        version: { type: integer }
+        updated_by: { type: string }
+        updated_at: { type: string, format: date-time }
+        deleted: { type: boolean }
+    WhiteboardComment:
+      type: object
+      required: [id, element_id, author_id, body, created_at]
+      properties:
+        id: { type: string }
+        element_id: { type: string }
+        author_id: { type: string }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+    DocComment:
+      type: object
+      required: [id, page_id, paragraph, quote, author_id, body, created_at]
+      properties:
+        id: { type: string }
+        page_id: { type: string }
+        paragraph: { type: integer, minimum: 0 }
+        quote: { type: string }
+        author_id: { type: string }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+    SectionOrder:
+      type: object
+      required: [order]
+      properties: { order: { type: array, items: { type: string }, maxItems: 50 } }
+    Bot:
+      type: object
+      required: [user_id, name, created_by, created_at]
+      properties:
+        user_id: { type: string }
+        name: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        token: { type: string, description: "The bot's access token; only when it is made." }
+    Webhook:
+      type: object
+      required: [id, name, created_by, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        url: { type: string, description: "The path to POST to (contains the secret); only when made or rotated." }
+    ChannelWorkflow:
+      type: object
+      required: [id, trigger, minute, days, text, created_by, created_at]
+      properties:
+        id: { type: string }
+        trigger: { type: string, enum: [member_joined, schedule] }
+        minute: { type: integer }
+        days: { type: array, items: { type: integer } }
+        text: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+    Bookmark:
+      type: object
+      required: [id, kind, ref, title, added_by, added_at]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [doc, link] }
+        ref: { type: string, description: "The doc id, or the URL" }
+        title: { type: string }
+        added_by: { type: string }
+        added_at: { type: string, format: date-time }
+    ConversationPrefs:
+      type: object
+      required: [conversation_id, level, section]
+      properties:
+        conversation_id: { type: string }
+        level: { type: string, enum: [all, mentions, muted] }
+        section: { type: string }
+    GroupInput:
+      type: object
+      required: [handle, member_ids]
+      properties:
+        handle: { type: string, description: "2–30 lower-case letters, digits or dashes" }
+        name: { type: string }
+        member_ids: { type: array, items: { type: string } }
+    UserGroup:
+      type: object
+      required: [id, handle, name, member_ids, created_by, created_at]
+      properties:
+        id: { type: string }
+        handle: { type: string }
+        name: { type: string }
+        member_ids: { type: array, items: { type: string } }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+    ScheduleInput:
+      type: object
+      required: [body, send_at]
+      properties: { body: { type: string }, send_at: { type: string, format: date-time } }
+    ScheduledMessage:
+      type: object
+      required: [id, conversation_id, body, send_at, created_at]
+      properties:
+        id: { type: string }
+        conversation_id: { type: string }
+        body: { type: string }
+        send_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+    UserStatus:
+      type: object
+      required: [user_id, emoji, text, expires_at, dnd, dnd_until]
+      properties:
+        user_id: { type: string }
+        emoji: { type: string }
+        text: { type: string }
+        expires_at: { type: [string, "null"], format: date-time }
+        dnd: { type: boolean }
+        dnd_until: { type: [string, "null"], format: date-time }
+    Call:
+      type: object
+      required: [id, conversation_id, started_by, started_at, live, participants, presentation, recording]
+      properties:
+        id: { type: string }
+        conversation_id: { type: string }
+        started_by: { type: string }
+        started_at: { type: string, format: date-time }
+        live: { type: boolean }
+        presentation:
+          oneOf:
+            - { type: "null" }
+            - { type: object, required: [kind, ref, by], properties: { kind: { type: string, enum: [doc, whiteboard] }, ref: { type: string }, by: { type: string } } }
+        recording:
+          oneOf:
+            - { type: "null" }
+            - { type: object, required: [by, since], properties: { by: { type: string }, since: { type: string, format: date-time } } }
+        participants:
+          type: array
+          items:
+            type: object
+            required: [user_id, joined_at, audio, video, screen, hand]
+            properties:
+              user_id: { type: string }
+              joined_at: { type: string, format: date-time }
+              audio: { type: boolean }
+              video: { type: boolean }
+              screen: { type: boolean }
+              hand: { type: boolean, description: "A raised hand (S75), until lowered" }
+    Conversation:
+      type: object
+      required: [id, kind, name, topic, private, member_ids, member, unread, created_at, owner_id, admin_ids, archived, project_key]
+      properties:
+        id: { type: string }
+        owner_id: { type: string, description: Who created it; owns a channel. }
+        project_key: { type: string, description: "The project whose news are posted here (S73); empty when not linked." }
+        admin_ids: { type: array, items: { type: string }, description: "Channel admins besides the owner (S69)." }
+        archived: { type: boolean, description: An archived channel is read-only. }
+        kind: { type: string, enum: [channel, dm] }
+        name: { type: string, description: Empty for DMs }
+        topic: { type: string }
+        private: { type: boolean }
+        member_ids: { type: array, items: { type: string } }
+        member: { type: boolean, description: Whether the caller belongs to it }
+        unread: { type: integer }
+        created_at: { type: string, format: date-time }
+    Message:
+      type: object
+      required: [id, conversation_id, author_id, body, created_at, edited_at, deleted, thread_id, reply_count, reactions, issues, kind, file, pinned_by, pinned_at]
+      properties:
+        id: { type: string }
+        conversation_id: { type: string }
+        author_id: { type: string }
+        body: { type: string, description: Empty once deleted }
+        created_at: { type: string, format: date-time }
+        edited_at: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+        deleted: { type: boolean }
+        thread_id: { oneOf: [{ type: string }, { type: "null" }], description: The parent message of a reply }
+        reply_count: { type: integer }
+        kind: { type: string, enum: ["", huddle_started, huddle_ended, huddle_recording, project_event, transcript, summary, workflow, webhook], description: "Empty for people's messages; summary: a recording transcript's summary (S87); system messages cannot be edited." }
+        file:
+          description: An attached file; download it from url (members of the conversation only).
+          oneOf:
+            - { type: "null" }
+            - { type: object, required: [name, type, size, url], properties: { name: { type: string }, type: { type: string }, size: { type: integer }, url: { type: string } } }
+        pinned_by: { oneOf: [{ type: string }, { type: "null" }] }
+        pinned_at: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+        issues:
+          description: Issues written by key in the body (at most 5) that the caller may browse. Not sent on the stream.
+          type: array
+          items: { type: object, required: [key, title, status], properties: { key: { type: string }, title: { type: string }, status: { type: string } } }
+        reactions:
+          type: array
+          items: { type: object, required: [emoji, user_ids], properties: { emoji: { type: string }, user_ids: { type: array, items: { type: string } } } }
     Meeting:
       type: object
       additionalProperties: false
-      required: [id, title, starts_at, ends_at, organizer_id, attendee_ids, scope, project_key, responses]
+      required: [id, title, starts_at, ends_at, organizer_id, attendee_ids, scope, project_key, conversation_id, responses]
       properties:
         id: { type: string }
         title: { type: string }
@@ -2215,6 +3513,7 @@ components:
         attendee_ids: { type: array, items: { type: string } }
         scope: { type: string, enum: [people, project, workspace] }
         project_key: { type: [string, "null"] }
+        conversation_id: { type: [string, "null"], description: "The chat channel whose huddle the meeting happens in (S76)." }
         responses: { type: object, additionalProperties: { type: string, enum: [going, maybe, declined] }, description: Attendee id → answer (those who answered). }
     FocusSession:
       type: object
@@ -2744,14 +4043,16 @@ components:
         remaining_issues: { type: integer }
     Notification:
       type: object
-      required: [id, kind, issue_key, issue_title, project_key, actor_name, excerpt, read, created_at]
+      required: [id, kind, issue_key, issue_title, project_key, conversation_id, conversation_name, actor_name, excerpt, read, created_at]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [assigned, commented, mentioned, transitioned, announcement, meeting], description: "meeting: a meeting you are invited to was scheduled or cancelled, or starts soon (excerpt: when). transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To). announcement: news to a project (project_key) or the workspace (project_key empty); issue_key is empty and issue_title holds its title." }
+        kind: { type: string, enum: [assigned, commented, mentioned, transitioned, announcement, meeting, reminder, message, doc], description: "doc: you were @mentioned in a comment on a doc page (project_key; issue_title holds the page title; excerpt the comment). message: a message in a conversation you follow (level all; conversation_id, excerpt). reminder: a saved chat message's reminder (conversation_id, excerpt). meeting: a meeting you are invited to was scheduled or cancelled, or starts soon (excerpt: when). transitioned: the status of an issue you report, are assigned or watch changed (excerpt: From → To). announcement: news to a project (project_key) or the workspace (project_key empty); issue_key is empty and issue_title holds its title." }
         issue_key: { type: string }
         issue_title: { type: string }
         project_key: { type: string, description: The announced project; empty for issue notifications and workspace announcements. }
+        conversation_id: { type: string, description: "Set (and issue_key empty) for a mention in chat." }
+        conversation_name: { type: string, description: "The channel of a chat mention; empty for a direct message." }
         actor_name: { type: string }
         excerpt: { type: string, description: Start of the comment (commented/mentioned). }
         read: { type: boolean }

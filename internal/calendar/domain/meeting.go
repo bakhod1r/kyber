@@ -34,7 +34,9 @@ type Meeting struct {
 	Audience   Audience
 	Responses  map[UserID]Response // attendees who answered
 	Reminded   bool                // the reminder before the start was sent
-	events     []Event
+	// Conversation is the chat channel whose huddle the meeting happens in (S76); by id, "" when none.
+	Conversation string
+	events       []Event
 }
 
 // NewMeeting books a meeting with chosen people.

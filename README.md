@@ -6,7 +6,10 @@
 > categories), Scrum & Kanban boards with status-mapped columns and WIP limits, backlog & sprints, reports (burndown,
 > velocity, created vs resolved, cycle time, workload), notifications & @mentions, Pomodoro focus with a meetings
 > time table, eye-break exercises, Jira CSV import/export, Google & Telegram sign-in, multi-tenant workspaces on
-> subdomains, OpenAPI contract, localized errors (en/uz/ru), PostgreSQL, optional Redis.
+> subdomains, Slack-style chat (threads, mentions, @groups, saved items, reminders, scheduled messages, statuses &
+> DND, channel sections, slash commands, project channels, workflows, incoming webhooks) with video huddles
+> (screen share, recording, transcripts, reactions) and shared whiteboards,
+> OpenAPI contract, localized errors (en/uz/ru), PostgreSQL, optional Redis.
 
 <p align="center"><img src="docs/assets/landing.png" alt="Kyber landing page" width="820"></p>
 
@@ -18,8 +21,10 @@
 | **Backlog & sprints** — rank issues, plan, start and complete sprints. | **Reports** — KPIs, distributions, burndown, velocity, cycle time. |
 | <img src="docs/assets/issue-panel.png" alt="Issue panel with focus timer and comments"> | <img src="docs/assets/meetings.png" alt="Meetings time table"> |
 | **Issue** — details, Pomodoro focus, comments with @mentions. | **Time table** — no Pomodoro can start during a meeting. |
-| <img src="docs/assets/notifications.png" alt="Notifications for mentions and comments"> | |
-| **Notifications** — comments and mentions, per workspace. | |
+| <img src="docs/assets/notifications.png" alt="Notifications for mentions and comments"> | <img src="docs/assets/chat.png" alt="Chat channel with a thread, reactions and an issue preview"> |
+| **Notifications** — comments and mentions, per workspace. | **Chat** — channels, DMs, threads, reactions, @mentions, pins, search, files, issue previews. |
+| <img src="docs/assets/huddle.png" alt="Video huddle with two cameras while recording"> | <img src="docs/assets/whiteboard.png" alt="Shared whiteboard with an architecture sketch"> |
+| **Huddles** — video, audio and screen share (WebRTC, up to 6), present a doc or whiteboard to everyone, record to the channel. | **Whiteboards** — draw architecture together in real time; stickies become issues; export SVG/PNG. |
 
 Screenshots are generated from a seeded demo with `make screenshots`.
 

@@ -21,9 +21,9 @@ func NewRepository(pool *pgxpool.Pool) *Repository { return &Repository{pool: po
 func (r *Repository) Create(ctx context.Context, m *domain.Meeting) error {
 	events := m.PullEvents()
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `INSERT INTO meetings (id, workspace_id, title, starts_at, ends_at, organizer_id, scope, project_key)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, string(m.ID), string(m.Workspace), m.Title, m.Start, m.End, string(m.Organizer),
-			string(m.Audience.Scope), m.Audience.Project); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO meetings (id, workspace_id, title, starts_at, ends_at, organizer_id, scope, project_key, conversation_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, string(m.ID), string(m.Workspace), m.Title, m.Start, m.End, string(m.Organizer),
+			string(m.Audience.Scope), m.Audience.Project, m.Conversation); err != nil {
 			return err
 		}
 		for _, a := range m.Attendees {
@@ -53,7 +53,7 @@ func (r *Repository) Cancel(ctx context.Context, m *domain.Meeting) error {
 }
 
 const cols = `m.id::text, m.workspace_id::text, m.title, m.starts_at, m.ends_at, m.organizer_id::text, m.scope, m.project_key,
-	m.reminded_at IS NOT NULL,
+	m.reminded_at IS NOT NULL, m.conversation_id,
 	array(SELECT a.user_id::text FROM meeting_attendees a WHERE a.meeting_id = m.id ORDER BY a.user_id::text),
 	array(SELECT a.response FROM meeting_attendees a WHERE a.meeting_id = m.id ORDER BY a.user_id::text)`
 
@@ -61,7 +61,7 @@ func scan(row pgx.CollectableRow) (*domain.Meeting, error) {
 	m := domain.Meeting{Responses: map[domain.UserID]domain.Response{}}
 	var attendees, responses []string
 	if err := row.Scan(&m.ID, &m.Workspace, &m.Title, &m.Start, &m.End, &m.Organizer, &m.Audience.Scope, &m.Audience.Project,
-		&m.Reminded, &attendees, &responses); err != nil {
+		&m.Reminded, &m.Conversation, &attendees, &responses); err != nil {
 		return nil, err
 	}
 	for i, a := range attendees {
