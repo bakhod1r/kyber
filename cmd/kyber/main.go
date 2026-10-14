@@ -9,7 +9,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	identitydomain "github.com/bakhod1r/kyber/internal/identity/domain"
+	"github.com/bakhod1r/kyber/internal/identity/infrastructure/github"
 	"github.com/bakhod1r/kyber/internal/identity/infrastructure/google"
+	"github.com/bakhod1r/kyber/internal/identity/infrastructure/oidcprovider"
 	"github.com/bakhod1r/kyber/internal/identity/infrastructure/telegram"
 	identityhttp "github.com/bakhod1r/kyber/internal/identity/interfaces/httpapi"
 	"github.com/bakhod1r/kyber/internal/notify/infrastructure/smtpmail"
@@ -95,9 +98,15 @@ func main() {
 
 // newHandler selects Postgres when KYBER_DATABASE_URL is set, otherwise in-memory dev mode.
 func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http.Handler, func(), error) {
+	callback := func(name string) string {
+		return strings.TrimRight(cfg.PublicURL, "/") + "/api/v1/auth/" + name + "/callback"
+	}
 	social := server.WithSocial(identityhttp.Social{
-		Google: google.New(google.Config{ClientID: cfg.GoogleClientID, ClientSecret: cfg.GoogleClientSecret,
-			RedirectURL: strings.TrimRight(cfg.PublicURL, "/") + "/api/v1/auth/google/callback"}),
+		Google: google.New(google.Config{ClientID: cfg.GoogleClientID, ClientSecret: cfg.GoogleClientSecret, RedirectURL: callback("google")}),
+		OIDC: oidcprovider.New(oidcprovider.Config{Provider: identitydomain.ProviderOIDC, Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID,
+			ClientSecret: cfg.OIDCClientSecret, RedirectURL: callback("oidc"), RequireVerifiedEmail: true}),
+		OIDCName:    cfg.OIDCName,
+		GitHub:      github.New(github.Config{ClientID: cfg.GitHubClientID, ClientSecret: cfg.GitHubClientSecret, RedirectURL: callback("github")}),
 		Telegram:    telegram.NewVerifier(cfg.TelegramBotToken, time.Now),
 		TelegramBot: cfg.TelegramBotName,
 	})

@@ -39,6 +39,15 @@ type Config struct {
 	// <PublicURL>/api/v1/auth/google/callback as an authorized redirect URI.
 	GoogleClientID     string `env:"KYBER_GOOGLE_CLIENT_ID"`
 	GoogleClientSecret string `env:"KYBER_GOOGLE_CLIENT_SECRET"`
+	// Single sign-on with any OpenID Connect provider (Okta, Keycloak, Entra ID, Authentik...):
+	// register <PublicURL>/api/v1/auth/oidc/callback as the redirect URI. OIDCName labels the button.
+	OIDCIssuer       string `env:"KYBER_OIDC_ISSUER"`
+	OIDCClientID     string `env:"KYBER_OIDC_CLIENT_ID"`
+	OIDCClientSecret string `env:"KYBER_OIDC_CLIENT_SECRET"`
+	OIDCName         string `env:"KYBER_OIDC_NAME" default:"SSO"`
+	// Sign in with GitHub: create an OAuth App with callback <PublicURL>/api/v1/auth/github/callback.
+	GitHubClientID     string `env:"KYBER_GITHUB_CLIENT_ID"`
+	GitHubClientSecret string `env:"KYBER_GITHUB_CLIENT_SECRET"`
 	// Sign in with Telegram: create a bot with @BotFather and /setdomain to the site's domain.
 	TelegramBotToken string `env:"KYBER_TELEGRAM_BOT_TOKEN"`
 	TelegramBotName  string `env:"KYBER_TELEGRAM_BOT_NAME"`
@@ -80,9 +89,9 @@ func (c Config) String() string {
 	if c.RedisURL != "" {
 		redisURL = redact(c.RedisURL)
 	}
-	return fmt.Sprintf("addr=%s database=%s redis=%s cookie_secure=%t session_purge_every=%s public_url=%s google=%t telegram=%t attachments=%s",
+	return fmt.Sprintf("addr=%s database=%s redis=%s cookie_secure=%t session_purge_every=%s public_url=%s google=%t oidc=%t github=%t telegram=%t attachments=%s",
 		c.Addr, redact(c.DatabaseURL), redisURL, c.CookieSecure, c.SessionPurgeEvery, c.PublicURL,
-		c.GoogleClientID != "" && c.GoogleClientSecret != "", c.TelegramBotToken != "", c.attachments())
+		c.GoogleClientID != "" && c.GoogleClientSecret != "", c.OIDCIssuer != "" && c.OIDCClientID != "", c.GitHubClientID != "", c.TelegramBotToken != "", c.attachments())
 }
 
 func redact(raw string) string {

@@ -146,14 +146,61 @@ func TestS39SocialSignIn(t *testing.T) {
 	}, social)
 }
 
+// F6: a generic OpenID Connect provider (SSO) and GitHub sign in through the same redirect flow.
+func TestF6SSOProviders(t *testing.T) {
+	sso := fakeGoogle{profiles: map[string]application.ExternalProfile{
+		"ok": {Provider: domain.ProviderOIDC, Subject: "o-1", Email: "dev@x.uz", EmailVerified: true, Name: "Dev"},
+	}}
+	gh := fakeGoogle{profiles: map[string]application.ExternalProfile{
+		"ok":       {Provider: domain.ProviderGitHub, Subject: "583231", Email: "octo@x.uz", EmailVerified: true, Name: "Octo"},
+		"takeover": {Provider: domain.ProviderGitHub, Subject: "9", Email: "dev@x.uz", EmailVerified: false, Name: "Evil"},
+	}}
+	social := server.WithSocial(identityhttp.Social{OIDC: sso, OIDCName: "Okta", GitHub: gh})
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		code, p := anon.do("GET", "/api/v1/auth/providers", nil)
+		expect(t, code, 200, p)
+		if p["oidc"] != "Okta" || p["github"] != true || p["google"] != false {
+			t.Fatalf("providers = %v", p)
+		}
+		_, dev := anon.signedIn("dev@x.uz").do("GET", "/api/v1/me", nil)
+		for _, name := range []string{"oidc", "github"} {
+			start := browser(t, anon, "/api/v1/auth/"+name+"/start")
+			flow := cookie(start, "kyber_oauth")
+			if start.StatusCode != 302 || flow == nil {
+				t.Fatalf("%s start = %d %v", name, start.StatusCode, start.Header)
+			}
+			state := strings.Split(flow.Value, ".")[0]
+			cb := browser(t, anon, "/api/v1/auth/"+name+"/callback?code=ok&state="+state, flow)
+			session := cookie(cb, "kyber_session")
+			if cb.Header.Get("Location") != "/" || session == nil {
+				t.Fatalf("%s callback = %d %v", name, cb.StatusCode, cb.Header)
+			}
+			me := &client{t: t, srv: anon.srv, token: session.Value}
+			_, u := me.do("GET", "/api/v1/me", nil)
+			if name == "oidc" && u["id"] != dev["id"] { // a verified email links to the existing account
+				t.Fatalf("sso me = %v, want %v", u, dev)
+			}
+			if bad := browser(t, anon, "/api/v1/auth/"+name+"/callback?code=ok&state=forged", flow); bad.Header.Get("Location") != "/login?error="+name+"_failed" {
+				t.Fatalf("%s forged = %v", name, bad.Header)
+			}
+		}
+		start := browser(t, anon, "/api/v1/auth/github/start")
+		flow := cookie(start, "kyber_oauth")
+		take := browser(t, anon, "/api/v1/auth/github/callback?code=takeover&state="+strings.Split(flow.Value, ".")[0], flow)
+		if take.Header.Get("Location") != "/login?error=github_email_taken" {
+			t.Fatalf("takeover = %v", take.Header)
+		}
+	}, social)
+}
+
 func TestS39SocialDisabled(t *testing.T) {
 	forEachBackend(t, func(t *testing.T, anon *client) {
 		code, p := anon.do("GET", "/api/v1/auth/providers", nil)
 		expect(t, code, 200, p)
-		if p["google"] != false || p["telegram_bot"] != nil {
+		if p["google"] != false || p["telegram_bot"] != nil || p["oidc"] != nil || p["github"] != false {
 			t.Fatalf("providers = %v", p)
 		}
-		for _, path := range []string{"/api/v1/auth/google/start", "/api/v1/auth/google/callback"} {
+		for _, path := range []string{"/api/v1/auth/google/start", "/api/v1/auth/google/callback", "/api/v1/auth/oidc/start", "/api/v1/auth/github/callback"} {
 			if res := browser(t, anon, path); res.StatusCode != 404 {
 				t.Fatalf("%s = %d", path, res.StatusCode)
 			}

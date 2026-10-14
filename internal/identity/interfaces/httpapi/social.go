@@ -17,15 +17,19 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
 )
 
-// Social configures sign-in with Google and Telegram; nil members are disabled.
+// Social configures sign-in with external providers; nil members are disabled.
 type Social struct {
-	Google      GoogleClient
+	Google      OAuthClient
+	OIDC        OAuthClient // the installation's generic OpenID Connect provider (SSO)
+	OIDCName    string      // its button label, e.g. "Okta"
+	GitHub      OAuthClient
 	Telegram    TelegramVerifier
 	TelegramBot string // bot username for the login widget and the code bot
 	TelegramOTP bool   // the bot sends one-time login codes (needs the bot token)
 }
 
-type GoogleClient interface {
+// OAuthClient is a redirect (authorization code) sign-in provider.
+type OAuthClient interface {
 	Enabled() bool
 	AuthURL(ctx context.Context, f application.OIDCFlow) (string, error)
 	Exchange(ctx context.Context, code string, f application.OIDCFlow) (application.ExternalProfile, error)
@@ -45,22 +49,41 @@ func (h *Handler) WithSocial(s Social) *Handler { h.social = s; return h }
 
 func (h *Handler) registerSocial(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/auth/providers", h.providers)
-	mux.HandleFunc("GET /api/v1/auth/google/start", h.googleStart)
-	mux.HandleFunc("GET /api/v1/auth/google/callback", h.googleCallback)
+	for _, name := range []string{"google", "oidc", "github"} {
+		mux.HandleFunc("GET /api/v1/auth/"+name+"/start", h.oauthStart(name))
+		mux.HandleFunc("GET /api/v1/auth/"+name+"/callback", h.oauthCallback(name))
+	}
 	mux.HandleFunc("POST /api/v1/auth/telegram", h.telegram)
 	mux.HandleFunc("POST /api/v1/auth/telegram/otp", h.otpStart)
 	mux.HandleFunc("POST /api/v1/auth/telegram/otp/verify", h.otpVerify)
 }
 
-func (h *Handler) googleOn() bool   { return h.social.Google != nil && h.social.Google.Enabled() }
+// oauth returns the enabled redirect provider by its route name, or nil.
+func (h *Handler) oauth(name string) OAuthClient {
+	c := map[string]OAuthClient{"google": h.social.Google, "oidc": h.social.OIDC, "github": h.social.GitHub}[name]
+	if c == nil || !c.Enabled() {
+		return nil
+	}
+	return c
+}
+
 func (h *Handler) telegramOn() bool { return h.social.Telegram != nil && h.social.Telegram.Enabled() }
 
 func (h *Handler) providers(w http.ResponseWriter, _ *http.Request) {
 	out := struct {
 		Google      bool    `json:"google"`
+		OIDC        *string `json:"oidc"`
+		GitHub      bool    `json:"github"`
 		TelegramBot *string `json:"telegram_bot"`
 		TelegramOTP bool    `json:"telegram_otp"`
-	}{Google: h.googleOn(), TelegramOTP: h.social.TelegramOTP}
+	}{Google: h.oauth("google") != nil, GitHub: h.oauth("github") != nil, TelegramOTP: h.social.TelegramOTP}
+	if h.oauth("oidc") != nil {
+		name := h.social.OIDCName
+		if name == "" {
+			name = "SSO"
+		}
+		out.OIDC = &name
+	}
 	if h.telegramOn() {
 		out.TelegramBot = &h.social.TelegramBot
 	}
@@ -79,44 +102,51 @@ func (h *Handler) failed(w http.ResponseWriter, r *http.Request, provider string
 	http.Redirect(w, r, "/login?error="+provider+"_"+reason, http.StatusFound)
 }
 
-func (h *Handler) googleStart(w http.ResponseWriter, r *http.Request) {
-	if !h.googleOn() {
-		httpx.Error(w, r, h.log, errProviderDisabled, codeFor)
-		return
+// oauthStart begins a redirect sign-in (Google, the SSO provider or GitHub).
+func (h *Handler) oauthStart(name string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		c := h.oauth(name)
+		if c == nil {
+			httpx.Error(w, r, h.log, errProviderDisabled, codeFor)
+			return
+		}
+		f := application.NewOIDCFlow()
+		u, err := c.AuthURL(r.Context(), f)
+		if err != nil {
+			h.failed(w, r, name, err)
+			return
+		}
+		http.SetCookie(w, &http.Cookie{Name: flowCookie, Value: f.State + "." + f.Nonce + "." + f.Verifier,
+			Path: "/api/v1/auth/" + name + "/", MaxAge: 600, HttpOnly: true, Secure: h.cookieSecure, SameSite: http.SameSiteLaxMode})
+		http.Redirect(w, r, u, http.StatusFound)
 	}
-	f := application.NewOIDCFlow()
-	u, err := h.social.Google.AuthURL(r.Context(), f)
-	if err != nil {
-		h.failed(w, r, "google", err)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{Name: flowCookie, Value: f.State + "." + f.Nonce + "." + f.Verifier,
-		Path: "/api/v1/auth/google/", MaxAge: 600, HttpOnly: true, Secure: h.cookieSecure, SameSite: http.SameSiteLaxMode})
-	http.Redirect(w, r, u, http.StatusFound)
 }
 
-func (h *Handler) googleCallback(w http.ResponseWriter, r *http.Request) {
-	if !h.googleOn() {
-		httpx.Error(w, r, h.log, errProviderDisabled, codeFor)
-		return
+func (h *Handler) oauthCallback(name string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		c := h.oauth(name)
+		if c == nil {
+			httpx.Error(w, r, h.log, errProviderDisabled, codeFor)
+			return
+		}
+		http.SetCookie(w, &http.Cookie{Name: flowCookie, Value: "", Path: "/api/v1/auth/" + name + "/", MaxAge: -1, HttpOnly: true, Secure: h.cookieSecure})
+		ck, err := r.Cookie(flowCookie)
+		parts := []string{}
+		if err == nil {
+			parts = strings.Split(ck.Value, ".")
+		}
+		// The state must match the cookie set by /start in this browser (login CSRF).
+		if len(parts) != 3 || subtle.ConstantTimeCompare([]byte(parts[0]), []byte(r.URL.Query().Get("state"))) != 1 {
+			h.failed(w, r, name, application.ErrInvalidLogin)
+			return
+		}
+		p, err := c.Exchange(r.Context(), r.URL.Query().Get("code"), application.OIDCFlow{State: parts[0], Nonce: parts[1], Verifier: parts[2]})
+		if err != nil {
+			h.failed(w, r, name, err)
+			return
+		}
+		h.finishSocial(w, r, name, p)
 	}
-	http.SetCookie(w, &http.Cookie{Name: flowCookie, Value: "", Path: "/api/v1/auth/google/", MaxAge: -1, HttpOnly: true, Secure: h.cookieSecure})
-	c, err := r.Cookie(flowCookie)
-	parts := []string{}
-	if err == nil {
-		parts = strings.Split(c.Value, ".")
-	}
-	// The state must match the cookie set by /start in this browser (login CSRF).
-	if len(parts) != 3 || subtle.ConstantTimeCompare([]byte(parts[0]), []byte(r.URL.Query().Get("state"))) != 1 {
-		h.failed(w, r, "google", application.ErrInvalidLogin)
-		return
-	}
-	p, err := h.social.Google.Exchange(r.Context(), r.URL.Query().Get("code"), application.OIDCFlow{State: parts[0], Nonce: parts[1], Verifier: parts[2]})
-	if err != nil {
-		h.failed(w, r, "google", err)
-		return
-	}
-	h.finishSocial(w, r, "google", p)
 }
 
 func (h *Handler) finishSocial(w http.ResponseWriter, r *http.Request, provider string, p application.ExternalProfile) {

@@ -5,7 +5,7 @@
 > Status: **v0.10 (Sprint 10)** — configurable workflows per project (statuses with To Do / In Progress / Done
 > categories), Scrum & Kanban boards with status-mapped columns and WIP limits, backlog & sprints, reports (burndown,
 > velocity, created vs resolved, cycle time, workload), notifications & @mentions, Pomodoro focus with a meetings
-> time table, eye-break exercises, Jira CSV import/export, Google & Telegram sign-in, multi-tenant workspaces on
+> time table, eye-break exercises, Jira CSV import/export, Google, GitHub, OpenID Connect SSO & Telegram sign-in, multi-tenant workspaces on
 > subdomains, Slack-style chat (threads, mentions, @groups, saved items, reminders, scheduled messages, statuses &
 > DND, channel sections, slash commands, project channels, workflows, incoming webhooks) with video huddles
 > (screen share, recording, transcripts, reactions) and shared whiteboards,
@@ -56,6 +56,9 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 | `KYBER_ADMIN_EMAILS` | — | Comma-separated emails administering the default workspace (single-tenant mode): they publish workspace-wide announcements. Named workspaces use their owners and admins |
 | `KYBER_PUBLIC_URL` | `http://localhost:8080` | External base URL; OAuth redirect URIs are built from it |
 | `KYBER_GOOGLE_CLIENT_ID` / `KYBER_GOOGLE_CLIENT_SECRET` | — | Enables "Continue with Google". Google Cloud → APIs & Services → Credentials → OAuth client (Web); authorized redirect URI `<KYBER_PUBLIC_URL>/api/v1/auth/google/callback` |
+| `KYBER_OIDC_ISSUER` / `KYBER_OIDC_CLIENT_ID` / `KYBER_OIDC_CLIENT_SECRET` | — | Enables single sign-on with any OpenID Connect provider (Okta, Keycloak, Microsoft Entra ID, Authentik…), found by discovery at `<issuer>/.well-known/openid-configuration`. Register redirect URI `<KYBER_PUBLIC_URL>/api/v1/auth/oidc/callback`; the provider must send `email_verified=true`. A verified email links to the existing account (ADR-0015) |
+| `KYBER_OIDC_NAME` | `SSO` | Label of the single sign-on button ("Continue with …") |
+| `KYBER_GITHUB_CLIENT_ID` / `KYBER_GITHUB_CLIENT_SECRET` | — | Enables "Continue with GitHub". GitHub → Settings → Developer settings → OAuth Apps; callback URL `<KYBER_PUBLIC_URL>/api/v1/auth/github/callback`. Only the primary verified email links to an existing account |
 | `KYBER_TELEGRAM_BOT_TOKEN` / `KYBER_TELEGRAM_BOT_NAME` | — | Enables Telegram sign-in. Create a bot with @BotFather. With both set the bot also sends **one-time login codes** (works on any domain; Kyber long-polls the bot, so run one replica with the token). The Login Widget additionally needs `/setdomain` to your site's domain. Users can also **connect Telegram for notifications** (Notifications page → Connect Telegram → press Start in the bot), and project admins can **connect Telegram groups** to a project (project → Notifications → Connect a Telegram group) |
 | `KYBER_SMTP_HOST` / `_PORT` / `_USERNAME` / `_PASSWORD` / `_FROM` / `_TLS` | — / by TLS mode / — / — / `Kyber <noreply@localhost>` / `starttls` | Email notifications through any SMTP server (Gmail, Mailgun, Postfix…). `_TLS`: `starttls` (port 587), `tls` (465) or `none` (local relay). Failed sends are retried with backoff for about 2½ hours |
 | `KYBER_COOKIE_SECURE` | `true` | Set `false` only for plain-HTTP local use |

@@ -13,9 +13,17 @@ type Provider string
 const (
 	ProviderGoogle   Provider = "google"
 	ProviderTelegram Provider = "telegram"
+	ProviderOIDC     Provider = "oidc"   // the installation's generic OpenID Connect provider (SSO)
+	ProviderGitHub   Provider = "github" // subject = GitHub's numeric user id
 )
 
-func (p Provider) Valid() bool { return p == ProviderGoogle || p == ProviderTelegram }
+func (p Provider) Valid() bool {
+	switch p {
+	case ProviderGoogle, ProviderTelegram, ProviderOIDC, ProviderGitHub:
+		return true
+	}
+	return false
+}
 
 // ExternalIdentity links a provider account (its stable subject id) to a Kyber user.
 type ExternalIdentity struct {
