@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/bakhod1r/kyber/internal/issue/application"
@@ -115,7 +116,7 @@ func codeFor(err error) (string, bool) {
 	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidTitle), errors.Is(err, domain.ErrInvalidIssueType),
 		errors.Is(err, domain.ErrInvalidPriority), errors.Is(err, domain.ErrDescriptionTooLong),
 		errors.Is(err, domain.ErrInvalidCommentBody), errors.Is(err, application.ErrInvalidAssignee), errors.Is(err, errMissingVersion),
-		errors.Is(err, application.ErrInvalidSprint), errors.Is(err, application.ErrInvalidAnchor), errors.Is(err, domain.ErrInvalidEstimate), errors.Is(err, domain.ErrInvalidLabel),
+		errors.Is(err, application.ErrInvalidSprint), errors.Is(err, application.ErrInvalidAnchor), errors.Is(err, domain.ErrInvalidEstimate), errors.Is(err, domain.ErrInvalidLabel), errors.Is(err, application.ErrInvalidPage),
 		errors.Is(err, domain.ErrInvalidWorkflow), errors.Is(err, domain.ErrUnknownStatus),
 		errors.Is(err, application.ErrInvalidSecurityLevel), errors.Is(err, domain.ErrInvalidResolution), errors.Is(err, application.ErrInvalidVersion),
 		errors.Is(err, domain.ErrInvalidDuration), errors.Is(err, domain.ErrInvalidWorklog),
@@ -194,8 +195,19 @@ func (h *Handler) transition(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	list, err := h.svc.List(r.Context(), auth.Actor(r.Context()), r.PathValue("key"),
-		application.ListQuery{Status: r.URL.Query().Get("status"), Sprint: r.URL.Query().Get("sprint"), FixVersion: r.URL.Query().Get("fix_version"), Label: r.URL.Query().Get("label")})
+	q := r.URL.Query()
+	lq := application.ListQuery{Status: q.Get("status"), Sprint: q.Get("sprint"), FixVersion: q.Get("fix_version"), Label: q.Get("label")}
+	for name, dst := range map[string]*int{"limit": &lq.Limit, "offset": &lq.Offset} {
+		if raw := q.Get(name); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || name == "limit" && n == 0 {
+				httpx.Error(w, r, h.log, application.ErrInvalidPage, codeFor)
+				return
+			}
+			*dst = n
+		}
+	}
+	list, err := h.svc.List(r.Context(), auth.Actor(r.Context()), r.PathValue("key"), lq)
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return

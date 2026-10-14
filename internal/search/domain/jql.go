@@ -486,8 +486,11 @@ func values(is *Issue, field string) []string {
 	return one(is.Custom[strings.TrimPrefix(field, "cf:")])
 }
 
+// normalizer is built once: norm runs for every value of every clause on every issue.
+var normalizer = strings.NewReplacer(" ", "_", "-", "", "'", "")
+
 func norm(s string) string {
-	return strings.NewReplacer(" ", "_", "-", "", "'", "").Replace(strings.ToLower(strings.TrimSpace(s)))
+	return normalizer.Replace(strings.ToLower(strings.TrimSpace(s)))
 }
 
 var categories = map[string]string{"todo": "todo", "to_do": "todo", "new": "todo", "in_progress": "in_progress",

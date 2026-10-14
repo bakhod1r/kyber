@@ -120,7 +120,16 @@ func (r *Repository) ListByProject(ctx context.Context, project string, f domain
 		where += fmt.Sprintf(` AND EXISTS (SELECT 1 FROM unnest(labels) l
 			WHERE replace(replace(replace(lower(btrim(l)), ' ', '_'), '-', ''), '''', '') = ANY($%d))`, len(args))
 	}
-	rows, err := r.pool.Query(ctx, selectCols+" "+where+` ORDER BY rank, number`, args...)
+	page := ""
+	if f.Limit > 0 {
+		args = append(args, f.Limit)
+		page += fmt.Sprintf(` LIMIT $%d`, len(args))
+	}
+	if f.Offset > 0 {
+		args = append(args, f.Offset)
+		page += fmt.Sprintf(` OFFSET $%d`, len(args))
+	}
+	rows, err := r.pool.Query(ctx, selectCols+" "+where+` ORDER BY rank, number`+page, args...)
 	if err != nil {
 		return nil, err
 	}

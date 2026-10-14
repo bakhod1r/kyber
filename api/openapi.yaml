@@ -2576,10 +2576,13 @@ paths:
           schema: { type: string }
         - { name: fix_version, in: query, description: "Issues planned into this version.", schema: { type: string } }
         - { name: label, in: query, description: "Issues carrying this label.", schema: { type: string } }
+        - { name: limit, in: query, description: "Page size (1-500); omitted = every issue.", schema: { type: integer, minimum: 1, maximum: 500 } }
+        - { name: offset, in: query, description: "Issues to skip, in rank order.", schema: { type: integer, minimum: 0 } }
       responses:
         "200": { description: Ordered by backlog rank., content: { application/json: { schema: { $ref: "#/components/schemas/IssueList" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "422": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createIssue

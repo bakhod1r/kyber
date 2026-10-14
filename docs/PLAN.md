@@ -248,7 +248,7 @@ Har bir milestone `awesome-agents` zanjiri bo'yicha o'tadi: `/design` → implem
 - [x] F15 Realtime — MQTT (ADR-0013; chat SSE→MQTT ko'chirildi), F12 email/Telegram + watchers, F13 attachments (local/S3)
 - [x] F17 Webhooks (HMAC imzo, outbox retry — ADR-0014), F1 OIDC + GitHub sign-in (ADR-0015)
 - [x] F16 Burndown, velocity; F19 i18n — 25 til (en/uz/ru to'liq), RTL; 10 tema, wallpaperlar
-- [~] Load test: `loadtest/api.js` (k6) bor; p95 natijasi hali o'lchanib hujjatlanmagan
+- [x] Load test (k6): 10k issue, 50 RPS → p95 78.9 ms (`loadtest/README.md`; ro'yxat sahifalash va JQL tezlashtirish bilan)
 
 ### M3 — v1.0
 - [x] Saved filters, swimlanes, quick filters, velocity
@@ -257,8 +257,9 @@ Har bir milestone `awesome-agents` zanjiri bo'yicha o'tadi: `/design` → implem
 - [x] Permission schemes, issue-level security; audit log UI; RLS (ADR-0010)
 - [x] F18 Jira import (CSV); F17 GitHub integratsiya (commit/PR `KYB-12` → Development paneli)
 - [x] Helm chart (`deploy/helm/kyber`), backup/restore (`docs/operations/backup.md`)
-  - [ ] upgrade yo'riqnomasi
-- [ ] Pentest + `/audit`, `/ship` gate; docs sayt
+  - [x] upgrade yo'riqnomasi (`docs/operations/upgrade.md`)
+- [x] Ichki xavfsizlik ko'rigi (`docs/operations/security-review-2026-10.md`), `make audit`, `make ship` gate (`docs/operations/release.md`), docs sayt (`site/`)
+  - [ ] tashqi pentest
 - [x] Umumiy API va upload rate limiting (foydalanuvchi bo'yicha, Redis bilan replikalararo)
 - [x] MCP OAuth 2.1 (ADR-0016: discovery, dynamic registration, PKCE, consent sahifasi)
 - [x] SAML 2.0 sign-in va SCIM 2.0 provisioning (ADR-0017)

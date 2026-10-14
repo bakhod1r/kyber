@@ -228,7 +228,16 @@ type ListQuery struct {
 	Label      string
 	// Types, Priorities and LabelKeys keep issues matching any of their values (JQL pushdown).
 	Types, Priorities, LabelKeys []string
+	// Limit / Offset page the result (Limit 0 = all); a page can be shorter than Limit when it
+	// holds issues the actor may not see.
+	Limit, Offset int
 }
+
+// MaxPage bounds one page of an issue list.
+const MaxPage = 500
+
+// ErrInvalidPage: limit must be 1-MaxPage and offset not negative.
+var ErrInvalidPage = errors.New("limit must be 1-500 and offset at least 0")
 
 func (s *Service) List(ctx context.Context, actor, project string, q ListQuery) ([]*domain.Issue, error) {
 	if err := s.access.Can(ctx, actor, project, PermBrowse, nil); err != nil {
@@ -267,6 +276,10 @@ func (s *Service) List(ctx context.Context, actor, project string, q ListQuery) 
 		}
 	}
 	f.LabelKeys = q.LabelKeys
+	if q.Limit < 0 || q.Limit > MaxPage || q.Offset < 0 {
+		return nil, ErrInvalidPage
+	}
+	f.Limit, f.Offset = q.Limit, q.Offset
 	list, err := s.issues.ListByProject(ctx, project, f)
 	if err != nil {
 		return nil, err

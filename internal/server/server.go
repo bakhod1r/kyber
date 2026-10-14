@@ -744,7 +744,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	webhookHTTP.RegisterPublic(mux)
 	mux.Handle("/api/v1/", auth.RequireAuth(d.rateLimit(log)(tenancy.RequireMember(audit.Record(problemFallback(otel.Routed(api)))))))
 	mux.Handle("/", web.Handler(web.Dist()))
-	return otel.Middleware(observe(log, m, recoverer(log, tenancy.Resolve(otel.Routed(mux)))))
+	return otel.Middleware(observe(log, m, recoverer(log, hsts(d.cookieSecure, tenancy.Resolve(otel.Routed(mux))))))
 }
 
 // rateLimit limits each user's API requests: per process, or across replicas with Redis.
@@ -768,6 +768,17 @@ func loggedPath(p string) string {
 		return "/api/v1/hooks/…"
 	}
 	return p
+}
+
+// hsts tells browsers to use HTTPS only, when Kyber is served over HTTPS (secure cookies).
+func hsts(on bool, next http.Handler) http.Handler {
+	if !on {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func observe(log *slog.Logger, m *metrics.HTTP, next http.Handler) http.Handler {

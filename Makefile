@@ -1,4 +1,4 @@
-.PHONY: test cover-strict lint run build docker cover web web-test e2e screenshots docs
+.PHONY: test cover-strict lint run build docker cover web web-test e2e screenshots docs audit ship
 
 COVER_MIN ?= 85
 
@@ -46,3 +46,12 @@ docker:
 docs: ## build the documentation site (VitePress) into site/.vitepress/dist
 	npm --prefix site ci --no-audit --no-fund
 	npm --prefix site run build
+
+audit: ## dependency and static security checks (govulncheck needs vuln.go.dev)
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	go run github.com/securego/gosec/v2/cmd/gosec@v2.22.4 -quiet -exclude=G101,G104,G115,G304,G505 -exclude-dir=web -exclude-dir=site ./...
+	npm --prefix web audit --omit=dev
+	npm --prefix site audit --omit=dev
+
+ship: lint web web-test test cover-strict build e2e docs audit ## release gate: everything must pass before tagging (docs/operations/release.md)
+	@echo "ship gate passed"

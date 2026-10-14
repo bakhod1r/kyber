@@ -42,6 +42,7 @@ export default defineConfig({
         items: [
           { text: 'Helm chart', link: '/operations/helm' },
           { text: 'Backup & restore', link: '/operations/backup' },
+          { text: 'Upgrading', link: '/operations/upgrade' },
           { text: 'Rate limiting', link: '/operations/rate-limiting' },
           { text: 'Security notes', link: '/operations/security' },
         ],
