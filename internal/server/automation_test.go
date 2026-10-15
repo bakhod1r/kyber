@@ -34,10 +34,11 @@ func TestAutomationRules(t *testing.T) {
 		dev.do("POST", "/api/v1/issues/KYB-2/transitions", map[string]string{"to": "in_progress"}) // not a bug
 
 		_, devMe := dev.do("GET", "/api/v1/me", nil)
-		got := eventuallyJSON(t, lead, "/api/v1/issues/KYB-1", func(m map[string]any) bool { return m["assignee_id"] == devMe["id"] })
-		if labels, _ := got["labels"].([]any); len(labels) != 1 || labels[0] != "triage" {
-			t.Fatalf("labels = %v", got["labels"])
-		}
+		// The actions run in order, so wait for the last field one of them sets, not only the first.
+		eventuallyJSON(t, lead, "/api/v1/issues/KYB-1", func(m map[string]any) bool {
+			labels, _ := m["labels"].([]any)
+			return m["assignee_id"] == devMe["id"] && len(labels) == 1 && labels[0] == "triage"
+		})
 		eventuallyJSON(t, lead, "/api/v1/issues/KYB-1/comments", func(m map[string]any) bool {
 			items, _ := m["items"].([]any)
 			return len(items) == 1 && strings.Contains(items[0].(map[string]any)["body"].(string), "Picked up automatically")
