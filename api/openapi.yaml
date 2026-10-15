@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.72.0
+  version: 0.74.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -2458,6 +2458,143 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "410": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/automation/rules:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listAutomationRules
+      description: The project's automation rules, by name (any member may read them).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/AutomationRule" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createAutomationRule
+      description: |
+        Add a rule (project admins). When a person causes the trigger event on an issue of the project and the issue
+        matches the JQL condition, the actions run in order as the rule's creator, with their permissions. Changes made
+        by automation never trigger rules, so rules cannot loop.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AutomationRuleInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/AutomationRule" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/automation/runs:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listAutomationRuns
+      description: The project's 50 most recent rule runs, newest first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [rule_id, issue_key, at, ok, detail]
+                      additionalProperties: false
+                      properties:
+                        rule_id: { type: string }
+                        issue_key: { type: string }
+                        at: { type: string, format: date-time }
+                        ok: { type: boolean }
+                        detail: { type: string, description: "What was done, or why it failed" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/automation/rules/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: updateAutomationRule
+      description: Redefine a rule and turn it on or off (project admins); `version` must be the current one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/AutomationRuleInput" }
+                - type: object
+                  required: [version]
+                  properties:
+                    version: { type: integer }
+                    enabled: { type: boolean }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AutomationRule" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteAutomationRule
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/issues/bulk:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    post:
+      operationId: bulkChangeIssues
+      description: |
+        Apply one change to up to 100 issues of the project (G9). Each issue is changed as it would be alone, so
+        permissions and workflow transitions apply per issue; `results` lists every issue's outcome (a failure does
+        not stop the others). Omitted fields stay unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keys]
+              properties:
+                keys: { type: array, minItems: 1, maxItems: 100, items: { type: string } }
+                status: { type: string, description: A workflow status id }
+                assignee_id: { type: string, description: "A user id; empty = unassigned" }
+                sprint_id: { type: string, description: "A sprint id; empty = the backlog" }
+                add_labels: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: Every issue's outcome, in the order given (duplicates once)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [key, ok]
+                      additionalProperties: false
+                      properties:
+                        key: { type: string }
+                        ok: { type: boolean }
+                        code: { type: string, description: "The problem code a single request would return" }
+                        error: { type: string }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "422": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/workflow:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -4630,6 +4767,37 @@ components:
         invited_by: { type: string, description: The inviting admin's user id. }
         created_at: { type: string, format: date-time }
         expires_at: { type: string, format: date-time }
+    AutomationAction:
+      type: object
+      required: [kind, value]
+      additionalProperties: false
+      properties:
+        kind: { type: string, enum: [transition, assign, add_label, comment] }
+        value: { type: string, description: "status id; user id, reporter or unassigned; a label; or comment text" }
+    AutomationRuleInput:
+      type: object
+      required: [name, trigger, actions]
+      properties:
+        name: { type: string }
+        trigger: { type: string, enum: [issue.created, issue.transitioned, comment.added, issue.assigned] }
+        to_status: { type: string, description: "issue.transitioned only: the status reached (empty = any)" }
+        condition: { type: string, description: JQL the issue must match (empty = always) }
+        actions: { type: array, minItems: 1, maxItems: 5, items: { $ref: "#/components/schemas/AutomationAction" } }
+    AutomationRule:
+      type: object
+      required: [id, project_key, owner_id, name, trigger, to_status, condition, actions, enabled, version]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        project_key: { type: string }
+        owner_id: { type: string, description: The rule runs as this user }
+        name: { type: string }
+        trigger: { type: string }
+        to_status: { type: string }
+        condition: { type: string }
+        actions: { type: array, items: { $ref: "#/components/schemas/AutomationAction" } }
+        enabled: { type: boolean }
+        version: { type: integer }
     Member:
       type: object
       required: [user_id, email, name, role]

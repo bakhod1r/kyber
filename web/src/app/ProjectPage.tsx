@@ -23,10 +23,12 @@ import { Docs } from "../contexts/docs/ui/Docs";
 import { Forms } from "../contexts/form/ui/Forms";
 import { Goals } from "../contexts/goal/ui/Goals";
 import { Webhooks } from "../contexts/webhook/ui/Webhooks";
+import { Automation } from "../contexts/automation/ui/Automation";
 import { Development } from "../contexts/webhook/ui/Development";
 import { Timeline } from "../contexts/issue/ui/Timeline";
 import { ProjectSummary } from "../contexts/insights/ui/ProjectSummary";
 import { IssueList } from "../contexts/search/ui/IssueList";
+import { BulkEdit } from "../contexts/issue/ui/BulkEdit";
 import { type QuickFilterState, QuickFilters } from "../contexts/search/ui/QuickFilters";
 import { useState } from "react";
 
@@ -38,7 +40,7 @@ function ProjectDocs({ projectKey }: { projectKey: string }) {
 }
 import { useT } from "../shared/i18n/i18n";
 
-export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "docs" | "forms" | "announcements" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" | "webhooks" }) {
+export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "docs" | "forms" | "announcements" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" | "webhooks" | "automation" }) {
   const t = useT();
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
@@ -86,6 +88,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         <NavLink to={`/projects/${encodeURIComponent(key)}/fields`}>{t("Fields")}</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/permissions`}>{t("Permissions")}</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/notifications`}>{t("Notifications")}</NavLink>
+        <NavLink to={`/projects/${encodeURIComponent(key)}/automation`}>{t("Automation")}</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/webhooks`}>{t("Webhooks")}</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/import`}>{t("Import")}</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/audit`}>{t("Audit")}</NavLink>
@@ -93,7 +96,9 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
       <div className="project-grid">
         {view === "summary" && <ProjectSummary projectKey={key} />}
         {view === "timeline" && <Timeline projectKey={key} onOpen={setOpen} />}
-        {view === "list" && <IssueList projectKey={key} onOpen={setOpen} />}
+        {view === "list" && (
+          <IssueList projectKey={key} onOpen={setOpen} bulk={(keys, done) => <BulkEdit projectKey={key} keys={keys} onDone={done} />} />
+        )}
         {view === "board" && (
           <div>
             <QuickFilters projectKey={key} value={filters} onChange={setFilters} onKeys={setVisible} />
@@ -115,6 +120,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         {view === "permissions" && <PermissionScheme projectKey={key} />}
         {view === "notifications" && <TelegramGroups projectKey={key} />}
         {view === "webhooks" && <Webhooks projectKey={key} />}
+        {view === "automation" && <Automation projectKey={key} />}
         <Members projectKey={key} />
       </div>
       {open && (

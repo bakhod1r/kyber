@@ -84,6 +84,8 @@ const (
 	CodeFieldConflict          = "FIELD_CONFLICT"
 	CodeGoalNotFound           = "GOAL_NOT_FOUND"
 	CodeGoalConflict           = "GOAL_CONFLICT"
+	CodeRuleNotFound           = "AUTOMATION_RULE_NOT_FOUND"
+	CodeRuleConflict           = "AUTOMATION_RULE_CONFLICT"
 	CodePageNotFound           = "PAGE_NOT_FOUND"
 	CodePageConflict           = "PAGE_CONFLICT"
 	CodeFormNotFound           = "FORM_NOT_FOUND"
@@ -195,6 +197,8 @@ var codes = []code{
 	{CodeFieldConflict, "6094", 409, "Another field has this name, or someone else changed it. Reload and try again.", "Bu nomli maydon bor yoki uni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Поле с таким именем уже есть или его изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeGoalNotFound, "6095", 404, "Goal not found.", "Maqsad topilmadi.", "Цель не найдена.", errorx.CategoryBusiness},
 	{CodeGoalConflict, "6096", 409, "Someone else changed this goal. Reload and try again.", "Maqsadni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Цель изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
+	{CodeRuleNotFound, "6121", 404, "Automation rule not found.", "Avtomatlashtirish qoidasi topilmadi.", "Правило автоматизации не найдено.", errorx.CategoryBusiness},
+	{CodeRuleConflict, "6122", 409, "Someone else changed this rule. Reload and try again.", "Qoidani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Правило изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodePageNotFound, "6085", 404, "Page not found.", "Sahifa topilmadi.", "Страница не найдена.", errorx.CategoryBusiness},
 	{CodePageConflict, "6086", 409, "Someone else changed this page. Reload and try again.", "Sahifani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Страницу изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeFormNotFound, "6087", 404, "Form not found.", "Forma topilmadi.", "Форма не найдена.", errorx.CategoryBusiness},

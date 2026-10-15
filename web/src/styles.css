@@ -743,8 +743,8 @@ circle.wb-handle { cursor: move; }
   .issue-table thead th { border: 0; padding: 0; }
   .issue-table tbody tr { display: block; padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
   .issue-table td { display: inline-block; border: 0; padding: 0 0.6rem 0 0; }
-  .issue-table td:nth-child(2) { display: block; margin: 0.15rem 0; color: var(--text); }
-  .issue-table td:nth-child(n + 3) { font-size: 0.8rem; color: var(--muted); }
+  .issue-table td.title { display: block; margin: 0.15rem 0; color: var(--text); }
+  .issue-table td.meta { font-size: 0.8rem; color: var(--muted); }
   /* Permission check boxes are big enough to tap; the table scrolls inside its panel. */
   .permissions { overflow-x: auto; }
   .perm-table input[type="checkbox"] { width: 1.4rem; height: 1.4rem; }
@@ -768,3 +768,24 @@ circle.wb-handle { cursor: move; }
 .badge { margin-left: 0.5rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.1rem 0.45rem;
   border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
 .panel.inline .template-pick { grid-column: 1 / -1; }
+/* G8 automation */
+.automation { display: grid; gap: 0.75rem; }
+.automation h3 { margin: 0.75rem 0 0; font-size: 0.95rem; }
+.automation .rules, .automation .runs { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.4rem; }
+.automation .rules li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.75rem; align-items: center;
+  padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.automation .rules li.off { opacity: 0.6; }
+.automation .rules small { display: block; overflow-wrap: anywhere; }
+.automation .runs li { font-size: 0.85rem; overflow-wrap: anywhere; }
+.automation .runs li.failed { color: var(--danger); }
+.rule-form { display: grid; gap: 0.6rem; max-width: 40rem; }
+.rule-actions { border: 1px solid var(--border); border-radius: var(--radius); display: grid; gap: 0.5rem; padding: 0.6rem 0.9rem; }
+.rule-action { display: grid; grid-template-columns: 15rem minmax(0, 1fr) auto; gap: 0.5rem; }
+.rule-form > button[type="submit"], .rule-actions > button { justify-self: start; }
+@media (max-width: 600px) { .rule-action { grid-template-columns: 1fr; } }
+/* G9 bulk change */
+.bulk-edit { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.6rem; align-items: end; margin-bottom: 0.75rem; }
+.bulk-edit > strong, .bulk-edit > .row, .bulk-edit > .bulk-result, .bulk-edit > .error { grid-column: 1 / -1; }
+.bulk-edit .row { display: flex; gap: 0.5rem; }
+.bulk-result ul { margin: 0.25rem 0 0; padding-left: 1.1rem; color: var(--danger); font-size: 0.85rem; }
+.issue-table .select { width: 2rem; }

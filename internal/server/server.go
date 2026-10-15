@@ -2,6 +2,12 @@
 package server
 
 import (
+	automationapp "github.com/bakhod1r/kyber/internal/automation/application"
+	automationdomain "github.com/bakhod1r/kyber/internal/automation/domain"
+	automationacl "github.com/bakhod1r/kyber/internal/automation/infrastructure/acl"
+	automationmemory "github.com/bakhod1r/kyber/internal/automation/infrastructure/memory"
+	automationpg "github.com/bakhod1r/kyber/internal/automation/infrastructure/postgres"
+	automationhttp "github.com/bakhod1r/kyber/internal/automation/interfaces/httpapi"
 	"net/netip"
 
 	"context"
@@ -203,6 +209,7 @@ type deps struct {
 	schemes        accessdomain.SchemeRepository
 	filters        searchdomain.FilterRepository
 	goals          goaldomain.Repository
+	rules          automationdomain.Repository
 	pages          docsdomain.Repository
 	docComments    docsdomain.Comments
 	attachments    attdomain.Repository
@@ -414,7 +421,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		projectHooks: hooks.Webhooks(), whDeliveries: hooks.Deliveries(), devLinks: hooks.Links(),
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), reactions: issuememory.NewReactionRepository(), worklogs: issuememory.NewWorklogRepository(), fields: issuememory.NewCustomFieldRepository(),
-		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: pageRepo, docComments: docCommentRepo, attachments: attmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
+		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), rules: automationmemory.NewRepository(), pages: pageRepo, docComments: docCommentRepo, attachments: attmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
 		invitations: projectmemory.NewInvitations(), mappings: importermemory.NewRepository(), importLock: importermemory.NewImportLock(), workspaces: workspacememory.NewRepository(),
@@ -463,7 +470,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		projectHooks: whpg.NewWebhooks(pool), whDeliveries: whpg.NewDeliveries(pool), devLinks: whpg.NewLinks(pool),
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), reactions: issuepg.NewReactionRepository(pool), worklogs: issuepg.NewWorklogRepository(pool), fields: issuepg.NewCustomFieldRepository(pool),
-		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), docComments: docspg.NewComments(pool), attachments: attpg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
+		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), rules: automationpg.NewRepository(pool), pages: docspg.NewRepository(pool), docComments: docspg.NewComments(pool), attachments: attpg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
 		activity: insightspg.NewRepository(pool), invitations: projectpg.NewInvitations(pool), mappings: importerpg.NewRepository(pool), importLock: importerpg.NewImportLock(pool), workspaces: workspacepg.NewRepository(pool),
@@ -525,6 +532,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	search := searchapp.NewService(searchapp.Deps{Projects: searchacl.NewProjects(projects), Issues: searchacl.NewIssues(issues),
 		Users: searchacl.NewUsers(d.users), Planning: searchacl.NewPlanning(agile), Filters: d.filters, NewID: id.New})
 	goals := goalapp.NewService(goalapp.Deps{Projects: goalacl.NewProjects(projects), Issues: goalacl.NewIssues(search), Goals: d.goals, NewID: id.New})
+	automation := automationapp.NewService(automationapp.Deps{Projects: automationacl.NewProjects(projects), Issues: automationacl.NewIssues(issues),
+		Conditions: automationacl.NewConditions(search), Rules: d.rules, NewID: id.New, Now: time.Now, Log: log})
 	pages := docsapp.NewService(docsapp.Deps{Projects: docsacl.NewProjects(projects), Pages: d.pages, Comments: d.docComments, NewID: id.New, Now: time.Now})
 	forms := formapp.NewService(formapp.Deps{Projects: formacl.NewProjects(projects), Issues: formacl.NewIssues(issues), Forms: d.forms, NewID: id.New})
 	insights := insightsapp.NewService(insightsapp.Deps{
@@ -627,6 +636,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 	for _, name := range []string{"issue.work_logged", "issue.worklog_removed"} {
 		relay.Handle(name, issues.OnWorklogEvent)
 	}
+	for _, t := range automationdomain.Triggers { // G8: automation rules react to people's issue changes
+		relay.Handle(string(t), automation.OnEvent)
+	}
 	relay.Handle("sprint.completed", issues.OnSprintCompleted) // carry unfinished issues over (QA-05)
 	for _, name := range []string{"version.released", "version.deleted"} {
 		relay.Handle(name, issues.OnVersionEvent)
@@ -691,6 +703,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	accesshttp.New(access, log).Register(api)
 	searchhttp.New(search, log).Register(api)
 	goalhttp.New(goals, log).Register(api)
+	automationhttp.New(automation, log).Register(api)
 	docshttp.New(pages, log).Register(api)
 	if d.blobs == nil {
 		d.blobs = attmemory.NewBlobs()

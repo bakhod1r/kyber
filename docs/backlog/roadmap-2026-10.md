@@ -82,5 +82,5 @@ From the gap review of unfinished items (QA limitations, ADR follow-ups). Each f
 | G5 ✅ | UI review | CSP for the MQTT worker, responsive header/board/tables, uz/ru labels, dates in the chosen language | — |
 | G6 ✅ | Daily email digest (B9) | per-user setting; 08:00 in the user's time zone, once a day across replicas; Telegram stays immediate | 0087 |
 | G7 ✅ | Project archive and templates (B10) | archived projects are read-only (Access context) until an admin restores them; Kanban, Scrum and bug-tracking templates | 0088 |
-| G8 | Automation rules | trigger → condition (JQL) → action, through the outbox | — |
-| G9 | Bulk operations | transition, assign, move to sprint, label many issues at once | — |
+| G8 ✅ | Automation rules | trigger → condition (JQL) → actions (transition, assign, label, comment) as the rule owner, through the outbox; only people's changes trigger rules (no loops); recent runs | 0089 |
+| G9 ✅ | Bulk operations | status, assignee, sprint and labels for up to 100 issues; per-issue outcome; List view selection | — |
