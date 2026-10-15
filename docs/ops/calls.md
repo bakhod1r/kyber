@@ -95,8 +95,9 @@ With `KYBER_DATABASE_URL` set, realtime events (chat messages, typing, calls, si
 cross replicas through PostgreSQL `LISTEN/NOTIFY` on the channel `kyber_realtime`; events larger than
 NOTIFY's 8 kB (SDP offers, big whiteboard batches) go through the `realtime_spill` table, which keeps rows for
 minutes. No sticky sessions are needed. A browser that reconnects to another replica reloads what it shows
-instead of replaying missed events (event ids are per replica). Presence (`GET /api/v1/presence`) only knows
-the streams of the replica that answers — a known limit.
+instead of replaying missed events (event ids are per replica). Presence (`GET /api/v1/presence`) covers every
+replica: each one beats its connected users into the `presence` table every 15 s, and a crashed replica's users
+go offline within 45 s (ADR-0013, S105).
 
 The reverse proxy must pass WebSocket upgrades on `/api/v1/mqtt` (the web app's only realtime connection,
 S88) and keep idle timeouts above MQTT's keepalive. It must not buffer `text/event-stream` responses

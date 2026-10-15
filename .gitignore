@@ -12,3 +12,4 @@ screenshots.log
 /.claude/worktrees/
 site/.vitepress/dist/
 site/.vitepress/cache/
+e2e-replica*.log

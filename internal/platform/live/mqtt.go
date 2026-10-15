@@ -21,6 +21,7 @@ import (
 	"github.com/mochi-mqtt/server/v2/packets"
 
 	"github.com/bakhod1r/kyber/internal/platform/auth"
+	"github.com/bakhod1r/kyber/internal/platform/presence"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
@@ -54,13 +55,14 @@ type identity struct{ user, workspace string }
 // workspace's project topics, and every delivery is re-authorized, so a revoked membership stops
 // hints at once, and a deactivated user is disconnected on their next delivery. The server publishes through the inline client.
 type Broker struct {
-	srv   *mqtt.Server
-	can   CanBrowse
-	login Login
-	alive Active
-	mu    sync.Mutex
-	who   map[*mqtt.Client]identity
-	up    websocket.Upgrader
+	srv      *mqtt.Server
+	can      CanBrowse
+	login    Login
+	alive    Active
+	mu       sync.Mutex
+	who      map[*mqtt.Client]identity
+	onChange func() // S105: someone connected or left (presence.Roster.Changed)
+	up       websocket.Upgrader
 }
 
 const wsListener = "ws"
@@ -102,6 +104,26 @@ func (b *Broker) PublishTo(workspace string, users []string, typ string, data []
 	for _, u := range users {
 		_ = b.srv.Publish(UserTopic(workspace, u), payload, false, 0)
 	}
+}
+
+// OnChange is called whenever a client connects or disconnects. Set it before serving.
+func (b *Broker) OnChange(f func()) { b.onChange = f }
+
+func (b *Broker) changed() {
+	if b.onChange != nil {
+		b.onChange()
+	}
+}
+
+// Seats lists the users connected to this broker (S105 presence across replicas).
+func (b *Broker) Seats() []presence.Seat {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := make([]presence.Seat, 0, len(b.who))
+	for _, id := range b.who {
+		out = append(out, presence.Seat{Workspace: id.workspace, User: id.user})
+	}
+	return out
 }
 
 // Online lists which of users have a client connected in workspace (in the given order).
@@ -226,6 +248,7 @@ func (h *hook) OnConnectAuthenticate(cl *mqtt.Client, pk packets.Packet) bool {
 	h.b.mu.Lock()
 	h.b.who[cl] = id
 	h.b.mu.Unlock()
+	h.b.changed()
 	return true
 }
 
@@ -233,6 +256,7 @@ func (h *hook) OnDisconnect(cl *mqtt.Client, _ error, _ bool) {
 	h.b.mu.Lock()
 	delete(h.b.who, cl)
 	h.b.mu.Unlock()
+	h.b.changed()
 }
 
 // OnACLCheck: clients never publish; they may subscribe to project topics ("+" may stand for

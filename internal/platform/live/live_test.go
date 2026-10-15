@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/auth"
 	"github.com/bakhod1r/kyber/internal/platform/live"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
+	"github.com/bakhod1r/kyber/internal/platform/presence"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
@@ -306,5 +308,28 @@ func TestDeactivatedUsersAreDisconnected(t *testing.T) {
 	}
 	if got := b.Online(ws, []string{"ann"}); len(got) != 0 {
 		t.Fatalf("online = %v", got)
+	}
+}
+
+// S105: the broker lists its clients as presence seats and says when they connect or leave.
+func TestSeatsAndChanges(t *testing.T) {
+	b := brokerWith(t, func(context.Context, string) bool { return true })
+	var changes atomic.Int32
+	b.OnChange(func() { changes.Add(1) })
+	addr := freeAddr(t)
+	if err := b.ListenTCP(addr); err != nil {
+		t.Fatal(err)
+	}
+	_, c := subscribe(t, paho.NewClientOptions().AddBroker("tcp://"+addr).SetUsername(ws).SetPassword("ann-token").SetClientID("s"), live.Topic(ws, "KYB"))
+	if got := b.Seats(); len(got) != 1 || got[0] != (presence.Seat{Workspace: ws, User: "ann"}) {
+		t.Fatalf("seats = %v", got)
+	}
+	c.Disconnect(0)
+	deadline := time.Now().Add(3 * time.Second)
+	for len(b.Seats()) > 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(b.Seats()) != 0 || changes.Load() < 2 {
+		t.Fatalf("after disconnect: seats %v, changes %d", b.Seats(), changes.Load())
 	}
 }

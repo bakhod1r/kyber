@@ -41,3 +41,28 @@ test("chat and a huddle across two replicas", async ({ browser, baseURL }) => {
     .poll(() => b.getByLabel("Ali's camera").evaluate((v: HTMLVideoElement) => v.videoWidth * (v.readyState >= 2 ? 1 : 0)), { timeout: 15_000 })
     .toBeGreaterThan(0); // the signaling crossed replicas (large events take the spill table: unit-tested)
 });
+
+// S105: presence is shared — Ali's open tab on replica one shows him online to Bobur on replica two,
+// and closing it takes him offline there too.
+test("presence across two replicas", async ({ browser, baseURL }) => {
+  const id = Date.now().toString(36).slice(-5);
+  const signIn = async (who: string, url: string) => {
+    const ctx = await browser.newContext({ baseURL: url });
+    const email = `${who}-${id}@example.com`;
+    const post = (path: string, data: unknown) => ctx.request.post(path, { data, headers: { "Content-Type": "application/json" } });
+    await post("/api/v1/auth/signup", { email, name: who, password: "a very long password" });
+    await post("/api/v1/auth/login", { email, password: "a very long password" });
+    const me = await (await ctx.request.get("/api/v1/me")).json();
+    return { ctx, id: me.id as string };
+  };
+  const ali = await signIn("AliP", baseURL!);
+  const bobur = await signIn("BoburP", second!);
+  const online = async () => (await (await bobur.ctx.request.get(`/api/v1/presence?user_id=${ali.id}`)).json()).online as string[];
+  expect(await online()).toEqual([]);
+
+  const page = await ali.ctx.newPage();
+  await page.goto("/"); // the app opens its MQTT connection on replica one
+  await expect.poll(online, { timeout: 20_000 }).toEqual([ali.id]);
+  await page.close();
+  await expect.poll(online, { timeout: 20_000 }).toEqual([]);
+});
