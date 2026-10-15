@@ -86,6 +86,8 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await expect(page.getByText("Sprint 1")).toBeVisible();
   await expect(page.getByText("— Ship v1")).toBeVisible();
   const ip = page.getByRole("region", { name: "In Progress" });
+  // Bring the target column into view first: a scroll during the drag cancels it.
+  await page.getByRole("region", { name: "Done" }).scrollIntoViewIfNeeded();
   await ip.getByText("Ship the board").dragTo(page.getByRole("region", { name: "Done" }));
   await expect(page.getByRole("region", { name: "Done" }).getByText("Ship the board")).toBeVisible();
   // Complete: the unfinished issue returns to the backlog.
@@ -96,10 +98,13 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await expect(page.getByRole("region", { name: "Backlog" }).getByText("Write release notes")).toBeVisible();
   await page.getByRole("link", { name: "Active sprints", exact: true }).click();
 
-  // Inviting an unknown email surfaces the server error.
+  // Inviting an address without an account creates an invitation; without SMTP the admin gets the link (B1).
   await page.getByLabel("Invite by email").fill("nobody@example.com");
   await page.getByRole("button", { name: "Invite" }).click();
-  await expect(page.getByRole("alert")).toContainText("no user with that email");
+  await expect(page.getByRole("status").filter({ hasText: "share this link with nobody@example.com" })).toBeVisible();
+  const link = await page.getByRole("textbox", { name: "Invitation link" }).inputValue();
+  expect(link).toMatch(/\/invite\/[0-9a-f]{64}$/);
+  await expect(page.getByRole("list", { name: "Pending invitations" }).getByText("nobody@example.com")).toBeVisible();
 
   await page.getByRole("button", { name: "Log out" }).click();
   await expect(page.getByRole("heading", { name: "Log in to Kyber" })).toBeVisible();

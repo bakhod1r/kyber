@@ -108,7 +108,7 @@ export function SearchPage() {
           {results.data && (
             <>
               <p className="muted">{results.data.total === 1 ? t("1 issue") : t("{n} issues", { n: results.data.total })}</p>
-              <table className="versions-table">
+              <table className="versions-table issue-table">
                 <thead>
                   <tr>
                     <th scope="col">{t("Key")}</th>

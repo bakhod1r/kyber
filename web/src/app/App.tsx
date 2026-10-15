@@ -24,6 +24,7 @@ import { AccessTokens } from "../contexts/identity/ui/AccessTokens";
 import { OAuthConsent } from "../contexts/identity/ui/OAuthConsent";
 import { AppearanceSettings } from "../shared/ui/AppearanceSettings";
 import { ProjectsPage } from "../contexts/project/ui/ProjectsPage";
+import { InvitePage } from "../contexts/project/ui/InvitePage";
 import { identityUseCases } from "../contexts/identity/application";
 import { SearchPage } from "../contexts/search/ui/SearchPage";
 import { useT } from "../shared/i18n/i18n";
@@ -55,6 +56,13 @@ function RequireUser({ children }: { children: ReactNode }) {
   return <Layout user={me.data}>{children}</Layout>;
 }
 
+/** Invitation links work signed in or out: visitors are sent to sign in or sign up and come back (B1). */
+function Invite() {
+  const me = useMe();
+  if (me.isPending) return null;
+  return <InvitePage signedIn={!!me.data} />;
+}
+
 /** "/" is the landing page for visitors and the project list for signed-in users. */
 function Home() {
   const t = useT();
@@ -74,6 +82,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<AuthPage mode="login" />} />
+      <Route path="/invite/:token" element={<Invite />} />
       <Route path="/signup" element={<AuthPage mode="signup" />} />
       <Route path="/" element={<Home />} />
       <Route path="/admin" element={<RequireUser><AdminPage /></RequireUser>} />

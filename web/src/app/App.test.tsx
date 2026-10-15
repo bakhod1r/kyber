@@ -112,14 +112,15 @@ describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
       "GET /api/v1/projects": { status: 200, body: { items: [{ id: "p-1", key: "KYB", name: "Kyber" }] } },
       "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [] } },
       "GET /api/v1/projects/KYB/members": { status: 200, body: { items: [{ user_id: "u-1", email: "ali@x.uz", name: "Ali", role: "admin" }] } },
-      "POST /api/v1/projects/KYB/members": { status: 204 },
+      "GET /api/v1/projects/KYB/invitations": { status: 200, body: { items: [] } },
+      "POST /api/v1/projects/KYB/invitations": { status: 200, body: { added: true } },
     });
     renderWithProviders(<AppRoutes />, "/projects/KYB");
     await userEvent.type(await screen.findByLabelText("Invite by email"), "bob@x.uz");
     await userEvent.selectOptions(screen.getByLabelText("Role"), "viewer");
     await userEvent.click(screen.getByRole("button", { name: "Invite" }));
     await waitFor(() =>
-      expect(calls.find((c) => c.key === "POST /api/v1/projects/KYB/members")?.body).toEqual({ email: "bob@x.uz", role: "viewer" }),
+      expect(calls.find((c) => c.key === "POST /api/v1/projects/KYB/invitations")?.body).toEqual({ email: "bob@x.uz", role: "viewer" }),
     );
   });
 

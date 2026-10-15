@@ -1,6 +1,20 @@
 // Labels for values the API sends as ids (issue types, priorities, roles, sprint states, permissions) and the
 // navigation added in the UI review. English is the key; uz and ru must translate every key (tsc enforces it).
 export const en = {
+  "{email} was added to the project.": "{email} was added to the project.",
+  "Invitation emailed to {email}.": "Invitation emailed to {email}.",
+  "Email is not configured; share this link with {email}:": "Email is not configured; share this link with {email}:",
+  "Invitation link": "Invitation link",
+  "Pending invitations": "Pending invitations",
+  "No pending invitations.": "No pending invitations.",
+  "until {date}": "until {date}",
+  "Revoke invitation for {email}": "Revoke invitation for {email}",
+  "Join {project}": "Join {project}",
+  "{name} invited {email} to the project {project} as {role}.": "{name} invited {email} to the project {project} as {role}.",
+  "This invitation has expired. Ask for a new one.": "This invitation has expired. Ask for a new one.",
+  "The link works until {date}.": "The link works until {date}.",
+  "Accept invitation": "Accept invitation",
+  "Sign in or sign up with {email} to accept.": "Sign in or sign up with {email} to accept.",
   "in #{channel}": "in #{channel}",
   "in a direct message": "in a direct message",
   "Chat": "Chat",
@@ -41,6 +55,20 @@ export const en = {
 type Key = keyof typeof en;
 
 export const uz: Record<Key, string> = {
+  "{email} was added to the project.": "{email} loyihaga qo‘shildi.",
+  "Invitation emailed to {email}.": "Taklif {email} manziliga yuborildi.",
+  "Email is not configured; share this link with {email}:": "Email sozlanmagan; bu havolani {email} ga yuboring:",
+  "Invitation link": "Taklif havolasi",
+  "Pending invitations": "Kutilayotgan takliflar",
+  "No pending invitations.": "Kutilayotgan takliflar yo‘q.",
+  "until {date}": "{date} gacha",
+  "Revoke invitation for {email}": "{email} uchun taklifni bekor qilish",
+  "Join {project}": "{project} loyihasiga qo‘shilish",
+  "{name} invited {email} to the project {project} as {role}.": "{name} {email} ni {project} loyihasiga {role} sifatida taklif qildi.",
+  "This invitation has expired. Ask for a new one.": "Taklif muddati o‘tgan. Yangisini so‘rang.",
+  "The link works until {date}.": "Havola {date} gacha amal qiladi.",
+  "Accept invitation": "Taklifni qabul qilish",
+  "Sign in or sign up with {email} to accept.": "Qabul qilish uchun {email} bilan kiring yoki ro‘yxatdan o‘ting.",
   "in #{channel}": "#{channel} kanalida",
   "in a direct message": "shaxsiy xabarda",
   "Chat": "Chat",
@@ -79,6 +107,20 @@ export const uz: Record<Key, string> = {
 };
 
 export const ru: Record<Key, string> = {
+  "{email} was added to the project.": "{email} добавлен(а) в проект.",
+  "Invitation emailed to {email}.": "Приглашение отправлено на {email}.",
+  "Email is not configured; share this link with {email}:": "Email не настроен; отправьте эту ссылку {email}:",
+  "Invitation link": "Ссылка-приглашение",
+  "Pending invitations": "Ожидающие приглашения",
+  "No pending invitations.": "Ожидающих приглашений нет.",
+  "until {date}": "до {date}",
+  "Revoke invitation for {email}": "Отозвать приглашение для {email}",
+  "Join {project}": "Присоединиться к {project}",
+  "{name} invited {email} to the project {project} as {role}.": "{name} пригласил(а) {email} в проект {project} с ролью «{role}».",
+  "This invitation has expired. Ask for a new one.": "Срок приглашения истёк. Попросите новое.",
+  "The link works until {date}.": "Ссылка действует до {date}.",
+  "Accept invitation": "Принять приглашение",
+  "Sign in or sign up with {email} to accept.": "Чтобы принять, войдите или зарегистрируйтесь с адресом {email}.",
   "in #{channel}": "в #{channel}",
   "in a direct message": "в личном сообщении",
   "Chat": "Чат",

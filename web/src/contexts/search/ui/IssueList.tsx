@@ -29,7 +29,7 @@ export function IssueList({ projectKey, onOpen }: { projectKey: string; onOpen?:
       {result.data && (
         <>
           <p className="muted">{result.data.total === 1 ? t("1 issue") : t("{n} issues", { n: result.data.total })}</p>
-          <table className="versions-table">
+          <table className="versions-table issue-table">
             <thead>
               <tr>
                 {COLUMNS.map((c) => (

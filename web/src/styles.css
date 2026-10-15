@@ -732,3 +732,28 @@ circle.wb-handle { cursor: move; }
   .issue-form .row { grid-template-columns: 1fr; }
   .topbar button, .topbar .focus-timer { padding: 0.35rem 0.55rem; }
 }
+/* UI review (2): phones */
+.logout-icon { display: none; }
+@media (max-width: 600px) {
+  .logout-icon { display: inline; }
+  .logout-text { display: none; }
+  /* Issue tables become cards: key and title first, type · status · priority underneath. */
+  .issue-table, .issue-table tbody, .issue-table thead { display: block; overflow: visible; }
+  .issue-table thead tr { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .issue-table thead th { border: 0; padding: 0; }
+  .issue-table tbody tr { display: block; padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+  .issue-table td { display: inline-block; border: 0; padding: 0 0.6rem 0 0; }
+  .issue-table td:nth-child(2) { display: block; margin: 0.15rem 0; color: var(--text); }
+  .issue-table td:nth-child(n + 3) { font-size: 0.8rem; color: var(--muted); }
+  /* Permission check boxes are big enough to tap; the table scrolls inside its panel. */
+  .permissions { overflow-x: auto; }
+  .perm-table input[type="checkbox"] { width: 1.4rem; height: 1.4rem; }
+  .invitations li { align-items: center; }
+}
+.invitations h3 { font-size: 0.9rem; margin: 1rem 0 0.5rem; }
+.invitations ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.35rem; }
+.invitations li { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.85rem; overflow-wrap: anywhere; }
+.invitations button { padding: 0.15rem 0.5rem; }
+.invite-result { display: grid; gap: 0.4rem; font-size: 0.85rem; }
+.invite-page { width: min(460px, 100%); display: grid; gap: 0.9rem; text-align: center; }
+.invite-page h1 { font-size: 1.25rem; margin: 0; }

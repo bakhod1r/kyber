@@ -52,8 +52,9 @@ export function Layout({ user, children }: { user: User; children: ReactNode }) 
         <Link to="/settings" className="user" title={t("Notification settings")}>
           {user.name}
         </Link>
-        <button className="ghost" onClick={() => logout.mutate()}>
-          {t("Log out")}
+        <button className="ghost logout" aria-label={t("Log out")} title={t("Log out")} onClick={() => logout.mutate()}>
+          <span aria-hidden="true" className="logout-icon">⎋</span>
+          <span className="logout-text">{t("Log out")}</span>
         </button>
       </header>
       <main className="page">{children}</main>
