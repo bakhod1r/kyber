@@ -82,6 +82,12 @@ export function translate(lang: Language, key: MessageKey, vars?: Vars): string 
   return vars ? text.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : text;
 }
 
+/** translateLabel translates text that is a known message (a default status or column name) and returns
+ * anything else — a name someone typed — unchanged. */
+export function translateLabel(lang: Language, text: string): string {
+  return text in en ? translate(lang, text as MessageKey) : text;
+}
+
 type I18n = { lang: Language; setLang: (l: Language) => void; t: Translate };
 
 const I18nContext = createContext<I18n>({ lang: "en", setLang: () => {}, t: (k, v) => translate("en", k, v) });
@@ -106,4 +112,10 @@ export function useI18n(): I18n {
 
 export function useT(): Translate {
   return useContext(I18nContext).t;
+}
+
+/** useLabel returns translateLabel bound to the current language. */
+export function useLabel(): (text: string) => string {
+  const { lang } = useContext(I18nContext);
+  return useCallback((text: string) => translateLabel(lang, text), [lang]);
 }

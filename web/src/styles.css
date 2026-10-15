@@ -45,6 +45,9 @@ input[type="checkbox"], input[type="radio"] { width: auto; margin: 0; accent-col
 label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { display: flex; align-items: center; gap: 0.4rem; }
 
 .muted { color: var(--muted); }
+/* A row of controls: an input takes the free space, buttons keep their size, and it wraps on narrow screens. */
+.row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.row > input:not([type="checkbox"]):not([type="radio"]), .row > select { flex: 1 1 12rem; width: auto; }
 .error { color: var(--danger); margin: 0.5rem 0; }
 .center { text-align: center; margin-top: 20vh; }
 .key { font-family: ui-monospace, monospace; font-weight: 700; color: var(--accent); }
@@ -379,6 +382,15 @@ a.user:hover { text-decoration: underline; }
 .permissions { overflow-x: auto; }
 .versions-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .versions-table th, .versions-table td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+.versions-table th > button.ghost, .versions-table td > button.ghost { padding: 0; border: 0; background: none; white-space: nowrap; }
+.versions-table th > button.ghost { font-weight: 700; color: var(--text); }
+/* Wide tables scroll inside their section instead of widening the page. */
+.issue-list, .admin .panel { overflow-x: auto; }
+.admin { display: grid; gap: 1rem; }
+.admin table { width: 100%; border-collapse: collapse; }
+.admin th, .admin td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); text-align: start; vertical-align: middle; }
+.admin td select { width: auto; }
+.chat-activity h2:not(:first-of-type) { margin-top: 1.5rem; }
 .releases { overflow-x: auto; }
 .release-notes pre { white-space: pre-wrap; background: var(--surface-2); padding: 0.75rem; border-radius: 6px; }
 .fix-versions { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; border: 0; padding: 0; margin: 0; }

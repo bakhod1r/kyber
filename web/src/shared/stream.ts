@@ -23,11 +23,18 @@ export function liveURL(loc: Pick<Location, "protocol" | "host">): string {
 /** Connects mqtt.js lazily, so the library loads only when something subscribes. */
 async function browserClient(): Promise<StreamClient> {
   const { default: mqtt } = await import("mqtt");
-  return mqtt.connect(liveURL(window.location), {
+  return mqtt.connect(liveURL(window.location), mqttOptions());
+}
+
+/** mqttOptions are the browser client's connect options. */
+export function mqttOptions() {
+  return {
     clientId: `web-${crypto.randomUUID()}`,
     reconnectPeriod: 2000,
     resubscribe: false, // we subscribe on every connect ourselves, to know when the subscriptions are active
-  });
+    // mqtt.js would run its keepalive timer in a blob: worker, which the CSP blocks unless a media server is set.
+    timerVariant: "native" as const,
+  };
 }
 
 let connector: (() => Promise<StreamClient>) | undefined;

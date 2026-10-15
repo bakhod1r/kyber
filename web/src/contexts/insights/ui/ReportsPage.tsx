@@ -5,13 +5,14 @@ import { BarList, GroupedBars, LineChart, StatTile, fmt } from "../../../shared/
 import { agileUseCases } from "../../agile/application";
 import { insightsUseCases, stackFlow } from "../application";
 import { issueUseCases } from "../../issue/application";
-import { msg, type MessageKey, type Translate, useT } from "../../../shared/i18n/i18n";
+import { msg, type MessageKey, type Translate, useLabel, useT } from "../../../shared/i18n/i18n";
 
 const STATUS: Record<string, MessageKey> = { todo: msg("To Do"), in_progress: msg("In Progress"), done: msg("Done") };
 const title = (t: Translate, k: string) => { const s = STATUS[k]; return s ? t(s) : k.charAt(0).toUpperCase() + k.slice(1); };
 
 export function Reports({ projectKey }: { projectKey: string }) {
   const t = useT();
+  const label = useLabel();
   const [days, setDays] = useState(30);
   const summary = useQuery({ queryKey: ["reports", projectKey, "summary"], queryFn: () => insightsUseCases.reportSummary(projectKey) });
   const cvr = useQuery({
@@ -23,7 +24,7 @@ export function Reports({ projectKey }: { projectKey: string }) {
   const focus = sprints.data?.find((s) => s.state === "active") ?? sprints.data?.find((s) => s.state === "closed");
   const burndown = useQuery({ queryKey: ["reports", "burndown", focus?.id], queryFn: () => insightsUseCases.burndown(focus!.id), enabled: !!focus });
   const workflow = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => issueUseCases.workflow(projectKey) });
-  const statusName = (k: string) => workflow.data?.statuses.find((st) => st.id === k)?.name ?? title(t, k);
+  const statusName = (k: string) => { const n = workflow.data?.statuses.find((st) => st.id === k)?.name; return n ? label(n) : title(t, k); };
   const flow = useQuery({
     queryKey: ["reports", projectKey, "cfd", days],
     queryFn: () => insightsUseCases.reportCumulativeFlow(projectKey, days),
