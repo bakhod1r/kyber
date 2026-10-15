@@ -1,4 +1,4 @@
-.PHONY: test cover-strict lint run build docker cover web web-test e2e e2e-rooms e2e-egress e2e-replicas screenshots docs audit ship
+.PHONY: test cover-strict lint run build docker cover web web-test e2e e2e-rooms e2e-egress e2e-replicas screenshots docs audit ship dev-db dev-db-stop
 
 COVER_MIN ?= 85
 
@@ -7,6 +7,12 @@ test: ## set KYBER_TEST_DATABASE_URL to include Postgres integration tests
 	@total=$$(go tool cover -func=coverage.out | awk '/^total:/ {sub("%","",$$3); print $$3}'); \
 	echo "total coverage: $$total% (min $(COVER_MIN)%)"; \
 	awk -v t=$$total -v m=$(COVER_MIN) 'BEGIN { exit (t+0 < m+0) }'
+
+dev-db: ## start a throwaway PostgreSQL on :55432 for tests; then: eval "$$(scripts/dev-env.sh env)"
+	@scripts/dev-env.sh up
+
+dev-db-stop: ## stop the test PostgreSQL started by dev-db
+	@scripts/dev-env.sh down
 
 cover-strict: ## packages listed in .cover-strict must stay at 100% statement coverage
 	@fail=0; for p in $$(grep -v '^#' .cover-strict); do \

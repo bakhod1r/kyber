@@ -13,3 +13,4 @@ screenshots.log
 site/.vitepress/dist/
 site/.vitepress/cache/
 e2e-replica*.log
+/.dev/

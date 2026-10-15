@@ -17,13 +17,17 @@ PostgreSQL. `docs/PLAN.md` is the plan and `docs/adr/` records the decisions.
 ## Before you open a pull request
 
 ```sh
-export KYBER_TEST_DATABASE_URL=postgres://postgres@localhost:5432/kyber_test?sslmode=disable
+make dev-db                            # throwaway PostgreSQL 16 on :55432 (Docker, else local binaries)
+eval "$(scripts/dev-env.sh env)"       # exports KYBER_TEST_DATABASE_URL
 make lint
 go test -race ./...
 make cover-strict          # packages listed in .cover-strict stay at 100%
 make web-test              # Vitest
 make e2e                   # Playwright (needs a Chromium)
 ```
+
+`make dev-db-stop` stops the database. `scripts/dev-env.sh k6` downloads the pinned k6 into `.dev/bin` for the
+load test (`loadtest/README.md`).
 
 Fill in the pull request template; keep changes focused, and update the README/ADRs when behaviour
 or configuration changes.
