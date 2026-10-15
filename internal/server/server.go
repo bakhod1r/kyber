@@ -621,6 +621,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	for _, name := range []string{"issue.work_logged", "issue.worklog_removed"} {
 		relay.Handle(name, issues.OnWorklogEvent)
 	}
+	relay.Handle("sprint.completed", issues.OnSprintCompleted) // carry unfinished issues over (QA-05)
 	for _, name := range []string{"version.released", "version.deleted"} {
 		relay.Handle(name, issues.OnVersionEvent)
 	}

@@ -55,10 +55,7 @@ func TestS47SprintReport(t *testing.T) {
 		if b["completed"] != float64(1) || b["returned"] != float64(2) {
 			t.Fatalf("completion = %v", b)
 		}
-		_, moved := c.do("GET", "/api/v1/issues/KYB-2", nil)
-		if moved["sprint_id"] != nid {
-			t.Fatalf("KYB-2 not carried to Sprint 2: %v", moved["sprint_id"])
-		}
+		eventuallyJSON(t, c, "/api/v1/issues/KYB-2", func(m map[string]any) bool { return m["sprint_id"] == nid })
 
 		keys := func(l any) string {
 			s := ""

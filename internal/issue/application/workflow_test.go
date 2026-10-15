@@ -89,7 +89,7 @@ func TestSetWorkflowKeepsStatusesInUse(t *testing.T) {
 }
 
 // Sprint completion counts any Done-category status as finished (not just "done").
-func TestReturnUnfinishedUsesDoneCategory(t *testing.T) {
+func TestSprintTallyUsesDoneCategory(t *testing.T) {
 	ctx := context.Background()
 	s, _ := setup()
 	if _, err := s.SetWorkflow(ctx, lead, "KYB", reviewDef()); err != nil {
@@ -101,9 +101,9 @@ func TestReturnUnfinishedUsesDoneCategory(t *testing.T) {
 	}
 	_, _ = s.Transition(ctx, dev, "KYB-1", "review", "")
 	_, _ = s.Transition(ctx, dev, "KYB-1", "closed", "")
-	completed, returned, err := s.ReturnUnfinished(ctx, dev, "KYB", "s-1", "")
+	completed, returned, err := s.SprintTally(ctx, "KYB", "s-1")
 	if err != nil || completed != 1 || returned != 1 {
-		t.Fatalf("ReturnUnfinished = %d, %d, %v", completed, returned, err)
+		t.Fatalf("SprintTally = %d, %d, %v", completed, returned, err)
 	}
 	wf, err := s.ProjectWorkflow(ctx, "KYB")
 	if err != nil || !wf.IsDone("closed") {

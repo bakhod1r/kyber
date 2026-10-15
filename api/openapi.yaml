@@ -2939,6 +2939,8 @@ paths:
       description: |
         Closes the active sprint. Issues that are not done are carried over to `move_to` (a planned sprint of the
         same project, 422 otherwise) or, without it, to the backlog; the sprint report lists them as not completed.
+        The sprint and its `sprint.completed` event are saved in one transaction and the issues move right after,
+        in reaction to that event (a live update follows); `completed`/`returned` count them at the moment of closing.
       requestBody:
         required: false
         content:

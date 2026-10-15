@@ -71,31 +71,68 @@ func (s *Service) Rank(ctx context.Context, actor, rawKey string, m RankMove) (*
 	return is, s.save(ctx, actor, is)
 }
 
-// ReturnUnfinished carries every issue of the sprint that is not done over to `to` — the
-// backlog ("") or the next sprint (Jira semantics: done issues stay with the closed sprint). It is called
-// by the Agile context after it has authorized the actor.
-func (s *Service) ReturnUnfinished(ctx context.Context, actor, project, sprint, to string) (completed, returned int, err error) {
-	sp := domain.SprintID(sprint)
-	list, err := s.issues.ListByProject(ctx, project, domain.ListFilter{Sprint: &sp})
-	if err != nil {
-		return 0, 0, err
-	}
-	wf, err := s.workflowFor(ctx, project)
+// SprintTally counts the sprint's issues that are done and the rest, for the Agile context closing it.
+func (s *Service) SprintTally(ctx context.Context, project, sprint string) (done, unfinished int, err error) {
+	list, wf, err := s.sprintIssues(ctx, project, sprint)
 	if err != nil {
 		return 0, 0, err
 	}
 	for _, is := range list {
 		if wf.IsDone(is.Status()) {
-			completed++
+			done++
+		} else {
+			unfinished++
+		}
+	}
+	return done, unfinished, nil
+}
+
+// OnSprintCompleted reacts to the Agile context's sprint.completed event by carrying every unfinished issue
+// of the closed sprint over to the next sprint or the backlog (Jira semantics: done issues stay with the
+// closed sprint). Re-delivery is harmless: carried-over issues are no longer in the sprint. When the target
+// sprint has closed meanwhile, issues go to the backlog.
+func (s *Service) OnSprintCompleted(ctx context.Context, m outbox.Message) error {
+	var e struct {
+		ID          string `json:"id"`
+		Project     string `json:"project"`
+		CarryOverTo string `json:"carry_over_to"`
+		By          string `json:"by"`
+	}
+	if err := json.Unmarshal(m.Payload, &e); err != nil || e.ID == "" || e.Project == "" {
+		return nil // a malformed event must not block the relay
+	}
+	to := e.CarryOverTo
+	if to != "" && s.sprints != nil {
+		if err := s.sprints.CanHold(ctx, e.Project, to); errors.Is(err, ErrInvalidSprint) {
+			to = ""
+		} else if err != nil {
+			return err
+		}
+	}
+	list, wf, err := s.sprintIssues(ctx, e.Project, e.ID)
+	if err != nil {
+		return err
+	}
+	for _, is := range list {
+		if wf.IsDone(is.Status()) {
 			continue
 		}
 		is.CarryOver(domain.SprintID(to))
-		if err := s.save(ctx, actor, is); err != nil {
-			return completed, returned, err
+		if err := s.save(ctx, e.By, is); err != nil {
+			return err
 		}
-		returned++
 	}
-	return completed, returned, nil
+	return nil
+}
+
+func (s *Service) sprintIssues(ctx context.Context, project, sprint string) ([]*domain.Issue, *domain.Workflow, error) {
+	sp := domain.SprintID(sprint)
+	list, err := s.issues.ListByProject(ctx, project, domain.ListFilter{Sprint: &sp})
+	if err != nil {
+		return nil, nil, err
+	}
+	wf, err := s.workflowFor(ctx, project)
+	return list, wf, err
 }
 
 // Peek loads an issue without authorization, for other bounded contexts reacting
