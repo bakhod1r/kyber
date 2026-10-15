@@ -51,3 +51,19 @@ WebSocket.
 - **Web app.** One MQTT connection per tab carries chat, calls, whiteboards and board hints; `onConnect` reloads after a reconnect
   (QoS 0, no replay). `GET /api/v1/stream` stays for existing scripts; the web app no longer opens it.
 - **Presence** counts MQTT clients as well as SSE streams (on the replica that answers).
+
+## Amendment (2026-10-15, S105): presence across replicas
+
+- **Problem.** `GET /api/v1/presence` only knew the MQTT clients and SSE streams of the replica that answered.
+- **Options.** (a) Share connect/disconnect through `NOTIFY` — cheap, but a replica that starts late has no
+  history, and a crashed replica never sends its disconnects, leaving users "online" forever. (b) A table of
+  seats with heartbeats and expiry. **Chosen: (b).**
+- **Design** (`internal/platform/presence`). Each replica beats every 15 s, and at once when a client connects
+  or leaves, replacing its own rows in `presence (replica, workspace_id, user_id, seen_at)` with the users
+  connected to it (MQTT clients and SSE streams). A user is online while a seat was seen in the last 45 s
+  (three beats, so one lost beat does not flicker); stale rows are expired by every replica. A clean
+  shutdown clears the replica's rows; a crashed replica's users go offline within 45 s. The answering
+  replica also counts its own connections immediately, before its next beat. Dev mode uses the same roster
+  over an in-memory store.
+- **Cost.** One small transaction per replica per beat; presence queries use the
+  `(workspace_id, user_id, seen_at)` index. The issue panel's "also viewing" (F4) is unchanged.

@@ -1,12 +1,18 @@
 package realtime_test
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/bakhod1r/kyber/internal/platform/presence"
 	"github.com/bakhod1r/kyber/internal/platform/realtime"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
 func recv(t *testing.T, ch <-chan realtime.Event) realtime.Event {
@@ -141,5 +147,59 @@ func TestHubForwardsToSink(t *testing.T) {
 	}
 	if got := h.Online("w1", []string{"carl", "bob", "ann"}); strings.Join(got, ",") != "bob,ann" {
 		t.Fatalf("online = %v", got)
+	}
+}
+
+func (f *fakeSink) Seats() []presence.Seat {
+	var out []presence.Seat
+	for _, u := range f.online {
+		out = append(out, presence.Seat{Workspace: "w1", User: u})
+	}
+	return out
+}
+
+type roster struct {
+	changed int
+	online  []string
+	err     error
+}
+
+func (r *roster) Changed() { r.changed++ }
+func (r *roster) Online(_ context.Context, _ string, users []string) ([]string, error) {
+	return r.online, r.err
+}
+
+// S105: the hub lists its streams and the sink's clients as seats, tells the roster when streams
+// open and close, and answers presence through the roster (every replica).
+func TestHubPresenceAcrossReplicas(t *testing.T) {
+	h := realtime.NewHub(8)
+	h.Forward(&fakeSink{online: []string{"bob"}})
+	r := &roster{online: []string{"cat"}}
+	h.Track(r)
+	_, stop := h.Subscribe("w1", "ann", 0)
+	if r.changed != 1 {
+		t.Fatalf("subscribe did not tell the roster: %d", r.changed)
+	}
+	if got := h.Seats(); len(got) != 2 || !slices.Contains(got, presence.Seat{Workspace: "w1", User: "ann"}) || !slices.Contains(got, presence.Seat{Workspace: "w1", User: "bob"}) {
+		t.Fatalf("seats = %v", got)
+	}
+	stop()
+	stop() // idempotent: one change
+	if r.changed != 2 {
+		t.Fatalf("closing did not tell the roster once: %d", r.changed)
+	}
+	mux := http.NewServeMux()
+	h.Register(mux, time.Second)
+	req := httptest.NewRequest("GET", "/api/v1/presence?user_id=cat", nil).WithContext(tenant.With(context.Background(), "w1"))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"online":["cat"]`) {
+		t.Fatalf("presence = %d %s", w.Code, w.Body)
+	}
+	r.err = errors.New("db down")
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != 500 {
+		t.Fatalf("store error = %d", w.Code)
 	}
 }

@@ -5,9 +5,12 @@
 package realtime
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 	"sync"
+
+	"github.com/bakhod1r/kyber/internal/platform/presence"
 )
 
 // Buffer is how many undelivered events a subscription holds before it is closed (the
@@ -39,13 +42,24 @@ type Sink interface {
 	Online(ws string, users []string) []string
 }
 
+// Presence answers who is online on any replica and wants to know when this replica's set changes
+// (S105, presence.Roster).
+type Presence interface {
+	Online(ctx context.Context, ws string, users []string) ([]string, error)
+	Changed()
+}
+
+// seater is a sink that can list its connected users (the MQTT broker).
+type seater interface{ Seats() []presence.Seat }
+
 type Hub struct {
-	sink Sink
-	mu   sync.Mutex
-	next uint64
-	ring []addressed
-	size int
-	subs map[*sub]struct{}
+	sink   Sink
+	roster Presence
+	mu     sync.Mutex
+	next   uint64
+	ring   []addressed
+	size   int
+	subs   map[*sub]struct{}
 }
 
 // NewHub keeps the last ring events for replay.
@@ -56,6 +70,7 @@ func (a addressed) to(ws, user string) bool { return a.ws == ws && slices.Contai
 // Subscribe opens a feed for user in ws, first replaying ring events after lastID. The stop
 // function is idempotent.
 func (h *Hub) Subscribe(ws, user string, lastID uint64) (<-chan Event, func()) {
+	defer h.changed() // after the lock is released
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	s := &sub{ws: ws, user: user, ch: make(chan Event, Buffer)}
@@ -69,8 +84,12 @@ func (h *Hub) Subscribe(ws, user string, lastID uint64) (<-chan Event, func()) {
 	h.subs[s] = struct{}{}
 	return s.ch, func() {
 		h.mu.Lock()
-		defer h.mu.Unlock()
+		was := !s.closed
 		h.close(s)
+		h.mu.Unlock()
+		if was {
+			h.changed()
+		}
 	}
 }
 
@@ -92,6 +111,31 @@ func (h *Hub) deliver(s *sub, e Event) {
 	default:
 		h.close(s)
 	}
+}
+
+// Track answers presence through p and tells it when streams open or close. Call it before use.
+func (h *Hub) Track(p Presence) { h.roster = p }
+
+func (h *Hub) changed() {
+	if h.roster != nil {
+		h.roster.Changed()
+	}
+}
+
+// Seats lists who is connected to this replica: open streams and the sink's clients.
+func (h *Hub) Seats() []presence.Seat {
+	var out []presence.Seat
+	if s, ok := h.sink.(seater); ok {
+		out = append(out, s.Seats()...)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for s := range h.subs {
+		if !s.closed {
+			out = append(out, presence.Seat{Workspace: s.ws, User: s.user})
+		}
+	}
+	return out
 }
 
 // Forward also hands every published event to sink. Call it before the hub is used.

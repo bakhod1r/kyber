@@ -150,6 +150,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/metrics"
 	"github.com/bakhod1r/kyber/internal/platform/otel"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
+	"github.com/bakhod1r/kyber/internal/platform/presence"
 	"github.com/bakhod1r/kyber/internal/platform/ratelimit"
 	"github.com/bakhod1r/kyber/internal/platform/realtime"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
@@ -599,6 +600,16 @@ func build(log *slog.Logger, d deps) http.Handler {
 		panic(fmt.Sprintf("mqtt broker: %v", err)) // only fails on programming errors (duplicate hook or listener ids)
 	}
 	rt.Forward(hub) // S88: chat, calls and whiteboards also reach each user's MQTT topic
+	// S105: who is online on any replica. Each replica beats its streams and MQTT clients into the
+	// presence table (PostgreSQL mode) or memory; a crashed replica's seats age out.
+	var seats presence.Store = presence.NewMemory()
+	if d.livePool != nil {
+		seats = presence.NewPostgres(d.livePool)
+	}
+	roster := presence.NewRoster(seats, id.New(), rt.Seats, time.Now, log)
+	rt.Track(roster)
+	hub.OnChange(roster.Changed)
+	go roster.Run(d.liveCtx())
 	if d.mqttAddr != "" {
 		if err := hub.ListenTCP(d.mqttAddr); err != nil {
 			panic(fmt.Sprintf("mqtt listener %s: %v", d.mqttAddr, err))
