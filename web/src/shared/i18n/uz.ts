@@ -80,6 +80,7 @@ export const uz: Record<MessageKey, string> = {
   "Clear filters": "Filtrlarni tozalash",
   "clones": "nusxalaydi",
   "Close": "Yopish",
+  "Move {key}": "{key} ni ko‘chirish",
   "Chat": "Chat",
   "Main": "Asosiy",
   "Settings": "Sozlamalar",

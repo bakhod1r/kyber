@@ -80,6 +80,7 @@ export const ru: Record<MessageKey, string> = {
   "Clear filters": "Сбросить фильтры",
   "clones": "клонирует",
   "Close": "Закрыть",
+  "Move {key}": "Переместить {key}",
   "Chat": "Чат",
   "Main": "Главное",
   "Settings": "Настройки",

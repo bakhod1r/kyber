@@ -79,6 +79,7 @@ export const en = {
   "Clear filters": "Clear filters",
   "clones": "clones",
   "Close": "Close",
+  "Move {key}": "Move {key}",
   "Chat": "Chat",
   "Main": "Main",
   "Settings": "Settings",
