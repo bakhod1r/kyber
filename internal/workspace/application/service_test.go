@@ -149,3 +149,44 @@ func TestMembersAndRoles(t *testing.T) {
 		t.Fatalf("missing: %v", err)
 	}
 }
+
+// S106: SSO group sync grants and revokes workspace roles without an acting user.
+func TestGrantAndRevoke(t *testing.T) {
+	ctx := context.Background()
+	s := setup()
+	w, _ := s.Create(ctx, "u-owner", "acme", "Acme")
+	ws := string(w.ID())
+	if err := s.Grant(ctx, ws, "u-dev", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := s.Administers(ctx, ws, "u-dev"); !ok {
+		t.Fatal("not granted")
+	}
+	if err := s.Grant(ctx, ws, "u-dev", "member"); err != nil { // a change of role
+		t.Fatal(err)
+	}
+	if ok, _ := s.Administers(ctx, ws, "u-dev"); ok {
+		t.Fatal("role not changed")
+	}
+	if err := s.Revoke(ctx, ws, "u-dev"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := s.IsMember(ctx, ws, "u-dev"); ok {
+		t.Fatal("still a member")
+	}
+	if err := s.Revoke(ctx, ws, "u-owner"); !errors.Is(err, domain.ErrLastOwner) {
+		t.Fatalf("last owner: %v", err)
+	}
+	if err := s.Grant(ctx, ws, "u-x", "emperor"); err == nil {
+		t.Fatal("invalid role accepted")
+	}
+	if err := s.Grant(ctx, ws, "u-owner", "member"); !errors.Is(err, domain.ErrLastOwner) {
+		t.Fatalf("demote last owner: %v", err)
+	}
+	if err := s.Grant(ctx, "w-404", "u-x", "member"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
+		t.Fatalf("unknown workspace: %v", err)
+	}
+	if err := s.Revoke(ctx, "w-404", "u-x"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
+		t.Fatalf("revoke in unknown workspace: %v", err)
+	}
+}

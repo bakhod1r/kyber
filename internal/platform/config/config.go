@@ -47,6 +47,8 @@ type Config struct {
 	SAMLCertFile        string `env:"KYBER_SAML_CERT_FILE"`
 	SAMLKeyFile         string `env:"KYBER_SAML_KEY_FILE"`
 	SAMLName            string `env:"KYBER_SAML_NAME" default:"SAML"`
+	// SAMLGroupsAttribute names the assertion attribute with the user's groups ("" = groups/memberOf).
+	SAMLGroupsAttribute string `env:"KYBER_SAML_GROUPS_ATTRIBUTE"`
 	// SCIMToken enables SCIM 2.0 user provisioning at /scim/v2 (ADR-0017): the identity provider
 	// sends it as a Bearer token.
 	SCIMToken string `env:"KYBER_SCIM_TOKEN"`
@@ -65,6 +67,8 @@ type Config struct {
 	OIDCClientID     string `env:"KYBER_OIDC_CLIENT_ID"`
 	OIDCClientSecret string `env:"KYBER_OIDC_CLIENT_SECRET"`
 	OIDCName         string `env:"KYBER_OIDC_NAME" default:"SSO"`
+	// OIDCGroupsClaim names the ID token claim with the user's groups for SSO group mappings (S106).
+	OIDCGroupsClaim string `env:"KYBER_OIDC_GROUPS_CLAIM" default:"groups"`
 	// Sign in with GitHub: create an OAuth App with callback <PublicURL>/api/v1/auth/github/callback.
 	GitHubClientID     string `env:"KYBER_GITHUB_CLIENT_ID"`
 	GitHubClientSecret string `env:"KYBER_GITHUB_CLIENT_SECRET"`

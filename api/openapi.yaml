@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.71.0
+  version: 0.72.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -14,6 +14,52 @@ security:
   - cookie: []
 
 paths:
+  /api/v1/admin/sso/group-mappings:
+    get:
+      operationId: listSSOGroupMappings
+      summary: Identity-provider groups mapped to workspace and project roles (site admins, S106).
+      responses:
+        "200":
+          description: Oldest first.
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/SSOGroupMapping" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createSSOGroupMapping
+      summary: Map a group to a role; applied at each SSO login (grants and revokes only what SSO granted).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [group, scope, role]
+              properties:
+                group: { type: string, description: "Group name as the IdP sends it (case-insensitive)." }
+                scope: { type: string, enum: [workspace, project] }
+                workspace_id: { type: string, description: "Defaults to the current workspace." }
+                project_key: { type: string, description: "Required for scope project." }
+                role: { type: string, description: "workspace: member or admin; project: viewer, member or admin." }
+      responses:
+        "201": { description: Created., content: { application/json: { schema: { $ref: "#/components/schemas/SSOGroupMapping" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/sso/group-mappings/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    delete:
+      operationId: deleteSSOGroupMapping
+      summary: Remove a mapping; roles it granted are revoked at each user's next SSO login.
+      responses:
+        "204": { description: Removed. }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /scim/v2/ServiceProviderConfig:
     get:
       operationId: getSCIMConfig
@@ -4192,6 +4238,17 @@ components:
         application/json:
           schema: { type: object, required: [body], properties: { body: { type: string } } }
   schemas:
+    SSOGroupMapping:
+      type: object
+      required: [id, group, scope, workspace_id, project_key, role, created_at]
+      properties:
+        id: { type: string }
+        group: { type: string }
+        scope: { type: string, enum: [workspace, project] }
+        workspace_id: { type: string }
+        project_key: { type: string }
+        role: { type: string }
+        created_at: { type: string, format: date-time }
     SCIMUser:
       type: object
       required: [schemas, id, userName, displayName, active]

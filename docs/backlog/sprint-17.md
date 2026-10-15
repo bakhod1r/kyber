@@ -15,7 +15,7 @@ approval of its ADR.
   - **Done:** `internal/platform/presence` (Roster, memory and PostgreSQL stores, contract test), migration
     0088, ADR-0013 amendment. Measured: after `kill -9` of a replica its user went offline on the other one
     after 46 s (45 s TTL + polling).
-- **S106 SSO group → role mapping** (ADR-0015 follow-up) — map an IdP group claim (OIDC `groups` or a
+- ✅ **S106 SSO group → role mapping** (ADR-0015 follow-up) — map an IdP group claim (OIDC `groups` or a
   configured claim; the SAML attribute) to workspace admin/member and project roles (ADR-0003).
   - AC1: site admins configure the mapping; AC2: applied at every SSO login (grant and revoke);
     AC3: every change is audited; AC4: users without a mapped group keep today's behaviour.

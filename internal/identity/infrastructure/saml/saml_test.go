@@ -95,9 +95,14 @@ func signIn(t *testing.T, sp *kyber.SP, provider *crewjam.IdentityProvider) (*ht
 
 func newSP(t *testing.T, provider *crewjam.IdentityProvider) *kyber.SP {
 	t.Helper()
+	return newSPWith(t, provider, "")
+}
+
+func newSPWith(t *testing.T, provider *crewjam.IdentityProvider, groups string) *kyber.SP {
+	t.Helper()
 	idpMeta, _ := xml.Marshal(provider.Metadata())
 	key, cert := keyPair(t, "kyber")
-	sp, err := kyber.New(kyber.Config{BaseURL: "https://kyber.example", IDPMetadata: idpMeta, Key: key, Cert: cert})
+	sp, err := kyber.New(kyber.Config{BaseURL: "https://kyber.example", IDPMetadata: idpMeta, Key: key, Cert: cert, GroupsAttribute: groups})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,5 +147,41 @@ func TestNoEmail(t *testing.T) {
 	}
 	if _, err := kyber.New(kyber.Config{IDPMetadata: []byte("<not xml")}); err == nil {
 		t.Fatal("bad metadata accepted")
+	}
+}
+
+// S106: the groups attribute (default "groups"/"memberOf", or a configured one) lists every value.
+func TestGroups(t *testing.T) {
+	attr := func(name string, vals ...string) crewjam.Attribute {
+		a := crewjam.Attribute{Name: name, NameFormat: "urn:oasis:names:tc:SAML:2.0:attrname-format:basic"}
+		for _, v := range vals {
+			a.Values = append(a.Values, crewjam.AttributeValue{Type: "xs:string", Value: v})
+		}
+		return a
+	}
+	for name, c := range map[string]struct {
+		configured string
+		attrs      []crewjam.Attribute
+		want       []string
+	}{
+		"groups":     {"", []crewjam.Attribute{attr("groups", "eng", "leads")}, []string{"eng", "leads"}},
+		"memberOf":   {"", []crewjam.Attribute{attr("memberOf", "cn=eng")}, []string{"cn=eng"}},
+		"claim URI":  {"", []crewjam.Attribute{attr("http://schemas.xmlsoap.org/claims/Groups", "eng")}, []string{"eng"}},
+		"configured": {"Roles", []crewjam.Attribute{attr("groups", "ignored"), attr("roles", "admins")}, []string{"admins"}},
+		"none sent":  {"", nil, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			provider := idp(t, &crewjam.Session{ID: "s", NameID: "ann@corp.example", UserEmail: "ann@corp.example",
+				CustomAttributes: c.attrs, CreateTime: time.Now(), ExpireTime: time.Now().Add(time.Hour)})
+			sp := newSPWith(t, provider, c.configured)
+			post, requestID := signIn(t, sp, provider)
+			p, err := sp.Profile(post, []string{requestID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(p.Groups, "|") != strings.Join(c.want, "|") || (c.want == nil) != (p.Groups == nil) {
+				t.Fatalf("groups = %#v, want %#v", p.Groups, c.want)
+			}
+		})
 	}
 }

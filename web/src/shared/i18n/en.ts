@@ -2,11 +2,13 @@
 import { en as callEn } from "./parts/call";
 import { en as chatEn } from "./parts/chat";
 import { en as whiteboardEn } from "./parts/whiteboard";
+import { en as ssosyncEn } from "./parts/ssosync";
 
 export const en = {
   ...chatEn,
   ...callEn,
   ...whiteboardEn,
+  ...ssosyncEn,
   " and ": " and ",
   "* added after the sprint started": "* added after the sprint started",
   "+ user": "+ user",

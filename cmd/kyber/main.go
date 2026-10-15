@@ -115,7 +115,7 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		SAML: sp, SAMLName: cfg.SAMLName,
 		Google: google.New(google.Config{ClientID: cfg.GoogleClientID, ClientSecret: cfg.GoogleClientSecret, RedirectURL: callback("google")}),
 		OIDC: oidcprovider.New(oidcprovider.Config{Provider: identitydomain.ProviderOIDC, Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID,
-			ClientSecret: cfg.OIDCClientSecret, RedirectURL: callback("oidc"), RequireVerifiedEmail: true}),
+			ClientSecret: cfg.OIDCClientSecret, RedirectURL: callback("oidc"), RequireVerifiedEmail: true, GroupsClaim: cfg.OIDCGroupsClaim}),
 		OIDCName:    cfg.OIDCName,
 		GitHub:      github.New(github.Config{ClientID: cfg.GitHubClientID, ClientSecret: cfg.GitHubClientSecret, RedirectURL: callback("github")}),
 		Telegram:    telegram.NewVerifier(cfg.TelegramBotToken, time.Now),
@@ -282,7 +282,7 @@ func samlSP(ctx context.Context, cfg *config.Config) (identityhttp.SAMLClient, e
 	if err != nil {
 		return nil, err
 	}
-	return samlsp.New(samlsp.Config{BaseURL: cfg.PublicURL, IDPMetadata: md, Key: key, Cert: cert})
+	return samlsp.New(samlsp.Config{BaseURL: cfg.PublicURL, IDPMetadata: md, Key: key, Cert: cert, GroupsAttribute: cfg.SAMLGroupsAttribute})
 }
 
 func fetch(ctx context.Context, u string) ([]byte, error) {

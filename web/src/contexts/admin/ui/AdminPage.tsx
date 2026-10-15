@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { adminUseCases, ROLES, type Role } from "../application";
 import { useT } from "../../../shared/i18n/i18n";
+import { GroupMappings } from "./GroupMappings";
 
 /** AdminPage: a workspace's administrators manage roles and look after projects and stuck events. */
 export function AdminPage() {
@@ -116,6 +117,8 @@ export function AdminPage() {
           ))}
         </ul>
       </section>
+
+      <GroupMappings />
     </div>
   );
 }

@@ -166,6 +166,12 @@ import (
 	searchmemory "github.com/bakhod1r/kyber/internal/search/infrastructure/memory"
 	searchpg "github.com/bakhod1r/kyber/internal/search/infrastructure/postgres"
 	searchhttp "github.com/bakhod1r/kyber/internal/search/interfaces/httpapi"
+	ssoapp "github.com/bakhod1r/kyber/internal/ssosync/application"
+	ssodomain "github.com/bakhod1r/kyber/internal/ssosync/domain"
+	ssoacl "github.com/bakhod1r/kyber/internal/ssosync/infrastructure/acl"
+	ssomemory "github.com/bakhod1r/kyber/internal/ssosync/infrastructure/memory"
+	ssopg "github.com/bakhod1r/kyber/internal/ssosync/infrastructure/postgres"
+	ssohttp "github.com/bakhod1r/kyber/internal/ssosync/interfaces/httpapi"
 	wbapp "github.com/bakhod1r/kyber/internal/whiteboard/application"
 	wbdomain "github.com/bakhod1r/kyber/internal/whiteboard/domain"
 	wbacl "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/acl"
@@ -219,6 +225,8 @@ type deps struct {
 	tokens        identitydomain.PersonalTokens
 	oauth         identitydomain.OAuthStore
 	directory     identitydomain.Directory
+	ssoMappings   ssodomain.Mappings
+	ssoGrants     ssodomain.Grants
 	scimToken     string
 	social        identityhttp.Social
 	otps          identitydomain.OTPChallenges
@@ -408,6 +416,7 @@ func WithRedis(rdb redis.UniversalClient) Option { return func(d *deps) { d.redi
 // NewInMemory builds the API on in-memory adapters (dev mode and tests).
 func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	ids := identitymemory.NewRepository()
+	sso := ssomemory.New()
 	chatRepo := chatmemory.NewRepository()
 	savedRepo := chatmemory.NewSaved(chatRepo)
 	remRepo := chatmemory.NewReminders()
@@ -432,7 +441,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
 		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), bots: chatmemory.NewBots(), sectionOrders: chatmemory.NewSectionOrders(), calls: callRepo, whiteboards: wbmemory.NewRepository(), wbComments: wbCommentRepo,
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(wbCommentRepo.Outbox, wbCommentRepo.OutboxMeta), events(docCommentRepo.Outbox, docCommentRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
-		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ready: func(context.Context) error { return nil },
+		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ssoMappings: sso, ssoGrants: sso, ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
 		o(&d)
@@ -470,6 +479,7 @@ func StartJobs(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, purgeE
 // NewPostgres builds the API on PostgreSQL; the pool must already be migrated.
 func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts ...Option) http.Handler {
 	ids := identitypg.NewRepository(pool)
+	sso := ssopg.New(pool)
 	d := deps{
 		projectHooks: whpg.NewWebhooks(pool), whDeliveries: whpg.NewDeliveries(pool), devLinks: whpg.NewLinks(pool),
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
@@ -480,7 +490,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), scheduled: chatpg.NewScheduled(pool), reminders: chatpg.NewReminders(pool), userGroups: chatpg.NewGroups(pool), chatPrefs: chatpg.NewPrefs(pool), bookmarks: chatpg.NewBookmarks(pool), chatWorkflows: chatpg.NewWorkflows(pool), webhooks: chatpg.NewWebhooks(pool), bots: chatpg.NewBots(pool), sectionOrders: chatpg.NewSectionOrders(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool), wbComments: wbpg.NewComments(pool),
-		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ready: pool.Ping, cookieSecure: cookieSecure,
+		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ssoMappings: sso, ssoGrants: sso, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
 		o(&d)
@@ -680,7 +690,12 @@ func build(log *slog.Logger, d deps) http.Handler {
 	go remindMeetings(d.ctx, log, chat.SendDue, d.reminderEvery)      // scheduled messages (S67)
 	go remindMeetings(d.ctx, log, chat.RunWorkflows, d.reminderEvery) // channel workflows (S80)
 	go dispatchWebhooks(d.ctx, log, webhooks, d.webhookEvery)
-	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens), identityapp.WithOAuth(d.oauth), identityapp.WithDirectory(d.directory)}
+	auditLog := auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now)
+	// S106: SSO groups → workspace and project roles, applied at every SSO login.
+	groupSync := ssoapp.NewService(ssoapp.Deps{Mappings: d.ssoMappings, Grants: d.ssoGrants,
+		Roles: ssoacl.Roles{Workspaces: workspaces, Projects: projects}, Audit: ssoacl.Audit{Log: auditLog},
+		Admins: ssoacl.Admins(d.siteAdmin), NewID: id.New, Now: time.Now, Log: log})
+	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens), identityapp.WithOAuth(d.oauth), identityapp.WithDirectory(d.directory), identityapp.WithGroupSync(groupSync)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
 	}
@@ -754,9 +769,9 @@ func build(log *slog.Logger, d deps) http.Handler {
 		return float64(n)
 	})
 	callhttp.New(calls, log, func(user string, now time.Time) any { return d.ice.Servers(user, now) }).Register(api)
-	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
-		auditacl.NewOwners(agile, d.boards, d.links), log)
+	audit := audithttp.New(auditLog, auditacl.NewOwners(agile, d.boards, d.links), log)
 	audit.Register(api)
+	ssohttp.New(groupSync, log).Register(api)
 	api.Handle("POST /api/v1/mcp", newMCP(projects, issues, search, agile))
 
 	mux := http.NewServeMux()

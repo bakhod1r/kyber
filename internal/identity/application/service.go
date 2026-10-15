@@ -39,6 +39,7 @@ type Service struct {
 	tokens   domain.PersonalTokens // nil = personal access tokens disabled
 	oauth    domain.OAuthStore     // nil = OAuth for MCP clients disabled
 	dir      domain.Directory      // nil = SCIM provisioning disabled
+	groups   GroupSync             // nil = no SSO group mapping
 }
 
 // Option customises the service.

@@ -44,3 +44,20 @@ to existing accounts exactly as Google does, without new trust rules.
 - Several OIDC providers per installation, and per-workspace SSO (ADR-0004) with enforced SSO and
   email-domain routing.
 - Group/role claims mapped to Kyber roles (ADR-0003).
+
+## Amendment (2026-10-15, S106): group → role mapping
+
+- A new bounded context `internal/ssosync` owns **group mappings** (`sso_group_mappings`: group,
+  scope `workspace|project`, workspace, project key, role) and the **grants SSO made**
+  (`sso_grants`). Site admins manage mappings at `GET/POST /api/v1/admin/sso/group-mappings` and
+  `DELETE …/{id}` (Administration page).
+- Groups come from the OIDC claim `KYBER_OIDC_GROUPS_CLAIM` (default `groups`; a string or a list)
+  and the SAML attribute `KYBER_SAML_GROUPS_ATTRIBUTE` (default `groups`, `memberOf` or a claim URI
+  ending in `/groups`). A provider that sends no groups leaves roles untouched (AC4).
+- On every external login, after the session is created, `Plan()` (pure domain) compares the user's
+  groups (case-insensitive) with the mappings: the highest mapped role per target is granted; a target
+  the user no longer qualifies for is revoked **only if SSO granted it**. Manual grants are never
+  taken away; the last owner/admin guards still apply. Default-workspace membership is implicit.
+- Grants and revokes run through new actor-less system methods on the workspace and project
+  services, each in the target's tenant, and every change is audited (`sso.role_granted`,
+  `sso.role_revoked`). A failing sync is logged and never blocks sign-in.

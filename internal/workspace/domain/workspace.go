@@ -115,6 +115,15 @@ func (w *Workspace) AddMember(u UserID, r Role) error {
 	return nil
 }
 
+// RemoveMember takes a user out of the workspace (a no-op for non-members), never its last owner.
+func (w *Workspace) RemoveMember(u UserID) error {
+	if w.members[u] == RoleOwner && w.owners() == 1 {
+		return ErrLastOwner
+	}
+	delete(w.members, u)
+	return nil
+}
+
 // ChangeRole changes a member's role (an administrator's action); the last owner cannot be demoted.
 func (w *Workspace) ChangeRole(u UserID, r Role) error {
 	if !w.IsMember(u) {

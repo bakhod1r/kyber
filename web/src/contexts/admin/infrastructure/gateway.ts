@@ -1,6 +1,6 @@
 // admin: HTTP gateway to the administration API (infrastructure).
 import { request, seg, type List } from "../../../shared/http";
-import type { AdminMember, AdminProject, DeadLetter, Role } from "../domain/model";
+import type { AdminMember, AdminProject, DeadLetter, GroupMapping, NewGroupMapping, Role } from "../domain/model";
 
 export const adminGateway = {
   access: () => request<{ admin: boolean }>("GET", "/api/v1/admin/access").then((r) => r.admin),
@@ -9,4 +9,7 @@ export const adminGateway = {
   projects: () => request<List<AdminProject>>("GET", "/api/v1/admin/projects").then((r) => r.items),
   deadLetters: () => request<List<DeadLetter>>("GET", "/api/v1/admin/dead-letters").then((r) => r.items),
   retry: (id: number) => request<undefined>("POST", `/api/v1/admin/dead-letters/${id}/retry`),
+  groupMappings: () => request<List<GroupMapping>>("GET", "/api/v1/admin/sso/group-mappings").then((r) => r.items),
+  addGroupMapping: (m: NewGroupMapping) => request<GroupMapping>("POST", "/api/v1/admin/sso/group-mappings", m),
+  removeGroupMapping: (id: string) => request<undefined>("DELETE", `/api/v1/admin/sso/group-mappings/${seg(id)}`),
 };
