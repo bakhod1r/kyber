@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -25,11 +26,13 @@ func (p connIdP) AuthURL(_ context.Context, f application.OIDCFlow) (string, err
 	return p.issuer + "/authorize?state=" + f.State, nil
 }
 
+// Exchange accepts "ok" (Zara) or an email address as the code: that person signs in.
 func (p connIdP) Exchange(_ context.Context, code string, _ application.OIDCFlow) (application.ExternalProfile, error) {
-	if code != "ok" {
+	email := map[bool]string{true: "zara@acme.uz", false: code}[code == "ok"]
+	if !strings.Contains(email, "@") {
 		return application.ExternalProfile{}, application.ErrInvalidLogin
 	}
-	return application.ExternalProfile{Provider: p.provider, Subject: "okta-42", Email: "zara@acme.uz", EmailVerified: true, Name: "Zara"}, nil
+	return application.ExternalProfile{Provider: p.provider, Subject: "okta-" + email, Email: email, EmailVerified: true, Name: "SSO user"}, nil
 }
 
 // S107 (ADR-0018 a): a site admin stores an identity provider; its button appears on the login
@@ -176,4 +179,87 @@ func TestSSODomainDiscovery(t *testing.T) {
 			t.Fatalf("form post = %d", res.StatusCode)
 		}
 	}, server.WithSiteAdmins("boss@x.uz"), server.WithEncryptionKey(box), server.WithDNS(records))
+}
+
+// ssoLogin signs in through a stored connection on host and returns the session token.
+func ssoLogin(t *testing.T, c *client, host, id, code string) *client {
+	t.Helper()
+	get := func(path string, ck *http.Cookie) *http.Response {
+		req, _ := http.NewRequest("GET", c.srv.URL+path, nil)
+		req.Host = host
+		if ck != nil {
+			req.AddCookie(ck)
+		}
+		res, err := (&http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res
+	}
+	flow := cookie(get("/api/v1/auth/sso/"+id+"/start", nil), "kyber_oauth")
+	cb := get("/api/v1/auth/sso/"+id+"/callback?code="+url.QueryEscape(code)+"&state="+strings.Split(flow.Value, ".")[0], flow)
+	return &client{t: t, srv: c.srv, token: cookie(cb, "kyber_session").Value, host: c.host}
+}
+
+// S107 (ADR-0018 c): a workspace admin adds the workspace's own connection and requires it. Members
+// signed in another way (or with an API token) are refused with SSO_REQUIRED and told where to sign
+// in; signed in through the connection they get in; owners always keep a way in.
+func TestSSOEnforcement(t *testing.T) {
+	box, _ := seal.New(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
+	build := func(c domain.Connection) application.RedirectProvider {
+		return connIdP{provider: identitydomain.Provider(domain.ProviderOf(c.ID)), issuer: c.Issuer}
+	}
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		apex := on(anon, "kyber.test")
+		owner := apex.signedIn("owner@acme.uz")
+		dev := apex.signedIn("dev@acme.uz")
+		owner.do("POST", "/api/v1/workspaces", map[string]string{"slug": "acme", "name": "Acme"})
+		acme := on(owner, "acme.kyber.test")
+		acme.do("POST", "/api/v1/projects", map[string]string{"key": "ACM", "name": "Acme"})
+		code, b := acme.do("POST", "/api/v1/projects/ACM/members", map[string]string{"email": "dev@acme.uz", "role": "member"})
+		expect(t, code, 204, b)
+		devAcme := on(dev, "acme.kyber.test")
+		if code, b := devAcme.do("GET", "/api/v1/projects", nil); code != 200 {
+			t.Fatalf("before = %d %v", code, b)
+		}
+		_, tok := devAcme.do("POST", "/api/v1/me/tokens", map[string]any{"name": "cli", "expires_in_days": 30})
+
+		code, b = devAcme.do("POST", "/api/v1/admin/sso/connections", map[string]string{"name": "Acme Okta", "issuer": "https://acme.okta.com", "client_id": "k", "client_secret": "s", "scope": "workspace"})
+		expect(t, code, 403, b)
+		code, c := acme.do("POST", "/api/v1/admin/sso/connections", map[string]string{"name": "Acme Okta", "issuer": "https://acme.okta.com", "client_id": "k", "client_secret": "s", "scope": "workspace"})
+		expect(t, code, 201, c)
+		id := c["id"].(string)
+		if c["workspace_id"] == nil || c["enforced"] != false {
+			t.Fatalf("created = %v", c)
+		}
+		code, c = acme.do("PATCH", "/api/v1/admin/sso/connections/"+id, map[string]any{"enforced": true})
+		expect(t, code, 200, c)
+
+		code, b = devAcme.do("GET", "/api/v1/projects", nil)
+		expect(t, code, 403, b)
+		if b["code"] != "SSO_REQUIRED" || !strings.Contains(fmt100(b), "/api/v1/auth/sso/"+id+"/start") {
+			t.Fatalf("refusal = %v", b)
+		}
+		pat := &client{t: t, srv: anon.srv, token: tok["token"].(string), host: "acme.kyber.test"}
+		if code, b := pat.do("GET", "/api/v1/projects", nil); code != 403 {
+			t.Fatalf("token = %d %v", code, b)
+		}
+		if code, _ := on(dev, "kyber.test").do("GET", "/api/v1/me", nil); code != 200 {
+			t.Fatalf("the apex stays open: %d", code)
+		}
+		if code, b := acme.do("GET", "/api/v1/projects", nil); code != 200 {
+			t.Fatalf("owner = %d %v", code, b)
+		}
+
+		viaSSO := ssoLogin(t, on(anon, "acme.kyber.test"), "kyber.test", id, "dev@acme.uz")
+		if code, b := viaSSO.do("GET", "/api/v1/projects", nil); code != 200 {
+			t.Fatalf("signed in through SSO = %d %v", code, b)
+		}
+		code, c = acme.do("PATCH", "/api/v1/admin/sso/connections/"+id, map[string]any{"enforced": false})
+		expect(t, code, 200, c)
+		if code, b := devAcme.do("GET", "/api/v1/projects", nil); code != 200 {
+			t.Fatalf("after lifting = %d %v", code, b)
+		}
+	}, server.WithBaseDomain("kyber.test"), server.WithEncryptionKey(box), server.WithSSOProviders(build))
 }

@@ -1,11 +1,14 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.74.0
+  version: 0.75.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
     `Content-Type: application/json` (CSRF guard). Non-members receive `404` for project resources.
+    A workspace that requires single sign-on (ADR-0018) answers any of its routes with
+    `403 SSO_REQUIRED` to members who signed in another way or use an API token; the detail names the
+    connection's sign-in URL. Workspace owners are exempt.
   license: { name: MIT, identifier: MIT }
 servers:
   - url: http://localhost:8080
@@ -63,7 +66,7 @@ paths:
   /api/v1/admin/sso/connections:
     get:
       operationId: listSSOConnections
-      summary: Stored identity providers (site admins, ADR-0018). Client secrets are never returned.
+      summary: Stored identity providers (ADR-0018). Site admins see all; a workspace's admins see its own. Secrets are never returned.
       responses:
         "200":
           description: Oldest first.
@@ -91,6 +94,11 @@ paths:
                 client_id: { type: string }
                 client_secret: { type: string, writeOnly: true }
                 groups_claim: { type: string, description: "ID token claim with the user's groups (S106); default groups." }
+                scope:
+                  type: string
+                  enum: [installation, workspace]
+                  default: installation
+                  description: "installation: site admins only; workspace: this workspace's own (its admins may manage it)."
       responses:
         "201": { description: Created., content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } }
         "401": { $ref: "#/components/responses/Error" }
@@ -112,6 +120,7 @@ paths:
               properties:
                 name: { type: string, maxLength: 60 }
                 enabled: { type: boolean }
+                enforced: { type: boolean, description: "Require it for the workspace's members (workspace connections only; owners exempt)." }
       responses:
         "200": { description: Updated., content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } }
         "401": { $ref: "#/components/responses/Error" }
@@ -2521,6 +2530,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProjectList" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
@@ -4416,9 +4426,11 @@ components:
   schemas:
     SSOConnection:
       type: object
-      required: [id, kind, name, issuer, client_id, groups_claim, enabled, created_at, domains]
+      required: [id, kind, name, issuer, client_id, groups_claim, workspace_id, enforced, enabled, created_at, domains]
       properties:
         id: { type: string }
+        workspace_id: { type: [string, "null"], description: "null: installation-wide." }
+        enforced: { type: boolean }
         domains:
           type: array
           description: Email domains it serves; only verified ones route sign-in.

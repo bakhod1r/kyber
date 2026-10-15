@@ -62,6 +62,20 @@ func (s *Store) Save(_ context.Context, c *domain.Connection) error {
 	return nil
 }
 
+func (s *Store) RequiredBy(_ context.Context, workspace string) ([]domain.Connection, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []domain.Connection{}
+	for _, c := range s.byID {
+		if c.Requires(workspace) {
+			c.Domains = nil
+			out = append(out, c)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
 func (s *Store) ByDomain(_ context.Context, name string) (*domain.Connection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

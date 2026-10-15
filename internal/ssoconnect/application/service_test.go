@@ -11,9 +11,14 @@ import (
 	"github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/memory"
 )
 
+// admins: "boss" is a site admin; "ws-admin" administers and "ws-owner" owns workspace w-1.
 type admins map[string]bool
 
 func (a admins) IsSiteAdmin(_ context.Context, u string) bool { return a[u] }
+func (admins) Administers(_ context.Context, ws, u string) bool {
+	return ws == "w-1" && (u == "ws-admin" || u == "ws-owner")
+}
+func (admins) Owns(_ context.Context, ws, u string) bool { return ws == "w-1" && u == "ws-owner" }
 
 type audit struct{ actions []string }
 
@@ -33,7 +38,7 @@ func setup(repo domain.Connections) (*application.Service, *audit) {
 		NewID: func() string { return "c-1" }, Now: func() time.Time { return time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC) }}), a
 }
 
-var okta = domain.Settings{Name: "Okta", Issuer: "https://acme.okta.com", ClientID: "id", ClientSecret: "secret", Workspace: "ignored"}
+var okta = domain.Settings{Name: "Okta", Issuer: "https://acme.okta.com", ClientID: "id", ClientSecret: "secret"}
 
 func TestManageConnections(t *testing.T) {
 	ctx := context.Background()
@@ -50,7 +55,7 @@ func TestManageConnections(t *testing.T) {
 	if c, _ = s.Update(ctx, "boss", "c-1", application.Change{Enabled: &on}); !c.Enabled {
 		t.Fatal("not re-enabled")
 	}
-	if list, err := s.List(ctx, "boss"); err != nil || len(list) != 1 {
+	if list, err := s.List(ctx, "boss", ""); err != nil || len(list) != 1 {
 		t.Fatalf("list = %v %v", list, err)
 	}
 	if err := s.Delete(ctx, "boss", "c-1"); err != nil {
@@ -70,11 +75,14 @@ func TestManageConnections(t *testing.T) {
 func TestRefusals(t *testing.T) {
 	ctx := context.Background()
 	s, _ := setup(memory.New())
-	if _, err := s.List(ctx, "bob"); !errors.Is(err, application.ErrForbidden) {
+	if _, err := s.List(ctx, "bob", ""); !errors.Is(err, application.ErrForbidden) {
 		t.Errorf("list: %v", err)
 	}
 	if _, err := s.Create(ctx, "bob", okta); !errors.Is(err, application.ErrForbidden) {
 		t.Errorf("create: %v", err)
+	}
+	if _, err := s.Create(ctx, "boss", okta); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := s.Update(ctx, "bob", "c-1", application.Change{}); !errors.Is(err, application.ErrForbidden) {
 		t.Errorf("update: %v", err)
@@ -82,6 +90,7 @@ func TestRefusals(t *testing.T) {
 	if err := s.Delete(ctx, "bob", "c-1"); !errors.Is(err, application.ErrForbidden) {
 		t.Errorf("delete: %v", err)
 	}
+	_ = s.Delete(ctx, "boss", "c-1")
 	bad := okta
 	bad.Issuer = "http://idp.example.com"
 	if _, err := s.Create(ctx, "boss", bad); !errors.Is(err, domain.ErrInvalidConnection) {
@@ -144,7 +153,7 @@ func (d dns) TXT(_ context.Context, name string) ([]string, error) {
 func withDNS(repo domain.Connections, records dns) (*application.Service, *audit) {
 	a := &audit{}
 	return application.NewService(application.Deps{Connections: repo, Admins: admins{"boss": true}, Audit: a, DNS: records,
-		NewID: func() string { return "c-1" }, NewToken: func() string { return "tok" },
+		NewID: ids(), NewToken: func() string { return "tok" },
 		Now: func() time.Time { return time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC) }}), a
 }
 
@@ -211,4 +220,10 @@ func withDNSFailingSave(*application.Service) *application.Service {
 	_, _ = s.Create(context.Background(), "boss", okta)
 	broken, _ := withDNS(failing{repo}, dns{})
 	return broken
+}
+
+// ids returns c-1, c-2, … one per call.
+func ids() func() string {
+	n := 0
+	return func() string { n++; return "c-" + string(rune('0'+n)) }
 }

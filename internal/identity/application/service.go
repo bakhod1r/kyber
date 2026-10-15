@@ -123,12 +123,12 @@ func (s *Service) login(ctx context.Context, rawEmail, password string) (string,
 	if !s.hasher.Verify(u.PasswordHash(), password) || !u.Active() {
 		return "", ErrInvalidCredentials
 	}
-	return s.newSession(ctx, u.ID())
+	return s.newSession(ctx, u.ID(), domain.MethodPassword)
 }
 
 // newSession issues an opaque bearer token; only its SHA-256 hash is stored.
 // Every sign-in path (password, social, code) ends here, so a deactivated user gets no session.
-func (s *Service) newSession(ctx context.Context, user domain.UserID) (string, error) {
+func (s *Service) newSession(ctx context.Context, user domain.UserID, method string) (string, error) {
 	if _, err := s.activeUser(ctx, user); err != nil {
 		if errors.Is(err, ErrUnauthenticated) {
 			return "", ErrInvalidCredentials
@@ -139,26 +139,35 @@ func (s *Service) newSession(ctx context.Context, user domain.UserID) (string, e
 	_, _ = rand.Read(raw[:]) // never fails (Go 1.24+: crypto/rand.Read panics instead of erroring)
 	token := base64.RawURLEncoding.EncodeToString(raw[:])
 	err := s.sessions.CreateSession(ctx, domain.Session{
-		TokenHash: hashToken(token), UserID: user, ExpiresAt: s.clock.Now().Add(SessionTTL),
+		TokenHash: hashToken(token), UserID: user, ExpiresAt: s.clock.Now().Add(SessionTTL), Method: method,
 	})
 	return token, err
 }
 
 func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User, error) {
+	u, _, err := s.AuthenticateWithMethod(ctx, token)
+	return u, err
+}
+
+// AuthenticateWithMethod also tells how the user signed in (domain.MethodPassword,
+// domain.MethodToken or the external provider).
+func (s *Service) AuthenticateWithMethod(ctx context.Context, token string) (*domain.User, string, error) {
 	if IsPersonalToken(token) {
-		return s.authenticateToken(ctx, token)
+		u, err := s.authenticateToken(ctx, token)
+		return u, domain.MethodToken, err
 	}
 	sess, err := s.sessions.SessionByHash(ctx, hashToken(token))
 	if errors.Is(err, domain.ErrSessionNotFound) {
-		return nil, ErrUnauthenticated
+		return nil, "", ErrUnauthenticated
 	}
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if !s.clock.Now().Before(sess.ExpiresAt) {
-		return nil, ErrUnauthenticated
+		return nil, "", ErrUnauthenticated
 	}
-	return s.activeUser(ctx, sess.UserID)
+	u, err := s.activeUser(ctx, sess.UserID)
+	return u, sess.Method, err
 }
 
 // activeUser loads a signed-in user; a deleted or deactivated (SCIM) user is unauthenticated.

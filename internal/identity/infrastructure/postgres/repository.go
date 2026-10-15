@@ -54,16 +54,16 @@ func scanUser(row pgx.Row) (*domain.User, error) {
 }
 
 func (r *Repository) CreateSession(ctx context.Context, s domain.Session) error {
-	_, err := r.pool.Exec(ctx, `INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)`,
-		s.TokenHash, string(s.UserID), s.ExpiresAt)
+	_, err := r.pool.Exec(ctx, `INSERT INTO sessions (token_hash, user_id, expires_at, auth_method) VALUES ($1, $2, $3, $4)`,
+		s.TokenHash, string(s.UserID), s.ExpiresAt, s.Method)
 	return err
 }
 
 func (r *Repository) SessionByHash(ctx context.Context, hash []byte) (domain.Session, error) {
 	var s domain.Session
 	var uid string
-	err := r.pool.QueryRow(ctx, `SELECT token_hash, user_id::text, expires_at FROM sessions WHERE token_hash = $1`, hash).
-		Scan(&s.TokenHash, &uid, &s.ExpiresAt)
+	err := r.pool.QueryRow(ctx, `SELECT token_hash, user_id::text, expires_at, auth_method FROM sessions WHERE token_hash = $1`, hash).
+		Scan(&s.TokenHash, &uid, &s.ExpiresAt, &s.Method)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Session{}, domain.ErrSessionNotFound
 	}

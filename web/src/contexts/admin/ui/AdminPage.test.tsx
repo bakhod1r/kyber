@@ -132,6 +132,7 @@ describe("admin page", () => {
         client_id: "kid",
         client_secret: "shh",
         groups_claim: "",
+        scope: "workspace",
       }),
     );
     expect(within(sso).getByLabelText("Client secret")).toHaveValue("");
@@ -187,5 +188,25 @@ describe("admin page", () => {
     await waitFor(() => expect(calls.find((c) => c.key === "POST /api/v1/admin/sso/connections/c-1/domains")?.body).toEqual({ domain: "corp.uz", trusted: true }));
     await user.click(within(sso).getByRole("button", { name: "Remove domain acme.uz" }));
     await waitFor(() => expect(calls.some((c) => c.key === "DELETE /api/v1/admin/sso/connections/c-1/domains/acme.uz")).toBe(true));
+  });
+
+  it("requires the workspace's own connection for its members", async () => {
+    const own = { id: "c-9", kind: "oidc", name: "Acme Okta", issuer: "https://acme.okta.com", client_id: "k", groups_claim: "", workspace_id: "w-1", enforced: false, enabled: true, created_at: "2026-10-15T09:00:00Z", domains: [] };
+    const site = { ...own, id: "c-1", name: "Shared Entra", workspace_id: null };
+    const calls = mockApi({
+      "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
+      "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/dead-letters": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/sso/connections": { status: 200, body: { items: [own, site] } },
+      "PATCH /api/v1/admin/sso/connections/c-9": { status: 200, body: { ...own, enforced: true } },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPage />);
+    const sso = await screen.findByRole("region", { name: "SSO connections" });
+    await user.click(await within(sso).findByRole("checkbox", { name: "Require Acme Okta for this workspace" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "PATCH /api/v1/admin/sso/connections/c-9")?.body).toEqual({ enforced: true }));
+    expect(within(sso).queryByRole("checkbox", { name: "Require Shared Entra for this workspace" })).not.toBeInTheDocument();
+    expect(within(sso).getByText(/installation-wide/)).toBeInTheDocument();
   });
 });

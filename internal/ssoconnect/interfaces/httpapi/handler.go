@@ -4,6 +4,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/bakhod1r/kyber/internal/platform/auth"
 	"github.com/bakhod1r/kyber/internal/platform/httpx"
+	"github.com/bakhod1r/kyber/internal/platform/tenant"
 	"github.com/bakhod1r/kyber/internal/ssoconnect/application"
 	"github.com/bakhod1r/kyber/internal/ssoconnect/domain"
 )
@@ -41,6 +43,8 @@ func (h *Handler) RegisterPublic(mux *http.ServeMux, wrap func(http.Handler) htt
 
 func codeFor(err error) (string, bool) {
 	switch {
+	case errors.Is(err, application.ErrSSORequired):
+		return httpx.CodeSSORequired, true
 	case errors.Is(err, application.ErrForbidden):
 		return httpx.CodeAdminForbidden, true
 	case errors.Is(err, domain.ErrInvalidConnection):
@@ -66,6 +70,8 @@ type connectionDTO struct {
 	Issuer      string      `json:"issuer"`
 	ClientID    string      `json:"client_id"`
 	GroupsClaim string      `json:"groups_claim"`
+	WorkspaceID *string     `json:"workspace_id"`
+	Enforced    bool        `json:"enforced"`
 	Enabled     bool        `json:"enabled"`
 	CreatedAt   time.Time   `json:"created_at"`
 	Domains     []domainDTO `json:"domains"`
@@ -83,12 +89,16 @@ func out(c domain.Connection) connectionDTO {
 	for _, d := range c.Domains {
 		ds = append(ds, domainDTO{Name: d.Name, Verified: d.Verified, TXT: "kyber-verify=" + d.Token})
 	}
+	var ws *string
+	if c.Workspace != "" {
+		ws = &c.Workspace
+	}
 	return connectionDTO{ID: string(c.ID), Kind: string(c.Kind), Name: c.Name, Issuer: c.Issuer, ClientID: c.ClientID,
-		GroupsClaim: c.GroupsClaim, Enabled: c.Enabled, CreatedAt: c.CreatedAt, Domains: ds}
+		GroupsClaim: c.GroupsClaim, WorkspaceID: ws, Enforced: c.Enforced, Enabled: c.Enabled, CreatedAt: c.CreatedAt, Domains: ds}
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	list, err := h.svc.List(r.Context(), auth.Actor(r.Context()))
+	list, err := h.svc.List(r.Context(), auth.Actor(r.Context()), tenant.Workspace(r.Context()))
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
@@ -107,13 +117,22 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		ClientID     string `json:"client_id"`
 		ClientSecret string `json:"client_secret"`
 		GroupsClaim  string `json:"groups_claim"`
+		Scope        string `json:"scope"` // "installation" (default) or "workspace": this workspace's own
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
-	c, err := h.svc.Create(r.Context(), auth.Actor(r.Context()), domain.Settings{Name: in.Name, Issuer: in.Issuer,
-		ClientID: in.ClientID, ClientSecret: in.ClientSecret, GroupsClaim: in.GroupsClaim})
+	settings := domain.Settings{Name: in.Name, Issuer: in.Issuer, ClientID: in.ClientID, ClientSecret: in.ClientSecret, GroupsClaim: in.GroupsClaim}
+	switch in.Scope {
+	case "workspace":
+		settings.Workspace = tenant.Workspace(r.Context())
+	case "", "installation":
+	default:
+		httpx.Error(w, r, h.log, fmt.Errorf("%w: scope must be installation or workspace", domain.ErrInvalidConnection), codeFor)
+		return
+	}
+	c, err := h.svc.Create(r.Context(), auth.Actor(r.Context()), settings)
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
@@ -123,15 +142,16 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Name    *string `json:"name"`
-		Enabled *bool   `json:"enabled"`
+		Name     *string `json:"name"`
+		Enabled  *bool   `json:"enabled"`
+		Enforced *bool   `json:"enforced"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
 	c, err := h.svc.Update(r.Context(), auth.Actor(r.Context()), domain.ConnectionID(r.PathValue("id")),
-		application.Change{Name: in.Name, Enabled: in.Enabled})
+		application.Change{Name: in.Name, Enabled: in.Enabled, Enforced: in.Enforced})
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
@@ -207,4 +227,29 @@ func (h *Handler) discover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"connection": found})
+}
+
+// RequireSSO refuses a workspace's API to members who did not sign in through the connection it
+// requires (ADR-0018 §5). It runs after the membership check; apex routes (sign-in, /me, the
+// workspace list) stay open so people can still sign in the right way.
+func (h *Handler) RequireSSO(apex func(path string) bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ws, scoped := tenant.From(r.Context())
+			if scoped && !apex(r.URL.Path) {
+				err := h.svc.Check(r.Context(), ws, auth.Actor(r.Context()), auth.Method(r.Context()))
+				var required *application.SSORequiredError
+				if errors.As(err, &required) {
+					msg := "This workspace requires single sign-on with " + required.Name + ": sign in at /api/v1/auth/sso/" + required.ID + "/start"
+					httpx.Problem(w, r, errorx.New(httpx.CodeSSORequired, msg).WithDetails(msg))
+					return
+				}
+				if err != nil {
+					httpx.Error(w, r, h.log, err, codeFor)
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

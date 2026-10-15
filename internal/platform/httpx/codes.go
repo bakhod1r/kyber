@@ -108,6 +108,7 @@ const (
 	CodeSSODomainNotFound      = "SSO_DOMAIN_NOT_FOUND"
 	CodeSSODomainNotVerified   = "SSO_DOMAIN_NOT_VERIFIED"
 	CodeSSODomainTaken         = "SSO_DOMAIN_TAKEN"
+	CodeSSORequired            = "SSO_REQUIRED"
 )
 
 type code struct {
@@ -157,6 +158,7 @@ var codes = []code{
 	{CodeSSODomainNotFound, "6196", 404, "This connection has no such domain.", "Bu ulanishda bunday domen yo'q.", "У этого подключения нет такого домена.", errorx.CategoryBusiness},
 	{CodeSSODomainNotVerified, "6197", 409, "The TXT record kyber-verify=<token> was not found on the domain yet.", "Domenda kyber-verify=<token> TXT yozuvi hali topilmadi.", "TXT-запись kyber-verify=<token> на домене пока не найдена.", errorx.CategoryBusiness},
 	{CodeSSODomainTaken, "6198", 409, "Another SSO connection already uses this domain.", "Bu domenni boshqa SSO ulanishi ishlatyapti.", "Этот домен уже использует другое подключение SSO.", errorx.CategoryBusiness},
+	{CodeSSORequired, "6199", 403, "This workspace requires single sign-on.", "Bu ish maydoniga faqat SSO orqali kirish mumkin.", "В это рабочее пространство можно войти только через SSO.", errorx.CategorySecurity},
 	{CodeGroupMappingNotFound, "6193", 404, "SSO group mapping not found.", "SSO guruh moslamasi topilmadi.", "Сопоставление группы SSO не найдено.", errorx.CategoryBusiness},
 	{CodeRateLimited, "6190", 429, "Too many requests; slow down.", "So'rovlar juda ko'p; sekinroq.", "Слишком много запросов; помедленнее.", errorx.CategoryBusiness},
 	{CodeWebhookRateLimited, "6118", 429, "Too many messages from this webhook; slow down.", "Bu vebhukdan juda ko'p xabar; sekinroq.", "Слишком много сообщений от этого вебхука; помедленнее.", errorx.CategoryBusiness},

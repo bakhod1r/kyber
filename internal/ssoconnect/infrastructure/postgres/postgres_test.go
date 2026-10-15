@@ -25,7 +25,11 @@ func box(t *testing.T, b byte) *seal.Box {
 }
 
 func TestContract(t *testing.T) {
-	repotest.Run(t, postgres.New(dbtest.New(t), box(t, 1)))
+	pool := dbtest.New(t)
+	if _, err := pool.Exec(context.Background(), `INSERT INTO workspaces (id, slug, name) VALUES ($1, 'acme', 'Acme')`, repotest.WS); err != nil {
+		t.Fatal(err)
+	}
+	repotest.Run(t, postgres.New(pool, box(t, 1)))
 }
 
 func TestSecretsAreSealed(t *testing.T) {

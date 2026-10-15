@@ -25,15 +25,32 @@ func (a Audit) Record(ctx context.Context, actor, action string, c domain.Connec
 	return a.Log.Record(ctx, actor, action, "sso:"+string(c.ID)+" "+c.Name+" ("+c.Issuer+", "+state+")", "", http.StatusOK)
 }
 
-// Admins answers with the installation's site admins (KYBER_ADMIN_EMAILS).
-type Admins func(ctx context.Context, user string) (bool, error)
+// WorkspaceRoles is the slice of the Workspace context used to authorize connection management.
+type WorkspaceRoles interface {
+	Administers(ctx context.Context, workspace, user string) (bool, error)
+	Owns(ctx context.Context, workspace, user string) (bool, error)
+}
 
-func (a Admins) IsSiteAdmin(ctx context.Context, user string) bool {
-	ok, err := a(ctx, user)
-	return err == nil && ok
+// Admins answers with the installation's site admins (KYBER_ADMIN_EMAILS) and workspace roles.
+// Any lookup error counts as "no": access is refused rather than granted.
+type Admins struct {
+	Site       func(ctx context.Context, user string) (bool, error)
+	Workspaces WorkspaceRoles
+}
+
+func yes(ok bool, err error) bool { return err == nil && ok }
+
+func (a Admins) IsSiteAdmin(ctx context.Context, user string) bool { return yes(a.Site(ctx, user)) }
+
+func (a Admins) Administers(ctx context.Context, workspace, user string) bool {
+	return yes(a.Workspaces.Administers(ctx, workspace, user))
+}
+
+func (a Admins) Owns(ctx context.Context, workspace, user string) bool {
+	return yes(a.Workspaces.Owns(ctx, workspace, user))
 }
 
 var (
 	_ application.Audit  = Audit{}
-	_ application.Admins = Admins(nil)
+	_ application.Admins = Admins{}
 )

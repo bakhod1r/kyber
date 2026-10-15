@@ -61,6 +61,19 @@ func (s *Service) Administers(ctx context.Context, workspace, user string) (bool
 	return ok && (r == domain.RoleOwner || r == domain.RoleAdmin), nil
 }
 
+// Owns reports whether user owns a named workspace (the default workspace has no stored owners).
+func (s *Service) Owns(ctx context.Context, workspace, user string) (bool, error) {
+	if domain.WorkspaceID(workspace) == domain.DefaultID {
+		return false, nil
+	}
+	w, err := s.repo.ByID(ctx, domain.WorkspaceID(workspace))
+	if err != nil {
+		return false, err
+	}
+	r, ok := w.RoleOf(domain.UserID(user))
+	return ok && r == domain.RoleOwner, nil
+}
+
 // MemberIDs lists a named workspace's members (a read model for other contexts). The default
 // workspace stores none: callers decide who is in it.
 func (s *Service) MemberIDs(ctx context.Context, workspace string) ([]string, error) {

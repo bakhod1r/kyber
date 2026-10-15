@@ -41,12 +41,12 @@ func TestRepository(t *testing.T) {
 	}
 
 	exp := time.Now().Add(time.Hour).UTC().Truncate(time.Microsecond)
-	s := domain.Session{TokenHash: []byte("0123456789abcdef0123456789abcdef"), UserID: u.ID(), ExpiresAt: exp}
+	s := domain.Session{TokenHash: []byte("0123456789abcdef0123456789abcdef"), UserID: u.ID(), ExpiresAt: exp, Method: "sso:c-1"}
 	if err := r.CreateSession(ctx, s); err != nil {
 		t.Fatal(err)
 	}
 	got, err := r.SessionByHash(ctx, s.TokenHash)
-	if err != nil || got.UserID != u.ID() || !got.ExpiresAt.Equal(exp) {
+	if err != nil || got.UserID != u.ID() || !got.ExpiresAt.Equal(exp) || got.Method != "sso:c-1" {
 		t.Fatalf("session = %+v, %v", got, err)
 	}
 	if err := r.DeleteSession(ctx, s.TokenHash); err != nil {

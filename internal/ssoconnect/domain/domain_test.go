@@ -110,3 +110,24 @@ func TestDomainOf(t *testing.T) {
 		}
 	}
 }
+
+func TestEnforce(t *testing.T) {
+	site, _ := domain.NewConnection("c-1", domain.Settings{Name: "A", Issuer: "https://a.example", ClientID: "x", ClientSecret: "y"}, now)
+	if err := site.Enforce(true); !errors.Is(err, domain.ErrInvalidConnection) {
+		t.Fatalf("an installation-wide connection cannot be required: %v", err)
+	}
+	if err := site.Enforce(false); err != nil {
+		t.Fatal(err)
+	}
+	ws, _ := domain.NewConnection("c-2", domain.Settings{Name: "A", Issuer: "https://a.example", ClientID: "x", ClientSecret: "y", Workspace: "w-1"}, now)
+	if err := ws.Enforce(true); err != nil || !ws.Enforced || !ws.Requires("w-1") {
+		t.Fatalf("enforce = %v %+v", err, ws)
+	}
+	if ws.Requires("w-2") {
+		t.Fatal("required in another workspace")
+	}
+	ws.Disable()
+	if ws.Requires("w-1") {
+		t.Fatal("a disabled connection is not required")
+	}
+}
