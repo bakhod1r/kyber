@@ -78,9 +78,9 @@ From the gap review of unfinished items (QA limitations, ADR follow-ups). Each f
 | G1 ✅ | Trusted proxies (B2) | `KYBER_TRUSTED_PROXIES`; `X-Forwarded-For` believed only from listed proxies, rightmost untrusted hop wins (QA-03) | — |
 | G2 ✅ | Import lock across replicas (B3) | `ImportLock` port; PostgreSQL advisory lock per workspace and project (QA-08) | — |
 | G3 ✅ | Atomic sprint completion (B4) | sprint and `sprint.completed` saved together; Issue Tracking carries issues over in a handler (QA-05) | — |
-| G4 ✅ | Email invitations (B1) | invite by email, 7-day link (token hashed), accept only with the invited address; members panel, `/invite/:token` | 0086 |
+| G4 ✅ | Email invitations (B1) | invite by email, 7-day link (token hashed), accept only with the invited address; members panel, `/invite/:token` | 0093 |
 | G5 ✅ | UI review | CSP for the MQTT worker, responsive header/board/tables, uz/ru labels, dates in the chosen language | — |
-| G6 ✅ | Daily email digest (B9) | per-user setting; 08:00 in the user's time zone, once a day across replicas; Telegram stays immediate | 0087 |
-| G7 ✅ | Project archive and templates (B10) | archived projects are read-only (Access context) until an admin restores them; Kanban, Scrum and bug-tracking templates | 0088 |
-| G8 ✅ | Automation rules | trigger → condition (JQL) → actions (transition, assign, label, comment) as the rule owner, through the outbox; only people's changes trigger rules (no loops); recent runs | 0089 |
+| G6 ✅ | Daily email digest (B9) | per-user setting; 08:00 in the user's time zone, once a day across replicas; Telegram stays immediate | 0094 |
+| G7 ✅ | Project archive and templates (B10) | archived projects are read-only (Access context) until an admin restores them; Kanban, Scrum and bug-tracking templates | 0095 |
+| G8 ✅ | Automation rules | trigger → condition (JQL) → actions (transition, assign, label, comment) as the rule owner, through the outbox; only people's changes trigger rules (no loops); recent runs | 0096 |
 | G9 ✅ | Bulk operations | status, assignee, sprint and labels for up to 100 issues; per-issue outcome; List view selection | — |

@@ -119,3 +119,20 @@ func TestNextIssueNumberAndRehydrate(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRemoveMember(t *testing.T) {
+	p, _ := domain.NewProject("p-1", "w-1", "KYB", "Kyber", "u-admin")
+	_ = p.SetMember("u-dev", domain.RoleMember)
+	if err := p.RemoveMember("u-dev"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := p.RoleOf("u-dev"); ok {
+		t.Fatal("still a member")
+	}
+	if err := p.RemoveMember("u-nobody"); err != nil {
+		t.Fatalf("removing a non-member is a no-op: %v", err)
+	}
+	if err := p.RemoveMember("u-admin"); !errors.Is(err, domain.ErrLastAdmin) {
+		t.Fatalf("last admin: %v", err)
+	}
+}

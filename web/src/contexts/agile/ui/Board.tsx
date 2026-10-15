@@ -6,7 +6,7 @@ import { agileUseCases, type BoardColumn, type BoardFilter, boardFilterActive, f
 import { issueUseCases, DEFAULT_WORKFLOW, ISSUE_TYPES, type Issue, type IssueType, type Status } from "../../issue/application";
 import { projectUseCases, type Member } from "../../project/application";
 import { announceIssueDone } from "../../../shared/events";
-import { useT } from "../../../shared/i18n/i18n";
+import { useLabel, useT } from "../../../shared/i18n/i18n";
 
 const DRAG_TYPE = "application/x-kyber-issue";
 
@@ -44,6 +44,7 @@ export function Board({
   visibleKeys?: Set<string> | null;
 }) {
   const t = useT();
+  const label = useLabel();
   const qc = useQueryClient();
   // With an active sprint the board shows only that sprint (Scrum); otherwise every issue (Kanban).
   const sprints = useQuery({ queryKey: ["sprints", projectKey], queryFn: () => agileUseCases.sprints(projectKey) });
@@ -115,10 +116,14 @@ export function Board({
   function onDrop(e: DragEvent, col: BoardColumn) {
     e.preventDefault();
     setOver(null);
-    const key = e.dataTransfer.getData(DRAG_TYPE);
+    moveTo(e.dataTransfer.getData(DRAG_TYPE), col);
+  }
+
+  // The card's Move menu does the same without a mouse (keyboard, touch screens).
+  function moveTo(key: string, col: BoardColumn | undefined) {
     const issue = issues.data?.find((i) => i.key === key);
-    const to = col.statuses[0];
-    if (issue && to && !col.statuses.includes(issue.status)) move.mutate({ key, to });
+    const to = col?.statuses[0];
+    if (issue && col && to && !col.statuses.includes(issue.status)) move.mutate({ key, to });
   }
 
   const laneLabel = (id: string): string => {
@@ -140,7 +145,7 @@ export function Board({
       return (
         <section
           key={col.name}
-          aria-label={lane === undefined ? col.name : `${col.name} · ${lane}`}
+          aria-label={lane === undefined ? label(col.name) : `${label(col.name)} · ${lane}`}
           className={`column${over === col.name ? " over" : ""}${wip}`}
           onDragOver={(e) => {
             e.preventDefault();
@@ -150,7 +155,7 @@ export function Board({
           onDrop={(e) => onDrop(e, col)}
         >
           <h2>
-            {col.name}{" "}
+            {label(col.name)}{" "}
             <span className="count" title={col.max > 0 ? t("Issues / WIP limit") : undefined}>
               {col.max > 0 ? `${total} / ${col.max}` : cards.length}
             </span>
@@ -174,6 +179,18 @@ export function Board({
               </button>
               <div className="card-foot">
                 <small>{i.key}</small>
+                <select
+                  className="card-move"
+                  aria-label={t("Move {key}", { key: i.key })}
+                  value={col.name}
+                  onChange={(e) => moveTo(i.key, boardColumns.find((c) => c.name === e.target.value))}
+                >
+                  {boardColumns.map((c) => (
+                    <option key={c.name} value={c.name}>
+                      {label(c.name)}
+                    </option>
+                  ))}
+                </select>
                 {i.assignee_id && byId.get(i.assignee_id) && (
                   <span className="avatar" title={byId.get(i.assignee_id)?.name}>
                     {initials(byId.get(i.assignee_id)?.name ?? "")}

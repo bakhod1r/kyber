@@ -96,7 +96,16 @@ type Session struct {
 	TokenHash []byte
 	UserID    UserID
 	ExpiresAt time.Time
+	// Method is how the user signed in: MethodPassword, or the external provider ("google",
+	// "sso:<connection id>", …). A workspace that requires SSO checks it (ADR-0018 §5).
+	Method string
 }
+
+// Sign-in methods besides external providers.
+const (
+	MethodPassword = "password"
+	MethodToken    = "token" // a personal access or OAuth token (no browser sign-in)
+)
 
 type Users interface {
 	Create(ctx context.Context, u *User) error // ErrEmailTaken

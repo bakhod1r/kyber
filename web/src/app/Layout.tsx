@@ -29,7 +29,7 @@ export function Layout({ user, children }: { user: User; children: ReactNode }) 
           <img src="/logo.svg" alt="" width={28} height={28} />
           {t("Kyber")}
         </Link>
-        <nav className="topnav" aria-label={t("Main navigation")}>
+        <nav className="topnav" aria-label={t("Main")}>
           <NavLink to="/search" className="nav-link">
             {t("Search")}
           </NavLink>
@@ -49,13 +49,15 @@ export function Layout({ user, children }: { user: User; children: ReactNode }) 
         <FocusTimer />
         <NotificationBell />
         <LanguagePicker />
-        <Link to="/settings" className="user" title={t("Notification settings")}>
-          {user.name}
-        </Link>
-        <button className="ghost logout" aria-label={t("Log out")} title={t("Log out")} onClick={() => logout.mutate()}>
-          <span aria-hidden="true" className="logout-icon">⎋</span>
-          <span className="logout-text">{t("Log out")}</span>
-        </button>
+        <details className="user-menu">
+          <summary className="user">{user.name}</summary>
+          <div className="user-menu-list panel">
+            <Link to="/settings">{t("Settings")}</Link>
+            <button className="ghost" onClick={() => logout.mutate()}>
+              {t("Log out")}
+            </button>
+          </div>
+        </details>
       </header>
       <main className="page">{children}</main>
     </>

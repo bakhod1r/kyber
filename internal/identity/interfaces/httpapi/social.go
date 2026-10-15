@@ -26,8 +26,9 @@ type Social struct {
 	SAML        SAMLClient // the installation's SAML identity provider
 	SAMLName    string     // its button label
 	Telegram    TelegramVerifier
-	TelegramBot string // bot username for the login widget and the code bot
-	TelegramOTP bool   // the bot sends one-time login codes (needs the bot token)
+	TelegramBot string                   // bot username for the login widget and the code bot
+	TelegramOTP bool                     // the bot sends one-time login codes (needs the bot token)
+	SSO         application.SSODirectory // stored SSO connections (ADR-0018); nil = none
 }
 
 // OAuthClient is a redirect (authorization code) sign-in provider.
@@ -52,9 +53,11 @@ func (h *Handler) WithSocial(s Social) *Handler { h.social = s; return h }
 func (h *Handler) registerSocial(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/auth/providers", h.providers)
 	for _, name := range []string{"google", "oidc", "github"} {
-		mux.HandleFunc("GET /api/v1/auth/"+name+"/start", h.oauthStart(name))
-		mux.HandleFunc("GET /api/v1/auth/"+name+"/callback", h.oauthCallback(name))
+		mux.HandleFunc("GET /api/v1/auth/"+name+"/start", h.oauthStart(h.builtin(name)))
+		mux.HandleFunc("GET /api/v1/auth/"+name+"/callback", h.oauthCallback(h.builtin(name)))
 	}
+	mux.HandleFunc("GET /api/v1/auth/sso/{id}/start", h.oauthStart(h.stored))
+	mux.HandleFunc("GET /api/v1/auth/sso/{id}/callback", h.oauthCallback(h.stored))
 	h.registerSAML(mux)
 	mux.HandleFunc("POST /api/v1/auth/telegram", h.telegram)
 	mux.HandleFunc("POST /api/v1/auth/telegram/otp", h.otpStart)
@@ -70,17 +73,64 @@ func (h *Handler) oauth(name string) OAuthClient {
 	return c
 }
 
+// redirect is a resolved authorization-code provider: name labels failures (/login?error=<name>_failed)
+// and path scopes the flow cookie to the provider's routes.
+type redirect struct {
+	provider   application.RedirectProvider
+	name, path string
+}
+
+type resolver func(r *http.Request) (redirect, error)
+
+func (h *Handler) builtin(name string) resolver {
+	return func(*http.Request) (redirect, error) {
+		c := h.oauth(name)
+		if c == nil {
+			return redirect{}, errProviderDisabled
+		}
+		return redirect{provider: c, name: name, path: "/api/v1/auth/" + name + "/"}, nil
+	}
+}
+
+// stored resolves a stored SSO connection by the {id} in the path.
+func (h *Handler) stored(r *http.Request) (redirect, error) {
+	if h.social.SSO == nil {
+		return redirect{}, errProviderDisabled
+	}
+	id := r.PathValue("id")
+	c, err := h.social.SSO.SSOConnection(r.Context(), id)
+	if err != nil {
+		return redirect{}, err
+	}
+	return redirect{provider: c.Provider, name: "sso", path: "/api/v1/auth/sso/" + url.PathEscape(id) + "/"}, nil
+}
+
 func (h *Handler) telegramOn() bool { return h.social.Telegram != nil && h.social.Telegram.Enabled() }
 
-func (h *Handler) providers(w http.ResponseWriter, _ *http.Request) {
+type ssoButton struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (h *Handler) providers(w http.ResponseWriter, r *http.Request) {
 	out := struct {
-		Google      bool    `json:"google"`
-		OIDC        *string `json:"oidc"`
-		SAML        *string `json:"saml"`
-		GitHub      bool    `json:"github"`
-		TelegramBot *string `json:"telegram_bot"`
-		TelegramOTP bool    `json:"telegram_otp"`
-	}{Google: h.oauth("google") != nil, GitHub: h.oauth("github") != nil, TelegramOTP: h.social.TelegramOTP}
+		Google      bool        `json:"google"`
+		OIDC        *string     `json:"oidc"`
+		SAML        *string     `json:"saml"`
+		GitHub      bool        `json:"github"`
+		TelegramBot *string     `json:"telegram_bot"`
+		TelegramOTP bool        `json:"telegram_otp"`
+		SSO         []ssoButton `json:"sso"`
+	}{Google: h.oauth("google") != nil, GitHub: h.oauth("github") != nil, TelegramOTP: h.social.TelegramOTP, SSO: []ssoButton{}}
+	if h.social.SSO != nil {
+		list, err := h.social.SSO.SSOConnections(r.Context())
+		if err != nil {
+			h.log.ErrorContext(r.Context(), "listing SSO connections", "err", err) // the other methods still work
+		}
+		for _, c := range list {
+			out.SSO = append(out.SSO, ssoButton{ID: c.ID, Name: c.Name})
+		}
+	}
 	if h.oauth("oidc") != nil {
 		name := h.social.OIDCName
 		if name == "" {
@@ -113,34 +163,34 @@ func (h *Handler) failed(w http.ResponseWriter, r *http.Request, provider string
 	http.Redirect(w, r, "/login?error="+provider+"_"+reason, http.StatusFound)
 }
 
-// oauthStart begins a redirect sign-in (Google, the SSO provider or GitHub).
-func (h *Handler) oauthStart(name string) http.HandlerFunc {
+// oauthStart begins a redirect sign-in (Google, the SSO provider, GitHub or a stored connection).
+func (h *Handler) oauthStart(resolve resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c := h.oauth(name)
-		if c == nil {
-			httpx.Error(w, r, h.log, errProviderDisabled, codeFor)
+		p, err := resolve(r)
+		if err != nil {
+			httpx.Error(w, r, h.log, err, codeFor)
 			return
 		}
 		f := application.NewOIDCFlow()
-		u, err := c.AuthURL(r.Context(), f)
+		u, err := p.provider.AuthURL(r.Context(), f)
 		if err != nil {
-			h.failed(w, r, name, err)
+			h.failed(w, r, p.name, err)
 			return
 		}
 		http.SetCookie(w, &http.Cookie{Name: flowCookie, Value: f.State + "." + f.Nonce + "." + f.Verifier,
-			Path: "/api/v1/auth/" + name + "/", MaxAge: 600, HttpOnly: true, Secure: h.cookieSecure, SameSite: http.SameSiteLaxMode})
+			Path: p.path, MaxAge: 600, HttpOnly: true, Secure: h.cookieSecure, SameSite: http.SameSiteLaxMode})
 		http.Redirect(w, r, u, http.StatusFound)
 	}
 }
 
-func (h *Handler) oauthCallback(name string) http.HandlerFunc {
+func (h *Handler) oauthCallback(resolve resolver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c := h.oauth(name)
-		if c == nil {
-			httpx.Error(w, r, h.log, errProviderDisabled, codeFor)
+		p, err := resolve(r)
+		if err != nil {
+			httpx.Error(w, r, h.log, err, codeFor)
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: flowCookie, Value: "", Path: "/api/v1/auth/" + name + "/", MaxAge: -1, HttpOnly: true, Secure: h.cookieSecure})
+		http.SetCookie(w, &http.Cookie{Name: flowCookie, Value: "", Path: p.path, MaxAge: -1, HttpOnly: true, Secure: h.cookieSecure})
 		ck, err := r.Cookie(flowCookie)
 		parts := []string{}
 		if err == nil {
@@ -148,15 +198,15 @@ func (h *Handler) oauthCallback(name string) http.HandlerFunc {
 		}
 		// The state must match the cookie set by /start in this browser (login CSRF).
 		if len(parts) != 3 || subtle.ConstantTimeCompare([]byte(parts[0]), []byte(r.URL.Query().Get("state"))) != 1 {
-			h.failed(w, r, name, application.ErrInvalidLogin)
+			h.failed(w, r, p.name, application.ErrInvalidLogin)
 			return
 		}
-		p, err := c.Exchange(r.Context(), r.URL.Query().Get("code"), application.OIDCFlow{State: parts[0], Nonce: parts[1], Verifier: parts[2]})
+		prof, err := p.provider.Exchange(r.Context(), r.URL.Query().Get("code"), application.OIDCFlow{State: parts[0], Nonce: parts[1], Verifier: parts[2]})
 		if err != nil {
-			h.failed(w, r, name, err)
+			h.failed(w, r, p.name, err)
 			return
 		}
-		h.finishSocial(w, r, name, p)
+		h.finishSocial(w, r, p.name, prof)
 	}
 }
 

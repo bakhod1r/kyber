@@ -32,6 +32,8 @@ type ListFilter struct {
 	Priorities []Priority
 	// LabelKeys keeps issues with a label whose LabelKey is one of these.
 	LabelKeys []string
+	// Limit / Offset page the rank-ordered result (Limit 0 = no limit).
+	Limit, Offset int
 }
 
 // KeyAllocator hands out the next sequential key of a project (ACL to the Project context).

@@ -183,6 +183,15 @@ func (p *Project) SetMember(u UserID, r Role) error {
 	return nil
 }
 
+// RemoveMember takes a user off the project (a no-op for non-members), never its last admin.
+func (p *Project) RemoveMember(u UserID) error {
+	if p.members[u] == RoleAdmin && p.adminCount() == 1 {
+		return ErrLastAdmin
+	}
+	delete(p.members, u)
+	return nil
+}
+
 // Members returns members sorted by user ID.
 func (p *Project) Members() []Member {
 	out := make([]Member, 0, len(p.members))

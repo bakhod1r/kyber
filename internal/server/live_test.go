@@ -9,7 +9,52 @@ import (
 	paho "github.com/eclipse/paho.mqtt.golang"
 
 	"github.com/bakhod1r/kyber/internal/platform/live"
+	"github.com/bakhod1r/kyber/internal/server"
 )
+
+// A user deactivated over SCIM stops receiving events on a stream opened before.
+func TestLiveStopsForDeactivatedUsers(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		idp := &client{t: t, srv: anon.srv, token: "scim-secret-token-0123456789"}
+		lead := anon.signedIn("lead@x.uz")
+		bo := anon.signedIn("bo@x.uz")
+		_, me := bo.do("GET", "/api/v1/me", nil)
+		code, dm := lead.do("POST", "/api/v1/dms", map[string]any{"user_ids": []string{me["id"].(string)}})
+		expect(t, code, 200, dm)
+		post := func(body string) {
+			code, b := lead.do("POST", "/api/v1/conversations/"+dm["id"].(string)+"/messages", map[string]string{"body": body})
+			expect(t, code, 201, b)
+		}
+		got := bo.subscribeMQTT(t, live.UserTopic("+", "+"))
+		post("before")
+		deadline := time.After(10 * time.Second)
+		for found := false; !found; {
+			select {
+			case l := <-got:
+				found = strings.Contains(l, "before")
+			case <-deadline:
+				t.Fatal("no event before deactivation")
+			}
+		}
+		code, b := idp.do("PATCH", "/scim/v2/Users/"+me["id"].(string), map[string]any{
+			"schemas":    []string{"urn:ietf:params:scim:api:messages:2.0:PatchOp"},
+			"Operations": []map[string]any{{"op": "Replace", "value": map[string]any{"active": false}}},
+		})
+		expect(t, code, 200, b)
+		post("after")
+		wait := time.After(1500 * time.Millisecond)
+		for done := false; !done; {
+			select {
+			case l := <-got:
+				if strings.Contains(l, "after") {
+					t.Fatalf("deactivated user got %s", l)
+				}
+			case <-wait:
+				done = true
+			}
+		}
+	}, server.WithSCIMToken("scim-secret-token-0123456789"))
+}
 
 // subscribeLive connects to the caller's MQTT-over-WebSocket endpoint and subscribes to every
 // project of the workspace; it returns the hint payloads.

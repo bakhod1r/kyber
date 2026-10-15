@@ -4,6 +4,12 @@ coverage.out
 .env.*
 node_modules/
 e2e.log
+e2e-rooms.log
+e2e-egress.log
+livekit.log
 screenshots.log
 /data/
 /.claude/worktrees/
+site/.vitepress/dist/
+site/.vitepress/cache/
+e2e-replica*.log

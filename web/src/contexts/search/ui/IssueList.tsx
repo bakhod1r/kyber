@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { projectQuery, searchUseCases } from "../application";
 import { type QuickFilterState, QuickFilters } from "./QuickFilters";
-import { msg, type MessageKey, useT } from "../../../shared/i18n/i18n";
+import { msg, type MessageKey, useLabel, useT } from "../../../shared/i18n/i18n";
 
 const COLUMNS: { field: string; label: MessageKey; jql: string }[] = [
   { field: "key", label: msg("Key"), jql: "key" },
@@ -26,6 +26,7 @@ export function IssueList({
   bulk?: (keys: string[], done: () => void) => ReactNode;
 }) {
   const t = useT();
+  const label = useLabel();
   const [filters, setFilters] = useState<QuickFilterState>({ quick: [], saved: "" });
   const [sort, setSort] = useState<{ jql: string; desc: boolean }>({ jql: "key", desc: false });
   const jql = projectQuery(projectKey, filters.quick, filters.saved, `${sort.jql}${sort.desc ? " DESC" : ""}`);
@@ -83,7 +84,7 @@ export function IssueList({
                   </td>
                   <td className="title">{is.title}</td>
                   <td className="meta">{typeLabel(t, is.type)}</td>
-                  <td className="meta">{is.status_name || is.status}</td>
+                  <td className="meta">{label(is.status_name || is.status)}</td>
                   <td className="meta">{priorityLabel(t, is.priority)}</td>
                   <td className="meta">{is.points ?? ""}</td>
                 </tr>

@@ -3,6 +3,7 @@ package realtime
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -77,6 +78,17 @@ func (h *Hub) stream(w http.ResponseWriter, r *http.Request, heartbeat time.Dura
 }
 
 // presence: ?user_id=a&user_id=b → which of them have Kyber open in this workspace.
+// With a roster (S105) the answer covers every replica.
 func (h *Hub) presence(w http.ResponseWriter, r *http.Request) {
-	httpx.JSON(w, http.StatusOK, map[string]any{"online": h.Online(tenant.Workspace(r.Context()), r.URL.Query()["user_id"])})
+	ws, users := tenant.Workspace(r.Context()), r.URL.Query()["user_id"]
+	if h.roster == nil {
+		httpx.JSON(w, http.StatusOK, map[string]any{"online": h.Online(ws, users)})
+		return
+	}
+	online, err := h.roster.Online(r.Context(), ws, users)
+	if err != nil {
+		httpx.Error(w, r, slog.Default(), err, func(error) (string, bool) { return "", false })
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"online": online})
 }

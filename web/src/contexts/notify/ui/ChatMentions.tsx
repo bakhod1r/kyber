@@ -1,4 +1,3 @@
-import { formatDateTime } from "../../../shared/i18n/labels";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { notifyUseCases } from "../application";
@@ -18,9 +17,9 @@ export function ChatMentions() {
           {sorted.map((n) => (
             <li key={n.id} className={n.read ? "" : "unread"}>
               <Link to={`/chat/${n.conversation_id}`}>
-                <b>{n.actor_name}</b> {n.conversation_name ? t("in #{channel}", { channel: n.conversation_name }) : t("in a direct message")}
+                {t("{name} in {where}", { name: n.actor_name, where: n.conversation_name ? `#${n.conversation_name}` : t("a direct message") })}
               </Link>{" "}
-              <time className="muted" dateTime={n.created_at}>{formatDateTime(n.created_at)}</time>
+              <time className="muted" dateTime={n.created_at}>{new Date(n.created_at).toLocaleString()}</time>
               <p>{n.excerpt}</p>
             </li>
           ))}

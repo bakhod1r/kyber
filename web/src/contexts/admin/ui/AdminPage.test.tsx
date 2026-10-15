@@ -63,4 +63,150 @@ describe("admin page", () => {
     renderWithProviders(<AdminPage />);
     expect(await screen.findByRole("alert")).toHaveTextContent("db down");
   });
+
+  it("maps SSO groups to roles for site administrators", async () => {
+    const mapping = { id: "m-1", group: "devs", scope: "project", workspace_id: "w-1", project_key: "KYB", role: "member", created_at: "2026-10-15T09:00:00Z" };
+    const calls = mockApi({
+      "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
+      "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/dead-letters": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/sso/group-mappings": { status: 200, body: { items: [mapping] } },
+      "POST /api/v1/admin/sso/group-mappings": { status: 201, body: mapping },
+      "DELETE /api/v1/admin/sso/group-mappings/m-1": { status: 204 },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPage />);
+    const sso = await screen.findByRole("region", { name: "SSO group mappings" });
+    expect(await within(sso).findByText("devs")).toBeInTheDocument();
+    await user.type(within(sso).getByLabelText("Group"), "admins");
+    await user.selectOptions(within(sso).getByLabelText("Scope"), "project");
+    await user.type(within(sso).getByLabelText("Project key"), "KYB");
+    await user.selectOptions(within(sso).getByLabelText("Mapped role"), "admin");
+    await user.click(within(sso).getByRole("button", { name: "Add mapping" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "POST /api/v1/admin/sso/group-mappings")?.body).toEqual({ group: "admins", scope: "project", project_key: "KYB", role: "admin" }));
+    await user.click(within(sso).getByRole("button", { name: "Remove mapping devs" }));
+    await waitFor(() => expect(calls.some((c) => c.key === "DELETE /api/v1/admin/sso/group-mappings/m-1")).toBe(true));
+  });
+
+  it("hides SSO group mappings from workspace administrators", async () => {
+    mockApi({
+      "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
+      "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/dead-letters": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/sso/group-mappings": problem(403, "site admins only"),
+    });
+    renderWithProviders(<AdminPage />);
+    expect(await screen.findByText("Nothing is stuck.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("region", { name: "SSO group mappings" })).not.toBeInTheDocument());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("adds, disables and removes SSO connections without ever showing a secret", async () => {
+    const conn = { id: "c-1", kind: "oidc", name: "Acme Okta", issuer: "https://acme.okta.com", client_id: "kyber", groups_claim: "", enabled: true, created_at: "2026-10-15T09:00:00Z", domains: [] };
+    const calls = mockApi({
+      "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
+      "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/dead-letters": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/sso/connections": { status: 200, body: { items: [conn] } },
+      "POST /api/v1/admin/sso/connections": { status: 201, body: conn },
+      "PATCH /api/v1/admin/sso/connections/c-1": { status: 200, body: { ...conn, enabled: false } },
+      "DELETE /api/v1/admin/sso/connections/c-1": { status: 204 },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPage />);
+    const sso = await screen.findByRole("region", { name: "SSO connections" });
+    expect(await within(sso).findByText("Acme Okta")).toBeInTheDocument();
+    expect(within(sso).getByText(/\/api\/v1\/auth\/sso\/c-1\/callback/)).toBeInTheDocument();
+    await user.type(within(sso).getByLabelText("Button label"), "Entra");
+    await user.type(within(sso).getByLabelText("Issuer URL"), "https://login.example.com");
+    await user.type(within(sso).getByLabelText("Client ID"), "kid");
+    await user.type(within(sso).getByLabelText("Client secret"), "shh");
+    await user.click(within(sso).getByRole("button", { name: "Add connection" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.key === "POST /api/v1/admin/sso/connections")?.body).toEqual({
+        name: "Entra",
+        issuer: "https://login.example.com",
+        client_id: "kid",
+        client_secret: "shh",
+        groups_claim: "",
+        scope: "workspace",
+      }),
+    );
+    expect(within(sso).getByLabelText("Client secret")).toHaveValue("");
+    await user.click(within(sso).getByRole("button", { name: "Disable Acme Okta" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "PATCH /api/v1/admin/sso/connections/c-1")?.body).toEqual({ enabled: false }));
+    await user.click(within(sso).getByRole("button", { name: "Remove connection Acme Okta" }));
+    await waitFor(() => expect(calls.some((c) => c.key === "DELETE /api/v1/admin/sso/connections/c-1")).toBe(true));
+  });
+
+  it("explains that SSO connections need an encryption key", async () => {
+    mockApi({
+      "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
+      "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/dead-letters": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/sso/connections": { status: 200, body: { items: [] } },
+      "POST /api/v1/admin/sso/connections": problem(409, "Set KYBER_ENCRYPTION_KEY to store SSO connections."),
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPage />);
+    const sso = await screen.findByRole("region", { name: "SSO connections" });
+    await user.type(within(sso).getByLabelText("Button label"), "X");
+    await user.type(within(sso).getByLabelText("Issuer URL"), "https://x.example");
+    await user.type(within(sso).getByLabelText("Client ID"), "a");
+    await user.type(within(sso).getByLabelText("Client secret"), "b");
+    await user.click(within(sso).getByRole("button", { name: "Add connection" }));
+    expect(await within(sso).findByRole("alert")).toHaveTextContent("KYBER_ENCRYPTION_KEY");
+  });
+
+  it("adds and verifies the email domains of an SSO connection", async () => {
+    const pending = { name: "acme.uz", verified: false, txt: "kyber-verify=abc123" };
+    const conn = { id: "c-1", kind: "oidc", name: "Acme Okta", issuer: "https://acme.okta.com", client_id: "kyber", groups_claim: "", enabled: true, created_at: "2026-10-15T09:00:00Z", domains: [pending] };
+    const calls = mockApi({
+      "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
+      "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/dead-letters": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/sso/connections": { status: 200, body: { items: [conn] } },
+      "POST /api/v1/admin/sso/connections/c-1/domains": { status: 200, body: conn },
+      "POST /api/v1/admin/sso/connections/c-1/domains/acme.uz/verify": problem(409, "The TXT record kyber-verify=<token> was not found on the domain yet."),
+      "DELETE /api/v1/admin/sso/connections/c-1/domains/acme.uz": { status: 200, body: { ...conn, domains: [] } },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPage />);
+    const sso = await screen.findByRole("region", { name: "SSO connections" });
+    expect(await within(sso).findByText("kyber-verify=abc123")).toBeInTheDocument();
+    expect(within(sso).getByText("acme.uz")).toBeInTheDocument();
+    await user.click(within(sso).getByRole("button", { name: "Verify acme.uz" }));
+    expect(await within(sso).findByRole("alert")).toHaveTextContent("not found on the domain yet");
+    await user.type(within(sso).getByLabelText("Email domain for Acme Okta"), "corp.uz");
+    await user.click(within(sso).getByLabelText("Trusted (skip DNS check) for Acme Okta"));
+    await user.click(within(sso).getByRole("button", { name: "Add domain to Acme Okta" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "POST /api/v1/admin/sso/connections/c-1/domains")?.body).toEqual({ domain: "corp.uz", trusted: true }));
+    await user.click(within(sso).getByRole("button", { name: "Remove domain acme.uz" }));
+    await waitFor(() => expect(calls.some((c) => c.key === "DELETE /api/v1/admin/sso/connections/c-1/domains/acme.uz")).toBe(true));
+  });
+
+  it("requires the workspace's own connection for its members", async () => {
+    const own = { id: "c-9", kind: "oidc", name: "Acme Okta", issuer: "https://acme.okta.com", client_id: "k", groups_claim: "", workspace_id: "w-1", enforced: false, enabled: true, created_at: "2026-10-15T09:00:00Z", domains: [] };
+    const site = { ...own, id: "c-1", name: "Shared Entra", workspace_id: null };
+    const calls = mockApi({
+      "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
+      "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/dead-letters": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/sso/connections": { status: 200, body: { items: [own, site] } },
+      "PATCH /api/v1/admin/sso/connections/c-9": { status: 200, body: { ...own, enforced: true } },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPage />);
+    const sso = await screen.findByRole("region", { name: "SSO connections" });
+    await user.click(await within(sso).findByRole("checkbox", { name: "Require Acme Okta for this workspace" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "PATCH /api/v1/admin/sso/connections/c-9")?.body).toEqual({ enforced: true }));
+    expect(within(sso).queryByRole("checkbox", { name: "Require Shared Entra for this workspace" })).not.toBeInTheDocument();
+    expect(within(sso).getByText(/installation-wide/)).toBeInTheDocument();
+  });
 });

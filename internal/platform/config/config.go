@@ -50,9 +50,14 @@ type Config struct {
 	SAMLCertFile        string `env:"KYBER_SAML_CERT_FILE"`
 	SAMLKeyFile         string `env:"KYBER_SAML_KEY_FILE"`
 	SAMLName            string `env:"KYBER_SAML_NAME" default:"SAML"`
+	// SAMLGroupsAttribute names the assertion attribute with the user's groups ("" = groups/memberOf).
+	SAMLGroupsAttribute string `env:"KYBER_SAML_GROUPS_ATTRIBUTE"`
 	// SCIMToken enables SCIM 2.0 user provisioning at /scim/v2 (ADR-0017): the identity provider
 	// sends it as a Bearer token.
 	SCIMToken string `env:"KYBER_SCIM_TOKEN"`
+	// EncryptionKey (32 bytes, base64) seals secrets stored in the database, such as the client
+	// secrets of SSO connections (ADR-0018). Unset: SSO connections cannot be stored.
+	EncryptionKey string `env:"KYBER_ENCRYPTION_KEY"`
 	// BaseDomain enables workspaces on subdomains (<slug>.<BaseDomain>, ADR-0004); empty = single-tenant.
 	BaseDomain string `env:"KYBER_BASE_DOMAIN"`
 	// AdminEmails (comma-separated) administer the default workspace: they publish workspace-wide
@@ -68,6 +73,8 @@ type Config struct {
 	OIDCClientID     string `env:"KYBER_OIDC_CLIENT_ID"`
 	OIDCClientSecret string `env:"KYBER_OIDC_CLIENT_SECRET"`
 	OIDCName         string `env:"KYBER_OIDC_NAME" default:"SSO"`
+	// OIDCGroupsClaim names the ID token claim with the user's groups for SSO group mappings (S106).
+	OIDCGroupsClaim string `env:"KYBER_OIDC_GROUPS_CLAIM" default:"groups"`
 	// Sign in with GitHub: create an OAuth App with callback <PublicURL>/api/v1/auth/github/callback.
 	GitHubClientID     string `env:"KYBER_GITHUB_CLIENT_ID"`
 	GitHubClientSecret string `env:"KYBER_GITHUB_CLIENT_SECRET"`
@@ -84,6 +91,17 @@ type Config struct {
 	// Calls (WebRTC): comma-separated stun:/turn:/turns: URLs, and coturn's static-auth-secret for TURN.
 	ICEServers string `env:"KYBER_ICE_SERVERS"`
 	TURNSecret string `env:"KYBER_TURN_SECRET"`
+	// A media server (LiveKit, ADR-0017) for calls of more than six people: its ws(s):// URL as browsers reach it,
+	// and the API key and secret Kyber signs room tokens with. Unset (the default), calls are a browser mesh.
+	LiveKitURL    string `env:"KYBER_LIVEKIT_URL"`
+	LiveKitKey    string `env:"KYBER_LIVEKIT_KEY"`
+	LiveKitSecret string `env:"KYBER_LIVEKIT_SECRET"`
+	// Where Kyber calls LiveKit's server API when browsers use another address (default: KYBER_LIVEKIT_URL over http(s)).
+	LiveKitAPIURL string `env:"KYBER_LIVEKIT_API_URL"`
+	// Server-side recording of room calls (LiveKit Egress, S104): the directory Egress writes MP4 files to, as Kyber
+	// sees it, and as Egress sees it. Unset, room calls are recorded in the browser.
+	LiveKitRecordingsDir string `env:"KYBER_LIVEKIT_RECORDINGS_DIR"`
+	LiveKitEgressDir     string `env:"KYBER_LIVEKIT_EGRESS_DIR" default:"/out"`
 	// FilesDir keeps chat files and huddle recordings on disk (back it up with the database).
 	FilesDir string `env:"KYBER_FILES_DIR"`
 	// STTURL turns on transcripts of huddle recordings (S77): an OpenAI-compatible speech-to-text endpoint, e.g.

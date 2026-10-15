@@ -15,3 +15,16 @@ func Actor(ctx context.Context) string {
 	id, _ := ctx.Value(ctxKey{}).(string)
 	return id
 }
+
+type methodKey struct{}
+
+// WithMethod records how the actor signed in ("password", "token", "google", "sso:<id>", …).
+func WithMethod(ctx context.Context, method string) context.Context {
+	return context.WithValue(ctx, methodKey{}, method)
+}
+
+// Method returns how the actor signed in, or "".
+func Method(ctx context.Context) string {
+	m, _ := ctx.Value(methodKey{}).(string)
+	return m
+}

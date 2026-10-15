@@ -39,7 +39,7 @@ export default function ({ token, key }) {
   const n = 1 + Math.floor(Math.random() * ISSUES);
   const reqs = [
     ["GET", `${BASE}/api/v1/issues/${key}-${n}`],
-    ["GET", `${BASE}/api/v1/projects/${key}/issues?status=todo`],
+    ["GET", `${BASE}/api/v1/projects/${key}/issues?status=todo&limit=50`],
     ["GET", `${BASE}/api/v1/search?jql=${encodeURIComponent(`project = ${key} AND type = bug ORDER BY key DESC`)}&limit=50`],
   ];
   const [method, url] = reqs[Math.floor(Math.random() * reqs.length)];

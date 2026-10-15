@@ -93,7 +93,18 @@ func (r *Repository) ListByProject(ctx context.Context, project string, f domain
 		out = append(out, &is)
 	}
 	sortByRank(out)
-	return out, nil
+	return page(out, f.Limit, f.Offset), nil
+}
+
+func page(list []*domain.Issue, limit, offset int) []*domain.Issue {
+	if offset >= len(list) {
+		return nil
+	}
+	list = list[offset:]
+	if limit > 0 && limit < len(list) {
+		list = list[:limit]
+	}
+	return list
 }
 
 func sortByRank(list []*domain.Issue) {

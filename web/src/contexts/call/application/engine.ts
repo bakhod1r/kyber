@@ -1,6 +1,10 @@
 // call: the huddle engine — one RTCPeerConnection per other participant (full mesh), perfect negotiation
-// over the server's signal relay, microphone/camera in one local stream and the screen share in another.
-import { type Call, type IceServer, isPolite, type Media, me, opens, peersOf, type Platform, type Signal, type SignalData, type SignalKind } from "../domain/model";
+// over the server's signal relay, microphone/camera in one local stream and the screen share in another. In a
+// room call (ADR-0017) the same tracks are published once to the media server instead, which forwards the others'.
+import {
+  type Call, type IceServer, isPolite, type Media, me, opens, peersOf, type Platform, type RoomConnection, type RoomTicket, type Signal,
+  type SignalData, type SignalKind,
+} from "../domain/model";
 
 export type Gateway = {
   join(conversationId: string): Promise<Call>;
@@ -8,6 +12,7 @@ export type Gateway = {
   media(callId: string, m: Media): Promise<Call>;
   signal(callId: string, to: string, kind: SignalKind, data: string): Promise<unknown>;
   ice(): Promise<IceServer[]>;
+  room(callId: string): Promise<RoomTicket>;
 };
 
 export type Remote = { camera?: MediaStream; screen?: MediaStream };
@@ -19,6 +24,8 @@ export type HuddleState = {
   remotes: Record<string, Remote>;
   media: Media;
   error?: string;
+  /** The host removed us from the live call (S103). */
+  removed?: boolean;
 };
 
 type Peer = {
@@ -33,6 +40,7 @@ const OFF: Media = { audio: false, video: false, screen: false };
 export class HuddleEngine {
   private state: HuddleState = { call: null, joined: false, remotes: {}, media: OFF };
   private peers = new Map<string, Peer>();
+  private room?: RoomConnection;
   private ice: IceServer[] = [];
   private local!: MediaStream; // created on join (MediaStream exists only in browsers)
   private screen?: MediaStream;
@@ -69,6 +77,7 @@ export class HuddleEngine {
   async join(conversationId: string) {
     this.joining = true;
     this.early = [];
+    this.set({ removed: false });
     try {
       this.ice = await this.gw.ice().catch(() => []);
       this.local = new MediaStream();
@@ -80,9 +89,15 @@ export class HuddleEngine {
       } catch {
         // no microphone or permission denied: join muted
       }
-      const call = await this.gw.join(conversationId);
+      let call = await this.gw.join(conversationId);
+      if (call.room) {
+        this.set({ call });
+        await this.enter(call);
+        // Updates that arrived while connecting to the room are newer than the join's answer.
+        if (this.state.call?.id === call.id) call = this.state.call;
+      }
       this.set({ joined: true, local: this.local, media: { audio, video: false, screen: false } });
-      if (!audio) await this.gw.media(call.id, { audio, video: false, screen: false });
+      if (!audio) call = await this.gw.media(call.id, { audio, video: false, screen: false });
       this.update(call);
       for (const sig of this.early.splice(0)) void this.onSignal(sig);
     } catch (e) {
@@ -93,11 +108,41 @@ export class HuddleEngine {
     }
   }
 
+  /** Connects to the call's media-server room and publishes the microphone; on failure leaves the call. */
+  private async enter(call: Call) {
+    try {
+      const ticket = await this.gw.room(call.id);
+      this.room = await this.platform.room(ticket.url, ticket.token, {
+        track: (user, kind, stream) => {
+          const { [kind]: _old, ...rest } = this.state.remotes[user] ?? {};
+          this.set({ remotes: { ...this.state.remotes, [user]: stream ? { ...rest, [kind]: stream } : rest } });
+        },
+        left: (user) => {
+          const { [user]: _gone, ...rest } = this.state.remotes;
+          this.set({ remotes: rest });
+        },
+      });
+      for (const t of this.local.getTracks()) await this.room.publish(t, false);
+    } catch (e) {
+      for (const t of this.local.getTracks()) t.stop();
+      await this.gw.leave(call.id).catch(() => {});
+      throw e;
+    }
+  }
+
   /** Applies the server's view of the call: connects to newcomers, drops those who left. */
   update(call: Call | null) {
     this.set({ call });
     if (!this.state.joined || !call) return;
-    if (!call.live || !me(call, this.user)) return this.teardown();
+    if (!call.live || !me(call, this.user)) {
+      this.teardown();
+      if (call.live) this.set({ removed: true }); // still going without us: the host removed us
+      return;
+    }
+    if (this.room) {
+      if (this.screen && !me(call, this.user)?.screen) void this.stopShare(false);
+      return; // the media server tells who is there
+    }
     const others = new Set(peersOf(call, this.user));
     for (const id of others) if (!this.peers.has(id) && opens(call, this.user, id)) this.connect(id);
     for (const [id, p] of this.peers) {
@@ -185,7 +230,7 @@ export class HuddleEngine {
       this.early.push(s);
       return Promise.resolve();
     }
-    if (!this.state.joined || s.call_id !== this.state.call?.id) return Promise.resolve();
+    if (!this.state.joined || this.room || s.call_id !== this.state.call?.id) return Promise.resolve();
     const peer = this.peers.get(s.from) ?? this.connect(s.from);
     peer.in = peer.in.then(() => this.handle(peer, s));
     return peer.in;
@@ -234,14 +279,16 @@ export class HuddleEngine {
     await this.publish({ ...this.state.media, audio: on });
   }
 
-  private addTrack(t: MediaStreamTrack, stream: MediaStream) {
+  private async addTrack(t: MediaStreamTrack, stream: MediaStream) {
     stream.addTrack(t);
     for (const { pc } of this.peers.values()) pc.addTrack(t, stream);
+    await this.room?.publish(t, stream === this.screen);
   }
 
   private removeTrack(t: MediaStreamTrack, stream: MediaStream) {
     t.stop();
     stream.removeTrack(t);
+    void this.room?.unpublish(t).catch(() => {});
     for (const { pc } of this.peers.values()) {
       const sender = pc.getSenders().find((x) => x.track === t);
       if (sender) pc.removeTrack(sender);
@@ -253,7 +300,7 @@ export class HuddleEngine {
       for (const t of this.local.getVideoTracks()) this.removeTrack(t, this.local);
       if (this.state.media.video && !deviceId) return await this.publish({ ...this.state.media, video: false });
       const cam = await this.platform.userMedia({ video: deviceId ? { deviceId: { exact: deviceId } } : true });
-      for (const t of cam.getVideoTracks()) this.addTrack(t, this.local);
+      for (const t of cam.getVideoTracks()) await this.addTrack(t, this.local);
       this.set({ local: this.local });
       await this.publish({ ...this.state.media, video: true });
     } catch (e) {
@@ -272,8 +319,10 @@ export class HuddleEngine {
         for (const { pc } of this.peers.values()) await pc.getSenders().find((x) => x.track === old)?.replaceTrack(next);
         old.stop();
         this.local.removeTrack(old);
+        await this.room?.unpublish(old);
       }
       this.local.addTrack(next);
+      await this.room?.publish(next, false);
     } catch (e) {
       this.fail(e);
     }
@@ -287,6 +336,7 @@ export class HuddleEngine {
       for (const t of screen.getTracks()) {
         t.onended = () => void this.stopShare(true); // "Stop sharing" in the browser's own bar
         for (const { pc } of this.peers.values()) pc.addTrack(t, screen);
+        await this.room?.publish(t, true);
       }
       this.set({ screen });
       await this.publish({ ...this.state.media, screen: true });
@@ -315,6 +365,8 @@ export class HuddleEngine {
       pc.close();
     }
     this.peers.clear();
+    this.room?.close();
+    this.room = undefined;
     for (const t of [...(this.local?.getTracks() ?? []), ...(this.screen?.getTracks() ?? [])]) t.stop();
     this.screen = undefined;
     this.set({ joined: false, local: undefined, screen: undefined, remotes: {}, media: OFF });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Call, Platform, Signal } from "../domain/model";
+import type { Call, Media, Platform, RoomEvents, Signal } from "../domain/model";
 import { HuddleEngine } from "./engine";
 
 class FakeTrack {
@@ -60,23 +60,42 @@ const callOf = (...ids: string[]): Call => ({
   participants: ids.map((user_id, i) => ({ user_id, joined_at: `2026-10-13T09:0${i}:00Z`, audio: true, video: false, screen: false })),
 });
 
+/** A fake media-server room: records what the engine publishes; tests drive its events. */
+class FakeRoom {
+  log: string[] = [];
+  events!: RoomEvents;
+  ticket = "";
+  async publish(t: FakeTrack, screen: boolean) { this.log.push(`publish ${t.kind}${screen ? " screen" : ""}`); }
+  async unpublish(t: FakeTrack) { this.log.push(`unpublish ${t.kind}`); }
+  close() { this.log.push("close"); }
+}
+
 function setup(user: string, current: () => Call) {
   const peers: FakePeer[] = [];
+  const rooms: FakeRoom[] = [];
   const sent: { to: string; kind: string; data: string }[] = [];
   const gw = {
     join: vi.fn(async () => current()),
     leave: vi.fn(async () => undefined),
-    media: vi.fn(async () => current()),
+    media: vi.fn(async (_id: string, _m: Media) => current()),
     signal: vi.fn(async (_id: string, to: string, kind: string, data: string) => void sent.push({ to, kind, data })),
     ice: vi.fn(async () => []),
+    room: vi.fn(async (id: string) => ({ url: "wss://sfu.test", token: `t-${id}`, expires_at: "" })),
   };
   const platform: Platform = {
     peer: () => { const p = new FakePeer(); peers.push(p); return p as unknown as RTCPeerConnection; },
     userMedia: async (c) => new FakeStream([new FakeTrack(c.video ? "video" : "audio")]) as unknown as MediaStream,
     displayMedia: async () => new FakeStream([new FakeTrack("video")]) as unknown as MediaStream,
     devices: async () => [],
+    room: async (url, token, events) => {
+      const r = new FakeRoom();
+      r.ticket = `${url} ${token}`;
+      r.events = events;
+      rooms.push(r);
+      return r as unknown as Awaited<ReturnType<Platform["room"]>>;
+    },
   };
-  return { engine: new HuddleEngine(user, gw, platform), peers, sent, gw };
+  return { engine: new HuddleEngine(user, gw, platform), peers, sent, gw, rooms };
 }
 
 beforeEach(() => vi.stubGlobal("MediaStream", FakeStream));
@@ -184,5 +203,78 @@ describe("huddle engine", () => {
     expect(engine.snapshot.joined).toBe(false);
     await engine.leave(); // not in a call any more: nothing to do
     expect(gw.leave).toHaveBeenCalledTimes(1);
+  });
+
+  it("in a room call publishes once to the media server instead of connecting to everyone (ADR-0017)", async () => {
+    const room = (...ids: string[]): Call => ({ ...callOf(...ids), room: true });
+    const { engine, peers, rooms, gw } = setup("a", () => room("a", "b", "c"));
+    await engine.join("c-1");
+    expect(peers).toHaveLength(0);
+    expect(gw.room).toHaveBeenCalledWith("k-1");
+    const r = rooms[0]!;
+    gw.media.mockImplementation(async (_id: string, m: Media) => {
+      const c = room("a", "b", "c");
+      return { ...c, participants: c.participants.map((p) => (p.user_id === "a" ? { ...p, ...m } : p)) };
+    });
+    expect(r.ticket).toBe("wss://sfu.test t-k-1");
+    expect(r.log).toEqual(["publish audio"]);
+
+    const cam = new FakeStream([new FakeTrack("video")]) as unknown as MediaStream;
+    r.events.track("b", "camera", cam);
+    const scr = new FakeStream([new FakeTrack("video")]) as unknown as MediaStream;
+    r.events.track("b", "screen", scr);
+    expect(engine.snapshot.remotes.b).toEqual({ camera: cam, screen: scr });
+    r.events.track("b", "screen", undefined); // stopped sharing
+    expect(engine.snapshot.remotes.b).toEqual({ camera: cam });
+
+    await engine.toggleCamera();
+    await engine.shareScreen();
+    expect(r.log).toEqual(["publish audio", "publish video", "publish video screen"]);
+    await engine.toggleCamera();
+    expect(r.log.at(-1)).toBe("unpublish video");
+    await engine.onSignal(offer("b")); // nothing to negotiate in a room
+    expect(peers).toHaveLength(0);
+
+    r.events.left("b");
+    expect(engine.snapshot.remotes.b).toBeUndefined();
+    engine.update(room("a", "c"));
+    expect(peers).toHaveLength(0);
+    await engine.leave();
+    expect(r.log.at(-1)).toBe("close");
+    expect(gw.leave).toHaveBeenCalledWith("k-1");
+  });
+
+  it("a room that cannot be reached is an error, and the call is left", async () => {
+    const { engine, gw } = setup("a", () => ({ ...callOf("a"), room: true }));
+    gw.room.mockRejectedValueOnce(new Error("media server down"));
+    await engine.join("c-1");
+    expect(engine.snapshot.error).toBe("media server down");
+    expect(engine.snapshot.joined).toBe(false);
+    expect(gw.leave).toHaveBeenCalledWith("k-1");
+  });
+
+  it("keeps call updates that arrive while connecting to the room", async () => {
+    const room = (...ids: string[]): Call => ({ ...callOf(...ids), room: true });
+    const { engine, gw } = setup("b", () => room("a", "b"));
+    gw.room.mockImplementationOnce(async (id: string) => {
+      const newer = room("a", "b");
+      newer.participants[0]!.video = true; // a turned the camera on meanwhile
+      engine.update(newer);
+      return { url: "wss://sfu.test", token: `t-${id}`, expires_at: "" };
+    });
+    await engine.join("c-1");
+    expect(engine.snapshot.call?.participants[0]?.video).toBe(true);
+  });
+
+  it("someone removed by the host is disconnected and told so (S103)", async () => {
+    const { engine, rooms, gw } = setup("b", () => ({ ...callOf("a", "b"), room: true }));
+    await engine.join("c-1");
+    engine.update({ ...callOf("a"), room: true }); // the host removed b
+    expect(engine.snapshot.joined).toBe(false);
+    expect(engine.snapshot.removed).toBe(true);
+    expect(rooms[0]?.log.at(-1)).toBe("close");
+    expect(gw.leave).not.toHaveBeenCalled();
+    await engine.join("c-1"); // joining again clears it
+    expect(engine.snapshot.removed).toBe(false);
   });
 });

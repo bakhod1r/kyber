@@ -48,7 +48,7 @@ export function AccessTokens() {
     <section className="settings panel" aria-label={t("Access tokens")}>
       <h2>{t("Access tokens")}</h2>
       <p className="muted">
-        Tokens let scripts and AI assistants (MCP) act as you. Send one as <code>{t("Authorization: Bearer …")}</code>; revoke it when you stop using it.
+        {t("Tokens let scripts and AI assistants (MCP) act as you. Send one as")} <code>{t("Authorization: Bearer …")}</code>; {t("revoke it when you stop using it.")}
       </p>
       <form className="row" onSubmit={submit}>
         <input aria-label={t("Token name")} placeholder={t("e.g. Claude Code on my laptop")} value={name} onChange={(e) => setName(e.target.value)} />

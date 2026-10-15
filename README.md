@@ -30,7 +30,7 @@
 
 Screenshots are generated from a seeded demo with `make screenshots`.
 
-> Roadmap: [`docs/PLAN.md`](docs/PLAN.md) · Backlog: [`docs/backlog`](docs/backlog) · QA: [`docs/qa`](docs/qa)
+> Documentation: [bakhod1r.github.io/kyber](https://bakhod1r.github.io/kyber/) · Roadmap: [`docs/PLAN.md`](docs/PLAN.md) · Backlog: [`docs/backlog`](docs/backlog) · QA: [`docs/qa`](docs/qa)
 
 ## Quick start
 
@@ -67,6 +67,9 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 | `KYBER_GOOGLE_CLIENT_ID` / `KYBER_GOOGLE_CLIENT_SECRET` | — | Enables "Continue with Google". Google Cloud → APIs & Services → Credentials → OAuth client (Web); authorized redirect URI `<KYBER_PUBLIC_URL>/api/v1/auth/google/callback` |
 | `KYBER_OIDC_ISSUER` / `KYBER_OIDC_CLIENT_ID` / `KYBER_OIDC_CLIENT_SECRET` | — | Enables single sign-on with any OpenID Connect provider (Okta, Keycloak, Microsoft Entra ID, Authentik…), found by discovery at `<issuer>/.well-known/openid-configuration`. Register redirect URI `<KYBER_PUBLIC_URL>/api/v1/auth/oidc/callback`; the provider must send `email_verified=true`. A verified email links to the existing account (ADR-0015) |
 | `KYBER_OIDC_NAME` | `SSO` | Label of the single sign-on button ("Continue with …") |
+| `KYBER_OIDC_GROUPS_CLAIM` | `groups` | ID-token claim holding the user's groups; mapped to roles by site admins on the Administration page (ADR-0015, S106) |
+| `KYBER_SAML_GROUPS_ATTRIBUTE` | `groups` / `memberOf` | SAML attribute holding the user's groups, mapped like the OIDC claim |
+| `KYBER_ENCRYPTION_KEY` | — | 32 random bytes in base64 (`openssl rand -base64 32`). Seals secrets stored in the database, such as the client secrets of SSO connections that site admins add on the Administration page (ADR-0018). Without it, SSO connections cannot be stored. Keep it safe: losing it makes stored secrets unreadable |
 | `KYBER_GITHUB_CLIENT_ID` / `KYBER_GITHUB_CLIENT_SECRET` | — | Enables "Continue with GitHub". GitHub → Settings → Developer settings → OAuth Apps; callback URL `<KYBER_PUBLIC_URL>/api/v1/auth/github/callback`. Only the primary verified email links to an existing account |
 | `KYBER_TELEGRAM_BOT_TOKEN` / `KYBER_TELEGRAM_BOT_NAME` | — | Enables Telegram sign-in. Create a bot with @BotFather. With both set the bot also sends **one-time login codes** (works on any domain; Kyber long-polls the bot, so run one replica with the token). The Login Widget additionally needs `/setdomain` to your site's domain. Users can also **connect Telegram for notifications** (Notifications page → Connect Telegram → press Start in the bot), and project admins can **connect Telegram groups** to a project (project → Notifications → Connect a Telegram group) |
 | `KYBER_SMTP_HOST` / `_PORT` / `_USERNAME` / `_PASSWORD` / `_FROM` / `_TLS` | — / by TLS mode / — / — / `Kyber <noreply@localhost>` / `starttls` | Email notifications through any SMTP server (Gmail, Mailgun, Postfix…). `_TLS`: `starttls` (port 587), `tls` (465) or `none` (local relay). Failed sends are retried with backoff for about 2½ hours |

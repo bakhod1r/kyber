@@ -61,6 +61,19 @@ func (s *Service) Administers(ctx context.Context, workspace, user string) (bool
 	return ok && (r == domain.RoleOwner || r == domain.RoleAdmin), nil
 }
 
+// Owns reports whether user owns a named workspace (the default workspace has no stored owners).
+func (s *Service) Owns(ctx context.Context, workspace, user string) (bool, error) {
+	if domain.WorkspaceID(workspace) == domain.DefaultID {
+		return false, nil
+	}
+	w, err := s.repo.ByID(ctx, domain.WorkspaceID(workspace))
+	if err != nil {
+		return false, err
+	}
+	r, ok := w.RoleOf(domain.UserID(user))
+	return ok && r == domain.RoleOwner, nil
+}
+
 // MemberIDs lists a named workspace's members (a read model for other contexts). The default
 // workspace stores none: callers decide who is in it.
 func (s *Service) MemberIDs(ctx context.Context, workspace string) ([]string, error) {
@@ -102,6 +115,34 @@ func (s *Service) ChangeRole(ctx context.Context, workspace, user, role string) 
 		return err
 	}
 	if err := w.ChangeRole(domain.UserID(user), r); err != nil {
+		return err
+	}
+	return s.repo.SaveMembers(ctx, w)
+}
+
+// Grant adds user with role or changes their role (SSO group sync, S106; authorization is the caller's).
+func (s *Service) Grant(ctx context.Context, workspace, user, role string) error {
+	r, err := domain.ParseRole(role)
+	if err != nil {
+		return err
+	}
+	w, err := s.repo.ByID(ctx, domain.WorkspaceID(workspace))
+	if err != nil {
+		return err
+	}
+	if err := w.AddMember(domain.UserID(user), r); err != nil {
+		return err
+	}
+	return s.repo.SaveMembers(ctx, w)
+}
+
+// Revoke takes user out of the workspace (SSO group sync); the last owner stays.
+func (s *Service) Revoke(ctx context.Context, workspace, user string) error {
+	w, err := s.repo.ByID(ctx, domain.WorkspaceID(workspace))
+	if err != nil {
+		return err
+	}
+	if err := w.RemoveMember(domain.UserID(user)); err != nil {
 		return err
 	}
 	return s.repo.SaveMembers(ctx, w)

@@ -167,6 +167,7 @@ function PageHistory({ id }: { id: string }) {
 
 /** S86: the page paragraph by paragraph, each with its comments (💬); comments whose paragraph is gone are listed at the end. */
 function CommentedBody({ page, me, names }: { page: Page; me: string; names: Map<string, string> }) {
+  const t = useT();
   const comments = useQuery({ queryKey: ["doc-comments", page.id], queryFn: () => docsUseCases.comments(page.id) });
   const [open, setOpen] = useState<number | null>(null);
   const paras = paragraphs(page.body);
@@ -194,8 +195,8 @@ function CommentedBody({ page, me, names }: { page: Page; me: string; names: Map
         );
       })}
       {earlier.length > 0 && (
-        <section aria-label="Comments on earlier versions" className="muted">
-          <h4>Comments on earlier versions</h4>
+        <section aria-label={t("Comments on earlier versions")} className="muted">
+          <h4>{t("Comments on earlier versions")}</h4>
           <ul>
             {earlier.map((c) => (
               <li key={c.id}>
@@ -212,6 +213,7 @@ function CommentedBody({ page, me, names }: { page: Page; me: string; names: Map
 const who = (c: DocComment, me: string, names: Map<string, string>) => (c.author_id === me ? "You" : (names.get(c.author_id) ?? "Someone"));
 
 function ParagraphComments({ page, index, quote, list, me, names }: { page: string; index: number; quote: string; list: DocComment[]; me: string; names: Map<string, string> }) {
+  const t = useT();
   const qc = useQueryClient();
   const [body, setBody] = useState("");
   const done = () => qc.invalidateQueries({ queryKey: ["doc-comments", page] });
@@ -224,14 +226,14 @@ function ParagraphComments({ page, index, quote, list, me, names }: { page: stri
         {list.map((c) => (
           <li key={c.id}>
             <b>{who(c, me, names)}</b> {c.body}{" "}
-            {c.author_id === me && <button type="button" className="ghost" onClick={() => remove.mutate(c.id)}>Remove</button>}
+            {c.author_id === me && <button type="button" className="ghost" onClick={() => remove.mutate(c.id)}>{t("Remove")}</button>}
           </li>
         ))}
       </ul>
       {(add.error ?? remove.error) && <p role="alert" className="error">{(add.error ?? remove.error)?.message}</p>}
       <form className="row" onSubmit={(e) => { e.preventDefault(); add.mutate(); }}>
-        <input aria-label="Comment" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Comment… (@email to mention)" maxLength={2000} />
-        <button disabled={!body.trim() || add.isPending}>Comment</button>
+        <input aria-label={t("Comment")} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Comment… (@email to mention)" maxLength={2000} />
+        <button disabled={!body.trim() || add.isPending}>{t("Comment")}</button>
       </form>
     </aside>
   );

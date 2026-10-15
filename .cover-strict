@@ -46,3 +46,10 @@
 ./internal/webhook/application
 ./internal/webhook/infrastructure/memory
 ./internal/platform/ratelimit
+./internal/call/infrastructure/livekit
+./internal/platform/seal
+./internal/ssoconnect/domain
+./internal/ssoconnect/application
+./internal/ssoconnect/infrastructure/memory
+./internal/ssoconnect/infrastructure/directory
+./internal/ssoconnect/infrastructure/dns

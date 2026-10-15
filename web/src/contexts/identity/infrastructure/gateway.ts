@@ -1,6 +1,6 @@
 // identity: HTTP gateway to the identity API (infrastructure).
 import { request } from "../../../shared/http";
-import type { AuthorizeRequest, AuthProviders, CreatedToken, OAuthClient, OtpChallenge, PersonalToken, TelegramUser, User } from "../domain/model";
+import type { AuthorizeRequest, AuthProviders, CreatedToken, OAuthClient, OtpChallenge, PersonalToken, TelegramUser, User, SSOButton } from "../domain/model";
 
 export const identityGateway = {
   me: () => request<User>("GET", "/api/v1/me"),
@@ -8,6 +8,8 @@ export const identityGateway = {
     request<User>("POST", "/api/v1/auth/signup", { email, name, password }),
   login: (email: string, password: string) => request<{ token: string }>("POST", "/api/v1/auth/login", { email, password }),
   authProviders: () => request<AuthProviders>("GET", "/api/v1/auth/providers"),
+  discoverSSO: (email: string) =>
+    request<{ connection: SSOButton | null }>("POST", "/api/v1/auth/sso/discover", { email }).then((r) => r.connection),
   telegramOtpStart: () => request<OtpChallenge>("POST", "/api/v1/auth/telegram/otp", {}),
   telegramOtpVerify: (id: string, code: string) => request<{ token: string }>("POST", "/api/v1/auth/telegram/otp/verify", { id, code }),
   telegramLogin: (user: TelegramUser) => request<{ token: string }>("POST", "/api/v1/auth/telegram", user),

@@ -3,7 +3,7 @@ import { request, seg } from "../../../shared/http";
 import { onConnect, subscribe } from "../../../shared/stream";
 
 export { onConnect };
-import type { Call, FollowView, IceServer, Media, PresentKind, Reaction, Signal, SignalKind } from "../domain/model";
+import type { Call, FollowView, IceServer, Media, PresentKind, Reaction, RoomTicket, Signal, SignalKind } from "../domain/model";
 
 const conv = (id: string) => `/api/v1/conversations/${seg(id)}/call`;
 const call = (id: string) => `/api/v1/calls/${seg(id)}`;
@@ -29,6 +29,8 @@ export const callGateway = {
   },
   raiseHand: (callId: string, raised: boolean) => request<Call>("PUT", `${call(callId)}/hand`, { raised }),
   react: (callId: string, emoji: string) => request<undefined>("POST", `${call(callId)}/reactions`, { emoji }),
+  remove: (callId: string, user: string) => request<Call>("DELETE", `${call(callId)}/participants/${seg(user)}`),
+  room: (callId: string) => request<RoomTicket>("POST", `${call(callId)}/room`),
   ice: () => request<{ ice_servers: IceServer[] }>("GET", "/api/v1/calls/ice").then((r) => r.ice_servers),
 };
 

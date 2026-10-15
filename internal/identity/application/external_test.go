@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/bakhod1r/kyber/internal/identity/application"
@@ -238,5 +239,38 @@ func TestLoginExternalSSOProviders(t *testing.T) {
 	_, b, err := s.LoginExternal(ctx, application.ExternalProfile{Provider: domain.ProviderGitHub, Subject: "77", Email: "same@x.uz", EmailVerified: true, Name: "S"})
 	if err != nil || a.ID() != b.ID() {
 		t.Fatalf("verified email must link: %v %v %v", a, b, err)
+	}
+}
+
+type groupSync struct {
+	calls []string
+	err   error
+}
+
+func (g *groupSync) Sync(_ context.Context, user string, groups []string) error {
+	g.calls = append(g.calls, user+":"+strings.Join(groups, ","))
+	return g.err
+}
+
+// S106: SSO logins hand the user's groups to group sync; a sync failure never blocks the login.
+func TestLoginExternalSyncsGroups(t *testing.T) {
+	ctx := context.Background()
+	repo := memory.NewRepository()
+	n := 0
+	ids := func() string { n++; return []string{"", "u-1", "u-2"}[n] }
+	sync := &groupSync{err: errors.New("project gone")}
+	s := application.NewService(repo, repo, &plainHasher{}, &clock{}, ids, application.WithExternalIdentities(repo), application.WithGroupSync(sync))
+	p := application.ExternalProfile{Provider: domain.ProviderOIDC, Subject: "o-1", Email: "ann@corp.example", EmailVerified: true, Name: "Ann", Groups: []string{"eng", "leads"}}
+	token, u, err := s.LoginExternal(ctx, p)
+	if err != nil || token == "" {
+		t.Fatalf("login = %v", err)
+	}
+	if len(sync.calls) != 1 || sync.calls[0] != string(u.ID())+":eng,leads" {
+		t.Fatalf("sync = %v", sync.calls)
+	}
+	// Telegram and Google carry no groups: nothing is synced.
+	_, _, _ = s.LoginExternal(ctx, application.ExternalProfile{Provider: domain.ProviderTelegram, Subject: "t-1", Name: "T"})
+	if len(sync.calls) != 1 {
+		t.Fatalf("synced a provider without groups: %v", sync.calls)
 	}
 }

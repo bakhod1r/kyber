@@ -106,6 +106,7 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   expect(link).toMatch(/\/invite\/[0-9a-f]{64}$/);
   await expect(page.getByRole("list", { name: "Pending invitations" }).getByText("nobody@example.com")).toBeVisible();
 
+  await page.locator(".user-menu summary").click();
   await page.getByRole("button", { name: "Log out" }).click();
   await expect(page.getByRole("heading", { name: "Log in to Kyber" })).toBeVisible();
   await page.goto(`/projects/${key}`);

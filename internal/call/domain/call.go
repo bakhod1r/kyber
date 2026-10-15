@@ -1,7 +1,7 @@
 // Package domain is the Call context (ADR-0009): huddles — live audio/video calls with screen
-// sharing in a chat conversation. Media flows browser to browser (WebRTC mesh); the server
-// keeps who is in the call and relays signaling. At most MaxParticipants people per call, one
-// live call per conversation, and the call ends when the last participant leaves.
+// sharing in a chat conversation. Media flows browser to browser (WebRTC mesh, at most MaxParticipants), or
+// through the media server when one is configured (a room, ADR-0017); the server keeps who is in the call and
+// relays mesh signaling. One live call per conversation, and the call ends when the last participant leaves.
 package domain
 
 import (
@@ -24,6 +24,12 @@ var (
 
 // MaxParticipants keeps a full-mesh call within every participant's upload bandwidth.
 const MaxParticipants = 6
+
+// MaxRoomParticipants bounds a call whose media goes through the media server (ADR-0017): everyone uploads once.
+const MaxRoomParticipants = 50
+
+// ErrNotRoom: the call's media flows browser to browser, so there is no media-server room to enter.
+var ErrNotRoom = errors.New("this call does not use the media server")
 
 type (
 	CallID         string
@@ -52,6 +58,7 @@ type Call struct {
 	Participants []Participant // in joining order
 	Presentation *Presentation // what everyone looks at together, if anything
 	Recording    *Recording    // someone is recording the call (everyone sees it)
+	Room         bool          // media goes through the media server (SFU, ADR-0017), not a browser mesh
 	Version      int           // optimistic locking
 	events       []Event
 }
@@ -73,6 +80,24 @@ type CallEnded struct {
 	Seconds      int            `json:"seconds"`
 }
 
+// ParticipantLeft: someone left (or was removed from) a room call; the media server must drop them (S103).
+type ParticipantLeft struct {
+	Call CallID `json:"call_id"`
+	User UserID `json:"user_id"`
+}
+
+// RecordingStopped: the media server finished recording; its file goes to the conversation (S104).
+type RecordingStopped struct {
+	Call         CallID         `json:"call_id"`
+	Conversation ConversationID `json:"conversation_id"`
+	By           UserID         `json:"by"`
+	Egress       string         `json:"egress_id"`
+	Since        time.Time      `json:"since"`
+}
+
+func (ParticipantLeft) EventName() string  { return "call.participant_left" }
+func (RecordingStopped) EventName() string { return "call.recording_stopped" }
+
 func (CallStarted) EventName() string { return "call.started" }
 func (CallEnded) EventName() string   { return "call.ended" }
 
@@ -83,10 +108,12 @@ func (c *Call) PullEvents() []Event {
 	return ev
 }
 
-// Recording: one participant's browser records the call; everyone in it is shown who and since when.
+// Recording: one participant's browser — or, in a room call, the media server — records the call; everyone in
+// it is shown who and since when.
 type Recording struct {
-	By    UserID
-	Since time.Time
+	By     UserID
+	Since  time.Time
+	Egress string // the media server's recording, if it records (S104)
 }
 
 var (
@@ -105,12 +132,49 @@ func (c *Call) StartRecording(by UserID, now time.Time) error {
 	return nil
 }
 
+// RecordOnServer: the media server records a room call (egress is its recording's id).
+func (c *Call) RecordOnServer(by UserID, egress string, now time.Time) error {
+	if !c.Room {
+		return ErrNotRoom
+	}
+	if egress == "" {
+		return errors.New("no media-server recording")
+	}
+	if err := c.StartRecording(by, now); err != nil {
+		return err
+	}
+	c.Recording.Egress = egress
+	return nil
+}
+
 func (c *Call) StopRecording(by UserID) error {
 	if c.Recording == nil || c.Recording.By != by {
 		return ErrNotRecorder
 	}
-	c.Recording = nil
+	c.endRecording()
 	return nil
+}
+
+// endRecording clears the recording; a media-server recording's file is then handed on.
+func (c *Call) endRecording() {
+	if r := c.Recording; r.Egress != "" {
+		c.events = append(c.events, RecordingStopped{Call: c.ID, Conversation: c.Conversation, By: r.By, Egress: r.Egress, Since: r.Since})
+	}
+	c.Recording = nil
+}
+
+// ErrNotHost: only the one who started the call removes others (and not themselves: they leave).
+var ErrNotHost = errors.New("only the host can remove people from the call")
+
+// Remove takes target out of the call (S103).
+func (c *Call) Remove(by, target UserID, now time.Time) error {
+	switch {
+	case !c.Live() || !c.In(target):
+		return ErrNotInCall
+	case by != c.StartedBy || by == target || !c.In(by):
+		return ErrNotHost
+	}
+	return c.Leave(target, now)
 }
 
 // A Presentation is a shared file opened for everyone in the call ("present to all"); each viewer opens it
@@ -169,6 +233,32 @@ func Start(id CallID, ws WorkspaceID, conv ConversationID, by UserID, now time.T
 		events:       []Event{CallStarted{Call: id, Conversation: conv, By: by}}}
 }
 
+// StartRoom opens a call whose media goes through the media server (ADR-0017).
+func StartRoom(id CallID, ws WorkspaceID, conv ConversationID, by UserID, now time.Time) *Call {
+	c := Start(id, ws, conv, by, now)
+	c.Room = true
+	return c
+}
+
+// Limit is how many people the call takes.
+func (c *Call) Limit() int {
+	if c.Room {
+		return MaxRoomParticipants
+	}
+	return MaxParticipants
+}
+
+// EnterRoom checks that u may connect to the call's media-server room.
+func (c *Call) EnterRoom(u UserID) error {
+	switch {
+	case !c.Room:
+		return ErrNotRoom
+	case !c.Live() || !c.In(u):
+		return ErrNotInCall
+	}
+	return nil
+}
+
 func (c *Call) Live() bool { return c.EndedAt.IsZero() }
 
 func (c *Call) index(u UserID) int {
@@ -184,7 +274,7 @@ func (c *Call) Join(u UserID, now time.Time) error {
 		return ErrCallEnded
 	case c.In(u):
 		return nil
-	case len(c.Participants) >= MaxParticipants:
+	case len(c.Participants) >= c.Limit():
 		return ErrCallFull
 	}
 	c.Participants = append(c.Participants, Participant{User: u, JoinedAt: now.UTC(), Media: Media{Audio: true}})
@@ -202,7 +292,10 @@ func (c *Call) Leave(u UserID, now time.Time) error {
 		c.Presentation = nil
 	}
 	if c.Recording != nil && c.Recording.By == u {
-		c.Recording = nil
+		c.endRecording()
+	}
+	if c.Room {
+		c.events = append(c.events, ParticipantLeft{Call: c.ID, User: u})
 	}
 	if len(c.Participants) == 0 {
 		c.EndedAt = now.UTC()
@@ -286,7 +379,7 @@ func (c *Call) Signal(from, to UserID, kind, data string) (Signal, error) {
 		return Signal{}, ErrNotInCall
 	}
 	k := SignalKind(kind)
-	if from == to || (k != SignalOffer && k != SignalAnswer && k != SignalCandidate) || data == "" || len(data) > MaxSignal {
+	if c.Room || from == to || (k != SignalOffer && k != SignalAnswer && k != SignalCandidate) || data == "" || len(data) > MaxSignal {
 		return Signal{}, ErrInvalidSignal
 	}
 	return Signal{Call: c.ID, From: from, To: to, Kind: k, Data: data}, nil

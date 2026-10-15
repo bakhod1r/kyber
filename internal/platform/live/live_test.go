@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/auth"
 	"github.com/bakhod1r/kyber/internal/platform/live"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
+	"github.com/bakhod1r/kyber/internal/platform/presence"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
@@ -48,6 +51,12 @@ func TestFromMessage(t *testing.T) {
 // ann may browse KYB; ben may browse nothing. Tokens: "ann-token" (ann), "ben-token" (ben).
 func broker(t *testing.T) *live.Broker {
 	t.Helper()
+	return brokerWith(t, func(context.Context, string) bool { return true })
+}
+
+// brokerWith is broker with the given check of whether a user is still active.
+func brokerWith(t *testing.T, active live.Active) *live.Broker {
+	t.Helper()
 	revoked := map[string]bool{}
 	can := func(ctx context.Context, user, project string) bool {
 		w, _ := tenant.From(ctx)
@@ -63,7 +72,7 @@ func broker(t *testing.T) *live.Broker {
 		}
 		return user, nil
 	}
-	b, err := live.NewBroker(can, login, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	b, err := live.NewBroker(can, login, active, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,5 +265,71 @@ func TestUserTopics(t *testing.T) {
 	}
 	if got, _ := subscribe(t, opts("ben-token"), live.UserTopic(ws, "ben")); got == nil {
 		t.Fatal("own topic refused")
+	}
+}
+
+// A deactivated user (SCIM) stops receiving events at once and is disconnected, whatever the topic.
+func TestDeactivatedUsersAreDisconnected(t *testing.T) {
+	var mu sync.Mutex
+	gone := map[string]bool{}
+	b := brokerWith(t, func(ctx context.Context, user string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		w, _ := tenant.From(ctx)
+		return w == ws && !gone[user]
+	})
+	addr := freeAddr(t)
+	if err := b.ListenTCP(addr); err != nil {
+		t.Fatal(err)
+	}
+	opts := paho.NewClientOptions().AddBroker("tcp://" + addr).SetUsername(ws).SetPassword("ann-token")
+	hints, hc := subscribe(t, opts.SetClientID("a"), live.Topic(ws, "KYB"))
+	own, oc := subscribe(t, paho.NewClientOptions().AddBroker("tcp://"+addr).SetUsername(ws).SetPassword("ann-token").SetClientID("b"), live.UserTopic(ws, "ann"))
+	b.Publish(live.Change{Workspace: ws, Project: "KYB", Event: "issue.created"})
+	b.PublishTo(ws, []string{"ann"}, "chat.message", []byte(`{}`))
+	hints.next(t)
+	own.next(t)
+
+	mu.Lock()
+	gone["ann"] = true
+	mu.Unlock()
+	b.Publish(live.Change{Workspace: ws, Project: "KYB", Event: "issue.changed"})
+	b.PublishTo(ws, []string{"ann"}, "chat.message", []byte(`{}`))
+	hints.none(t)
+	own.none(t)
+	for _, c := range []paho.Client{hc, oc} {
+		deadline := time.Now().Add(3 * time.Second)
+		for c.IsConnectionOpen() && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if c.IsConnectionOpen() {
+			t.Fatal("deactivated client still connected")
+		}
+	}
+	if got := b.Online(ws, []string{"ann"}); len(got) != 0 {
+		t.Fatalf("online = %v", got)
+	}
+}
+
+// S105: the broker lists its clients as presence seats and says when they connect or leave.
+func TestSeatsAndChanges(t *testing.T) {
+	b := brokerWith(t, func(context.Context, string) bool { return true })
+	var changes atomic.Int32
+	b.OnChange(func() { changes.Add(1) })
+	addr := freeAddr(t)
+	if err := b.ListenTCP(addr); err != nil {
+		t.Fatal(err)
+	}
+	_, c := subscribe(t, paho.NewClientOptions().AddBroker("tcp://"+addr).SetUsername(ws).SetPassword("ann-token").SetClientID("s"), live.Topic(ws, "KYB"))
+	if got := b.Seats(); len(got) != 1 || got[0] != (presence.Seat{Workspace: ws, User: "ann"}) {
+		t.Fatalf("seats = %v", got)
+	}
+	c.Disconnect(0)
+	deadline := time.Now().Add(3 * time.Second)
+	for len(b.Seats()) > 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(b.Seats()) != 0 || changes.Load() < 2 {
+		t.Fatalf("after disconnect: seats %v, changes %d", b.Seats(), changes.Load())
 	}
 }

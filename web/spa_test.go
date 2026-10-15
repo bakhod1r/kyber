@@ -45,8 +45,7 @@ func TestSPAHandler(t *testing.T) {
 	if code, _, _ := get(t, h, "/logo.svg"); code != 200 {
 		t.Fatalf("logo = %d", code)
 	}
-	if csp := hdr.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") || !strings.Contains(csp, "frame-ancestors 'none'") || !strings.Contains(csp, "script-src 'self' https://telegram.org;") || !strings.Contains(csp, "frame-src https://oauth.telegram.org;") ||
-		!strings.Contains(csp, "worker-src 'self' blob:;") { // mqtt.js runs its timers in a blob worker
+	if csp := hdr.Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") || !strings.Contains(csp, "frame-ancestors 'none'") || !strings.Contains(csp, "script-src 'self' https://telegram.org;") || !strings.Contains(csp, "frame-src https://oauth.telegram.org;") {
 		t.Fatalf("CSP = %q", csp)
 	}
 	if hdr.Get("X-Content-Type-Options") != "nosniff" {
@@ -59,5 +58,17 @@ func TestSPAHandlerWithoutBuild(t *testing.T) {
 	code, body, _ := get(t, h, "/")
 	if code != 503 || !strings.Contains(body, "npm run build") {
 		t.Fatalf("unbuilt = %d %q", code, body)
+	}
+}
+
+// The media server's origins (ADR-0017) are added to connect-src; without one, default-src covers it.
+func TestSPAHandlerConnectOrigins(t *testing.T) {
+	app := fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}}
+	if _, _, hdr := get(t, web.Handler(app), "/"); strings.Contains(hdr.Get("Content-Security-Policy"), "connect-src") || strings.Contains(hdr.Get("Content-Security-Policy"), "blob:") {
+		t.Fatalf("CSP = %q", hdr.Get("Content-Security-Policy"))
+	}
+	_, _, hdr := get(t, web.Handler(app, "wss://sfu.example.com", "https://sfu.example.com"), "/")
+	if csp := hdr.Get("Content-Security-Policy"); !strings.HasSuffix(csp, "; connect-src 'self' wss://sfu.example.com https://sfu.example.com; worker-src 'self' blob:") {
+		t.Fatalf("CSP = %q", csp)
 	}
 }

@@ -3,8 +3,10 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/bakhod1r/kyber/internal/identity/application"
@@ -85,8 +87,12 @@ func (h *Handler) registerClient(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "the body must be JSON client metadata")
 		return
 	}
-	c, err := h.svc.RegisterClient(r.Context(), in.Name, in.Redirects)
+	c, err := h.svc.RegisterClient(r.Context(), clientIP(r), in.Name, in.Redirects)
+	var tooMany *application.TooManyAttemptsError
 	switch {
+	case errors.As(err, &tooMany):
+		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(tooMany.RetryAfter.Seconds()))))
+		oauthError(w, http.StatusTooManyRequests, "too_many_requests", "too many client registrations from this address; retry later")
 	case errors.Is(err, domain.ErrInvalidOAuthClient) && strings.Contains(err.Error(), "redirect_uri"):
 		oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", err.Error())
 	case errors.Is(err, domain.ErrInvalidOAuthClient), errors.Is(err, application.ErrOAuthDisabled):
@@ -138,6 +144,10 @@ func (h *Handler) oauthClient(w http.ResponseWriter, r *http.Request) {
 // browser session may approve: a token must not be able to grant itself more tokens.
 func (h *Handler) authorize(w http.ResponseWriter, r *http.Request) {
 	if !h.sessionOnly(w, r) {
+		return
+	}
+	if !isJSON(r) { // no simple (form or text) cross-site posts can approve a client
+		httpx.Error(w, r, h.log, httpx.ErrBadJSON, codeFor)
 		return
 	}
 	var in struct {

@@ -21,7 +21,19 @@ func (f fakeRoles) RoleOf(_ context.Context, project, user string) (string, bool
 }
 
 func (f fakeRoles) Archived(_ context.Context, project string) (bool, error) {
+	if project == "ARC-DOWN" {
+		return false, errors.New("db down")
+	}
 	return project == "ARC", nil
+}
+
+// The archived check's own failure surfaces as itself, not as a denial.
+func TestArchivedCheckFailure(t *testing.T) {
+	s := application.NewService(fakeRoles{"ARC-DOWN": {"lead": "admin"}})
+	err := s.Can(context.Background(), "lead", "ARC-DOWN", domain.EditIssues, nil)
+	if err == nil || errors.Is(err, application.ErrForbidden) || errors.Is(err, application.ErrNotFound) {
+		t.Fatalf("err = %v", err)
+	}
 }
 
 // B10: in an archived project everyone keeps reading; nobody changes anything, admins included.

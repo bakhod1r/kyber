@@ -148,8 +148,6 @@ func (s *Service) Can(ctx context.Context, actor, project string, perm domain.Pe
 		return errors.Join(ErrNotFound, err)
 	case errors.Is(err, domain.ErrForbidden):
 		return errors.Join(ErrForbidden, err)
-	case err != nil:
-		return err
 	}
 	if perm != domain.BrowseProjects {
 		archived, err := s.roles.Archived(ctx, project)

@@ -159,8 +159,10 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/metrics"
 	"github.com/bakhod1r/kyber/internal/platform/otel"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
+	"github.com/bakhod1r/kyber/internal/platform/presence"
 	"github.com/bakhod1r/kyber/internal/platform/ratelimit"
 	"github.com/bakhod1r/kyber/internal/platform/realtime"
+	"github.com/bakhod1r/kyber/internal/platform/seal"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 	projectapp "github.com/bakhod1r/kyber/internal/project/application"
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
@@ -176,6 +178,20 @@ import (
 	searchmemory "github.com/bakhod1r/kyber/internal/search/infrastructure/memory"
 	searchpg "github.com/bakhod1r/kyber/internal/search/infrastructure/postgres"
 	searchhttp "github.com/bakhod1r/kyber/internal/search/interfaces/httpapi"
+	ssocapp "github.com/bakhod1r/kyber/internal/ssoconnect/application"
+	ssocdomain "github.com/bakhod1r/kyber/internal/ssoconnect/domain"
+	ssocacl "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/acl"
+	ssocdir "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/directory"
+	ssocdns "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/dns"
+	ssocmemory "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/memory"
+	ssocpg "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/postgres"
+	ssochttp "github.com/bakhod1r/kyber/internal/ssoconnect/interfaces/httpapi"
+	ssoapp "github.com/bakhod1r/kyber/internal/ssosync/application"
+	ssodomain "github.com/bakhod1r/kyber/internal/ssosync/domain"
+	ssoacl "github.com/bakhod1r/kyber/internal/ssosync/infrastructure/acl"
+	ssomemory "github.com/bakhod1r/kyber/internal/ssosync/infrastructure/memory"
+	ssopg "github.com/bakhod1r/kyber/internal/ssosync/infrastructure/postgres"
+	ssohttp "github.com/bakhod1r/kyber/internal/ssosync/interfaces/httpapi"
 	wbapp "github.com/bakhod1r/kyber/internal/whiteboard/application"
 	wbdomain "github.com/bakhod1r/kyber/internal/whiteboard/domain"
 	wbacl "github.com/bakhod1r/kyber/internal/whiteboard/infrastructure/acl"
@@ -231,6 +247,12 @@ type deps struct {
 	tokens         identitydomain.PersonalTokens
 	oauth          identitydomain.OAuthStore
 	directory      identitydomain.Directory
+	ssoMappings    ssodomain.Mappings
+	ssoGrants      ssodomain.Grants
+	ssoConns       ssocdomain.Connections // stored SSO connections (ADR-0018); Postgres is built once the key is known
+	ssoBuild       ssocdir.Build
+	ssoDNS         ssocapp.DNS
+	sealBox        *seal.Box
 	scimToken      string
 	social         identityhttp.Social
 	otps           identitydomain.OTPChallenges
@@ -279,6 +301,7 @@ type deps struct {
 	chatBlobs      blob.Store // chat files; memory unless WithFilesDir
 	baseDomain     string     // "" = single-tenant (ADR-0004)
 	ice            ice.Config
+	media          MediaServer
 	outbox         outbox.Store
 	livePool       *pgxpool.Pool   // set: hints cross replicas through NOTIFY
 	ctx            context.Context // lifetime of background work (outbox relay)
@@ -297,6 +320,16 @@ func WithReminderEvery(every time.Duration) Option { return func(d *deps) { d.re
 func WithMQTTAddr(addr string) Option { return func(d *deps) { d.mqttAddr = addr } }
 
 func WithRelayEvery(every time.Duration) Option { return func(d *deps) { d.relayEvery = every } }
+
+// WithEncryptionKey seals secrets stored in the database (KYBER_ENCRYPTION_KEY, ADR-0018);
+// nil disables stored SSO connections on PostgreSQL.
+func WithEncryptionKey(b *seal.Box) Option { return func(d *deps) { d.sealBox = b } }
+
+// WithSSOProviders replaces how stored SSO connections become sign-in clients (tests use a fake IdP).
+func WithSSOProviders(b ssocdir.Build) Option { return func(d *deps) { d.ssoBuild = b } }
+
+// WithDNS replaces the resolver used to verify SSO domains (tests serve fixed TXT records).
+func WithDNS(r ssocapp.DNS) Option { return func(d *deps) { d.ssoDNS = r } }
 
 // WithSocial enables sign-in with Google and/or Telegram.
 func WithSocial(s identityhttp.Social) Option { return func(d *deps) { d.social = s } }
@@ -373,6 +406,27 @@ func WithICE(urls []string, turnSecret string) Option {
 	return func(d *deps) { d.ice = ice.Config{URLs: urls, Secret: turnSecret} }
 }
 
+// MediaServer is an SFU for large calls (ADR-0017): it issues room tickets, and the web app connects to its
+// origins.
+type MediaServer interface {
+	callapp.Rooms
+	Origins() []string
+}
+
+// recorder is the media server's recorder when it records (LiveKit Egress with a recordings directory, S104).
+func (d *deps) recorder() callapp.Recorder {
+	if r, ok := d.media.(interface {
+		callapp.Recorder
+		Records() bool
+	}); ok && r.Records() {
+		return r
+	}
+	return nil
+}
+
+// WithMediaServer makes new calls rooms on the media server (LiveKit) instead of a browser mesh.
+func WithMediaServer(m MediaServer) Option { return func(d *deps) { d.media = m } }
+
 // WithTranscriber transcribes huddle recordings into their threads (S77).
 func WithTranscriber(t chatapp.Transcriber) Option { return func(d *deps) { d.transcriber = t } }
 
@@ -404,6 +458,7 @@ func WithRedis(rdb redis.UniversalClient) Option { return func(d *deps) { d.redi
 // NewInMemory builds the API on in-memory adapters (dev mode and tests).
 func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 	ids := identitymemory.NewRepository()
+	sso := ssomemory.New()
 	chatRepo := chatmemory.NewRepository()
 	savedRepo := chatmemory.NewSaved(chatRepo)
 	remRepo := chatmemory.NewReminders()
@@ -428,7 +483,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
 		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), bots: chatmemory.NewBots(), sectionOrders: chatmemory.NewSectionOrders(), calls: callRepo, whiteboards: wbmemory.NewRepository(), wbComments: wbCommentRepo,
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(wbCommentRepo.Outbox, wbCommentRepo.OutboxMeta), events(docCommentRepo.Outbox, docCommentRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
-		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ready: func(context.Context) error { return nil },
+		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ssoMappings: sso, ssoGrants: sso, ssoConns: ssocmemory.New(), ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
 		o(&d)
@@ -466,6 +521,7 @@ func StartJobs(ctx context.Context, log *slog.Logger, pool *pgxpool.Pool, purgeE
 // NewPostgres builds the API on PostgreSQL; the pool must already be migrated.
 func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts ...Option) http.Handler {
 	ids := identitypg.NewRepository(pool)
+	sso := ssopg.New(pool)
 	d := deps{
 		projectHooks: whpg.NewWebhooks(pool), whDeliveries: whpg.NewDeliveries(pool), devLinks: whpg.NewLinks(pool),
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
@@ -476,7 +532,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		activity: insightspg.NewRepository(pool), invitations: projectpg.NewInvitations(pool), mappings: importerpg.NewRepository(pool), importLock: importerpg.NewImportLock(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), scheduled: chatpg.NewScheduled(pool), reminders: chatpg.NewReminders(pool), userGroups: chatpg.NewGroups(pool), chatPrefs: chatpg.NewPrefs(pool), bookmarks: chatpg.NewBookmarks(pool), chatWorkflows: chatpg.NewWorkflows(pool), webhooks: chatpg.NewWebhooks(pool), bots: chatpg.NewBots(pool), sectionOrders: chatpg.NewSectionOrders(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool), wbComments: wbpg.NewComments(pool),
-		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ready: pool.Ping, cookieSecure: cookieSecure,
+		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ssoMappings: sso, ssoGrants: sso, ready: pool.Ping, cookieSecure: cookieSecure,
 	}
 	for _, o := range opts {
 		o(&d)
@@ -572,7 +628,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	calendar.WithConversations(calendaracl.NewConversations(chat)) // meetings in a channel's huddle (S76)
 	callEvents := callrealtime.New(publish, func(c *calldomain.Call) any { return callhttp.ToDTO(c) })
 	calls := callapp.NewService(callapp.Deps{Calls: d.calls, Conversations: callacl.NewConversations(chat),
-		Notifier: callEvents, Signals: callEvents, NewID: id.New, Now: time.Now})
+		Notifier: callEvents, Signals: callEvents, Rooms: d.media, Recorder: d.recorder(), Recordings: callacl.NewRecordings(chat),
+		NewID: id.New, Now: time.Now})
 	notify.WithConversations(notifyacl.NewConversations(chat))
 	notify.WithQuiet(notifyacl.NewQuiet(chat, focus))
 	notify.WithGroupMentions(notifyacl.NewGroupMentions(chat))
@@ -592,11 +649,24 @@ func build(log *slog.Logger, d deps) http.Handler {
 			}
 		}
 		return string(u.ID()), nil
+	}, func(ctx context.Context, user string) bool { // SCIM deactivation ends live streams too
+		u, err := d.users.ByID(ctx, identitydomain.UserID(user))
+		return err == nil && u.Active()
 	}, log)
 	if err != nil {
 		panic(fmt.Sprintf("mqtt broker: %v", err)) // only fails on programming errors (duplicate hook or listener ids)
 	}
 	rt.Forward(hub) // S88: chat, calls and whiteboards also reach each user's MQTT topic
+	// S105: who is online on any replica. Each replica beats its streams and MQTT clients into the
+	// presence table (PostgreSQL mode) or memory; a crashed replica's seats age out.
+	var seats presence.Store = presence.NewMemory()
+	if d.livePool != nil {
+		seats = presence.NewPostgres(d.livePool)
+	}
+	roster := presence.NewRoster(seats, id.New(), rt.Seats, time.Now, log)
+	rt.Track(roster)
+	hub.OnChange(roster.Changed)
+	go roster.Run(d.liveCtx())
 	if d.mqttAddr != "" {
 		if err := hub.ListenTCP(d.mqttAddr); err != nil {
 			panic(fmt.Sprintf("mqtt listener %s: %v", d.mqttAddr, err))
@@ -627,6 +697,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 	for _, name := range []string{"issue.created", "issue.transitioned", "sprint.started", "sprint.completed"} {
 		relay.Handle(name, chat.OnProjectEvent) // project channels (S73)
 	}
+	relay.Handle("call.participant_left", calls.OnParticipantLeft)   // drop them from the media server (S103)
+	relay.Handle("call.recording_stopped", calls.OnRecordingStopped) // post the media server's recording (S104)
 	relay.Handle("call.started", chat.OnCallEvent)
 	relay.Handle("call.ended", chat.OnCallEvent)
 	relay.Handle("issue.changed", notify.OnIssueChanged)
@@ -670,7 +742,12 @@ func build(log *slog.Logger, d deps) http.Handler {
 	go remindMeetings(d.ctx, log, chat.RunWorkflows, d.reminderEvery)  // channel workflows (S80)
 	go remindMeetings(d.ctx, log, notify.SendDigests, d.reminderEvery) // daily email digests (B9)
 	go dispatchWebhooks(d.ctx, log, webhooks, d.webhookEvery)
-	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens), identityapp.WithOAuth(d.oauth), identityapp.WithDirectory(d.directory)}
+	auditLog := auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now)
+	// S106: SSO groups → workspace and project roles, applied at every SSO login.
+	groupSync := ssoapp.NewService(ssoapp.Deps{Mappings: d.ssoMappings, Grants: d.ssoGrants,
+		Roles: ssoacl.Roles{Workspaces: workspaces, Projects: projects}, Audit: ssoacl.Audit{Log: auditLog},
+		Admins: ssoacl.Admins(d.siteAdmin), NewID: id.New, Now: time.Now, Log: log})
+	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens), identityapp.WithOAuth(d.oauth), identityapp.WithDirectory(d.directory), identityapp.WithGroupSync(groupSync)}
 	if d.redis != nil {
 		identityOpts = append(identityOpts, identityapp.WithLoginLimiter(guardlimit.New(d.redis, "kyber:")))
 	}
@@ -692,7 +769,23 @@ func build(log *slog.Logger, d deps) http.Handler {
 			})
 	}
 	chat.WithBots(d.bots, chatacl.NewBotMaker(identity), chatacl.NewWorkspace(workspaces, d.siteAdmin)) // bot users (S84)
-	auth := identityhttp.New(identity, log, d.cookieSecure).WithSocial(d.social).WithPublicURL(d.publicURL)
+	if d.ssoConns == nil {
+		d.ssoConns = ssocpg.New(d.livePool, d.sealBox)
+	}
+	if d.ssoDNS == nil {
+		d.ssoDNS = ssocdns.Resolver{}
+	}
+	if d.ssoBuild == nil {
+		d.ssoBuild = ssocdir.OIDC(func(id string) string {
+			return strings.TrimRight(d.publicURL, "/") + "/api/v1/auth/sso/" + id + "/callback"
+		})
+	}
+	connections := ssocapp.NewService(ssocapp.Deps{Connections: d.ssoConns, Admins: ssocacl.Admins{Site: d.siteAdmin, Workspaces: workspaces},
+		Audit: ssocacl.Audit{Log: auditLog}, DNS: d.ssoDNS, NewID: id.New, NewToken: ssocdns.Token, Now: time.Now})
+	connectionsHTTP := ssochttp.New(connections, log)
+	social := d.social
+	social.SSO = ssocdir.New(d.ssoConns, d.ssoBuild)
+	auth := identityhttp.New(identity, log, d.cookieSecure).WithSocial(social).WithPublicURL(d.publicURL)
 	m := metrics.NewHTTP()
 
 	api := http.NewServeMux()
@@ -745,9 +838,10 @@ func build(log *slog.Logger, d deps) http.Handler {
 		return float64(n)
 	})
 	callhttp.New(calls, log, func(user string, now time.Time) any { return d.ice.Servers(user, now) }).Register(api)
-	audit := audithttp.New(auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now),
-		auditacl.NewOwners(agile, d.boards, d.links), log)
+	audit := audithttp.New(auditLog, auditacl.NewOwners(agile, d.boards, d.links), log)
 	audit.Register(api)
+	ssohttp.New(groupSync, log).Register(api)
+	connectionsHTTP.Register(api)
 	api.Handle("POST /api/v1/mcp", newMCP(projects, issues, search, agile))
 
 	mux := http.NewServeMux()
@@ -766,13 +860,18 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
+	connectionsHTTP.RegisterPublic(mux, d.rateLimit(log))
 	projecthttp.New(projects, log).RegisterPublic(mux) // invitation previews: the token in the URL is the credential
 	auth.RegisterSCIM(mux, d.scimToken)
 	chatAPI.RegisterPublic(mux) // incoming webhooks (S81): the secret in the URL is the credential
 	webhookHTTP.RegisterPublic(mux)
-	mux.Handle("/api/v1/", auth.RequireAuth(d.rateLimit(log)(tenancy.RequireMember(audit.Record(problemFallback(otel.Routed(api)))))))
-	mux.Handle("/", web.Handler(web.Dist()))
-	return otel.Middleware(realip.Middleware(d.trustedProxies, observe(log, m, recoverer(log, tenancy.Resolve(otel.Routed(mux))))))
+	mux.Handle("/api/v1/", auth.RequireAuth(d.rateLimit(log)(tenancy.RequireMember(connectionsHTTP.RequireSSO(workspacehttp.IsApexPath)(audit.Record(problemFallback(otel.Routed(api))))))))
+	var mediaOrigins []string
+	if d.media != nil {
+		mediaOrigins = d.media.Origins()
+	}
+	mux.Handle("/", web.Handler(web.Dist(), mediaOrigins...))
+	return otel.Middleware(realip.Middleware(d.trustedProxies, observe(log, m, recoverer(log, hsts(d.cookieSecure, tenancy.Resolve(otel.Routed(mux)))))))
 }
 
 // rateLimit limits each user's API requests: per process, or across replicas with Redis.
@@ -796,6 +895,17 @@ func loggedPath(p string) string {
 		return "/api/v1/hooks/…"
 	}
 	return p
+}
+
+// hsts tells browsers to use HTTPS only, when Kyber is served over HTTPS (secure cookies).
+func hsts(on bool, next http.Handler) http.Handler {
+	if !on {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func observe(log *slog.Logger, m *metrics.HTTP, next http.Handler) http.Handler {

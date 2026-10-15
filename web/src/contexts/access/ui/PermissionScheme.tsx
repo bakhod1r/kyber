@@ -1,10 +1,9 @@
-import { permissionLabel } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { accessUseCases, type GrantKind, type PermissionGrants } from "../application";
 import { ApiError } from "../../../shared/http";
 import { projectUseCases } from "../../project/application";
-import { msg, type MessageKey, useT } from "../../../shared/i18n/i18n";
+import { msg, type MessageKey, useLabel, useT } from "../../../shared/i18n/i18n";
 
 /** Holders shown as columns; individual users are listed per permission. */
 const COLUMNS: { kind: GrantKind; value: string; label: MessageKey }[] = [
@@ -18,9 +17,11 @@ const COLUMNS: { kind: GrantKind; value: string; label: MessageKey }[] = [
 /** Admins must keep these, so the project cannot lock its admins out (the API enforces it too). */
 const LOCKED = new Set(["BROWSE_PROJECTS", "ADMINISTER_PROJECTS"]);
 
+const format = (p: string) => p.charAt(0) + p.slice(1).toLowerCase().replaceAll("_", " ");
 
 /** PermissionScheme: the project's permission scheme editor (project admins). */
 export function PermissionScheme({ projectKey }: { projectKey: string }) {
+  const label = useLabel();
   const t = useT();
   const qc = useQueryClient();
   const key = ["permissions", projectKey];
@@ -82,14 +83,14 @@ export function PermissionScheme({ projectKey }: { projectKey: string }) {
         <tbody>
           {draft.map((p) => (
             <tr key={p.permission}>
-              <th scope="row">{permissionLabel(t, p.permission)}</th>
+              <th scope="row">{label(format(p.permission))}</th>
               {COLUMNS.map((c) => {
                 const locked = LOCKED.has(p.permission) && c.value === "admin";
                 return (
                   <td key={c.label}>
                     <input
                       type="checkbox"
-                      aria-label={`${permissionLabel(t, p.permission)}: ${t(c.label)}`}
+                      aria-label={`${label(format(p.permission))}: ${t(c.label)}`}
                       checked={has(p, c.kind, c.value)}
                       disabled={locked}
                       onChange={() => toggle(p.permission, c.kind, c.value)}
@@ -105,14 +106,14 @@ export function PermissionScheme({ projectKey }: { projectKey: string }) {
                       key={g.value}
                       type="button"
                       className="ghost chip"
-                      aria-label={t("Remove {name} from {permission}", { name: name(g.value), permission: permissionLabel(t, p.permission) })}
+                      aria-label={t("Remove {name} from {permission}", { name: name(g.value), permission: label(format(p.permission)) })}
                       onClick={() => toggle(p.permission, "user", g.value)}
                     >
                       {name(g.value)} ×
                     </button>
                   ))}
                 <select
-                  aria-label={t("Add a user to {permission}", { permission: permissionLabel(t, p.permission) })}
+                  aria-label={t("Add a user to {permission}", { permission: label(format(p.permission)) })}
                   value=""
                   onChange={(e) => e.target.value && toggle(p.permission, "user", e.target.value)}
                 >

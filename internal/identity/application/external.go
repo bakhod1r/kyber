@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/bakhod1r/kyber/internal/identity/domain"
 )
@@ -28,7 +29,18 @@ type ExternalProfile struct {
 	Email         string
 	EmailVerified bool
 	Name          string
+	// Groups the provider says the user belongs to (OIDC groups claim, SAML attribute; S106).
+	// nil: the provider sends no groups and group sync is skipped.
+	Groups []string
 }
+
+// GroupSync applies SSO group mappings to a user at login (S106, the ssosync context).
+type GroupSync interface {
+	Sync(ctx context.Context, user string, groups []string) error
+}
+
+// WithGroupSync enables SSO group → role mapping at every SSO login.
+func WithGroupSync(g GroupSync) Option { return func(s *Service) { s.groups = g } }
 
 // LoginExternal signs a provider-verified user in, creating or linking the account:
 // a linked identity wins; otherwise a *verified* email links to the existing account
@@ -44,7 +56,14 @@ func (s *Service) LoginExternal(ctx context.Context, p ExternalProfile) (string,
 	if err != nil {
 		return "", nil, err
 	}
-	token, err := s.newSession(ctx, u.ID())
+	token, err := s.newSession(ctx, u.ID(), string(p.Provider))
+	if err == nil && s.groups != nil && p.Groups != nil {
+		// Roles follow the identity provider; a failure is logged and retried at the next login,
+		// never a reason to refuse the sign-in.
+		if err := s.groups.Sync(ctx, string(u.ID()), p.Groups); err != nil {
+			slog.WarnContext(ctx, "sso group sync", "user", string(u.ID()), "err", err)
+		}
+	}
 	return token, u, err
 }
 

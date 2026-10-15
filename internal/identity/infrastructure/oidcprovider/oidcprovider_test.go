@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -68,6 +69,11 @@ func validClaims(nonce string) func(string) map[string]any {
 		return map[string]any{"iss": iss, "aud": "kyber-client", "sub": "g-123", "nonce": nonce, "email": "ali@gmail.com",
 			"email_verified": true, "name": "Ali Valiyev", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix()}
 	}
+}
+
+func clientWith(f *fakeIdP, groupsClaim string) *oidcprovider.Client {
+	return oidcprovider.New(oidcprovider.Config{Provider: domain.ProviderOIDC, Issuer: f.URL, ClientID: "kyber-client", ClientSecret: "s",
+		RedirectURL: "https://kyber.test/cb", RequireVerifiedEmail: true, GroupsClaim: groupsClaim, AuthParams: map[string]string{"acr_values": "mfa"}})
 }
 
 func client(f *fakeIdP) *oidcprovider.Client {
@@ -177,5 +183,44 @@ func TestKeysFetchedAfterDiscoveryRequestEnded(t *testing.T) {
 	f.claims = validClaims(flow.Nonce)
 	if _, err := c.Exchange(context.Background(), "good-code", flow); err != nil {
 		t.Fatalf("callback after start ended: %v", err)
+	}
+}
+
+// S106: the groups claim (configurable; a list or a single string) becomes the profile's groups;
+// without the claim the profile has none (nil: group sync is skipped).
+func TestExchangeGroups(t *testing.T) {
+	for name, c := range map[string]struct {
+		claim string
+		value any
+		want  []string
+	}{
+		"default list":  {"", []any{"eng", "leads"}, []string{"eng", "leads"}},
+		"custom claim":  {"roles", []any{"admins"}, []string{"admins"}},
+		"single string": {"", "eng", []string{"eng"}},
+		"absent":        {"", nil, nil},
+		"empty list":    {"", []any{}, []string{}},
+		"wrong type":    {"", 42, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFake(t)
+			cl := clientWith(f, c.claim)
+			flow := application.NewOIDCFlow()
+			start(t, f, cl, flow)
+			claim := c.claim
+			if claim == "" {
+				claim = "groups"
+			}
+			f.claims = validClaims(flow.Nonce)
+			if c.value != nil {
+				f.claims = withClaim(validClaims(flow.Nonce), claim, c.value)
+			}
+			p, err := cl.Exchange(context.Background(), "good-code", flow)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fmt.Sprint(p.Groups) != fmt.Sprint(c.want) || (c.want == nil) != (p.Groups == nil) {
+				t.Fatalf("groups = %#v, want %#v", p.Groups, c.want)
+			}
+		})
 	}
 }

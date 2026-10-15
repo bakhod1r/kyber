@@ -172,6 +172,29 @@ func Run(t *testing.T, newRepo Factory) {
 		}
 	})
 
+	t.Run("pages in rank order", func(t *testing.T) {
+		repo, _ := newRepo(t)
+		for i := 1; i <= 5; i++ {
+			if err := repo.Save(ctx, mk(t, i, "Paged"), nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for name, c := range map[string]struct {
+			f    domain.ListFilter
+			want string
+		}{
+			"first page": {domain.ListFilter{Limit: 2}, "KYB-1,KYB-2"},
+			"next page":  {domain.ListFilter{Limit: 2, Offset: 2}, "KYB-3,KYB-4"},
+			"past end":   {domain.ListFilter{Limit: 2, Offset: 10}, ""},
+			"no limit":   {domain.ListFilter{Offset: 3}, "KYB-4,KYB-5"},
+		} {
+			list, err := repo.ListByProject(ctx, "KYB", c.f)
+			if err != nil || keys(list) != c.want {
+				t.Errorf("%s = %s %v", name, keys(list), err)
+			}
+		}
+	})
+
 	t.Run("labels persist and filter", func(t *testing.T) {
 		repo, _ := newRepo(t)
 		a, b := mk(t, 1, "Both"), mk(t, 2, "UI")

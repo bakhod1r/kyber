@@ -100,6 +100,25 @@ func TestAdministers(t *testing.T) {
 	}
 }
 
+func TestOwns(t *testing.T) {
+	ctx := context.Background()
+	s := setup()
+	w, _ := s.Create(ctx, "u-1", "acme", "Acme")
+	ws := string(w.ID())
+	_ = s.Grant(ctx, ws, "u-2", "admin")
+	for user, want := range map[string]bool{"u-1": true, "u-2": false, "u-9": false} {
+		if got, err := s.Owns(ctx, ws, user); err != nil || got != want {
+			t.Errorf("%s = %v %v", user, got, err)
+		}
+	}
+	if got, err := s.Owns(ctx, string(domain.DefaultID), "u-1"); err != nil || got {
+		t.Fatalf("default workspace = %v %v", got, err)
+	}
+	if _, err := s.Owns(ctx, "missing", "u-1"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+}
+
 func TestMemberIDs(t *testing.T) {
 	ctx := context.Background()
 	s := setup()
@@ -147,5 +166,46 @@ func TestMembersAndRoles(t *testing.T) {
 	}
 	if _, err := s.Members(ctx, "missing"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
 		t.Fatalf("missing: %v", err)
+	}
+}
+
+// S106: SSO group sync grants and revokes workspace roles without an acting user.
+func TestGrantAndRevoke(t *testing.T) {
+	ctx := context.Background()
+	s := setup()
+	w, _ := s.Create(ctx, "u-owner", "acme", "Acme")
+	ws := string(w.ID())
+	if err := s.Grant(ctx, ws, "u-dev", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := s.Administers(ctx, ws, "u-dev"); !ok {
+		t.Fatal("not granted")
+	}
+	if err := s.Grant(ctx, ws, "u-dev", "member"); err != nil { // a change of role
+		t.Fatal(err)
+	}
+	if ok, _ := s.Administers(ctx, ws, "u-dev"); ok {
+		t.Fatal("role not changed")
+	}
+	if err := s.Revoke(ctx, ws, "u-dev"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := s.IsMember(ctx, ws, "u-dev"); ok {
+		t.Fatal("still a member")
+	}
+	if err := s.Revoke(ctx, ws, "u-owner"); !errors.Is(err, domain.ErrLastOwner) {
+		t.Fatalf("last owner: %v", err)
+	}
+	if err := s.Grant(ctx, ws, "u-x", "emperor"); err == nil {
+		t.Fatal("invalid role accepted")
+	}
+	if err := s.Grant(ctx, ws, "u-owner", "member"); !errors.Is(err, domain.ErrLastOwner) {
+		t.Fatalf("demote last owner: %v", err)
+	}
+	if err := s.Grant(ctx, "w-404", "u-x", "member"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
+		t.Fatalf("unknown workspace: %v", err)
+	}
+	if err := s.Revoke(ctx, "w-404", "u-x"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
+		t.Fatalf("revoke in unknown workspace: %v", err)
 	}
 }

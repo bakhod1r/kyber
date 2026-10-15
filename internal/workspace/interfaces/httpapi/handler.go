@@ -107,6 +107,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 // Invitations are accepted by people who are not workspace members yet; the token picks the workspace.
 var apexAPI = []string{"/api/v1/auth/", "/api/v1/me", "/api/v1/workspaces", "/api/v1/invitations/"}
 
+// IsApexPath reports whether path is served on the apex in multi-tenant mode (sign-in, /me, the
+// workspace list): workspace guards leave these open.
+func IsApexPath(path string) bool { return hasPrefix(path, apexAPI) }
+
 // probes answer on any host (load balancers and Prometheus use IPs).
 var probes = []string{"/healthz", "/readyz", "/metrics"}
 

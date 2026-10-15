@@ -1,11 +1,14 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.74.0
+  version: 0.76.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
     `Content-Type: application/json` (CSRF guard). Non-members receive `404` for project resources.
+    A workspace that requires single sign-on (ADR-0018) answers any of its routes with
+    `403 SSO_REQUIRED` to members who signed in another way or use an API token; the detail names the
+    connection's sign-in URL. Workspace owners are exempt.
   license: { name: MIT, identifier: MIT }
 servers:
   - url: http://localhost:8080
@@ -14,6 +17,230 @@ security:
   - cookie: []
 
 paths:
+  /api/v1/admin/sso/group-mappings:
+    get:
+      operationId: listSSOGroupMappings
+      summary: Identity-provider groups mapped to workspace and project roles (site admins, S106).
+      responses:
+        "200":
+          description: Oldest first.
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/SSOGroupMapping" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createSSOGroupMapping
+      summary: Map a group to a role; applied at each SSO login (grants and revokes only what SSO granted).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [group, scope, role]
+              properties:
+                group: { type: string, description: "Group name as the IdP sends it (case-insensitive)." }
+                scope: { type: string, enum: [workspace, project] }
+                workspace_id: { type: string, description: "Defaults to the current workspace." }
+                project_key: { type: string, description: "Required for scope project." }
+                role: { type: string, description: "workspace: member or admin; project: viewer, member or admin." }
+      responses:
+        "201": { description: Created., content: { application/json: { schema: { $ref: "#/components/schemas/SSOGroupMapping" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/sso/group-mappings/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    delete:
+      operationId: deleteSSOGroupMapping
+      summary: Remove a mapping; roles it granted are revoked at each user's next SSO login.
+      responses:
+        "204": { description: Removed. }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/sso/connections:
+    get:
+      operationId: listSSOConnections
+      summary: Stored identity providers (ADR-0018). Site admins see all; a workspace's admins see its own. Secrets are never returned.
+      responses:
+        "200":
+          description: Oldest first.
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/SSOConnection" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createSSOConnection
+      summary: Add an OpenID Connect provider. Its redirect URI is <KYBER_PUBLIC_URL>/api/v1/auth/sso/{id}/callback.
+      description: The client secret is sealed with KYBER_ENCRYPTION_KEY (409 ENCRYPTION_KEY_MISSING without it).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, issuer, client_id, client_secret]
+              properties:
+                name: { type: string, maxLength: 60, description: The sign-in button's label. }
+                issuer: { type: string, description: "https URL; discovery at <issuer>/.well-known/openid-configuration." }
+                client_id: { type: string }
+                client_secret: { type: string, writeOnly: true }
+                groups_claim: { type: string, description: "ID token claim with the user's groups (S106); default groups." }
+                scope:
+                  type: string
+                  enum: [installation, workspace]
+                  default: installation
+                  description: "installation: site admins only; workspace: this workspace's own (its admins may manage it)."
+      responses:
+        "201": { description: Created., content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/sso/connections/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    patch:
+      operationId: updateSSOConnection
+      summary: Rename, enable or disable a connection. A disabled connection disappears from the login page.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 60 }
+                enabled: { type: boolean }
+                enforced: { type: boolean, description: "Require it for the workspace's members (workspace connections only; owners exempt)." }
+      responses:
+        "200": { description: Updated., content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteSSOConnection
+      summary: Remove a connection. Accounts keep their other sign-in methods.
+      responses:
+        "204": { description: Removed. }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/sso/connections/{id}/domains:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: addSSODomain
+      summary: >-
+        List an email domain for the connection (ADR-0018 §4). It routes sign-in once its DNS has the TXT record
+        shown in `domains[].txt`, or at once when `trusted` (the site admin vouches for it).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [domain]
+              properties:
+                domain: { type: string, examples: [acme.uz] }
+                trusted: { type: boolean, default: false }
+      responses:
+        "200": { description: The connection., content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/sso/connections/{id}/domains/{domain}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: domain, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: removeSSODomain
+      summary: Stop routing the domain to this connection.
+      responses:
+        "200": { description: The connection., content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/sso/connections/{id}/domains/{domain}/verify:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: domain, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: verifySSODomain
+      summary: Look up the domain's TXT records; 409 SSO_DOMAIN_NOT_VERIFIED until kyber-verify=<token> is published.
+      responses:
+        "200": { description: Verified; the connection., content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/sso/discover:
+    post:
+      operationId: discoverSSOConnection
+      security: []
+      summary: Which SSO connection signs in this email (its verified domain), or null. JSON only (login CSRF).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email], properties: { email: { type: string } } }
+      responses:
+        "200":
+          description: The connection to use, or null.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [connection]
+                properties:
+                  connection:
+                    oneOf:
+                      - { type: "null" }
+                      - { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/auth/sso/{id}/start:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: ssoConnectionStart
+      security: []
+      description: Starts sign-in with a stored SSO connection (ADR-0018); like oidcStart, with the flow cookie scoped to this connection.
+      responses:
+        "302": { description: "Redirect to the provider's sign-in page" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/sso/{id}/callback:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: ssoConnectionCallback
+      security: []
+      description: >-
+        The connection's provider redirects here; verified like oidcCallback. Identities are keyed by
+        (sso:<id>, subject). On failure redirects to `/login?error=sso_failed` or `sso_email_taken`.
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+      responses:
+        "302": { description: "Redirect to / when signed in, otherwise to /login?error=sso_failed or sso_email_taken" }
+        "404": { $ref: "#/components/responses/Error" }
   /scim/v2/ServiceProviderConfig:
     get:
       operationId: getSCIMConfig
@@ -162,6 +389,16 @@ paths:
                   grant_types: { type: array, items: { type: string } }
                   response_types: { type: array, items: { type: string } }
         "400": { $ref: "#/components/responses/OAuthError" }
+        "429":
+          description: Too many registrations from this client IP (error `too_many_requests`); retry after `Retry-After` seconds.
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties: { error: { type: string }, error_description: { type: string } }
   /api/v1/oauth/token:
     post:
       operationId: exchangeOAuthCode
@@ -236,6 +473,7 @@ paths:
           content:
             application/json:
               schema: { type: object, required: [redirect_to], properties: { redirect_to: { type: string } } }
+        "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
@@ -337,6 +575,10 @@ paths:
                   github: { type: boolean }
                   telegram_bot: { type: [string, "null"], description: Bot username for the Telegram Login Widget; null when disabled. }
                   telegram_otp: { type: boolean, description: The bot sends one-time login codes. }
+                  sso:
+                    type: array
+                    description: Enabled stored SSO connections (ADR-0018), oldest first.
+                    items: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/auth/google/start:
     get:
@@ -1298,6 +1540,43 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/room:
+    post:
+      operationId: enterCallRoom
+      description: |
+        A ticket to the call's room on the media server (LiveKit, ADR-0017; only when the call has `room: true`):
+        where the browser connects and a signed token, valid for a few minutes, that lets this participant join this
+        room only. 409 when the caller is not in the call, the call uses a browser mesh, or no media server is set.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, token, expires_at]
+                properties: { url: { type: string }, token: { type: string }, expires_at: { type: string, format: date-time } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/calls/{id}/participants/{user}:
+    delete:
+      operationId: removeCallParticipant
+      description: |
+        The host (who started the call) removes someone from it (S103); in a room call the media server drops them
+        too. 403 `CALL_NOT_HOST` for anyone else or for removing oneself (leave instead).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: user, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The call after the removal, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/calls/ice:
     get:
       operationId: getIceServers
@@ -1453,7 +1732,10 @@ paths:
   /api/v1/calls/{id}/recording:
     put:
       operationId: startRecording
-      description: Starts recording the call (one recorder at a time); everyone sees `recording` on the call.
+      description: |
+        Starts recording the call (one recorder at a time); everyone sees `recording` on the call. In a room call with
+        LiveKit Egress configured the media server records (`recording.server`) and posts the MP4 to the conversation
+        when the recording stops; otherwise the browser records and uploads.
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Call" } } } }
@@ -2248,6 +2530,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProjectList" } } } }
         "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "404": { $ref: "#/components/responses/Error" }
     post:
@@ -2843,10 +3126,13 @@ paths:
           schema: { type: string }
         - { name: fix_version, in: query, description: "Issues planned into this version.", schema: { type: string } }
         - { name: label, in: query, description: "Issues carrying this label.", schema: { type: string } }
+        - { name: limit, in: query, description: "Page size (1-500); omitted = every issue.", schema: { type: integer, minimum: 1, maximum: 500 } }
+        - { name: offset, in: query, description: "Issues to skip, in rank order.", schema: { type: integer, minimum: 0 } }
       responses:
         "200": { description: Ordered by backlog rank., content: { application/json: { schema: { $ref: "#/components/schemas/IssueList" } } } }
         "401": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "422": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       operationId: createIssue
@@ -4419,6 +4705,41 @@ components:
         application/json:
           schema: { type: object, required: [body], properties: { body: { type: string } } }
   schemas:
+    SSOConnection:
+      type: object
+      required: [id, kind, name, issuer, client_id, groups_claim, workspace_id, enforced, enabled, created_at, domains]
+      properties:
+        id: { type: string }
+        workspace_id: { type: [string, "null"], description: "null: installation-wide." }
+        enforced: { type: boolean }
+        domains:
+          type: array
+          description: Email domains it serves; only verified ones route sign-in.
+          items:
+            type: object
+            required: [name, verified, txt]
+            properties:
+              name: { type: string }
+              verified: { type: boolean }
+              txt: { type: string, description: "The TXT record to publish on the domain: kyber-verify=<token>." }
+        kind: { type: string, enum: [oidc] }
+        name: { type: string }
+        issuer: { type: string }
+        client_id: { type: string }
+        groups_claim: { type: string }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+    SSOGroupMapping:
+      type: object
+      required: [id, group, scope, workspace_id, project_key, role, created_at]
+      properties:
+        id: { type: string }
+        group: { type: string }
+        scope: { type: string, enum: [workspace, project] }
+        workspace_id: { type: string }
+        project_key: { type: string }
+        role: { type: string }
+        created_at: { type: string, format: date-time }
     SCIMUser:
       type: object
       required: [schemas, id, userName, displayName, active]
@@ -4574,13 +4895,16 @@ components:
         dnd_until: { type: [string, "null"], format: date-time }
     Call:
       type: object
-      required: [id, conversation_id, started_by, started_at, live, participants, presentation, recording]
+      required: [id, conversation_id, started_by, started_at, live, room, participants, presentation, recording]
       properties:
         id: { type: string }
         conversation_id: { type: string }
         started_by: { type: string }
         started_at: { type: string, format: date-time }
         live: { type: boolean }
+        room:
+          type: boolean
+          description: Media goes through the media server (up to 50 people) instead of a browser mesh (up to 6).
         presentation:
           oneOf:
             - { type: "null" }
@@ -4588,7 +4912,12 @@ components:
         recording:
           oneOf:
             - { type: "null" }
-            - { type: object, required: [by, since], properties: { by: { type: string }, since: { type: string, format: date-time } } }
+            - type: object
+              required: [by, since, server]
+              properties:
+                by: { type: string }
+                since: { type: string, format: date-time }
+                server: { type: boolean, description: "The media server records (S104); the file is posted when it stops." }
         participants:
           type: array
           items:

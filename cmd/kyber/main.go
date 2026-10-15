@@ -21,6 +21,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/identity/infrastructure/telegram"
 	identityhttp "github.com/bakhod1r/kyber/internal/identity/interfaces/httpapi"
 	"github.com/bakhod1r/kyber/internal/notify/infrastructure/smtpmail"
+	"github.com/bakhod1r/kyber/internal/platform/seal"
 	"log/slog"
 	"net/http"
 	"os"
@@ -32,6 +33,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/bakhod1r/kyber/internal/call/infrastructure/ice"
+	"github.com/bakhod1r/kyber/internal/call/infrastructure/livekit"
 	"github.com/bakhod1r/kyber/internal/chat/infrastructure/llm"
 	"github.com/bakhod1r/kyber/internal/chat/infrastructure/stt"
 	blobs3chat "github.com/bakhod1r/kyber/internal/platform/blob/s3"
@@ -111,6 +113,10 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 	if err != nil {
 		return nil, nil, err
 	}
+	box, err := seal.New(cfg.EncryptionKey)
+	if err != nil {
+		return nil, nil, err
+	}
 	proxies, err := realip.Parse(cfg.TrustedProxies)
 	if err != nil {
 		return nil, nil, err
@@ -119,7 +125,7 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		SAML: sp, SAMLName: cfg.SAMLName,
 		Google: google.New(google.Config{ClientID: cfg.GoogleClientID, ClientSecret: cfg.GoogleClientSecret, RedirectURL: callback("google")}),
 		OIDC: oidcprovider.New(oidcprovider.Config{Provider: identitydomain.ProviderOIDC, Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID,
-			ClientSecret: cfg.OIDCClientSecret, RedirectURL: callback("oidc"), RequireVerifiedEmail: true}),
+			ClientSecret: cfg.OIDCClientSecret, RedirectURL: callback("oidc"), RequireVerifiedEmail: true, GroupsClaim: cfg.OIDCGroupsClaim}),
 		OIDCName:    cfg.OIDCName,
 		GitHub:      github.New(github.Config{ClientID: cfg.GitHubClientID, ClientSecret: cfg.GitHubClientSecret, RedirectURL: callback("github")}),
 		Telegram:    telegram.NewVerifier(cfg.TelegramBotToken, time.Now),
@@ -130,7 +136,15 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		server.WithICE(ice.Parse(cfg.ICEServers), cfg.TURNSecret),
 		server.WithWebhooks(cfg.WebhookAllowPrivate, 0), server.WithGitHubSecret(cfg.GitHubWebhookSecret),
 		server.WithRateLimits(cfg.APIRateLimit, cfg.UploadRateLimit), server.WithSCIMToken(cfg.SCIMToken),
-		server.WithTrustedProxies(proxies)}, telegramBot(cfg)...)
+		server.WithEncryptionKey(box), server.WithTrustedProxies(proxies)}, telegramBot(cfg)...)
+	if cfg.LiveKitURL != "" {
+		lk, err := livekit.New(livekit.Config{URL: cfg.LiveKitURL, APIURL: cfg.LiveKitAPIURL, Key: cfg.LiveKitKey,
+			Secret: cfg.LiveKitSecret, RecordingsDir: cfg.LiveKitRecordingsDir, EgressDir: cfg.LiveKitEgressDir})
+		if err != nil {
+			return nil, nil, err
+		}
+		common = append(common, server.WithMediaServer(lk))
+	}
 	if cfg.S3Bucket != "" {
 		blobs, err := blobs3.New(ctx, blobs3.Config{Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, Region: cfg.S3Region,
 			AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, TLS: cfg.S3TLS})
@@ -279,7 +293,7 @@ func samlSP(ctx context.Context, cfg *config.Config) (identityhttp.SAMLClient, e
 	if err != nil {
 		return nil, err
 	}
-	return samlsp.New(samlsp.Config{BaseURL: cfg.PublicURL, IDPMetadata: md, Key: key, Cert: cert})
+	return samlsp.New(samlsp.Config{BaseURL: cfg.PublicURL, IDPMetadata: md, Key: key, Cert: cert, GroupsAttribute: cfg.SAMLGroupsAttribute})
 }
 
 func fetch(ctx context.Context, u string) ([]byte, error) {

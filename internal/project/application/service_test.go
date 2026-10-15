@@ -188,3 +188,31 @@ func TestRoleOf(t *testing.T) {
 		}
 	}
 }
+
+// S106: SSO group sync grants and revokes project roles without an acting user.
+func TestGrantAndRevokeRole(t *testing.T) {
+	ctx := context.Background()
+	s := newService(t)
+	_, _ = s.Create(ctx, alice, "KYB", "Kyber")
+	if err := s.GrantRole(ctx, "KYB", string(bob), "viewer"); err != nil {
+		t.Fatal(err)
+	}
+	if r, ok, _ := s.RoleOf(ctx, "KYB", string(bob)); !ok || r != "viewer" {
+		t.Fatalf("granted = %q %v", r, ok)
+	}
+	if err := s.GrantRole(ctx, "KYB", string(bob), "boss"); err == nil {
+		t.Fatal("invalid role accepted")
+	}
+	if err := s.RevokeRole(ctx, "KYB", string(bob)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := s.RoleOf(ctx, "KYB", string(bob)); ok {
+		t.Fatal("still a member")
+	}
+	if err := s.RevokeRole(ctx, "KYB", string(alice)); !errors.Is(err, domain.ErrLastAdmin) {
+		t.Fatalf("last admin: %v", err)
+	}
+	if err := s.GrantRole(ctx, "NOPE", string(bob), "member"); !errors.Is(err, domain.ErrProjectNotFound) {
+		t.Fatalf("unknown project: %v", err)
+	}
+}
