@@ -66,7 +66,7 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
-	secret, t, err := h.svc.CreateToken(r.Context(), domain.UserID(auth.Actor(r.Context())), in.Name, in.Days)
+	secret, t, err := h.svc.CreateTokenUnder(r.Context(), domain.UserID(auth.Actor(r.Context())), in.Name, in.Days, auth.Method(r.Context()))
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return

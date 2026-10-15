@@ -58,8 +58,8 @@ check (for domains the installation's owner controls). A domain belongs to one c
 
 A workspace's admins can add the workspace's **own** connection (scope "This workspace") on the
 Administration page and tick **Required**. From then on its members can only use the workspace after signing
-in through that connection; anyone signed in another way (password, Google, …) or using an API token gets
-`403 SSO_REQUIRED` with the sign-in link. Workspace owners are exempt, so a broken identity provider never
+in through that connection; anyone signed in another way (password, Google, …) gets `403 SSO_REQUIRED` with
+the sign-in link. API and MCP tokens work only if they were created while signed in through that connection. Workspace owners are exempt, so a broken identity provider never
 locks everyone out. Untick **Required** to lift it.
 
 ## Groups → roles

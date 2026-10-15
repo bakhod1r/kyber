@@ -12,16 +12,16 @@ import (
 )
 
 func (r *Repository) CreateToken(ctx context.Context, t *domain.PersonalToken) error {
-	_, err := r.pool.Exec(ctx, `INSERT INTO personal_tokens (id, user_id, name, token_hash, created_at, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`, string(t.ID), string(t.UserID), t.Name, t.Hash, t.CreatedAt, t.ExpiresAt)
+	_, err := r.pool.Exec(ctx, `INSERT INTO personal_tokens (id, user_id, name, token_hash, created_at, expires_at, auth_method)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`, string(t.ID), string(t.UserID), t.Name, t.Hash, t.CreatedAt, t.ExpiresAt, t.Method)
 	return err
 }
 
-const tokenCols = `SELECT id::text, user_id::text, name, token_hash, created_at, expires_at, last_used_at FROM personal_tokens`
+const tokenCols = `SELECT id::text, user_id::text, name, token_hash, created_at, expires_at, last_used_at, auth_method FROM personal_tokens`
 
 func scanToken(row pgx.CollectableRow) (*domain.PersonalToken, error) {
 	var t domain.PersonalToken
-	err := row.Scan(&t.ID, &t.UserID, &t.Name, &t.Hash, &t.CreatedAt, &t.ExpiresAt, &t.LastUsedAt)
+	err := row.Scan(&t.ID, &t.UserID, &t.Name, &t.Hash, &t.CreatedAt, &t.ExpiresAt, &t.LastUsedAt, &t.Method)
 	t.CreatedAt = t.CreatedAt.UTC()
 	for _, p := range []*time.Time{t.ExpiresAt, t.LastUsedAt} {
 		if p != nil {

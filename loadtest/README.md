@@ -6,7 +6,7 @@
 
 ```sh
 KYBER_API_RATE_LIMIT=0 KYBER_DATABASE_URL=… ./bin/kyber &      # one user sends 50 req/s: lift the per-user limit
-KYBER_URL=http://localhost:8080 ISSUES=10000 DURATION=2m k6 run loadtest/api.js
+KYBER_URL=http://localhost:8080 ISSUES=10000 DURATION=2m "$(scripts/dev-env.sh k6)" run loadtest/api.js
 ```
 
 ## Results

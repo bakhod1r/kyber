@@ -102,6 +102,7 @@ type AuthCode struct {
 	RedirectURI string
 	Challenge   string // base64url(SHA-256(verifier))
 	ExpiresAt   time.Time
+	Method      string // how the consenting user had signed in; the issued token inherits it
 }
 
 var challengeShape = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)

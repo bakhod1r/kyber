@@ -24,6 +24,17 @@ func RunTokens(t *testing.T, s domain.PersonalTokens, ann, ben domain.UserID) {
 		}
 		return tok
 	}
+	tok, _ := domain.NewPersonalToken("95000000-0000-4000-8000-000000000004", ann, "SSO", []byte("hash-sso-123456789abcdef012345678"), at, nil)
+	tok.Method = "sso:c-1"
+	if err := s.CreateToken(ctx, tok); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.TokenByHash(ctx, tok.Hash); err != nil || got.Method != "sso:c-1" {
+		t.Fatalf("method round trip = %+v %v", got, err)
+	}
+	if err := s.DeleteToken(ctx, ann, tok.ID); err != nil {
+		t.Fatal(err)
+	}
 	ci := mk("95000000-0000-4000-8000-000000000001", ann, "CI", "hash-ci-0123456789abcdef01234567", at, &exp)
 	mk("95000000-0000-4000-8000-000000000002", ann, "MCP", "hash-mcp-123456789abcdef012345678", at.Add(time.Minute), nil)
 	mk("95000000-0000-4000-8000-000000000003", ben, "Ben's", "hash-ben-123456789abcdef012345678", at, nil)

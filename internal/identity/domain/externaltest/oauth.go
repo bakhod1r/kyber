@@ -30,11 +30,12 @@ func RunOAuth(t *testing.T, s domain.OAuthStore, user domain.UserID) {
 		}
 	}
 	code, _ := domain.NewAuthCode([]byte("code-hash-0123456789abcdef0123456"), c.ID, user, "https://claude.ai/cb", "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", at)
+	code.Method = "sso:c-1"
 	if err := s.SaveCode(ctx, code); err != nil {
 		t.Fatal(err)
 	}
 	taken, err := s.TakeCode(ctx, code.Hash)
-	if err != nil || taken.Client != c.ID || taken.User != user || taken.Challenge != code.Challenge || taken.RedirectURI != "https://claude.ai/cb" || !taken.ExpiresAt.Equal(code.ExpiresAt) {
+	if err != nil || taken.Method != "sso:c-1" || taken.Client != c.ID || taken.User != user || taken.Challenge != code.Challenge || taken.RedirectURI != "https://claude.ai/cb" || !taken.ExpiresAt.Equal(code.ExpiresAt) {
 		t.Fatalf("taken = %+v %v", taken, err)
 	}
 	if _, err := s.TakeCode(ctx, code.Hash); !errors.Is(err, domain.ErrAuthCodeNotFound) {

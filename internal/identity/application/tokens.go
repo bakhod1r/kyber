@@ -24,6 +24,11 @@ func WithPersonalTokens(t domain.PersonalTokens) Option { return func(s *Service
 // CreateToken issues a personal access token for the user. The secret is returned once; only
 // its hash is stored. days = 0 means it never expires.
 func (s *Service) CreateToken(ctx context.Context, user domain.UserID, name string, days int) (string, *domain.PersonalToken, error) {
+	return s.CreateTokenUnder(ctx, user, name, days, "")
+}
+
+// CreateTokenUnder creates a token that remembers how its creator had signed in (method).
+func (s *Service) CreateTokenUnder(ctx context.Context, user domain.UserID, name string, days int, method string) (string, *domain.PersonalToken, error) {
 	if days < 0 || days > MaxTokenDays {
 		return "", nil, fmt.Errorf("%w: %w", domain.ErrInvalidToken, ErrTokenLifetime)
 	}
@@ -40,6 +45,7 @@ func (s *Service) CreateToken(ctx context.Context, user domain.UserID, name stri
 	if err != nil {
 		return "", nil, err
 	}
+	t.Method = method
 	if err := s.tokens.CreateToken(ctx, t); err != nil {
 		return "", nil, err
 	}
@@ -59,28 +65,34 @@ func (s *Service) RevokeToken(ctx context.Context, user domain.UserID, id string
 // IsPersonalToken tells personal access tokens from session tokens.
 func IsPersonalToken(token string) bool { return strings.HasPrefix(token, domain.TokenPrefix) }
 
-// authenticateToken resolves a personal access token to its owner, recording its use.
-func (s *Service) authenticateToken(ctx context.Context, secret string) (*domain.User, error) {
+// authenticateToken resolves a personal access token to its owner, recording its use. Its method is
+// "token", or the SSO connection its creator had signed in through.
+func (s *Service) authenticateToken(ctx context.Context, secret string) (*domain.User, string, error) {
 	if s.tokens == nil {
-		return nil, ErrUnauthenticated
+		return nil, "", ErrUnauthenticated
 	}
 	t, err := s.tokens.TokenByHash(ctx, hashToken(secret))
 	if errors.Is(err, domain.ErrTokenNotFound) {
-		return nil, ErrUnauthenticated
+		return nil, "", ErrUnauthenticated
 	}
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	now := s.clock.Now()
 	if t.Expired(now) {
-		return nil, ErrUnauthenticated
+		return nil, "", ErrUnauthenticated
 	}
 	if t.TouchDue(now) {
 		if err := s.tokens.TouchToken(ctx, t.ID, now.UTC()); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
-	return s.activeUser(ctx, t.UserID)
+	method := domain.MethodToken
+	if strings.HasPrefix(t.Method, "sso:") {
+		method = t.Method
+	}
+	u, err := s.activeUser(ctx, t.UserID)
+	return u, method, err
 }
 
 // botDomain gives bots placeholder addresses that are never mailed (RFC 2606 .invalid).
