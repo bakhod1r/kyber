@@ -1,3 +1,4 @@
+import { typeLabel } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { issueUseCases, type Issue, type IssueType } from "../application";
@@ -45,7 +46,7 @@ export function IssueChildren({ issue, projectKey, onOpen }: { issue: Issue; pro
           {c.items.map((k) => (
             <li key={k.id}>
               <button type="button" className="link" onClick={() => onOpen?.(k.key)}>
-                <span className={`type type-${k.type}`}>{k.type}</span> {k.key} {k.title}
+                <span className={`type type-${k.type}`}>{typeLabel(t, k.type)}</span> {k.key} {k.title}
               </button>
               <span className={`status status-${k.status}`}>{k.status.replace("_", " ")}</span>
             </li>

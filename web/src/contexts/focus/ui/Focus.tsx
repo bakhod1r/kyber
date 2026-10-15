@@ -1,3 +1,4 @@
+import { formatDateTime } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { focusUseCases, type FocusSession } from "../application";
@@ -204,7 +205,7 @@ export function IssueFocus({ issueKey }: { issueKey: string }) {
           <ul aria-label={t("Focus history")} className="focus-log">
             {log.data.items.map((s) => (
               <li key={s.id}>
-                <time dateTime={s.started_at}>{new Date(s.started_at).toLocaleString()}</time> · {minutes(s.focused_seconds)} ·{" "}
+                <time dateTime={s.started_at}>{formatDateTime(s.started_at)}</time> · {minutes(s.focused_seconds)} ·{" "}
                 <span className={`state ${s.state}`}>{s.state}</span>
                 {s.reason && <span className="muted"> ({s.reason})</span>}
               </li>

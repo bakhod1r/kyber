@@ -1,3 +1,4 @@
+import { formatDateTime } from "../../../shared/i18n/labels";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, type FormEvent, type KeyboardEvent, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -594,7 +595,7 @@ function ScheduledList({ title }: { title: (conversationId: string) => string })
         {items.map((x) => (
           <li key={x.id}>
             <Link to={`/chat/${x.conversation_id}`}>{title(x.conversation_id) || t("Conversation")}</Link>{" "}
-            <span className="muted">🕒 {new Date(x.send_at).toLocaleString()}</span>
+            <span className="muted">🕒 {formatDateTime(x.send_at)}</span>
             <p>{x.body}</p>
             <button className="ghost" onClick={() => cancel.mutate(x.id)}>{t("Cancel")}</button>
           </li>
@@ -643,7 +644,7 @@ function SavedList({ title }: { title: (conversationId: string) => string }) {
           {items.map((x) => (
             <li key={x.message.id}>
               <Link to={`/chat/${x.message.conversation_id}`}>{title(x.message.conversation_id) || t("Conversation")}</Link>{" "}
-              {x.remind_at && <span className="muted">{x.reminded ? t("⏰ reminded") : `⏰ ${new Date(x.remind_at).toLocaleString()}`}</span>}
+              {x.remind_at && <span className="muted">{x.reminded ? t("⏰ reminded") : `⏰ ${formatDateTime(x.remind_at)}`}</span>}
               <p>{x.message.deleted ? <i className="muted">{t("deleted")}</i> : x.message.body}</p>
               <button className="ghost" onClick={() => unsave.mutate(x.message.id)}>{t("Remove")}</button>
             </li>
@@ -864,13 +865,13 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
   const later = useMutation({
     mutationFn: ({ body, at }: { body: string; at: Date }) => chatUseCases.schedule(id, body, at),
     onSuccess: (sc) => {
-      setNote(t("🕒 Scheduled for {time}.", { time: new Date(sc.send_at).toLocaleString() }));
+      setNote(t("🕒 Scheduled for {time}.", { time: formatDateTime(sc.send_at) }));
       void qc.invalidateQueries({ queryKey: scheduledKey });
     },
   });
   const remind = useMutation({
     mutationFn: ({ text, at }: { text: string; at: Date }) => chatUseCases.remind(id, text, at),
-    onSuccess: (r) => setNote(t("⏰ I'll remind you at {time}: {text}", { time: new Date(r.at).toLocaleString(), text: r.text })),
+    onSuccess: (r) => setNote(t("⏰ I'll remind you at {time}: {text}", { time: formatDateTime(r.at), text: r.text })),
   });
   const commands = useContext(Commands);
   const command = useMutation({ mutationFn: (c: SlashCommand) => commands!(c), onSuccess: setNote, onError: (e) => setNote(`⚠️ ${e.message}`) });

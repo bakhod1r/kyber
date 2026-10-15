@@ -1,3 +1,4 @@
+import { formatDateTime } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Markdown } from "../../../shared/ui/Markdown";
@@ -75,7 +76,7 @@ export function Announcements({ projectKey }: { projectKey: string | null }) {
             <article aria-label={a.title}>
               <h3>📣 {a.title}</h3>
               <time className="muted" dateTime={a.created_at}>
-                {new Date(a.created_at).toLocaleString()}
+                {formatDateTime(a.created_at)}
               </time>
               {a.body && <Markdown source={a.body} />}
             </article>

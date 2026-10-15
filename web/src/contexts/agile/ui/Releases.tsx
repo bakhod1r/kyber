@@ -1,9 +1,10 @@
+import { formatDate } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { agileUseCases, type Version } from "../application";
 import { useT } from "../../../shared/i18n/i18n";
 
-const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() : "—");
+const day = (iso: string | null) => (iso ? formatDate(iso) : "—");
 
 /** Releases: the project's versions (Jira's fix versions) — progress, release, archive, notes. */
 export function Releases({ projectKey }: { projectKey: string }) {

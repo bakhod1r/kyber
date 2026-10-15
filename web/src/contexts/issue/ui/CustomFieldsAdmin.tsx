@@ -1,3 +1,4 @@
+import { label } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { ApiError } from "../../../shared/http";
@@ -67,9 +68,9 @@ export function CustomFieldsAdmin({ projectKey }: { projectKey: string }) {
         <label>
           {t("Field type")}
           <select value={type} onChange={(e) => setType(e.target.value as CustomFieldType)}>
-            {CUSTOM_FIELD_TYPES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
+            {CUSTOM_FIELD_TYPES.map((ft) => (
+              <option key={ft.id} value={ft.id}>
+                {label(t, ft.label)}
               </option>
             ))}
           </select>

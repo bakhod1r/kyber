@@ -1,3 +1,4 @@
+import { label } from "../../../shared/i18n/labels";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { projectQuery, QUICK_FILTERS, searchUseCases } from "../application";
@@ -33,7 +34,7 @@ export function QuickFilters({
     <div className="quick-filters row" role="group" aria-label={t("Quick filters")}>
       {QUICK_FILTERS.map((f) => (
         <button key={f.id} type="button" className="ghost chip" aria-pressed={value.quick.includes(f.id)} onClick={() => toggle(f.id)}>
-          {f.label}
+          {label(t, f.label)}
         </button>
       ))}
       {(filters.data ?? []).length > 0 && (

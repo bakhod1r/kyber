@@ -1,3 +1,4 @@
+import { priorityLabel, typeLabel } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type DragEvent, type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
@@ -165,8 +166,8 @@ export function Board({
               }}
             >
               <div className="card-head">
-                <span className={`type type-${i.type}`}>{i.type}</span>
-                <span className={`prio prio-${i.priority}`} aria-label={t("Priority: {priority}", { priority: i.priority })} title={t("Priority: {priority}", { priority: i.priority })} />
+                <span className={`type type-${i.type}`}>{typeLabel(t, i.type)}</span>
+                <span className={`prio prio-${i.priority}`} aria-label={t("Priority: {priority}", { priority: priorityLabel(t, i.priority) })} title={t("Priority: {priority}", { priority: priorityLabel(t, i.priority) })} />
               </div>
               <button type="button" className="card-open" onClick={() => onOpen?.(i.key)}>
                 {i.title}
@@ -442,9 +443,9 @@ function QuickAdd({ projectKey, sprintId }: { projectKey: string; sprintId?: str
     <form className="quick-add" onSubmit={submit}>
       <input aria-label={t("New issue title")} placeholder={t("What needs to be done?")} value={title} onChange={(e) => setTitle(e.target.value)} />
       <select aria-label={t("Type")} value={type} onChange={(e) => setType(e.target.value as IssueType)}>
-        {ISSUE_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {t}
+        {ISSUE_TYPES.map((ty) => (
+          <option key={ty} value={ty}>
+            {typeLabel(t, ty)}
           </option>
         ))}
       </select>

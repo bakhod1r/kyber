@@ -1,3 +1,4 @@
+import { roleLabel } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { projectUseCases, type Role } from "../application";
@@ -29,7 +30,7 @@ export function Members({ projectKey }: { projectKey: string }) {
       <ul>
         {members.data?.map((m) => (
           <li key={m.user_id}>
-            <span>{m.name}</span> <span className={`role role-${m.role}`}>{m.role}</span>
+            <span>{m.name}</span> <span className={`role role-${m.role}`}>{roleLabel(t, m.role)}</span>
           </li>
         ))}
       </ul>
@@ -41,9 +42,9 @@ export function Members({ projectKey }: { projectKey: string }) {
         <label>
           {t("Role")}
           <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            <option value="member">{t("member")}</option>
-            <option value="viewer">{t("viewer")}</option>
-            <option value="admin">{t("admin")}</option>
+            <option value="member">{roleLabel(t, "member")}</option>
+            <option value="viewer">{roleLabel(t, "viewer")}</option>
+            <option value="admin">{roleLabel(t, "admin")}</option>
           </select>
         </label>
         <button type="submit" disabled={invite.isPending}>

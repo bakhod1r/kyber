@@ -1,3 +1,4 @@
+import { formatDateTime, priorityLabel } from "../../../shared/i18n/labels";
 import type { ReactNode } from "react";
 import { IssueChildren } from "./IssueChildren";
 import { IssueHistory } from "./IssueHistory";
@@ -52,6 +53,7 @@ export function IssuePanel({
   const qc = useQueryClient();
   const titleId = useId();
   const issue = useQuery({ queryKey: ["issue", issueKey], queryFn: () => issueUseCases.issue(issueKey) });
+  const workflow = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => issueUseCases.workflow(projectKey) });
   const members = useQuery({ queryKey: ["members", projectKey], queryFn: () => projectUseCases.members(projectKey) });
   const versions = useQuery({ queryKey: ["versions", projectKey], queryFn: () => agileUseCases.versions(projectKey) });
   const projectLabels = useQuery({ queryKey: ["labels", projectKey], queryFn: () => issueUseCases.projectLabels(projectKey) });
@@ -111,7 +113,7 @@ export function IssuePanel({
       <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="panel issue-panel" onClick={(e) => e.stopPropagation()}>
         <header className="issue-panel-head">
           <h2 id={titleId}>
-            <span className="key">{issueKey}</span> {loaded?.status.replace("_", " ")}
+            <span className="key">{issueKey}</span> {loaded && (workflow.data?.statuses.find((st) => st.id === loaded.status)?.name ?? loaded.status.replace("_", " "))}
           </h2>
           <button type="button" className="ghost" aria-label={t("Close")} onClick={onClose}>
             ✕
@@ -151,7 +153,7 @@ export function IssuePanel({
                 <select value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value as Priority })}>
                   {PRIORITIES.map((p) => (
                     <option key={p} value={p}>
-                      {p}
+                      {priorityLabel(t, p)}
                     </option>
                   ))}
                 </select>
@@ -266,7 +268,7 @@ function Comments({ issueKey, projectKey }: { issueKey: string; projectKey: stri
         {comments.data?.map((c) => (
           <li key={c.id}>
             <div className="comment-meta">
-              <strong>{c.author_name}</strong> <time dateTime={c.created_at}>{new Date(c.created_at).toLocaleString()}</time>
+              <strong>{c.author_name}</strong> <time dateTime={c.created_at}>{formatDateTime(c.created_at)}</time>
             </div>
             <p className="comment-body">{c.body}</p>
             <CommentReactions issueKey={issueKey} comment={c} />

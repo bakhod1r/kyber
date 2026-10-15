@@ -1,3 +1,4 @@
+import { formatDateTime } from "../../../shared/i18n/labels";
 import { useQuery } from "@tanstack/react-query";
 import { issueUseCases, DEFAULT_WORKFLOW, type HistoryEntry, RESOLUTIONS } from "../application";
 import { msg, type MessageKey, useT } from "../../../shared/i18n/i18n";
@@ -50,7 +51,7 @@ export function IssueHistory({ issueKey, projectKey }: { issueKey: string; proje
             <li key={`${e.at}-${i}`}>
               <span>{line(e)}</span>{" "}
               <time className="muted" dateTime={e.at}>
-                {new Date(e.at).toLocaleString()}
+                {formatDateTime(e.at)}
               </time>
             </li>
           ))}

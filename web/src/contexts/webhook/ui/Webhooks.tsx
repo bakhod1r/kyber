@@ -1,3 +1,4 @@
+import { formatDateTime } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { ApiError } from "../../../shared/http";
@@ -125,7 +126,7 @@ function Deliveries({ projectKey, id }: { projectKey: string; id: string }) {
             <td>{t(d.status === "delivered" ? "Delivered" : d.status === "failed" ? "Failed" : "Pending")}</td>
             <td>{d.attempts}</td>
             <td>{d.last_status ? d.last_status : d.last_error || "—"}</td>
-            <td>{new Date(d.created_at).toLocaleString()}</td>
+            <td>{formatDateTime(d.created_at)}</td>
           </tr>
         ))}
       </tbody>

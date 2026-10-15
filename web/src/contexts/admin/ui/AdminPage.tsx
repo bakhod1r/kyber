@@ -1,3 +1,4 @@
+import { formatDateTime } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { adminUseCases, ROLES, type Role } from "../application";
@@ -107,7 +108,7 @@ export function AdminPage() {
         <ul>
           {dead.data?.map((d) => (
             <li key={d.id}>
-              <code>#{d.id}</code> <b>{d.event}</b> · <span className="muted">{t("{n} attempts", { n: d.attempts })} · {new Date(d.at).toLocaleString()}</span>
+              <code>#{d.id}</code> <b>{d.event}</b> · <span className="muted">{t("{n} attempts", { n: d.attempts })} · {formatDateTime(d.at)}</span>
               <div className="error">{d.last_error}</div>
               <button type="button" className="ghost" onClick={() => retry.mutate(d.id)}>
                 {t("Retry #{id}", { id: d.id })}

@@ -1,3 +1,4 @@
+import { formatDateTime } from "../../../shared/i18n/labels";
 import { useQuery } from "@tanstack/react-query";
 import { auditUseCases } from "../application";
 import { type Translate, translate, useT } from "../../../shared/i18n/i18n";
@@ -53,7 +54,7 @@ export function AuditLog({ projectKey }: { projectKey: string }) {
             {log.data.map((e, i) => (
               <tr key={`${e.at}-${i}`}>
                 <td>
-                  <time dateTime={e.at}>{new Date(e.at).toLocaleString()}</time>
+                  <time dateTime={e.at}>{formatDateTime(e.at)}</time>
                 </td>
                 <td>{e.actor_name}</td>
                 <td title={`${e.action}\n${e.target}`}>{describeAction(e.action, e.target, t)}</td>

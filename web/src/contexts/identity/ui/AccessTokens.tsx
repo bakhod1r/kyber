@@ -1,3 +1,4 @@
+import { formatDate } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { identityUseCases, type CreatedToken } from "../application";
@@ -13,7 +14,7 @@ const lifetimes: { days: number; label: MessageKey }[] = [
 ];
 
 function day(iso: string | null, none: string): string {
-  return iso ? new Date(iso).toLocaleDateString() : none;
+  return iso ? formatDate(iso) : none;
 }
 
 /** AccessTokens: personal access tokens for scripts and AI assistants (MCP). */

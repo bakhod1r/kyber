@@ -1,3 +1,4 @@
+import { priorityLabel, typeLabel } from "../../../shared/i18n/labels";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { projectQuery, searchUseCases } from "../application";
@@ -50,9 +51,9 @@ export function IssueList({ projectKey, onOpen }: { projectKey: string; onOpen?:
                     </button>
                   </td>
                   <td>{is.title}</td>
-                  <td>{is.type}</td>
+                  <td>{typeLabel(t, is.type)}</td>
                   <td>{is.status_name || is.status}</td>
-                  <td>{is.priority}</td>
+                  <td>{priorityLabel(t, is.priority)}</td>
                   <td>{is.points ?? ""}</td>
                 </tr>
               ))}

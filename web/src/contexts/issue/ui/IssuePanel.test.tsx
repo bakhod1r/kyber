@@ -112,7 +112,7 @@ describe("Board cards (KYB-S17 AC4)", () => {
     });
     renderWithProviders(<Board projectKey="KYB" onOpen={onOpen} />);
     const card = (await screen.findByText("Login page")).closest("article")!;
-    expect(within(card).getByLabelText("Priority: highest")).toBeInTheDocument();
+    expect(within(card).getByLabelText("Priority: Highest")).toBeInTheDocument();
     expect(await within(card).findByTitle("Ali Valiyev")).toHaveTextContent("AV");
     await userEvent.click(within(card).getByRole("button", { name: /Login page/ }));
     expect(onOpen).toHaveBeenCalledWith("KYB-1");

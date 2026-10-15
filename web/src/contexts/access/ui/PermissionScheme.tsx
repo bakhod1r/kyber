@@ -1,3 +1,4 @@
+import { permissionLabel } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { accessUseCases, type GrantKind, type PermissionGrants } from "../application";
@@ -17,7 +18,6 @@ const COLUMNS: { kind: GrantKind; value: string; label: MessageKey }[] = [
 /** Admins must keep these, so the project cannot lock its admins out (the API enforces it too). */
 const LOCKED = new Set(["BROWSE_PROJECTS", "ADMINISTER_PROJECTS"]);
 
-const label = (p: string) => p.charAt(0) + p.slice(1).toLowerCase().replaceAll("_", " ");
 
 /** PermissionScheme: the project's permission scheme editor (project admins). */
 export function PermissionScheme({ projectKey }: { projectKey: string }) {
@@ -82,14 +82,14 @@ export function PermissionScheme({ projectKey }: { projectKey: string }) {
         <tbody>
           {draft.map((p) => (
             <tr key={p.permission}>
-              <th scope="row">{label(p.permission)}</th>
+              <th scope="row">{permissionLabel(t, p.permission)}</th>
               {COLUMNS.map((c) => {
                 const locked = LOCKED.has(p.permission) && c.value === "admin";
                 return (
                   <td key={c.label}>
                     <input
                       type="checkbox"
-                      aria-label={`${label(p.permission)}: ${t(c.label)}`}
+                      aria-label={`${permissionLabel(t, p.permission)}: ${t(c.label)}`}
                       checked={has(p, c.kind, c.value)}
                       disabled={locked}
                       onChange={() => toggle(p.permission, c.kind, c.value)}
@@ -105,14 +105,14 @@ export function PermissionScheme({ projectKey }: { projectKey: string }) {
                       key={g.value}
                       type="button"
                       className="ghost chip"
-                      aria-label={t("Remove {name} from {permission}", { name: name(g.value), permission: label(p.permission) })}
+                      aria-label={t("Remove {name} from {permission}", { name: name(g.value), permission: permissionLabel(t, p.permission) })}
                       onClick={() => toggle(p.permission, "user", g.value)}
                     >
                       {name(g.value)} ×
                     </button>
                   ))}
                 <select
-                  aria-label={t("Add a user to {permission}", { permission: label(p.permission) })}
+                  aria-label={t("Add a user to {permission}", { permission: permissionLabel(t, p.permission) })}
                   value=""
                   onChange={(e) => e.target.value && toggle(p.permission, "user", e.target.value)}
                 >

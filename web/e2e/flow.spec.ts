@@ -50,7 +50,7 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await expect(dialog.getByRole("region", { name: "Comments" }).getByText("Looks great!")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByLabel("Priority: highest")).toBeVisible();
+  await expect(page.getByLabel("Priority: Highest")).toBeVisible();
   await expect(page.getByRole("region", { name: "In Progress" }).getByTitle("E2E User")).toHaveText("EU"); // the card, not the toolbar filter
   await page.reload();
   await page.getByRole("button", { name: "Ship the board" }).click();

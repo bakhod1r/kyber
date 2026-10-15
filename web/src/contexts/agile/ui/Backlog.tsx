@@ -1,3 +1,4 @@
+import { priorityLabel, sprintStateLabel, typeLabel } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type DragEvent, type FormEvent, useState } from "react";
 import { agileUseCases, type Sprint } from "../application";
@@ -14,6 +15,8 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
   const qc = useQueryClient();
   const sprints = useQuery({ queryKey: ["sprints", projectKey], queryFn: () => agileUseCases.sprints(projectKey) });
   const issues = useQuery({ queryKey: ["issues", projectKey, "all"], queryFn: () => issueUseCases.issues(projectKey) });
+  const workflow = useQuery({ queryKey: ["workflow", projectKey], queryFn: () => issueUseCases.workflow(projectKey) });
+  const statusName = (id: string) => workflow.data?.statuses.find((st) => st.id === id)?.name ?? id.replace("_", " ");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -107,7 +110,7 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
             <header className="backlog-head">
               <div>
                 <h2>
-                  {sec.title} {sec.sprint && <span className={`state state-${sec.sprint.state}`}>{sec.sprint.state}</span>}
+                  {sec.title} {sec.sprint && <span className={`state state-${sec.sprint.state}`}>{sprintStateLabel(t, sec.sprint.state)}</span>}
                   <span className="count">{rows.length}</span>
                   {rows.some((i) => i.estimate !== null) && (
                     <span className="count">{fmt(rows.reduce((sum, i) => sum + (i.estimate ?? 0), 0))} {t("pts")}</span>
@@ -156,12 +159,12 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => drop(e, { section: sec.id, beforeKey: i.key })}
                 >
-                  <span className={`type type-${i.type}`}>{i.type}</span>
+                  <span className={`type type-${i.type}`}>{typeLabel(t, i.type)}</span>
                   <button type="button" className="row-open" onClick={() => onOpen?.(i.key)}>
                     {i.title}
                   </button>
-                  <span className={`status status-${i.status}`}>{i.status.replace("_", " ")}</span>
-                  <span className={`prio prio-${i.priority}`} aria-label={t("Priority: {priority}", { priority: i.priority })} />
+                  <span className={`status status-${i.status}`}>{statusName(i.status)}</span>
+                  <span className={`prio prio-${i.priority}`} aria-label={t("Priority: {priority}", { priority: priorityLabel(t, i.priority) })} />
                   <span className="points" aria-label={i.estimate === null ? t("Not estimated") : t("Story points: {points}", { points: fmt(i.estimate) })}>
                     {i.estimate === null ? "–" : fmt(i.estimate)}
                   </span>

@@ -1,3 +1,4 @@
+import { priorityLabel, typeLabel } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type KeyboardEvent, useId, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -124,9 +125,9 @@ export function SearchPage() {
                         <Link to={`/projects/${encodeURIComponent(is.project_key)}?issue=${encodeURIComponent(is.key)}`}>{is.key}</Link>
                       </td>
                       <td>{is.title}</td>
-                      <td>{is.type}</td>
+                      <td>{typeLabel(t, is.type)}</td>
                       <td>{is.status_name || is.status}</td>
-                      <td>{is.priority}</td>
+                      <td>{priorityLabel(t, is.priority)}</td>
                     </tr>
                   ))}
                 </tbody>
