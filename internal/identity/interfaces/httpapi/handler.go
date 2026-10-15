@@ -216,8 +216,8 @@ func isJSON(r *http.Request) bool {
 	return err == nil && mt == "application/json"
 }
 
-// clientIP is the TCP peer address; deployments behind a proxy should terminate
-// throttling there or configure trusted forwarding (not yet supported).
+// clientIP is the request's peer address; behind reverse proxies listed in KYBER_TRUSTED_PROXIES the
+// realip middleware has already replaced it with the client from X-Forwarded-For.
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

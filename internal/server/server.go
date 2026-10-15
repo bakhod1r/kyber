@@ -2,6 +2,8 @@
 package server
 
 import (
+	"net/netip"
+
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -14,6 +16,7 @@ import (
 	attmemory "github.com/bakhod1r/kyber/internal/attachment/infrastructure/memory"
 	attpg "github.com/bakhod1r/kyber/internal/attachment/infrastructure/postgres"
 	atthttp "github.com/bakhod1r/kyber/internal/attachment/interfaces/httpapi"
+	"github.com/bakhod1r/kyber/internal/platform/realip"
 	whapp "github.com/bakhod1r/kyber/internal/webhook/application"
 	whdomain "github.com/bakhod1r/kyber/internal/webhook/domain"
 	whacl "github.com/bakhod1r/kyber/internal/webhook/infrastructure/acl"
@@ -183,92 +186,93 @@ import (
 
 // deps are the adapters a server is assembled from.
 type deps struct {
-	projects      projectdomain.Repository
-	issues        issuedomain.Repository
-	comments      issuedomain.CommentRepository
-	workflows     issuedomain.WorkflowRepository
-	history       issuedomain.HistoryRepository
-	links         issuedomain.LinkRepository
-	watchers      issuedomain.WatcherRepository
-	reactions     issuedomain.ReactionRepository
-	worklogs      issuedomain.WorklogRepository
-	fields        issuedomain.CustomFieldRepository
-	audit         auditdomain.Repository
-	schemes       accessdomain.SchemeRepository
-	filters       searchdomain.FilterRepository
-	goals         goaldomain.Repository
-	pages         docsdomain.Repository
-	docComments   docsdomain.Comments
-	attachments   attdomain.Repository
-	projectHooks  whdomain.Repository
-	whDeliveries  whdomain.DeliveryRepository
-	devLinks      whdomain.LinkRepository
-	webhookOpen   bool          // deliver to private/loopback addresses too (KYBER_WEBHOOK_ALLOW_PRIVATE)
-	webhookEvery  time.Duration // how often due webhook deliveries are sent (default 2s)
-	githubSecret  string
-	blobs         attapp.Blobs
-	forms         formdomain.Repository
-	announcements anndomain.Repository
-	siteAdmins    map[string]bool // lower-case emails administering the default workspace
-	sprints       agiledomain.Repository
-	boards        agiledomain.BoardRepository
-	versions      agiledomain.VersionRepository
-	users         identitydomain.Users
-	external      identitydomain.ExternalIdentities
-	tokens        identitydomain.PersonalTokens
-	oauth         identitydomain.OAuthStore
-	directory     identitydomain.Directory
-	scimToken     string
-	social        identityhttp.Social
-	otps          identitydomain.OTPChallenges
-	telegramBot   *telegram.Bot
-	mailer        notifyapp.Sender
-	publicURL     string
-	mqttAddr      string
-	dispatchEvery time.Duration
-	deliveries    notifydomain.DeliveryRepository
-	prefs         notifydomain.PrefsRepository
-	groups        notifydomain.GroupRepository
-	telegramWait  time.Duration
-	sessions      identitydomain.Sessions
-	ready         func(context.Context) error
-	cookieSecure  bool
-	redis         redis.UniversalClient // optional: shared login limiter (guard)
-	apiRate       int                   // requests per user per minute (0 = off)
-	uploadRate    int                   // uploads per user per minute (0 = off)
-	notes         notifydomain.Repository
-	activity      insightsdomain.Repository
-	mappings      importerdomain.MappingRepository
-	workspaces    workspacedomain.Repository
-	meetings      calendardomain.Repository
-	focusSessions focusdomain.Repository
-	conversations chatdomain.Repository
-	messages      chatdomain.Messages
-	saved         chatdomain.SavedMessages
-	statuses      chatdomain.Statuses
-	scheduled     chatdomain.ScheduledMessages
-	reminders     chatdomain.Reminders
-	userGroups    chatdomain.Groups // chat @groups (S70); groups are Telegram groups
-	chatPrefs     chatdomain.Prefs
-	transcriber   chatapp.Transcriber
-	summarizer    chatapp.Summarizer
-	bookmarks     chatdomain.Bookmarks
-	chatWorkflows chatdomain.Workflows
-	webhooks      chatdomain.Webhooks
-	bots          chatdomain.Bots
-	sectionOrders chatdomain.SectionOrders
-	calls         calldomain.Repository
-	whiteboards   wbdomain.Repository
-	wbComments    wbdomain.Comments
-	chatStore     blob.Store // chat files on S3 (S82)
-	chatBlobs     blob.Store // chat files; memory unless WithFilesDir
-	baseDomain    string     // "" = single-tenant (ADR-0004)
-	ice           ice.Config
-	outbox        outbox.Store
-	livePool      *pgxpool.Pool   // set: hints cross replicas through NOTIFY
-	ctx           context.Context // lifetime of background work (outbox relay)
-	relayEvery    time.Duration
-	reminderEvery time.Duration // how often due meeting reminders are sent (default 30s)
+	trustedProxies []netip.Prefix
+	projects       projectdomain.Repository
+	issues         issuedomain.Repository
+	comments       issuedomain.CommentRepository
+	workflows      issuedomain.WorkflowRepository
+	history        issuedomain.HistoryRepository
+	links          issuedomain.LinkRepository
+	watchers       issuedomain.WatcherRepository
+	reactions      issuedomain.ReactionRepository
+	worklogs       issuedomain.WorklogRepository
+	fields         issuedomain.CustomFieldRepository
+	audit          auditdomain.Repository
+	schemes        accessdomain.SchemeRepository
+	filters        searchdomain.FilterRepository
+	goals          goaldomain.Repository
+	pages          docsdomain.Repository
+	docComments    docsdomain.Comments
+	attachments    attdomain.Repository
+	projectHooks   whdomain.Repository
+	whDeliveries   whdomain.DeliveryRepository
+	devLinks       whdomain.LinkRepository
+	webhookOpen    bool          // deliver to private/loopback addresses too (KYBER_WEBHOOK_ALLOW_PRIVATE)
+	webhookEvery   time.Duration // how often due webhook deliveries are sent (default 2s)
+	githubSecret   string
+	blobs          attapp.Blobs
+	forms          formdomain.Repository
+	announcements  anndomain.Repository
+	siteAdmins     map[string]bool // lower-case emails administering the default workspace
+	sprints        agiledomain.Repository
+	boards         agiledomain.BoardRepository
+	versions       agiledomain.VersionRepository
+	users          identitydomain.Users
+	external       identitydomain.ExternalIdentities
+	tokens         identitydomain.PersonalTokens
+	oauth          identitydomain.OAuthStore
+	directory      identitydomain.Directory
+	scimToken      string
+	social         identityhttp.Social
+	otps           identitydomain.OTPChallenges
+	telegramBot    *telegram.Bot
+	mailer         notifyapp.Sender
+	publicURL      string
+	mqttAddr       string
+	dispatchEvery  time.Duration
+	deliveries     notifydomain.DeliveryRepository
+	prefs          notifydomain.PrefsRepository
+	groups         notifydomain.GroupRepository
+	telegramWait   time.Duration
+	sessions       identitydomain.Sessions
+	ready          func(context.Context) error
+	cookieSecure   bool
+	redis          redis.UniversalClient // optional: shared login limiter (guard)
+	apiRate        int                   // requests per user per minute (0 = off)
+	uploadRate     int                   // uploads per user per minute (0 = off)
+	notes          notifydomain.Repository
+	activity       insightsdomain.Repository
+	mappings       importerdomain.MappingRepository
+	workspaces     workspacedomain.Repository
+	meetings       calendardomain.Repository
+	focusSessions  focusdomain.Repository
+	conversations  chatdomain.Repository
+	messages       chatdomain.Messages
+	saved          chatdomain.SavedMessages
+	statuses       chatdomain.Statuses
+	scheduled      chatdomain.ScheduledMessages
+	reminders      chatdomain.Reminders
+	userGroups     chatdomain.Groups // chat @groups (S70); groups are Telegram groups
+	chatPrefs      chatdomain.Prefs
+	transcriber    chatapp.Transcriber
+	summarizer     chatapp.Summarizer
+	bookmarks      chatdomain.Bookmarks
+	chatWorkflows  chatdomain.Workflows
+	webhooks       chatdomain.Webhooks
+	bots           chatdomain.Bots
+	sectionOrders  chatdomain.SectionOrders
+	calls          calldomain.Repository
+	whiteboards    wbdomain.Repository
+	wbComments     wbdomain.Comments
+	chatStore      blob.Store // chat files on S3 (S82)
+	chatBlobs      blob.Store // chat files; memory unless WithFilesDir
+	baseDomain     string     // "" = single-tenant (ADR-0004)
+	ice            ice.Config
+	outbox         outbox.Store
+	livePool       *pgxpool.Pool   // set: hints cross replicas through NOTIFY
+	ctx            context.Context // lifetime of background work (outbox relay)
+	relayEvery     time.Duration
+	reminderEvery  time.Duration // how often due meeting reminders are sent (default 30s)
 }
 
 // WithContext bounds background work (the outbox relay) to ctx.
@@ -378,6 +382,10 @@ func WithFilesDir(dir string) Option {
 
 // Option configures optional infrastructure.
 type Option func(*deps)
+
+// WithTrustedProxies names the reverse proxies whose X-Forwarded-For is believed (KYBER_TRUSTED_PROXIES):
+// login and OTP throttles then count the real client, not the proxy.
+func WithTrustedProxies(p []netip.Prefix) Option { return func(d *deps) { d.trustedProxies = p } }
 
 // WithRedis shares the login limiter across replicas via guard's Redis limiter.
 func WithRedis(rdb redis.UniversalClient) Option { return func(d *deps) { d.redis = rdb } }
@@ -741,7 +749,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	webhookHTTP.RegisterPublic(mux)
 	mux.Handle("/api/v1/", auth.RequireAuth(d.rateLimit(log)(tenancy.RequireMember(audit.Record(problemFallback(otel.Routed(api)))))))
 	mux.Handle("/", web.Handler(web.Dist()))
-	return otel.Middleware(observe(log, m, recoverer(log, tenancy.Resolve(otel.Routed(mux)))))
+	return otel.Middleware(realip.Middleware(d.trustedProxies, observe(log, m, recoverer(log, tenancy.Resolve(otel.Routed(mux))))))
 }
 
 // rateLimit limits each user's API requests: per process, or across replicas with Redis.
