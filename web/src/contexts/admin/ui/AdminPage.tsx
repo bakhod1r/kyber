@@ -3,6 +3,7 @@ import { useState } from "react";
 import { adminUseCases, ROLES, type Role } from "../application";
 import { useT } from "../../../shared/i18n/i18n";
 import { GroupMappings } from "./GroupMappings";
+import { SSOConnections } from "./SSOConnections";
 
 /** AdminPage: a workspace's administrators manage roles and look after projects and stuck events. */
 export function AdminPage() {
@@ -118,6 +119,7 @@ export function AdminPage() {
         </ul>
       </section>
 
+      <SSOConnections />
       <GroupMappings />
     </div>
   );

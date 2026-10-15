@@ -102,4 +102,62 @@ describe("admin page", () => {
     await waitFor(() => expect(screen.queryByRole("region", { name: "SSO group mappings" })).not.toBeInTheDocument());
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  it("adds, disables and removes SSO connections without ever showing a secret", async () => {
+    const conn = { id: "c-1", kind: "oidc", name: "Acme Okta", issuer: "https://acme.okta.com", client_id: "kyber", groups_claim: "", enabled: true, created_at: "2026-10-15T09:00:00Z" };
+    const calls = mockApi({
+      "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
+      "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/dead-letters": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/sso/connections": { status: 200, body: { items: [conn] } },
+      "POST /api/v1/admin/sso/connections": { status: 201, body: conn },
+      "PATCH /api/v1/admin/sso/connections/c-1": { status: 200, body: { ...conn, enabled: false } },
+      "DELETE /api/v1/admin/sso/connections/c-1": { status: 204 },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPage />);
+    const sso = await screen.findByRole("region", { name: "SSO connections" });
+    expect(await within(sso).findByText("Acme Okta")).toBeInTheDocument();
+    expect(within(sso).getByText(/\/api\/v1\/auth\/sso\/c-1\/callback/)).toBeInTheDocument();
+    await user.type(within(sso).getByLabelText("Button label"), "Entra");
+    await user.type(within(sso).getByLabelText("Issuer URL"), "https://login.example.com");
+    await user.type(within(sso).getByLabelText("Client ID"), "kid");
+    await user.type(within(sso).getByLabelText("Client secret"), "shh");
+    await user.click(within(sso).getByRole("button", { name: "Add connection" }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.key === "POST /api/v1/admin/sso/connections")?.body).toEqual({
+        name: "Entra",
+        issuer: "https://login.example.com",
+        client_id: "kid",
+        client_secret: "shh",
+        groups_claim: "",
+      }),
+    );
+    expect(within(sso).getByLabelText("Client secret")).toHaveValue("");
+    await user.click(within(sso).getByRole("button", { name: "Disable Acme Okta" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "PATCH /api/v1/admin/sso/connections/c-1")?.body).toEqual({ enabled: false }));
+    await user.click(within(sso).getByRole("button", { name: "Remove connection Acme Okta" }));
+    await waitFor(() => expect(calls.some((c) => c.key === "DELETE /api/v1/admin/sso/connections/c-1")).toBe(true));
+  });
+
+  it("explains that SSO connections need an encryption key", async () => {
+    mockApi({
+      "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
+      "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/dead-letters": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/sso/connections": { status: 200, body: { items: [] } },
+      "POST /api/v1/admin/sso/connections": problem(409, "Set KYBER_ENCRYPTION_KEY to store SSO connections."),
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPage />);
+    const sso = await screen.findByRole("region", { name: "SSO connections" });
+    await user.type(within(sso).getByLabelText("Button label"), "X");
+    await user.type(within(sso).getByLabelText("Issuer URL"), "https://x.example");
+    await user.type(within(sso).getByLabelText("Client ID"), "a");
+    await user.type(within(sso).getByLabelText("Client secret"), "b");
+    await user.click(within(sso).getByRole("button", { name: "Add connection" }));
+    expect(await within(sso).findByRole("alert")).toHaveTextContent("KYBER_ENCRYPTION_KEY");
+  });
 });

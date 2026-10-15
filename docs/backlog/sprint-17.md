@@ -21,4 +21,6 @@ approval of its ADR.
     AC3: every change is audited; AC4: users without a mapped group keep today's behaviour.
 - **S107 Several SSO providers, per-workspace SSO** (ADR-0015 follow-up) — several OIDC/SAML providers per
   installation; a workspace can require SSO and route users by email domain (ADR-0004).
-  - ADR first; **stop for approval** before building.
+  - ADR first; **stop for approval** before building. ADR-0018 accepted 2026-10-15.
+  - (a) ✅ stored OpenID Connect connections, per-connection routes, admin API and UI, sealed secrets.
+  - (b) domain verification + email discovery; (c) enforcement + per-workspace admin.

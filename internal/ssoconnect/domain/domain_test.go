@@ -1,0 +1,70 @@
+package domain_test
+
+import (
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/bakhod1r/kyber/internal/ssoconnect/domain"
+)
+
+var now = time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC)
+
+func TestNewConnection(t *testing.T) {
+	ok := domain.Settings{Name: "Acme Okta", Issuer: "https://acme.okta.com", ClientID: "cid", ClientSecret: "s3cret"}
+	c, err := domain.NewConnection("c-1", ok, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ID != "c-1" || c.Kind != domain.KindOIDC || !c.Enabled || c.Name != "Acme Okta" || !c.CreatedAt.Equal(now) {
+		t.Fatalf("connection = %+v", c)
+	}
+	local := ok
+	local.Issuer = "http://localhost:8080/realms/dev"
+	if _, err := domain.NewConnection("c-2", local, now); err != nil {
+		t.Fatalf("localhost over http: %v", err)
+	}
+	for name, mutate := range map[string]func(*domain.Settings){
+		"no name":      func(s *domain.Settings) { s.Name = " " },
+		"long name":    func(s *domain.Settings) { s.Name = string(make([]byte, 61)) },
+		"no issuer":    func(s *domain.Settings) { s.Issuer = "" },
+		"http issuer":  func(s *domain.Settings) { s.Issuer = "http://idp.example.com" },
+		"bad issuer":   func(s *domain.Settings) { s.Issuer = "://x" },
+		"query issuer": func(s *domain.Settings) { s.Issuer = "https://idp.example.com?x=1" },
+		"no client":    func(s *domain.Settings) { s.ClientID = "" },
+		"no secret":    func(s *domain.Settings) { s.ClientSecret = "" },
+	} {
+		s := ok
+		mutate(&s)
+		if _, err := domain.NewConnection("c-3", s, now); !errors.Is(err, domain.ErrInvalidConnection) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err := domain.NewConnection("", ok, now); !errors.Is(err, domain.ErrInvalidConnection) {
+		t.Errorf("no id: %v", err)
+	}
+}
+
+func TestRenameAndToggle(t *testing.T) {
+	c, _ := domain.NewConnection("c-1", domain.Settings{Name: "A", Issuer: "https://a.example", ClientID: "x", ClientSecret: "y"}, now)
+	if err := c.Rename(""); !errors.Is(err, domain.ErrInvalidConnection) {
+		t.Fatalf("empty rename: %v", err)
+	}
+	if err := c.Rename(" Okta "); err != nil || c.Name != "Okta" {
+		t.Fatalf("rename: %v %q", err, c.Name)
+	}
+	c.Disable()
+	if c.Enabled {
+		t.Fatal("still enabled")
+	}
+	c.Enable()
+	if !c.Enabled {
+		t.Fatal("not enabled")
+	}
+}
+
+func TestProviderName(t *testing.T) {
+	if got := domain.ProviderOf("c-1"); got != "sso:c-1" {
+		t.Fatalf("provider = %q", got)
+	}
+}

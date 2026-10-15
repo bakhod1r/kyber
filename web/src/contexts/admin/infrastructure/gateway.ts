@@ -1,6 +1,6 @@
 // admin: HTTP gateway to the administration API (infrastructure).
 import { request, seg, type List } from "../../../shared/http";
-import type { AdminMember, AdminProject, DeadLetter, GroupMapping, NewGroupMapping, Role } from "../domain/model";
+import type { AdminMember, AdminProject, DeadLetter, GroupMapping, NewGroupMapping, NewSSOConnection, Role, SSOConnection } from "../domain/model";
 
 export const adminGateway = {
   access: () => request<{ admin: boolean }>("GET", "/api/v1/admin/access").then((r) => r.admin),
@@ -11,5 +11,9 @@ export const adminGateway = {
   retry: (id: number) => request<undefined>("POST", `/api/v1/admin/dead-letters/${id}/retry`),
   groupMappings: () => request<List<GroupMapping>>("GET", "/api/v1/admin/sso/group-mappings").then((r) => r.items),
   addGroupMapping: (m: NewGroupMapping) => request<GroupMapping>("POST", "/api/v1/admin/sso/group-mappings", m),
+  connections: () => request<List<SSOConnection>>("GET", "/api/v1/admin/sso/connections").then((r) => r.items),
+  addConnection: (c: NewSSOConnection) => request<SSOConnection>("POST", "/api/v1/admin/sso/connections", c),
+  setConnectionEnabled: (id: string, enabled: boolean) => request<SSOConnection>("PATCH", `/api/v1/admin/sso/connections/${seg(id)}`, { enabled }),
+  removeConnection: (id: string) => request<undefined>("DELETE", `/api/v1/admin/sso/connections/${seg(id)}`),
   removeGroupMapping: (id: string) => request<undefined>("DELETE", `/api/v1/admin/sso/group-mappings/${seg(id)}`),
 };

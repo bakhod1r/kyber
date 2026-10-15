@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.72.0
+  version: 0.73.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -59,6 +59,99 @@ paths:
         "401": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/sso/connections:
+    get:
+      operationId: listSSOConnections
+      summary: Stored identity providers (site admins, ADR-0018). Client secrets are never returned.
+      responses:
+        "200":
+          description: Oldest first.
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/SSOConnection" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createSSOConnection
+      summary: Add an OpenID Connect provider. Its redirect URI is <KYBER_PUBLIC_URL>/api/v1/auth/sso/{id}/callback.
+      description: The client secret is sealed with KYBER_ENCRYPTION_KEY (409 ENCRYPTION_KEY_MISSING without it).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, issuer, client_id, client_secret]
+              properties:
+                name: { type: string, maxLength: 60, description: The sign-in button's label. }
+                issuer: { type: string, description: "https URL; discovery at <issuer>/.well-known/openid-configuration." }
+                client_id: { type: string }
+                client_secret: { type: string, writeOnly: true }
+                groups_claim: { type: string, description: "ID token claim with the user's groups (S106); default groups." }
+      responses:
+        "201": { description: Created., content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/sso/connections/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    patch:
+      operationId: updateSSOConnection
+      summary: Rename, enable or disable a connection. A disabled connection disappears from the login page.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 60 }
+                enabled: { type: boolean }
+      responses:
+        "200": { description: Updated., content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteSSOConnection
+      summary: Remove a connection. Accounts keep their other sign-in methods.
+      responses:
+        "204": { description: Removed. }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/sso/{id}/start:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: ssoConnectionStart
+      security: []
+      description: Starts sign-in with a stored SSO connection (ADR-0018); like oidcStart, with the flow cookie scoped to this connection.
+      responses:
+        "302": { description: "Redirect to the provider's sign-in page" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/sso/{id}/callback:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: ssoConnectionCallback
+      security: []
+      description: >-
+        The connection's provider redirects here; verified like oidcCallback. Identities are keyed by
+        (sso:<id>, subject). On failure redirects to `/login?error=sso_failed` or `sso_email_taken`.
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+      responses:
+        "302": { description: "Redirect to / when signed in, otherwise to /login?error=sso_failed or sso_email_taken" }
         "404": { $ref: "#/components/responses/Error" }
   /scim/v2/ServiceProviderConfig:
     get:
@@ -394,6 +487,10 @@ paths:
                   github: { type: boolean }
                   telegram_bot: { type: [string, "null"], description: Bot username for the Telegram Login Widget; null when disabled. }
                   telegram_otp: { type: boolean, description: The bot sends one-time login codes. }
+                  sso:
+                    type: array
+                    description: Enabled stored SSO connections (ADR-0018), oldest first.
+                    items: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/auth/google/start:
     get:
@@ -4238,6 +4335,18 @@ components:
         application/json:
           schema: { type: object, required: [body], properties: { body: { type: string } } }
   schemas:
+    SSOConnection:
+      type: object
+      required: [id, kind, name, issuer, client_id, groups_claim, enabled, created_at]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [oidc] }
+        name: { type: string }
+        issuer: { type: string }
+        client_id: { type: string }
+        groups_claim: { type: string }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
     SSOGroupMapping:
       type: object
       required: [id, group, scope, workspace_id, project_key, role, created_at]

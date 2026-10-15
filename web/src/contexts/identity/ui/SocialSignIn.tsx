@@ -19,6 +19,8 @@ const ERRORS: Record<string, MessageKey> = {
   saml_failed: msg("Single sign-on did not complete. Please try again."),
   saml_email_taken: msg("This email already has a Kyber account. Log in with your password instead."),
   oidc_email_taken: msg("This email already has a Kyber account. Log in with your password instead."),
+  sso_failed: msg("Single sign-on did not complete. Please try again."),
+  sso_email_taken: msg("This email already has a Kyber account. Log in with your password instead."),
   github_failed: msg("GitHub sign-in did not complete. Please try again."),
   github_email_taken:
     msg("This email already has a Kyber account, and GitHub did not confirm it. Log in with your password instead."),
@@ -67,7 +69,8 @@ export function SocialSignIn() {
   const sso = providers.data?.oidc ?? null;
   const saml = providers.data?.saml ?? null;
   const github = providers.data?.github ?? false;
-  const any = providers.data?.google || sso || saml || github || bot || otp;
+  const stored = providers.data?.sso ?? [];
+  const any = providers.data?.google || sso || saml || github || bot || otp || stored.length > 0;
   return (
     <>
       {error && (
@@ -98,6 +101,15 @@ export function SocialSignIn() {
               {t("Continue with {name}", { name: sso })}
             </a>
           )}
+          {stored.map((c) => (
+            <a key={c.id} className="button ghost social-sso" href={`/api/v1/auth/sso/${encodeURIComponent(c.id)}/start`}>
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="5" y="11" width="14" height="10" rx="2" />
+                <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              </svg>
+              {t("Continue with {name}", { name: c.name })}
+            </a>
+          ))}
           {saml && (
             <a className="button ghost social-sso" href="/api/v1/auth/saml/start">
               <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

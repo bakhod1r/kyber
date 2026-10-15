@@ -153,6 +153,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/presence"
 	"github.com/bakhod1r/kyber/internal/platform/ratelimit"
 	"github.com/bakhod1r/kyber/internal/platform/realtime"
+	"github.com/bakhod1r/kyber/internal/platform/seal"
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 	projectapp "github.com/bakhod1r/kyber/internal/project/application"
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
@@ -166,6 +167,13 @@ import (
 	searchmemory "github.com/bakhod1r/kyber/internal/search/infrastructure/memory"
 	searchpg "github.com/bakhod1r/kyber/internal/search/infrastructure/postgres"
 	searchhttp "github.com/bakhod1r/kyber/internal/search/interfaces/httpapi"
+	ssocapp "github.com/bakhod1r/kyber/internal/ssoconnect/application"
+	ssocdomain "github.com/bakhod1r/kyber/internal/ssoconnect/domain"
+	ssocacl "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/acl"
+	ssocdir "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/directory"
+	ssocmemory "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/memory"
+	ssocpg "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/postgres"
+	ssochttp "github.com/bakhod1r/kyber/internal/ssoconnect/interfaces/httpapi"
 	ssoapp "github.com/bakhod1r/kyber/internal/ssosync/application"
 	ssodomain "github.com/bakhod1r/kyber/internal/ssosync/domain"
 	ssoacl "github.com/bakhod1r/kyber/internal/ssosync/infrastructure/acl"
@@ -227,6 +235,9 @@ type deps struct {
 	directory     identitydomain.Directory
 	ssoMappings   ssodomain.Mappings
 	ssoGrants     ssodomain.Grants
+	ssoConns      ssocdomain.Connections // stored SSO connections (ADR-0018); Postgres is built once the key is known
+	ssoBuild      ssocdir.Build
+	sealBox       *seal.Box
 	scimToken     string
 	social        identityhttp.Social
 	otps          identitydomain.OTPChallenges
@@ -292,6 +303,13 @@ func WithReminderEvery(every time.Duration) Option { return func(d *deps) { d.re
 func WithMQTTAddr(addr string) Option { return func(d *deps) { d.mqttAddr = addr } }
 
 func WithRelayEvery(every time.Duration) Option { return func(d *deps) { d.relayEvery = every } }
+
+// WithEncryptionKey seals secrets stored in the database (KYBER_ENCRYPTION_KEY, ADR-0018);
+// nil disables stored SSO connections on PostgreSQL.
+func WithEncryptionKey(b *seal.Box) Option { return func(d *deps) { d.sealBox = b } }
+
+// WithSSOProviders replaces how stored SSO connections become sign-in clients (tests use a fake IdP).
+func WithSSOProviders(b ssocdir.Build) Option { return func(d *deps) { d.ssoBuild = b } }
 
 // WithSocial enables sign-in with Google and/or Telegram.
 func WithSocial(s identityhttp.Social) Option { return func(d *deps) { d.social = s } }
@@ -441,7 +459,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
 		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), bots: chatmemory.NewBots(), sectionOrders: chatmemory.NewSectionOrders(), calls: callRepo, whiteboards: wbmemory.NewRepository(), wbComments: wbCommentRepo,
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(wbCommentRepo.Outbox, wbCommentRepo.OutboxMeta), events(docCommentRepo.Outbox, docCommentRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
-		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ssoMappings: sso, ssoGrants: sso, ready: func(context.Context) error { return nil },
+		users:  ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ssoMappings: sso, ssoGrants: sso, ssoConns: ssocmemory.New(), ready: func(context.Context) error { return nil },
 	}
 	for _, o := range opts {
 		o(&d)
@@ -717,7 +735,19 @@ func build(log *slog.Logger, d deps) http.Handler {
 			})
 	}
 	chat.WithBots(d.bots, chatacl.NewBotMaker(identity), chatacl.NewWorkspace(workspaces, d.siteAdmin)) // bot users (S84)
-	auth := identityhttp.New(identity, log, d.cookieSecure).WithSocial(d.social).WithPublicURL(d.publicURL)
+	if d.ssoConns == nil {
+		d.ssoConns = ssocpg.New(d.livePool, d.sealBox)
+	}
+	if d.ssoBuild == nil {
+		d.ssoBuild = ssocdir.OIDC(func(id string) string {
+			return strings.TrimRight(d.publicURL, "/") + "/api/v1/auth/sso/" + id + "/callback"
+		})
+	}
+	connections := ssocapp.NewService(ssocapp.Deps{Connections: d.ssoConns, Admins: ssocacl.Admins(d.siteAdmin),
+		Audit: ssocacl.Audit{Log: auditLog}, NewID: id.New, Now: time.Now})
+	social := d.social
+	social.SSO = ssocdir.New(d.ssoConns, d.ssoBuild)
+	auth := identityhttp.New(identity, log, d.cookieSecure).WithSocial(social).WithPublicURL(d.publicURL)
 	m := metrics.NewHTTP()
 
 	api := http.NewServeMux()
@@ -772,6 +802,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	audit := audithttp.New(auditLog, auditacl.NewOwners(agile, d.boards, d.links), log)
 	audit.Register(api)
 	ssohttp.New(groupSync, log).Register(api)
+	ssochttp.New(connections, log).Register(api)
 	api.Handle("POST /api/v1/mcp", newMCP(projects, issues, search, agile))
 
 	mux := http.NewServeMux()
