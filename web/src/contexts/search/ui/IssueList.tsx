@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { projectQuery, searchUseCases } from "../application";
 import { type QuickFilterState, QuickFilters } from "./QuickFilters";
-import { msg, type MessageKey, useT } from "../../../shared/i18n/i18n";
+import { msg, type MessageKey, useLabel, useT } from "../../../shared/i18n/i18n";
 
 const COLUMNS: { field: string; label: MessageKey; jql: string }[] = [
   { field: "key", label: msg("Key"), jql: "key" },
@@ -16,6 +16,7 @@ const COLUMNS: { field: string; label: MessageKey; jql: string }[] = [
 /** IssueList: Jira's List view — every issue of the project in a sortable table, with quick filters. */
 export function IssueList({ projectKey, onOpen }: { projectKey: string; onOpen?: (issueKey: string) => void }) {
   const t = useT();
+  const label = useLabel();
   const [filters, setFilters] = useState<QuickFilterState>({ quick: [], saved: "" });
   const [sort, setSort] = useState<{ jql: string; desc: boolean }>({ jql: "key", desc: false });
   const jql = projectQuery(projectKey, filters.quick, filters.saved, `${sort.jql}${sort.desc ? " DESC" : ""}`);
@@ -51,7 +52,7 @@ export function IssueList({ projectKey, onOpen }: { projectKey: string; onOpen?:
                   </td>
                   <td>{is.title}</td>
                   <td>{is.type}</td>
-                  <td>{is.status_name || is.status}</td>
+                  <td>{label(is.status_name || is.status)}</td>
                   <td>{is.priority}</td>
                   <td>{is.points ?? ""}</td>
                 </tr>

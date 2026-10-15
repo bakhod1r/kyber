@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { projectQuery, QUICK_FILTERS, searchUseCases } from "../application";
-import { useT } from "../../../shared/i18n/i18n";
+import { useLabel, useT } from "../../../shared/i18n/i18n";
 
 export type QuickFilterState = { quick: string[]; saved: string };
 
@@ -19,6 +19,7 @@ export function QuickFilters({
   onKeys: (keys: Set<string> | null) => void;
 }) {
   const t = useT();
+  const label = useLabel();
   const filters = useQuery({ queryKey: ["filters"], queryFn: searchUseCases.filters });
   const active = value.quick.length > 0 || value.saved !== "";
   const jql = projectQuery(projectKey, value.quick, value.saved);
@@ -33,7 +34,7 @@ export function QuickFilters({
     <div className="quick-filters row" role="group" aria-label={t("Quick filters")}>
       {QUICK_FILTERS.map((f) => (
         <button key={f.id} type="button" className="ghost chip" aria-pressed={value.quick.includes(f.id)} onClick={() => toggle(f.id)}>
-          {f.label}
+          {label(f.label)}
         </button>
       ))}
       {(filters.data ?? []).length > 0 && (

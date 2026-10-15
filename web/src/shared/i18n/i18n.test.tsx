@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { en } from "./en";
-import { currentLanguage, fromLocale, I18nProvider, LANGUAGE_NAMES, LANGUAGES, translate, useT } from "./i18n";
+import { currentLanguage, fromLocale, translateLabel, I18nProvider, LANGUAGE_NAMES, LANGUAGES, translate, useT } from "./i18n";
 import { ar } from "./ar";
 import { de } from "./de";
 import { ja } from "./ja";
@@ -119,5 +119,10 @@ describe("i18n", () => {
     expect(translate("ru", "Zoom in")).toBe("Увеличить");
     expect(translate("uz", "{n} replies", { n: 3 })).toBe("3 ta javob");
     expect(translate("de", "Start huddle")).toBe("Start huddle"); // other languages fall back to English
+  });
+
+  it("translates a label that is a known message and keeps a user's own name as is", () => {
+    expect(translateLabel("ru", "Done")).toBe(ru["Done"]);
+    expect(translateLabel("ru", "Waiting for QA")).toBe("Waiting for QA");
   });
 });

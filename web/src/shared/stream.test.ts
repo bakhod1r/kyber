@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { liveClient, onConnect, setStreamConnector, subscribe, subscribeTopic, USER_TOPIC } from "./stream";
+import { liveClient, mqttOptions, onConnect, setStreamConnector, subscribe, subscribeTopic, USER_TOPIC } from "./stream";
 import { FakeStreamClient, flush } from "./test/fakeStream";
 
 afterEach(() => setStreamConnector(undefined));
@@ -99,5 +99,11 @@ describe("shared stream (S88: MQTT)", () => {
     const stop = subscribe(["typing"], () => {});
     await flush();
     stop();
+  });
+});
+
+describe("mqttOptions", () => {
+  it("keeps the keepalive on native timers: the CSP allows no blob: workers without a media server", () => {
+    expect(mqttOptions()).toMatchObject({ timerVariant: "native", resubscribe: false });
   });
 });

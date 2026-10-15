@@ -12,12 +12,12 @@ export function ChatMentions() {
   return (
     <>
       <h2>{t("Mentions")}</h2>
-      {sorted.length === 0 ? <p className="muted">No mentions yet.</p> : (
+      {sorted.length === 0 ? <p className="muted">{t("No mentions yet.")}</p> : (
         <ul aria-label={t("Mentions")} className="chat-mentions">
           {sorted.map((n) => (
             <li key={n.id} className={n.read ? "" : "unread"}>
               <Link to={`/chat/${n.conversation_id}`}>
-                <b>{n.actor_name}</b> in {n.conversation_name ? `#${n.conversation_name}` : "a direct message"}
+                {t("{name} in {where}", { name: n.actor_name, where: n.conversation_name ? `#${n.conversation_name}` : t("a direct message") })}
               </Link>{" "}
               <time className="muted" dateTime={n.created_at}>{new Date(n.created_at).toLocaleString()}</time>
               <p>{n.excerpt}</p>
