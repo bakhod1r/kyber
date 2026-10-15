@@ -74,6 +74,7 @@ type settingsDTO struct {
 	TelegramAvailable bool   `json:"telegram_available"`
 	TelegramConnected bool   `json:"telegram_connected"`
 	TimeZone          string `json:"time_zone"`
+	EmailDigest       bool   `json:"email_digest"`
 }
 
 func (h *Handler) settings(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +84,7 @@ func (h *Handler) settings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, settingsDTO{Email: s.Email, Telegram: s.Telegram, EmailAvailable: s.EmailAvailable,
-		TelegramAvailable: s.TelegramAvailable, TelegramConnected: s.TelegramConnected, TimeZone: s.TimeZone})
+		TelegramAvailable: s.TelegramAvailable, TelegramConnected: s.TelegramConnected, TimeZone: s.TimeZone, EmailDigest: s.EmailDigest})
 }
 
 func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
@@ -91,6 +92,7 @@ func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
 		Email    *bool   `json:"email"`
 		Telegram *bool   `json:"telegram"`
 		TimeZone *string `json:"time_zone"`
+		Digest   *bool   `json:"email_digest"`
 	}
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
@@ -111,6 +113,9 @@ func (h *Handler) setSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.TimeZone != nil {
 		p.TimeZone = *in.TimeZone
+	}
+	if in.Digest != nil {
+		p.EmailDigest = *in.Digest
 	}
 	if err := h.svc.SetPrefs(r.Context(), actor, p); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)

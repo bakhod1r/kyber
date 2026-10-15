@@ -53,6 +53,26 @@ func Run(t *testing.T, newRepo func(t *testing.T) domain.Repository) {
 		}
 	})
 
+	t.Run("unread since, across workspaces (digest)", func(t *testing.T) {
+		repo := newRepo(t)
+		old, recent, read, other := mk(1, Alice, 1), mk(5, Alice, 2), mk(6, Alice, 3), mk(7, Bob, 4)
+		for _, n := range []domain.Notification{old, recent, read, other} {
+			if err := repo.Add(ctx, n); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := repo.MarkRead(ctx, inbox(Alice), read.ID, t0.Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		got, err := repo.UnreadSince(ctx, Alice, t0.Add(3*time.Minute), 50)
+		if err != nil || len(got) != 1 || got[0].ID != recent.ID {
+			t.Fatalf("UnreadSince = %v, %v", got, err)
+		}
+		if all, _ := repo.UnreadSince(ctx, Alice, time.Time{}, 50); len(all) != 2 || all[0].ID != recent.ID {
+			t.Fatalf("newest first = %v", all)
+		}
+	})
+
 	t.Run("announcements keep their project", func(t *testing.T) {
 		repo := newRepo(t)
 		n := mk(1, Alice, 9)
