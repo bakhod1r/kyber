@@ -162,7 +162,8 @@ func (h *Handler) authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	code, err := h.svc.Authorize(r.Context(), domain.UserID(auth.Actor(r.Context())),
-		application.AuthorizeRequest{ClientID: in.ClientID, RedirectURI: in.RedirectURI, Challenge: in.Challenge, Method: in.Method})
+		application.AuthorizeRequest{ClientID: in.ClientID, RedirectURI: in.RedirectURI, Challenge: in.Challenge, Method: in.Method,
+			SignInMethod: auth.Method(r.Context())})
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return

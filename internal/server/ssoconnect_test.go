@@ -203,8 +203,9 @@ func ssoLogin(t *testing.T, c *client, host, id, code string) *client {
 }
 
 // S107 (ADR-0018 c): a workspace admin adds the workspace's own connection and requires it. Members
-// signed in another way (or with an API token) are refused with SSO_REQUIRED and told where to sign
-// in; signed in through the connection they get in; owners always keep a way in.
+// signed in another way (or with an API token made outside it) are refused with SSO_REQUIRED and told
+// where to sign in; signed in through the connection, or with a token made then, they get in; owners
+// always keep a way in.
 func TestSSOEnforcement(t *testing.T) {
 	box, _ := seal.New(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
 	build := func(c domain.Connection) application.RedirectProvider {
@@ -255,6 +256,12 @@ func TestSSOEnforcement(t *testing.T) {
 		viaSSO := ssoLogin(t, on(anon, "acme.kyber.test"), "kyber.test", id, "dev@acme.uz")
 		if code, b := viaSSO.do("GET", "/api/v1/projects", nil); code != 200 {
 			t.Fatalf("signed in through SSO = %d %v", code, b)
+		}
+		// A token made while signed in through the required connection carries that sign-in.
+		_, ssoTok := viaSSO.do("POST", "/api/v1/me/tokens", map[string]any{"name": "cli", "expires_in_days": 30})
+		ssoPAT := &client{t: t, srv: anon.srv, token: ssoTok["token"].(string), host: "acme.kyber.test"}
+		if code, b := ssoPAT.do("GET", "/api/v1/projects", nil); code != 200 {
+			t.Fatalf("token made under SSO = %d %v", code, b)
 		}
 		code, c = acme.do("PATCH", "/api/v1/admin/sso/connections/"+id, map[string]any{"enforced": false})
 		expect(t, code, 200, c)

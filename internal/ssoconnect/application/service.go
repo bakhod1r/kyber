@@ -202,7 +202,8 @@ func (s *Service) Discover(ctx context.Context, email string) (*domain.Connectio
 
 // Check lets the actor into workspace unless the workspace requires a connection the actor did not
 // sign in with (method "sso:<id>"); its owners always get in, so nobody is locked out by a broken IdP.
-// API tokens carry no SSO sign-in, so they are refused too (ADR-0018 §5).
+// An API token counts as the sign-in it was created under, so only tokens made through the
+// connection get in (ADR-0018 §5).
 func (s *Service) Check(ctx context.Context, workspace, actor, method string) error {
 	required, err := s.d.Connections.RequiredBy(ctx, workspace)
 	if err != nil {

@@ -59,6 +59,7 @@ func (s *Service) OAuthClient(ctx context.Context, id string) (*domain.OAuthClie
 type AuthorizeRequest struct {
 	ClientID, RedirectURI string
 	Challenge, Method     string // PKCE: only S256
+	SignInMethod          string // how the consenting user had signed in (the token inherits it)
 }
 
 // Authorize issues a single-use authorization code for the signed-in user.
@@ -80,6 +81,7 @@ func (s *Service) Authorize(ctx context.Context, user domain.UserID, r Authorize
 	if err != nil {
 		return "", err
 	}
+	code.Method = r.SignInMethod
 	return secret, s.oauth.SaveCode(ctx, code)
 }
 
@@ -113,7 +115,7 @@ func (s *Service) ExchangeCode(ctx context.Context, r TokenRequest) (string, tim
 	if err != nil {
 		return "", 0, err
 	}
-	secret, _, err := s.CreateToken(ctx, code.User, "MCP: "+c.Name, OAuthTokenDays)
+	secret, _, err := s.CreateTokenUnder(ctx, code.User, "MCP: "+c.Name, OAuthTokenDays, code.Method)
 	if err != nil {
 		return "", 0, err
 	}

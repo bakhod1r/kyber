@@ -89,6 +89,8 @@ needs more:
   be `enforced`: then `RequireSSO`, after the membership check, answers the workspace's routes with
   `403 SSO_REQUIRED` (detail names `/api/v1/auth/sso/<id>/start`) unless the session came through it.
   Apex routes (sign-in, `/me`, the workspace list) stay open. Workspace **owners** are exempt (break-glass).
-- **API tokens are refused in an enforced workspace** (safer default). Letting tokens through when they were
-  created under an SSO session needs the token to remember that session's method: a follow-up.
+- **API tokens** count as the sign-in they were created under (amended 2026-10-15, migration `0093`): a
+  personal access token remembers its creator's session method, and an OAuth (MCP) token the method of the
+  session that gave consent. A token made through the required connection works in the enforced workspace;
+  any other token (including ones from before `0093`) is refused.
 - The check is one indexed query per workspace request (`sso_connections_required` partial index).

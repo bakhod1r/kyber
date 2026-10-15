@@ -153,8 +153,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (*domain.User,
 // domain.MethodToken or the external provider).
 func (s *Service) AuthenticateWithMethod(ctx context.Context, token string) (*domain.User, string, error) {
 	if IsPersonalToken(token) {
-		u, err := s.authenticateToken(ctx, token)
-		return u, domain.MethodToken, err
+		return s.authenticateToken(ctx, token)
 	}
 	sess, err := s.sessions.SessionByHash(ctx, hashToken(token))
 	if errors.Is(err, domain.ErrSessionNotFound) {

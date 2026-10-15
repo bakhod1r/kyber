@@ -31,8 +31,8 @@ func (r *Repository) Client(ctx context.Context, id domain.ClientID) (*domain.OA
 }
 
 func (r *Repository) SaveCode(ctx context.Context, c *domain.AuthCode) error {
-	_, err := r.pool.Exec(ctx, `INSERT INTO oauth_codes (code_hash, client_id, user_id, redirect_uri, challenge, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`, c.Hash, string(c.Client), string(c.User), c.RedirectURI, c.Challenge, c.ExpiresAt)
+	_, err := r.pool.Exec(ctx, `INSERT INTO oauth_codes (code_hash, client_id, user_id, redirect_uri, challenge, expires_at, auth_method)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`, c.Hash, string(c.Client), string(c.User), c.RedirectURI, c.Challenge, c.ExpiresAt, c.Method)
 	return err
 }
 
@@ -40,8 +40,8 @@ func (r *Repository) SaveCode(ctx context.Context, c *domain.AuthCode) error {
 func (r *Repository) TakeCode(ctx context.Context, hash []byte) (*domain.AuthCode, error) {
 	var c domain.AuthCode
 	err := r.pool.QueryRow(ctx, `DELETE FROM oauth_codes WHERE code_hash = $1
-		RETURNING code_hash, client_id::text, user_id::text, redirect_uri, challenge, expires_at`, hash).
-		Scan(&c.Hash, &c.Client, &c.User, &c.RedirectURI, &c.Challenge, &c.ExpiresAt)
+		RETURNING code_hash, client_id::text, user_id::text, redirect_uri, challenge, expires_at, auth_method`, hash).
+		Scan(&c.Hash, &c.Client, &c.User, &c.RedirectURI, &c.Challenge, &c.ExpiresAt, &c.Method)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrAuthCodeNotFound
 	}
