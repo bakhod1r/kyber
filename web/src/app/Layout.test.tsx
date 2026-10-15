@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { Layout } from "./Layout";
 import { mockApi, renderWithProviders } from "../shared/test/test-utils";
@@ -24,9 +25,14 @@ describe("Layout top bar", () => {
     expect(within(nav).getByRole("link", { name: ru["Chat"] })).toBeInTheDocument();
   });
 
-  it("the user's name opens their settings and says so", async () => {
+  it("groups settings and log out in the user's menu", async () => {
     mockApi(noAdmin);
     renderWithProviders(<Layout user={me}>x</Layout>, "/");
-    expect(screen.getByRole("link", { name: "Ali" })).toHaveAttribute("title", "Settings");
+    const menu = screen.getByText("Ali").closest("details")!;
+    expect(menu).not.toHaveAttribute("open");
+    await userEvent.click(screen.getByText("Ali"));
+    expect(menu).toHaveAttribute("open");
+    expect(within(menu).getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    expect(within(menu).getByRole("button", { name: "Log out" })).toBeInTheDocument();
   });
 });

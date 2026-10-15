@@ -49,12 +49,15 @@ export function Layout({ user, children }: { user: User; children: ReactNode }) 
         <FocusTimer />
         <NotificationBell />
         <LanguagePicker />
-        <Link to="/settings" className="user" title={t("Settings")}>
-          {user.name}
-        </Link>
-        <button className="ghost" onClick={() => logout.mutate()}>
-          {t("Log out")}
-        </button>
+        <details className="user-menu">
+          <summary className="user">{user.name}</summary>
+          <div className="user-menu-list panel">
+            <Link to="/settings">{t("Settings")}</Link>
+            <button className="ghost" onClick={() => logout.mutate()}>
+              {t("Log out")}
+            </button>
+          </div>
+        </details>
       </header>
       <main className="page">{children}</main>
     </>
