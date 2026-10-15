@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"sync"
 
 	"github.com/bakhod1r/kyber/internal/importer/domain"
 )
@@ -50,15 +49,15 @@ type Deps struct {
 	Issues   Issues
 	Mappings domain.MappingRepository
 	Source   Source
+	// Lock serialises runs of a project's import across replicas.
+	Lock domain.ImportLock
 }
 
 type Service struct {
-	d     Deps
-	mu    sync.Mutex
-	locks map[string]*sync.Mutex // one import at a time per project
+	d Deps
 }
 
-func NewService(d Deps) *Service { return &Service{d: d, locks: map[string]*sync.Mutex{}} }
+func NewService(d Deps) *Service { return &Service{d: d} }
 
 // ReportItem is an importable row and, after a real run, the Kyber issue created from it.
 type ReportItem struct {
@@ -71,18 +70,6 @@ type Report struct {
 	Items   []ReportItem
 	Errors  []domain.RowError
 	Skipped []string // external keys imported by an earlier run
-}
-
-func (s *Service) lock(project string) func() {
-	s.mu.Lock()
-	l, ok := s.locks[project]
-	if !ok {
-		l = &sync.Mutex{}
-		s.locks[project] = l
-	}
-	s.mu.Unlock()
-	l.Lock()
-	return l.Unlock
 }
 
 // Import previews (dryRun) or runs a Jira CSV import into a project. A run stops at the
@@ -103,7 +90,11 @@ func (s *Service) Import(ctx context.Context, actor, project, csv string, dryRun
 		return Report{}, err
 	}
 	if !dryRun {
-		defer s.lock(project)()
+		release, err := s.d.Lock.Lock(ctx, project)
+		if err != nil {
+			return Report{}, err
+		}
+		defer release()
 	}
 	done, err := s.d.Mappings.ForProject(ctx, project)
 	if err != nil {

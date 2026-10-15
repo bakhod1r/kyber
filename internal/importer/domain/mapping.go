@@ -22,3 +22,9 @@ type MappingRepository interface {
 	// ForProject returns ExternalKey → IssueKey for the project.
 	ForProject(ctx context.Context, project string) (map[string]string, error)
 }
+
+// ImportLock lets one import run at a time per project across every replica of the server.
+type ImportLock interface {
+	// Lock blocks until the project's import lock is held or ctx ends; release frees it.
+	Lock(ctx context.Context, project string) (release func(), err error)
+}

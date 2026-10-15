@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/bakhod1r/kyber/internal/importer/domain"
 )
@@ -38,4 +39,75 @@ func Run(t *testing.T, newRepo func(t *testing.T) domain.MappingRepository) {
 
 func mk(project, external, issue string) domain.Mapping {
 	return domain.Mapping{Project: project, ExternalKey: external, IssueKey: issue}
+}
+
+// RunLock is the contract of ImportLock adapters; newPair returns two handles on the same lock store, as two
+// replicas of the server would have.
+func RunLock(t *testing.T, newPair func(t *testing.T) (domain.ImportLock, domain.ImportLock)) {
+	t.Run("a held project lock blocks the other replica until released", func(t *testing.T) {
+		ctx := context.Background()
+		a, b := newPair(t)
+		release, err := a.Lock(ctx, "KYB")
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := make(chan func(), 1)
+		go func() {
+			r, err := b.Lock(ctx, "KYB")
+			if err != nil {
+				t.Error(err)
+				r = func() {}
+			}
+			got <- r
+		}()
+		select {
+		case <-got:
+			t.Fatal("second holder got the lock while it was held")
+		case <-time.After(100 * time.Millisecond):
+		}
+		release()
+		select {
+		case r := <-got:
+			r()
+		case <-time.After(5 * time.Second):
+			t.Fatal("lock not handed over after release")
+		}
+	})
+	t.Run("other projects are independent", func(t *testing.T) {
+		ctx := context.Background()
+		a, b := newPair(t)
+		ra, err := a.Lock(ctx, "KYB")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ra()
+		wait, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		rb, err := b.Lock(wait, "OPS")
+		if err != nil {
+			t.Fatalf("OPS blocked by KYB: %v", err)
+		}
+		rb()
+	})
+	t.Run("waiting ends with the context", func(t *testing.T) {
+		ctx := context.Background()
+		a, b := newPair(t)
+		ra, err := a.Lock(ctx, "KYB")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ra()
+		wait, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		defer cancel()
+		if _, err := b.Lock(wait, "KYB"); err == nil {
+			t.Fatal("got a held lock")
+		}
+		// The lock still works after an abandoned wait.
+		ra()
+		rb, err := b.Lock(ctx, "KYB")
+		if err != nil {
+			t.Fatal(err)
+		}
+		rb()
+	})
 }
