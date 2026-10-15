@@ -47,6 +47,13 @@ number of OpenID Connect providers on the **Administration** page (**SSO connect
 Each enabled connection gets its own "Continue with …" button. Disabling one hides the button; deleting one keeps
 the accounts, which still sign in with their other methods. Secrets are never shown again after saving.
 
+### Route people by their email domain
+
+Add the company's email domains to its connection. Kyber shows a TXT record (`kyber-verify=…`) to publish on
+each domain; press **Verify** once it is live. A verified domain routes sign-in: on the login page people type
+their work email and get their company's button. A site admin may mark a domain **trusted** to skip the DNS
+check (for domains the installation's owner controls). A domain belongs to one connection only.
+
 ## Groups → roles
 
 Site administrators can map an identity-provider group to a role on the **Administration** page

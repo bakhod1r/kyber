@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,5 +67,46 @@ func TestRenameAndToggle(t *testing.T) {
 func TestProviderName(t *testing.T) {
 	if got := domain.ProviderOf("c-1"); got != "sso:c-1" {
 		t.Fatalf("provider = %q", got)
+	}
+}
+
+func TestDomains(t *testing.T) {
+	c, _ := domain.NewConnection("c-1", domain.Settings{Name: "A", Issuer: "https://a.example", ClientID: "x", ClientSecret: "y"}, now)
+	if err := c.AddDomain(" Acme.UZ ", "tok", false); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Domains) != 1 || c.Domains[0] != (domain.Domain{Name: "acme.uz", Token: "tok"}) || c.Serves("acme.uz") {
+		t.Fatalf("domains = %+v", c.Domains)
+	}
+	for _, bad := range []string{"", "acme", "-x.uz", "a..uz", "acme.uz", "ACME.uz", "x.uz/path", strings.Repeat("a", 64) + ".uz"} {
+		if err := c.AddDomain(bad, "t", false); !errors.Is(err, domain.ErrInvalidConnection) {
+			t.Errorf("%q accepted: %v", bad, err)
+		}
+	}
+	if err := c.VerifyDomain("acme.uz", []string{"v=spf1", "kyber-verify=wrong"}); !errors.Is(err, domain.ErrDomainNotVerified) {
+		t.Fatalf("wrong token: %v", err)
+	}
+	if err := c.VerifyDomain("acme.uz", []string{"v=spf1", " kyber-verify=tok "}); err != nil || !c.Serves("ACME.uz") {
+		t.Fatalf("verify: %v %+v", err, c.Domains)
+	}
+	if err := c.VerifyDomain("other.uz", nil); !errors.Is(err, domain.ErrDomainNotFound) {
+		t.Fatalf("unknown domain: %v", err)
+	}
+	if err := c.AddDomain("trusted.uz", "t2", true); err != nil || !c.Serves("trusted.uz") {
+		t.Fatalf("trusted: %v", err)
+	}
+	if err := c.RemoveDomain("acme.uz"); err != nil || c.Serves("acme.uz") || len(c.Domains) != 1 {
+		t.Fatalf("remove: %v %+v", err, c.Domains)
+	}
+	if err := c.RemoveDomain("acme.uz"); !errors.Is(err, domain.ErrDomainNotFound) {
+		t.Fatalf("remove twice: %v", err)
+	}
+}
+
+func TestDomainOf(t *testing.T) {
+	for in, want := range map[string]string{"Zara@Acme.UZ": "acme.uz", " a@b.c ": "b.c", "nope": "", "a@": ""} {
+		if got := domain.DomainOf(in); got != want {
+			t.Errorf("DomainOf(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

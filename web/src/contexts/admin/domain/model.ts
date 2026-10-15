@@ -8,5 +8,6 @@ export type MappingScope = "workspace" | "project";
 export type GroupMapping = { id: string; group: string; scope: MappingScope; workspace_id: string; project_key: string; role: string; created_at: string };
 export type NewGroupMapping = { group: string; scope: MappingScope; project_key?: string; role: string };
 export const MAPPED_ROLES: Record<MappingScope, string[]> = { workspace: ["member", "admin"], project: ["viewer", "member", "admin"] };
-export type SSOConnection = { id: string; kind: "oidc"; name: string; issuer: string; client_id: string; groups_claim: string; enabled: boolean; created_at: string };
+export type SSODomain = { name: string; verified: boolean; txt: string };
+export type SSOConnection = { id: string; kind: "oidc"; name: string; issuer: string; client_id: string; groups_claim: string; enabled: boolean; created_at: string; domains: SSODomain[] };
 export type NewSSOConnection = { name: string; issuer: string; client_id: string; client_secret: string; groups_claim: string };

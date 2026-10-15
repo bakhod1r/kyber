@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -101,4 +102,78 @@ func TestSSOConnections(t *testing.T) {
 		code, b = boss.do("DELETE", "/api/v1/admin/sso/connections/"+id, nil)
 		expect(t, code, 404, b)
 	}, server.WithSiteAdmins("boss@x.uz"), server.WithEncryptionKey(box), server.WithSSOProviders(build))
+}
+
+// fixedDNS serves TXT records from a map.
+type fixedDNS map[string][]string
+
+func (d fixedDNS) TXT(_ context.Context, name string) ([]string, error) { return d[name], nil }
+
+// S107 (ADR-0018 b): a connection lists email domains; a domain routes sign-in only once its TXT
+// record proves control (or a site admin trusts it); the login page discovers the IdP by email.
+func TestSSODomainDiscovery(t *testing.T) {
+	box, _ := seal.New(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
+	records := fixedDNS{}
+	forEachBackend(t, func(t *testing.T, anon *client) {
+		boss := anon.signedIn("boss@x.uz")
+		discover := func(email string) map[string]any {
+			t.Helper()
+			code, b := anon.do("POST", "/api/v1/auth/sso/discover", map[string]string{"email": email})
+			expect(t, code, 200, b)
+			c, _ := b["connection"].(map[string]any)
+			return c
+		}
+		_, c := boss.do("POST", "/api/v1/admin/sso/connections", map[string]string{"name": "Acme Okta", "issuer": "https://acme.okta.com", "client_id": "k", "client_secret": "s"})
+		id := c["id"].(string)
+		base := "/api/v1/admin/sso/connections/" + id + "/domains"
+		code, c := boss.do("POST", base, map[string]any{"domain": "Acme.UZ"})
+		expect(t, code, 200, c)
+		d := c["domains"].([]any)[0].(map[string]any)
+		txt := d["txt"].(string)
+		if d["name"] != "acme.uz" || d["verified"] != false || !strings.HasPrefix(txt, "kyber-verify=") || len(txt) < 30 {
+			t.Fatalf("domain = %v", d)
+		}
+		if found := discover("zara@acme.uz"); found != nil {
+			t.Fatalf("an unverified domain routes: %v", found)
+		}
+		code, b := boss.do("POST", base+"/acme.uz/verify", nil)
+		expect(t, code, 409, b)
+		records["acme.uz"] = []string{"v=spf1 -all", txt}
+		code, c = boss.do("POST", base+"/acme.uz/verify", nil)
+		expect(t, code, 200, c)
+		if found := discover("Zara@ACME.uz"); found == nil || found["id"] != id || found["name"] != "Acme Okta" {
+			t.Fatalf("discover = %v", found)
+		}
+		if found := discover("zara@other.uz"); found != nil {
+			t.Fatalf("other domain = %v", found)
+		}
+		_, other := boss.do("POST", "/api/v1/admin/sso/connections", map[string]string{"name": "Entra", "issuer": "https://login.example.com", "client_id": "k", "client_secret": "s"})
+		code, b = boss.do("POST", "/api/v1/admin/sso/connections/"+other["id"].(string)+"/domains", map[string]any{"domain": "acme.uz"})
+		expect(t, code, 409, b)
+		code, c = boss.do("POST", "/api/v1/admin/sso/connections/"+other["id"].(string)+"/domains", map[string]any{"domain": "corp.uz", "trusted": true})
+		expect(t, code, 200, c)
+		if found := discover("ali@corp.uz"); found == nil || found["name"] != "Entra" {
+			t.Fatalf("trusted domain = %v", found)
+		}
+		dev := anon.signedIn("dev@x.uz")
+		code, b = dev.do("POST", base, map[string]any{"domain": "evil.uz", "trusted": true})
+		expect(t, code, 403, b)
+		code, c = boss.do("DELETE", base+"/acme.uz", nil)
+		expect(t, code, 200, c)
+		if found := discover("zara@acme.uz"); found != nil {
+			t.Fatalf("removed domain routes: %v", found)
+		}
+		code, b = boss.do("DELETE", base+"/acme.uz", nil)
+		expect(t, code, 404, b)
+		req, _ := http.NewRequest("POST", anon.srv.URL+"/api/v1/auth/sso/discover", strings.NewReader("email=zara@acme.uz"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != 403 {
+			t.Fatalf("form post = %d", res.StatusCode)
+		}
+	}, server.WithSiteAdmins("boss@x.uz"), server.WithEncryptionKey(box), server.WithDNS(records))
 }

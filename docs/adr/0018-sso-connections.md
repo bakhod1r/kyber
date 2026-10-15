@@ -70,3 +70,12 @@ needs more:
 - OpenID Connect connections only in this phase; SAML connections, per-workspace connections, domain routing
   and enforcement follow in (b) and (c). The environment-configured providers keep their routes and appear in
   `/api/v1/auth/providers` as before (`oidc`, `saml`); they are not listed by the connections API.
+
+## Implementation note — phase (b) (2026-10-15)
+
+- A connection lists email domains (`sso_connection_domains`, migration `0091`; one connection per domain,
+  `409 SSO_DOMAIN_TAKEN`). Each gets a random token; `POST …/domains/{domain}/verify` looks up the domain's TXT
+  records (5 s timeout) for `kyber-verify=<token>`. A site admin may add a domain as `trusted` (verified at once).
+- `POST /api/v1/auth/sso/discover {email}` (JSON only, rate-limited) returns the enabled connection whose
+  verified domain matches, or `null`. The login page shows "Work email → Find my sign-in" when connections exist.
+- Domain tokens are not secrets (they only prove DNS control) and are shown to admins as the TXT record to publish.

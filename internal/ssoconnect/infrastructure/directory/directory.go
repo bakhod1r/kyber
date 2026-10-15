@@ -26,9 +26,10 @@ func OIDC(callback func(id string) string) Build {
 	}
 }
 
+// entry is a built client and what it was built from (domains do not affect the client).
 type entry struct {
-	c domain.Connection
-	p identity.RedirectProvider
+	settings domain.Settings
+	p        identity.RedirectProvider
 }
 
 type Directory struct {
@@ -46,11 +47,11 @@ func New(repo domain.Connections, build Build) *Directory {
 func (d *Directory) provider(c domain.Connection) identity.RedirectProvider {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if e, ok := d.cache[c.ID]; ok && e.c == c {
+	if e, ok := d.cache[c.ID]; ok && e.settings == c.Settings {
 		return e.p
 	}
 	p := d.build(c)
-	d.cache[c.ID] = entry{c: c, p: p}
+	d.cache[c.ID] = entry{settings: c.Settings, p: p}
 	return p
 }
 

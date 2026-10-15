@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { adminUseCases, type NewSSOConnection } from "../application";
 import { useT } from "../../../shared/i18n/i18n";
+import { ConnectionDomains } from "./ConnectionDomains";
 
 const empty: NewSSOConnection = { name: "", issuer: "", client_id: "", client_secret: "", groups_claim: "" };
 
@@ -59,6 +60,7 @@ export function SSOConnections() {
             <button type="button" className="ghost" aria-label={t("Remove connection {name}", { name: c.name })} onClick={() => remove.mutate(c.id)}>
               ×
             </button>
+            <ConnectionDomains connection={c} onError={setError} />
           </li>
         ))}
       </ul>

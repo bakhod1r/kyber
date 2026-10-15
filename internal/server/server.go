@@ -171,6 +171,7 @@ import (
 	ssocdomain "github.com/bakhod1r/kyber/internal/ssoconnect/domain"
 	ssocacl "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/acl"
 	ssocdir "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/directory"
+	ssocdns "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/dns"
 	ssocmemory "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/memory"
 	ssocpg "github.com/bakhod1r/kyber/internal/ssoconnect/infrastructure/postgres"
 	ssochttp "github.com/bakhod1r/kyber/internal/ssoconnect/interfaces/httpapi"
@@ -237,6 +238,7 @@ type deps struct {
 	ssoGrants     ssodomain.Grants
 	ssoConns      ssocdomain.Connections // stored SSO connections (ADR-0018); Postgres is built once the key is known
 	ssoBuild      ssocdir.Build
+	ssoDNS        ssocapp.DNS
 	sealBox       *seal.Box
 	scimToken     string
 	social        identityhttp.Social
@@ -310,6 +312,9 @@ func WithEncryptionKey(b *seal.Box) Option { return func(d *deps) { d.sealBox = 
 
 // WithSSOProviders replaces how stored SSO connections become sign-in clients (tests use a fake IdP).
 func WithSSOProviders(b ssocdir.Build) Option { return func(d *deps) { d.ssoBuild = b } }
+
+// WithDNS replaces the resolver used to verify SSO domains (tests serve fixed TXT records).
+func WithDNS(r ssocapp.DNS) Option { return func(d *deps) { d.ssoDNS = r } }
 
 // WithSocial enables sign-in with Google and/or Telegram.
 func WithSocial(s identityhttp.Social) Option { return func(d *deps) { d.social = s } }
@@ -738,13 +743,17 @@ func build(log *slog.Logger, d deps) http.Handler {
 	if d.ssoConns == nil {
 		d.ssoConns = ssocpg.New(d.livePool, d.sealBox)
 	}
+	if d.ssoDNS == nil {
+		d.ssoDNS = ssocdns.Resolver{}
+	}
 	if d.ssoBuild == nil {
 		d.ssoBuild = ssocdir.OIDC(func(id string) string {
 			return strings.TrimRight(d.publicURL, "/") + "/api/v1/auth/sso/" + id + "/callback"
 		})
 	}
 	connections := ssocapp.NewService(ssocapp.Deps{Connections: d.ssoConns, Admins: ssocacl.Admins(d.siteAdmin),
-		Audit: ssocacl.Audit{Log: auditLog}, NewID: id.New, Now: time.Now})
+		Audit: ssocacl.Audit{Log: auditLog}, DNS: d.ssoDNS, NewID: id.New, NewToken: ssocdns.Token, Now: time.Now})
+	connectionsHTTP := ssochttp.New(connections, log)
 	social := d.social
 	social.SSO = ssocdir.New(d.ssoConns, d.ssoBuild)
 	auth := identityhttp.New(identity, log, d.cookieSecure).WithSocial(social).WithPublicURL(d.publicURL)
@@ -802,7 +811,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	audit := audithttp.New(auditLog, auditacl.NewOwners(agile, d.boards, d.links), log)
 	audit.Register(api)
 	ssohttp.New(groupSync, log).Register(api)
-	ssochttp.New(connections, log).Register(api)
+	connectionsHTTP.Register(api)
 	api.Handle("POST /api/v1/mcp", newMCP(projects, issues, search, agile))
 
 	mux := http.NewServeMux()
@@ -821,6 +830,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
+	connectionsHTTP.RegisterPublic(mux, d.rateLimit(log))
 	auth.RegisterSCIM(mux, d.scimToken)
 	chatAPI.RegisterPublic(mux) // incoming webhooks (S81): the secret in the URL is the credential
 	webhookHTTP.RegisterPublic(mux)

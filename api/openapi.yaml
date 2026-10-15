@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.73.0
+  version: 0.74.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -130,6 +130,85 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/sso/connections/{id}/domains:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: addSSODomain
+      summary: >-
+        List an email domain for the connection (ADR-0018 §4). It routes sign-in once its DNS has the TXT record
+        shown in `domains[].txt`, or at once when `trusted` (the site admin vouches for it).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [domain]
+              properties:
+                domain: { type: string, examples: [acme.uz] }
+                trusted: { type: boolean, default: false }
+      responses:
+        "200": { description: The connection., content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/sso/connections/{id}/domains/{domain}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: domain, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: removeSSODomain
+      summary: Stop routing the domain to this connection.
+      responses:
+        "200": { description: The connection., content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/sso/connections/{id}/domains/{domain}/verify:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: domain, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: verifySSODomain
+      summary: Look up the domain's TXT records; 409 SSO_DOMAIN_NOT_VERIFIED until kyber-verify=<token> is published.
+      responses:
+        "200": { description: Verified; the connection., content: { application/json: { schema: { $ref: "#/components/schemas/SSOConnection" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/sso/discover:
+    post:
+      operationId: discoverSSOConnection
+      security: []
+      summary: Which SSO connection signs in this email (its verified domain), or null. JSON only (login CSRF).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [email], properties: { email: { type: string } } }
+      responses:
+        "200":
+          description: The connection to use, or null.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [connection]
+                properties:
+                  connection:
+                    oneOf:
+                      - { type: "null" }
+                      - { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/v1/auth/sso/{id}/start:
     parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
     get:
@@ -4337,9 +4416,19 @@ components:
   schemas:
     SSOConnection:
       type: object
-      required: [id, kind, name, issuer, client_id, groups_claim, enabled, created_at]
+      required: [id, kind, name, issuer, client_id, groups_claim, enabled, created_at, domains]
       properties:
         id: { type: string }
+        domains:
+          type: array
+          description: Email domains it serves; only verified ones route sign-in.
+          items:
+            type: object
+            required: [name, verified, txt]
+            properties:
+              name: { type: string }
+              verified: { type: boolean }
+              txt: { type: string, description: "The TXT record to publish on the domain: kyber-verify=<token>." }
         kind: { type: string, enum: [oidc] }
         name: { type: string }
         issuer: { type: string }

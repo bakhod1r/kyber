@@ -105,6 +105,9 @@ const (
 	CodeGroupMappingNotFound   = "SSO_GROUP_MAPPING_NOT_FOUND"
 	CodeConnectionNotFound     = "SSO_CONNECTION_NOT_FOUND"
 	CodeNoEncryptionKey        = "ENCRYPTION_KEY_MISSING"
+	CodeSSODomainNotFound      = "SSO_DOMAIN_NOT_FOUND"
+	CodeSSODomainNotVerified   = "SSO_DOMAIN_NOT_VERIFIED"
+	CodeSSODomainTaken         = "SSO_DOMAIN_TAKEN"
 )
 
 type code struct {
@@ -151,6 +154,9 @@ var codes = []code{
 	{CodeWebhookNotFound, "6117", 404, "Webhook not found.", "Vebhuk topilmadi.", "Вебхук не найден.", errorx.CategoryBusiness},
 	{CodeConnectionNotFound, "6194", 404, "SSO connection not found.", "SSO ulanishi topilmadi.", "Подключение SSO не найдено.", errorx.CategoryBusiness},
 	{CodeNoEncryptionKey, "6195", 409, "Set KYBER_ENCRYPTION_KEY to store SSO connections.", "SSO ulanishlarini saqlash uchun KYBER_ENCRYPTION_KEY ni o'rnating.", "Чтобы хранить подключения SSO, задайте KYBER_ENCRYPTION_KEY.", errorx.CategoryBusiness},
+	{CodeSSODomainNotFound, "6196", 404, "This connection has no such domain.", "Bu ulanishda bunday domen yo'q.", "У этого подключения нет такого домена.", errorx.CategoryBusiness},
+	{CodeSSODomainNotVerified, "6197", 409, "The TXT record kyber-verify=<token> was not found on the domain yet.", "Domenda kyber-verify=<token> TXT yozuvi hali topilmadi.", "TXT-запись kyber-verify=<token> на домене пока не найдена.", errorx.CategoryBusiness},
+	{CodeSSODomainTaken, "6198", 409, "Another SSO connection already uses this domain.", "Bu domenni boshqa SSO ulanishi ishlatyapti.", "Этот домен уже использует другое подключение SSO.", errorx.CategoryBusiness},
 	{CodeGroupMappingNotFound, "6193", 404, "SSO group mapping not found.", "SSO guruh moslamasi topilmadi.", "Сопоставление группы SSO не найдено.", errorx.CategoryBusiness},
 	{CodeRateLimited, "6190", 429, "Too many requests; slow down.", "So'rovlar juda ko'p; sekinroq.", "Слишком много запросов; помедленнее.", errorx.CategoryBusiness},
 	{CodeWebhookRateLimited, "6118", 429, "Too many messages from this webhook; slow down.", "Bu vebhukdan juda ko'p xabar; sekinroq.", "Слишком много сообщений от этого вебхука; помедленнее.", errorx.CategoryBusiness},
