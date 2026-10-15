@@ -180,7 +180,13 @@ func TestGrantAndRevoke(t *testing.T) {
 	if err := s.Grant(ctx, ws, "u-x", "emperor"); err == nil {
 		t.Fatal("invalid role accepted")
 	}
+	if err := s.Grant(ctx, ws, "u-owner", "member"); !errors.Is(err, domain.ErrLastOwner) {
+		t.Fatalf("demote last owner: %v", err)
+	}
 	if err := s.Grant(ctx, "w-404", "u-x", "member"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
 		t.Fatalf("unknown workspace: %v", err)
+	}
+	if err := s.Revoke(ctx, "w-404", "u-x"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
+		t.Fatalf("revoke in unknown workspace: %v", err)
 	}
 }
