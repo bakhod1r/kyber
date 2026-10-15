@@ -22,12 +22,12 @@ type Store struct {
 
 func New(pool *pgxpool.Pool, box *seal.Box) *Store { return &Store{pool: pool, box: box} }
 
-const columns = `id::text, kind, name, issuer, client_id, client_secret, groups_claim, COALESCE(workspace_id::text, ''), enabled, created_at`
+const columns = `id::text, kind, name, issuer, client_id, client_secret, groups_claim, COALESCE(workspace_id::text, ''), enabled, enforced, created_at`
 
 func (s *Store) scan(r pgx.Row) (domain.Connection, error) {
 	var c domain.Connection
 	var sealed []byte
-	err := r.Scan(&c.ID, &c.Kind, &c.Name, &c.Issuer, &c.ClientID, &sealed, &c.GroupsClaim, &c.Workspace, &c.Enabled, &c.CreatedAt)
+	err := r.Scan(&c.ID, &c.Kind, &c.Name, &c.Issuer, &c.ClientID, &sealed, &c.GroupsClaim, &c.Workspace, &c.Enabled, &c.Enforced, &c.CreatedAt)
 	if err != nil {
 		return c, err
 	}
@@ -66,6 +66,17 @@ func (s *Store) domains(ctx context.Context, id domain.ConnectionID) ([]domain.D
 		list = nil
 	}
 	return list, err
+}
+
+func (s *Store) RequiredBy(ctx context.Context, workspace string) ([]domain.Connection, error) {
+	if !kid.Valid(workspace) {
+		return []domain.Connection{}, nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT `+columns+` FROM sso_connections WHERE workspace_id = $1 AND enforced AND enabled ORDER BY id`, workspace)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Connection, error) { return s.scan(r) })
 }
 
 func (s *Store) ByDomain(ctx context.Context, name string) (*domain.Connection, error) {
@@ -111,10 +122,10 @@ func (s *Store) Save(ctx context.Context, c *domain.Connection) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	_, err = tx.Exec(ctx, `INSERT INTO sso_connections (id, kind, name, issuer, client_id, client_secret, groups_claim, workspace_id, enabled, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		ON CONFLICT (id) DO UPDATE SET name = $3, issuer = $4, client_id = $5, client_secret = $6, groups_claim = $7, enabled = $9`,
-		string(c.ID), string(c.Kind), c.Name, c.Issuer, c.ClientID, sealed, c.GroupsClaim, ws, c.Enabled, c.CreatedAt)
+	_, err = tx.Exec(ctx, `INSERT INTO sso_connections (id, kind, name, issuer, client_id, client_secret, groups_claim, workspace_id, enabled, enforced, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		ON CONFLICT (id) DO UPDATE SET name = $3, issuer = $4, client_id = $5, client_secret = $6, groups_claim = $7, enabled = $9, enforced = $10`,
+		string(c.ID), string(c.Kind), c.Name, c.Issuer, c.ClientID, sealed, c.GroupsClaim, ws, c.Enabled, c.Enforced, c.CreatedAt)
 	if err != nil {
 		return err
 	}

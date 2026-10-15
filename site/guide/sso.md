@@ -54,6 +54,14 @@ each domain; press **Verify** once it is live. A verified domain routes sign-in:
 their work email and get their company's button. A site admin may mark a domain **trusted** to skip the DNS
 check (for domains the installation's owner controls). A domain belongs to one connection only.
 
+### Require single sign-on for a workspace
+
+A workspace's admins can add the workspace's **own** connection (scope "This workspace") on the
+Administration page and tick **Required**. From then on its members can only use the workspace after signing
+in through that connection; anyone signed in another way (password, Google, …) or using an API token gets
+`403 SSO_REQUIRED` with the sign-in link. Workspace owners are exempt, so a broken identity provider never
+locks everyone out. Untick **Required** to lift it.
+
 ## Groups → roles
 
 Site administrators can map an identity-provider group to a role on the **Administration** page

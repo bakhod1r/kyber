@@ -19,9 +19,10 @@ approval of its ADR.
   configured claim; the SAML attribute) to workspace admin/member and project roles (ADR-0003).
   - AC1: site admins configure the mapping; AC2: applied at every SSO login (grant and revoke);
     AC3: every change is audited; AC4: users without a mapped group keep today's behaviour.
-- **S107 Several SSO providers, per-workspace SSO** (ADR-0015 follow-up) — several OIDC/SAML providers per
+- ✅ **S107 Several SSO providers, per-workspace SSO** (ADR-0015 follow-up) — several OIDC/SAML providers per
   installation; a workspace can require SSO and route users by email domain (ADR-0004).
   - ADR first; **stop for approval** before building. ADR-0018 accepted 2026-10-15.
   - (a) ✅ stored OpenID Connect connections, per-connection routes, admin API and UI, sealed secrets.
   - (b) ✅ email domains verified by DNS TXT (or trusted), email-first discovery on the login page.
-  - (c) enforcement + per-workspace admin.
+  - (c) ✅ sessions record their sign-in method; a workspace's own connection can be required (owners exempt,
+    API tokens refused for now); workspace admins manage their workspace's connections.

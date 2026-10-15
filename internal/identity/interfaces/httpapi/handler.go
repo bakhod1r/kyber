@@ -180,7 +180,7 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 			httpx.Error(w, r, h.log, application.ErrUnauthenticated, codeFor)
 			return
 		}
-		u, err := h.svc.Authenticate(r.Context(), token)
+		u, method, err := h.svc.AuthenticateWithMethod(r.Context(), token)
 		if err != nil {
 			if errors.Is(err, application.ErrUnauthenticated) {
 				h.challenge(w, r)
@@ -188,7 +188,7 @@ func (h *Handler) RequireAuth(next http.Handler) http.Handler {
 			httpx.Error(w, r, h.log, err, codeFor)
 			return
 		}
-		ctx := context.WithValue(r.Context(), ctxKey{}, u)
+		ctx := auth.WithMethod(context.WithValue(r.Context(), ctxKey{}, u), method)
 		next.ServeHTTP(w, r.WithContext(auth.WithActor(ctx, string(u.ID()))))
 	})
 }

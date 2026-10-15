@@ -751,7 +751,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 			return strings.TrimRight(d.publicURL, "/") + "/api/v1/auth/sso/" + id + "/callback"
 		})
 	}
-	connections := ssocapp.NewService(ssocapp.Deps{Connections: d.ssoConns, Admins: ssocacl.Admins(d.siteAdmin),
+	connections := ssocapp.NewService(ssocapp.Deps{Connections: d.ssoConns, Admins: ssocacl.Admins{Site: d.siteAdmin, Workspaces: workspaces},
 		Audit: ssocacl.Audit{Log: auditLog}, DNS: d.ssoDNS, NewID: id.New, NewToken: ssocdns.Token, Now: time.Now})
 	connectionsHTTP := ssochttp.New(connections, log)
 	social := d.social
@@ -834,7 +834,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	auth.RegisterSCIM(mux, d.scimToken)
 	chatAPI.RegisterPublic(mux) // incoming webhooks (S81): the secret in the URL is the credential
 	webhookHTTP.RegisterPublic(mux)
-	mux.Handle("/api/v1/", auth.RequireAuth(d.rateLimit(log)(tenancy.RequireMember(audit.Record(problemFallback(otel.Routed(api)))))))
+	mux.Handle("/api/v1/", auth.RequireAuth(d.rateLimit(log)(tenancy.RequireMember(connectionsHTTP.RequireSSO(workspacehttp.IsApexPath)(audit.Record(problemFallback(otel.Routed(api))))))))
 	var mediaOrigins []string
 	if d.media != nil {
 		mediaOrigins = d.media.Origins()

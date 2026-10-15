@@ -100,6 +100,25 @@ func TestAdministers(t *testing.T) {
 	}
 }
 
+func TestOwns(t *testing.T) {
+	ctx := context.Background()
+	s := setup()
+	w, _ := s.Create(ctx, "u-1", "acme", "Acme")
+	ws := string(w.ID())
+	_ = s.Grant(ctx, ws, "u-2", "admin")
+	for user, want := range map[string]bool{"u-1": true, "u-2": false, "u-9": false} {
+		if got, err := s.Owns(ctx, ws, user); err != nil || got != want {
+			t.Errorf("%s = %v %v", user, got, err)
+		}
+	}
+	if got, err := s.Owns(ctx, string(domain.DefaultID), "u-1"); err != nil || got {
+		t.Fatalf("default workspace = %v %v", got, err)
+	}
+	if _, err := s.Owns(ctx, "missing", "u-1"); !errors.Is(err, domain.ErrWorkspaceNotFound) {
+		t.Fatalf("missing: %v", err)
+	}
+}
+
 func TestMemberIDs(t *testing.T) {
 	ctx := context.Background()
 	s := setup()

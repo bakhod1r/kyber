@@ -57,7 +57,9 @@ type Connection struct {
 	ID ConnectionID
 	Kind
 	Settings
-	Enabled   bool
+	Enabled bool
+	// Enforced: members of the connection's workspace must sign in through it (ADR-0018 §5).
+	Enforced  bool
 	CreatedAt time.Time
 	Domains   []Domain // sorted by name
 }
@@ -179,6 +181,20 @@ func (c *Connection) Serves(name string) bool {
 	return i >= 0 && c.Domains[i].Verified
 }
 
+// Enforce makes the connection required for its workspace; installation-wide ones cannot be.
+func (c *Connection) Enforce(on bool) error {
+	if on && c.Workspace == "" {
+		return fmt.Errorf("%w: only a workspace's own connection can be required", ErrInvalidConnection)
+	}
+	c.Enforced = on
+	return nil
+}
+
+// Requires reports whether members of workspace must sign in through this connection.
+func (c *Connection) Requires(workspace string) bool {
+	return c.Enabled && c.Enforced && c.Workspace != "" && c.Workspace == workspace
+}
+
 func (c *Connection) Enable()  { c.Enabled = true }
 func (c *Connection) Disable() { c.Enabled = false }
 
@@ -190,6 +206,9 @@ type Connections interface {
 	Save(ctx context.Context, c *Connection) error
 	// Delete returns ErrConnectionNotFound for an unknown id.
 	Delete(ctx context.Context, id ConnectionID) error
+	// RequiredBy returns the enabled, enforced connections of a workspace (without their domains);
+	// it runs on every request to the workspace, so adapters answer it with one indexed lookup.
+	RequiredBy(ctx context.Context, workspace string) ([]Connection, error)
 	// ByDomain returns the connection listing the domain (verified or not) or ErrConnectionNotFound.
 	ByDomain(ctx context.Context, domain string) (*Connection, error)
 }

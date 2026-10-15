@@ -56,7 +56,7 @@ func (s *Service) LoginExternal(ctx context.Context, p ExternalProfile) (string,
 	if err != nil {
 		return "", nil, err
 	}
-	token, err := s.newSession(ctx, u.ID())
+	token, err := s.newSession(ctx, u.ID(), string(p.Provider))
 	if err == nil && s.groups != nil && p.Groups != nil {
 		// Roles follow the identity provider; a failure is logged and retried at the next login,
 		// never a reason to refuse the sign-in.

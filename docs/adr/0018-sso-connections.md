@@ -79,3 +79,16 @@ needs more:
 - `POST /api/v1/auth/sso/discover {email}` (JSON only, rate-limited) returns the enabled connection whose
   verified domain matches, or `null`. The login page shows "Work email → Find my sign-in" when connections exist.
 - Domain tokens are not secrets (they only prove DNS control) and are shown to admins as the TXT record to publish.
+
+## Implementation note — phase (c) (2026-10-15)
+
+- Sessions record their sign-in method (`sessions.auth_method`, migration `0092`): `password`, the external
+  provider (`google`, `sso:<id>`, …); API tokens authenticate as `token`. Older sessions have none.
+- A connection created with `scope: workspace` belongs to the request's workspace; that workspace's admins
+  manage it (site admins manage everything; only site admins may mark a domain trusted). Such a connection can
+  be `enforced`: then `RequireSSO`, after the membership check, answers the workspace's routes with
+  `403 SSO_REQUIRED` (detail names `/api/v1/auth/sso/<id>/start`) unless the session came through it.
+  Apex routes (sign-in, `/me`, the workspace list) stay open. Workspace **owners** are exempt (break-glass).
+- **API tokens are refused in an enforced workspace** (safer default). Letting tokens through when they were
+  created under an SSO session needs the token to remember that session's method: a follow-up.
+- The check is one indexed query per workspace request (`sso_connections_required` partial index).

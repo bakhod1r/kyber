@@ -36,6 +36,11 @@ export const en = {
   "Trusted (skip DNS check)": "Trusted (skip DNS check)",
   "Add domain to {name}": "Add domain to {name}",
   "Add domain": "Add domain",
+  "Require {name} for this workspace": "Require {name} for this workspace",
+  "Required: members must sign in with it (owners exempt)": "Required: members must sign in with it (owners exempt)",
+  "installation-wide": "installation-wide",
+  "This workspace": "This workspace",
+  "Whole installation (site admins)": "Whole installation (site admins)",
 };
 
 export const uz: Record<keyof typeof en, string> = {
@@ -75,6 +80,11 @@ export const uz: Record<keyof typeof en, string> = {
   "Trusted (skip DNS check)": "Ishonchli (DNS tekshiruvisiz)",
   "Add domain to {name}": "{name} ga domen qo‘shish",
   "Add domain": "Domen qo‘shish",
+  "Require {name} for this workspace": "{name} ni bu ish maydoni uchun majburiy qilish",
+  "Required: members must sign in with it (owners exempt)": "Majburiy: a’zolar shu orqali kirishi shart (egalar bundan mustasno)",
+  "installation-wide": "butun o‘rnatma uchun",
+  "This workspace": "Shu ish maydoni",
+  "Whole installation (site admins)": "Butun o‘rnatma (sayt administratorlari)",
 };
 
 export const ru: Record<keyof typeof en, string> = {
@@ -114,4 +124,9 @@ export const ru: Record<keyof typeof en, string> = {
   "Trusted (skip DNS check)": "Доверенный (без проверки DNS)",
   "Add domain to {name}": "Добавить домен в {name}",
   "Add domain": "Добавить домен",
+  "Require {name} for this workspace": "Требовать {name} в этом рабочем пространстве",
+  "Required: members must sign in with it (owners exempt)": "Обязательно: участники входят только через него (кроме владельцев)",
+  "installation-wide": "для всей установки",
+  "This workspace": "Это рабочее пространство",
+  "Whole installation (site admins)": "Вся установка (администраторы сайта)",
 };

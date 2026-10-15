@@ -24,3 +24,16 @@ func TestSameTimeOrdersByID(t *testing.T) {
 		t.Fatalf("order = %v", all)
 	}
 }
+
+func TestRequiredByOrdersByID(t *testing.T) {
+	s := memory.New()
+	ctx := context.Background()
+	for _, id := range []domain.ConnectionID{"b", "a"} {
+		c, _ := domain.NewConnection(id, domain.Settings{Name: "X", Issuer: "https://x.example", ClientID: "c", ClientSecret: "s", Workspace: "w-1"}, time.Now())
+		_ = c.Enforce(true)
+		_ = s.Save(ctx, c)
+	}
+	if req, _ := s.RequiredBy(ctx, "w-1"); len(req) != 2 || req[0].ID != "a" {
+		t.Fatalf("required = %v", req)
+	}
+}
