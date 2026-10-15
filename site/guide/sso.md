@@ -34,6 +34,18 @@ GitHub → Settings → Developer settings → OAuth Apps; callback URL
 Sign-in is SP-initiated only (IdP-initiated responses are refused). The email comes from the `email` / `mail`
 attribute or an email-shaped NameID. Single logout is not implemented.
 
+## Groups → roles
+
+Site administrators can map an identity-provider group to a role on the **Administration** page
+(**SSO group mappings**): a workspace role (`member`, `admin`) or a project role (`viewer`, `member`,
+`admin`). At every OIDC or SAML sign-in Kyber grants the highest mapped role and removes roles it granted
+earlier when the user has left the group. Roles given by hand are never removed. Every change is audited.
+
+- OIDC: groups come from the `groups` claim; set `KYBER_OIDC_GROUPS_CLAIM` for another claim.
+- SAML: groups come from the `groups` or `memberOf` attribute; set `KYBER_SAML_GROUPS_ATTRIBUTE` to override.
+
+If the provider sends no groups, roles stay as they are.
+
 ## SCIM 2.0 provisioning
 
 Set `KYBER_SCIM_TOKEN` and configure your identity provider to call `<KYBER_PUBLIC_URL>/scim/v2` with that

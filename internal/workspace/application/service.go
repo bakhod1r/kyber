@@ -107,6 +107,34 @@ func (s *Service) ChangeRole(ctx context.Context, workspace, user, role string) 
 	return s.repo.SaveMembers(ctx, w)
 }
 
+// Grant adds user with role or changes their role (SSO group sync, S106; authorization is the caller's).
+func (s *Service) Grant(ctx context.Context, workspace, user, role string) error {
+	r, err := domain.ParseRole(role)
+	if err != nil {
+		return err
+	}
+	w, err := s.repo.ByID(ctx, domain.WorkspaceID(workspace))
+	if err != nil {
+		return err
+	}
+	if err := w.AddMember(domain.UserID(user), r); err != nil {
+		return err
+	}
+	return s.repo.SaveMembers(ctx, w)
+}
+
+// Revoke takes user out of the workspace (SSO group sync); the last owner stays.
+func (s *Service) Revoke(ctx context.Context, workspace, user string) error {
+	w, err := s.repo.ByID(ctx, domain.WorkspaceID(workspace))
+	if err != nil {
+		return err
+	}
+	if err := w.RemoveMember(domain.UserID(user)); err != nil {
+		return err
+	}
+	return s.repo.SaveMembers(ctx, w)
+}
+
 // Join makes user a member (used when a project admin adds someone to a project).
 // Existing members keep their role.
 func (s *Service) Join(ctx context.Context, workspace, user string) error {

@@ -87,3 +87,17 @@ func TestChangeRole(t *testing.T) {
 		t.Fatalf("last owner: %v", err)
 	}
 }
+
+func TestRemoveWorkspaceMember(t *testing.T) {
+	w, _ := domain.NewWorkspace("w-1", "acme", "Acme", "u-owner")
+	_ = w.AddMember("u-dev", domain.RoleMember)
+	if err := w.RemoveMember("u-dev"); err != nil || w.IsMember("u-dev") {
+		t.Fatalf("remove = %v member=%v", err, w.IsMember("u-dev"))
+	}
+	if err := w.RemoveMember("u-nobody"); err != nil {
+		t.Fatalf("no-op: %v", err)
+	}
+	if err := w.RemoveMember("u-owner"); !errors.Is(err, domain.ErrLastOwner) {
+		t.Fatalf("last owner: %v", err)
+	}
+}

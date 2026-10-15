@@ -63,4 +63,43 @@ describe("admin page", () => {
     renderWithProviders(<AdminPage />);
     expect(await screen.findByRole("alert")).toHaveTextContent("db down");
   });
+
+  it("maps SSO groups to roles for site administrators", async () => {
+    const mapping = { id: "m-1", group: "devs", scope: "project", workspace_id: "w-1", project_key: "KYB", role: "member", created_at: "2026-10-15T09:00:00Z" };
+    const calls = mockApi({
+      "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
+      "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/dead-letters": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/sso/group-mappings": { status: 200, body: { items: [mapping] } },
+      "POST /api/v1/admin/sso/group-mappings": { status: 201, body: mapping },
+      "DELETE /api/v1/admin/sso/group-mappings/m-1": { status: 204 },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPage />);
+    const sso = await screen.findByRole("region", { name: "SSO group mappings" });
+    expect(await within(sso).findByText("devs")).toBeInTheDocument();
+    await user.type(within(sso).getByLabelText("Group"), "admins");
+    await user.selectOptions(within(sso).getByLabelText("Scope"), "project");
+    await user.type(within(sso).getByLabelText("Project key"), "KYB");
+    await user.selectOptions(within(sso).getByLabelText("Mapped role"), "admin");
+    await user.click(within(sso).getByRole("button", { name: "Add mapping" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "POST /api/v1/admin/sso/group-mappings")?.body).toEqual({ group: "admins", scope: "project", project_key: "KYB", role: "admin" }));
+    await user.click(within(sso).getByRole("button", { name: "Remove mapping devs" }));
+    await waitFor(() => expect(calls.some((c) => c.key === "DELETE /api/v1/admin/sso/group-mappings/m-1")).toBe(true));
+  });
+
+  it("hides SSO group mappings from workspace administrators", async () => {
+    mockApi({
+      "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
+      "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/dead-letters": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/sso/group-mappings": problem(403, "site admins only"),
+    });
+    renderWithProviders(<AdminPage />);
+    expect(await screen.findByText("Nothing is stuck.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("region", { name: "SSO group mappings" })).not.toBeInTheDocument());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });

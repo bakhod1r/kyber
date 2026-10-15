@@ -3,11 +3,13 @@ import type { MessageKey } from "./en";
 import { uz as call } from "./parts/call";
 import { uz as chat } from "./parts/chat";
 import { uz as whiteboard } from "./parts/whiteboard";
+import { uz as ssosync } from "./parts/ssosync";
 
 export const uz: Record<MessageKey, string> = {
   ...chat,
   ...call,
   ...whiteboard,
+  ...ssosync,
   " and ": " va ",
   "* added after the sprint started": "* sprint boshlangandan keyin qo‘shilgan",
   "+ user": "+ foydalanuvchi",

@@ -132,6 +132,29 @@ func (s *Service) SetMember(ctx context.Context, actor domain.UserID, key, email
 	return s.workspaces.Join(ctx, string(ws), string(u.ID))
 }
 
+// GrantRole gives user a role on the project without an acting user (SSO group sync, S106): the
+// caller decided it. The user also joins the project's workspace.
+func (s *Service) GrantRole(ctx context.Context, key, user, rawRole string) error {
+	role, err := domain.ParseRole(rawRole)
+	if err != nil {
+		return err
+	}
+	var ws domain.WorkspaceID
+	err = s.repo.Update(ctx, key, func(p *domain.Project) error {
+		ws = p.Workspace()
+		return p.SetMember(domain.UserID(user), role)
+	})
+	if err != nil || s.workspaces == nil {
+		return err
+	}
+	return s.workspaces.Join(ctx, string(ws), user)
+}
+
+// RevokeRole takes user off the project (SSO group sync); the last admin stays.
+func (s *Service) RevokeRole(ctx context.Context, key, user string) error {
+	return s.repo.Update(ctx, key, func(p *domain.Project) error { return p.RemoveMember(domain.UserID(user)) })
+}
+
 type MemberInfo struct {
 	UserInfo
 	Role domain.Role

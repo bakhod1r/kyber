@@ -3,11 +3,13 @@ import type { MessageKey } from "./en";
 import { ru as call } from "./parts/call";
 import { ru as chat } from "./parts/chat";
 import { ru as whiteboard } from "./parts/whiteboard";
+import { ru as ssosync } from "./parts/ssosync";
 
 export const ru: Record<MessageKey, string> = {
   ...chat,
   ...call,
   ...whiteboard,
+  ...ssosync,
   " and ": " и ",
   "* added after the sprint started": "* добавлено после начала спринта",
   "+ user": "+ пользователь",

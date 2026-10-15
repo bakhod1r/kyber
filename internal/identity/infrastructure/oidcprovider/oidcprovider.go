@@ -32,6 +32,8 @@ type Config struct {
 	RequireVerifiedEmail bool
 	// AuthParams are extra authorization request parameters (e.g. prompt=select_account).
 	AuthParams map[string]string
+	// GroupsClaim names the ID token claim listing the user's groups (S106); "" = "groups".
+	GroupsClaim string
 }
 
 // Client discovers the provider lazily, so the server starts even when it is unreachable.
@@ -104,6 +106,32 @@ func (c *Client) Exchange(ctx context.Context, code string, f Flow) (application
 	if c.cfg.RequireVerifiedEmail && !claims.EmailVerified {
 		return application.ExternalProfile{}, fmt.Errorf("%w: email not verified", ErrInvalidLogin)
 	}
+	var all map[string]any
+	_ = id.Claims(&all)
 	return application.ExternalProfile{Provider: c.cfg.Provider, Subject: id.Subject, Email: claims.Email,
-		EmailVerified: claims.EmailVerified, Name: claims.Name}, nil
+		EmailVerified: claims.EmailVerified, Name: claims.Name, Groups: groups(all[c.groupsClaim()])}, nil
+}
+
+func (c *Client) groupsClaim() string {
+	if c.cfg.GroupsClaim != "" {
+		return c.cfg.GroupsClaim
+	}
+	return "groups"
+}
+
+// groups reads a groups claim: a list of strings or one string; anything else is no claim (nil).
+func groups(v any) []string {
+	switch g := v.(type) {
+	case string:
+		return []string{g}
+	case []any:
+		out := make([]string, 0, len(g))
+		for _, x := range g {
+			if s, ok := x.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
 }

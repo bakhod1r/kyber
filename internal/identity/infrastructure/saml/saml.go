@@ -25,10 +25,16 @@ type Config struct {
 	IDPMetadata []byte // the identity provider's metadata XML
 	Key         *rsa.PrivateKey
 	Cert        *x509.Certificate
+	// GroupsAttribute names the attribute listing the user's groups (S106); "" = "groups", also
+	// accepting "memberOf" and the Microsoft groups claim.
+	GroupsAttribute string
 }
 
 // SP signs users in through one SAML identity provider.
-type SP struct{ sp crewjam.ServiceProvider }
+type SP struct {
+	sp     crewjam.ServiceProvider
+	groups string
+}
 
 // Paths of the service provider's endpoints.
 const (
@@ -50,7 +56,7 @@ func New(c Config) (*SP, error) {
 	return &SP{sp: crewjam.ServiceProvider{
 		EntityID: meta.String(), Key: c.Key, Certificate: c.Cert, MetadataURL: *meta, AcsURL: *acs,
 		IDPMetadata: &md, AuthnNameIDFormat: crewjam.EmailAddressNameIDFormat,
-	}}, nil
+	}, groups: strings.ToLower(c.GroupsAttribute)}, nil
 }
 
 func (s *SP) Enabled() bool { return s != nil }
@@ -90,8 +96,17 @@ func (s *SP) Profile(r *http.Request, requestIDs []string) (application.External
 		return application.ExternalProfile{}, err
 	}
 	attrs := map[string]string{}
+	var groups []string
 	for _, st := range a.AttributeStatements {
 		for _, at := range st.Attributes {
+			if s.isGroups(at) {
+				if groups == nil {
+					groups = []string{}
+				}
+				for _, v := range at.Values {
+					groups = append(groups, v.Value)
+				}
+			}
 			if len(at.Values) > 0 {
 				name := strings.ToLower(at.Name)
 				if i := strings.LastIndexAny(name, "/:"); i >= 0 { // claim URIs: …/emailaddress
@@ -121,7 +136,21 @@ func (s *SP) Profile(r *http.Request, requestIDs []string) (application.External
 	if subject == "" {
 		subject = strings.ToLower(email)
 	}
-	return application.ExternalProfile{Provider: domain.ProviderSAML, Subject: subject, Email: email, EmailVerified: true, Name: name}, nil
+	return application.ExternalProfile{Provider: domain.ProviderSAML, Subject: subject, Email: email, EmailVerified: true, Name: name, Groups: groups}, nil
+}
+
+// isGroups tells the groups attribute by its name, friendly name or the claim URI's last segment.
+func (s *SP) isGroups(at crewjam.Attribute) bool {
+	names := []string{strings.ToLower(at.Name), strings.ToLower(at.FriendlyName)}
+	if i := strings.LastIndexAny(names[0], "/:"); i >= 0 {
+		names = append(names, names[0][i+1:])
+	}
+	for _, n := range names {
+		if n != "" && (n == s.groups || s.groups == "" && (n == "groups" || n == "memberof")) {
+			return true
+		}
+	}
+	return false
 }
 
 func first(vs ...string) string {
