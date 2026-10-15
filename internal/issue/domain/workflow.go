@@ -201,6 +201,23 @@ func DefaultWorkflowDef() WorkflowDef {
 	}}
 }
 
+// BugTrackingWorkflowDef is the bug-tracking template's workflow (B10): Open → In Progress → In Review →
+// Resolved → Closed, with reopening from Resolved and Closed.
+func BugTrackingWorkflowDef() WorkflowDef {
+	return WorkflowDef{Initial: "open", Statuses: []Status{
+		{ID: "open", Name: "Open", Category: CategoryToDo},
+		{ID: "in_progress", Name: "In Progress", Category: CategoryInProgress},
+		{ID: "in_review", Name: "In Review", Category: CategoryInProgress},
+		{ID: "resolved", Name: "Resolved", Category: CategoryDone},
+		{ID: "closed", Name: "Closed", Category: CategoryDone},
+	}, Transitions: []Transition{
+		{From: "open", To: "in_progress"}, {From: "in_progress", To: "open"},
+		{From: "in_progress", To: "in_review"}, {From: "in_review", To: "in_progress"},
+		{From: "in_review", To: "resolved"}, {From: "in_progress", To: "resolved"},
+		{From: "resolved", To: "closed"}, {From: "resolved", To: "open"}, {From: "closed", To: "open"},
+	}}
+}
+
 func DefaultWorkflow() *Workflow {
 	wf, err := DefineWorkflow(DefaultWorkflowDef())
 	if err != nil {

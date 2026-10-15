@@ -16,6 +16,7 @@ var (
 	ErrInvalidRole     = errors.New("role must be one of admin, member, viewer")
 	ErrForbidden       = errors.New("insufficient project role")
 	ErrLastAdmin       = errors.New("project must keep at least one admin")
+	ErrArchived        = errors.New("project is archived (read-only)")
 )
 
 var keyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
@@ -79,6 +80,7 @@ type Project struct {
 	name      string
 	issueSeq  int
 	members   map[UserID]Role
+	archived  bool // read-only until restored (B10)
 }
 
 // NewProject creates a project whose creator becomes its first admin.
@@ -102,7 +104,37 @@ func Rehydrate(id ProjectID, workspace WorkspaceID, key, name string, issueSeq i
 	return p
 }
 
+// RehydrateArchived rebuilds a persisted project with its archived state (repository use only).
+func RehydrateArchived(id ProjectID, workspace WorkspaceID, key, name string, issueSeq int, members []Member, archived bool) *Project {
+	p := Rehydrate(id, workspace, key, name, issueSeq, members)
+	p.archived = archived
+	return p
+}
+
 func (p *Project) ID() ProjectID { return p.id }
+
+// Archived tells whether the project is read-only.
+func (p *Project) Archived() bool { return p.archived }
+
+// Archive makes the project read-only; admins only.
+func (p *Project) Archive(by UserID) error {
+	if err := p.Authorize(by, PermAdmin); err != nil {
+		return err
+	}
+	p.archived = true
+	return nil
+}
+
+// Restore makes an archived project writable again; admins only.
+func (p *Project) Restore(by UserID) error {
+	if r, ok := p.members[by]; !ok {
+		return ErrProjectNotFound
+	} else if r != RoleAdmin {
+		return ErrForbidden
+	}
+	p.archived = false
+	return nil
+}
 
 // Workspace is the tenant the project belongs to (ADR-0004).
 func (p *Project) Workspace() WorkspaceID { return p.workspace }
@@ -133,11 +165,17 @@ func (p *Project) Authorize(u UserID, need Permission) error {
 	if r.grants() < need {
 		return ErrForbidden
 	}
+	if p.archived && need > PermRead {
+		return ErrArchived
+	}
 	return nil
 }
 
 // SetMember adds a member or changes their role, never leaving the project without an admin.
 func (p *Project) SetMember(u UserID, r Role) error {
+	if p.archived {
+		return ErrArchived
+	}
 	if cur, ok := p.members[u]; ok && cur == RoleAdmin && r != RoleAdmin && p.adminCount() == 1 {
 		return ErrLastAdmin
 	}
@@ -174,4 +212,26 @@ type Repository interface {
 	ListForUser(ctx context.Context, u UserID) ([]*Project, error)
 	// InWorkspace lists every project of the request's workspace, by key.
 	InWorkspace(ctx context.Context) ([]*Project, error)
+}
+
+// Template is how a new project starts out (B10): its workflow and board kind, set by the contexts that own them.
+type Template string
+
+const (
+	TemplateKanban      Template = "kanban"       // To Do → In Progress → Done on a Kanban board (the default)
+	TemplateScrum       Template = "scrum"        // the same workflow on a Scrum board with sprints
+	TemplateBugTracking Template = "bug-tracking" // Open → In Progress → In Review → Resolved → Closed, Kanban board
+)
+
+var ErrInvalidTemplate = errors.New("template must be kanban, scrum or bug-tracking")
+
+// ParseTemplate reads a template name; empty means Kanban.
+func ParseTemplate(s string) (Template, error) {
+	switch t := Template(s); t {
+	case "":
+		return TemplateKanban, nil
+	case TemplateKanban, TemplateScrum, TemplateBugTracking:
+		return t, nil
+	}
+	return "", ErrInvalidTemplate
 }

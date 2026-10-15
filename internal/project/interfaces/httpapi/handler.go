@@ -25,6 +25,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/projects/{key}", h.get)
 	mux.HandleFunc("GET /api/v1/projects/{key}/members", h.members)
 	mux.HandleFunc("POST /api/v1/projects/{key}/members", h.setMember)
+	mux.HandleFunc("POST /api/v1/projects/{key}/archive", h.archive)
+	mux.HandleFunc("POST /api/v1/projects/{key}/restore", h.restore)
 	mux.HandleFunc("GET /api/v1/projects/{key}/invitations", h.invitations)
 	mux.HandleFunc("POST /api/v1/projects/{key}/invitations", h.invite)
 	mux.HandleFunc("DELETE /api/v1/projects/{key}/invitations/{id}", h.revokeInvitation)
@@ -37,21 +39,43 @@ func (h *Handler) RegisterPublic(mux *http.ServeMux) {
 }
 
 type projectDTO struct {
-	ID   string `json:"id"`
-	Key  string `json:"key"`
-	Name string `json:"name"`
+	ID       string `json:"id"`
+	Key      string `json:"key"`
+	Name     string `json:"name"`
+	Archived bool   `json:"archived"`
 }
 
 func toDTO(p *domain.Project) projectDTO {
-	return projectDTO{ID: string(p.ID()), Key: p.Key(), Name: p.Name()}
+	return projectDTO{ID: string(p.ID()), Key: p.Key(), Name: p.Name(), Archived: p.Archived()}
+}
+
+func (h *Handler) archive(w http.ResponseWriter, r *http.Request) {
+	h.reply(w, r)(h.svc.Archive(r.Context(), actor(r), r.PathValue("key")))
+}
+
+func (h *Handler) restore(w http.ResponseWriter, r *http.Request) {
+	h.reply(w, r)(h.svc.Restore(r.Context(), actor(r), r.PathValue("key")))
+}
+
+// reply writes a changed project, or the error.
+func (h *Handler) reply(w http.ResponseWriter, r *http.Request) func(*domain.Project, error) {
+	return func(p *domain.Project, err error) {
+		if err != nil {
+			httpx.Error(w, r, h.log, err, codeFor)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, toDTO(p))
+	}
 }
 
 func codeFor(err error) (string, bool) {
 	switch {
-	case errors.Is(err, domain.ErrInvalidKey), errors.Is(err, domain.ErrEmptyName), errors.Is(err, domain.ErrInvalidRole):
+	case errors.Is(err, domain.ErrInvalidKey), errors.Is(err, domain.ErrEmptyName), errors.Is(err, domain.ErrInvalidRole), errors.Is(err, domain.ErrInvalidTemplate):
 		return httpx.CodeValidation, true
 	case errors.Is(err, domain.ErrKeyTaken):
 		return httpx.CodeProjectKeyTaken, true
+	case errors.Is(err, domain.ErrArchived):
+		return httpx.CodeProjectArchived, true
 	case errors.Is(err, domain.ErrLastAdmin):
 		return httpx.CodeLastAdmin, true
 	case errors.Is(err, domain.ErrProjectNotFound):
@@ -75,12 +99,12 @@ func codeFor(err error) (string, bool) {
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Key, Name string }
+	var in struct{ Key, Name, Template string }
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return
 	}
-	p, err := h.svc.Create(r.Context(), actor(r), in.Key, in.Name)
+	p, err := h.svc.CreateFromTemplate(r.Context(), actor(r), in.Key, in.Name, in.Template)
 	if err != nil {
 		httpx.Error(w, r, h.log, err, codeFor)
 		return

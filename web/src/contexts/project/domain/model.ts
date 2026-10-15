@@ -1,6 +1,9 @@
 // project: domain model (types and pure rules) — no I/O.
-export type Project = { id: string; key: string; name: string };
+export type Project = { id: string; key: string; name: string; archived?: boolean };
 export type Role = "admin" | "member" | "viewer";
+/** How a new project starts (B10). */
+export type ProjectTemplate = "kanban" | "scrum" | "bug-tracking";
+export const PROJECT_TEMPLATES: ProjectTemplate[] = ["kanban", "scrum", "bug-tracking"];
 export type Member = { user_id: string; email: string; name: string; role: Role };
 /** Invitation: someone asked by email to join a project (B1); the link works until expires_at. */
 export type Invitation = { id: string; email: string; role: Role; invited_by: string; created_at: string; expires_at: string };

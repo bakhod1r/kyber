@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { projectUseCases } from "../application";
+import { PROJECT_TEMPLATES, projectUseCases, type ProjectTemplate } from "../application";
+import { msg, type MessageKey } from "../../../shared/i18n/i18n";
+
+const TEMPLATE_NAMES: Record<ProjectTemplate, MessageKey> = {
+  kanban: msg("Kanban — a board for continuous flow"),
+  scrum: msg("Scrum — sprints, backlog and a Scrum board"),
+  "bug-tracking": msg("Bug tracking — Open, In Progress, In Review, Resolved, Closed"),
+};
 import { useT } from "../../../shared/i18n/i18n";
 
 export function ProjectsPage() {
@@ -11,8 +18,9 @@ export function ProjectsPage() {
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
   const [key, setKey] = useState("");
   const [name, setName] = useState("");
+  const [template, setTemplate] = useState<ProjectTemplate>("kanban");
   const create = useMutation({
-    mutationFn: () => projectUseCases.createProject(key, name),
+    mutationFn: () => projectUseCases.createProject(key, name, template),
     onSuccess: async (p) => {
       await qc.invalidateQueries({ queryKey: ["projects"] });
       navigate(`/projects/${encodeURIComponent(p.key)}`);
@@ -31,10 +39,11 @@ export function ProjectsPage() {
       {projects.isError && <p role="alert" className="error">{projects.error.message}</p>}
       {projects.data?.length === 0 && <p className="muted">{t("No projects yet — create the first one below.")}</p>}
       <ul className="project-list">
-        {projects.data?.map((p) => (
-          <li key={p.id}>
+        {[...(projects.data ?? [])].sort((a, b) => Number(!!a.archived) - Number(!!b.archived)).map((p) => (
+          <li key={p.id} className={p.archived ? "archived" : undefined}>
             <Link to={`/projects/${encodeURIComponent(p.key)}`}>
               <span className="key">{p.key}</span> {p.name}
+              {p.archived && <span className="badge">{t("Archived")}</span>}
             </Link>
           </li>
         ))}
@@ -48,6 +57,16 @@ export function ProjectsPage() {
         <label>
           {t("Project name")}
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Kyber")} required />
+        </label>
+        <label className="template-pick">
+          {t("Template")}
+          <select value={template} onChange={(e) => setTemplate(e.target.value as ProjectTemplate)}>
+            {PROJECT_TEMPLATES.map((id) => (
+              <option key={id} value={id}>
+                {t(TEMPLATE_NAMES[id])}
+              </option>
+            ))}
+          </select>
         </label>
         <button type="submit" disabled={create.isPending}>
           {t("Create project")}

@@ -32,6 +32,31 @@ type Service struct {
 	newID      func() string
 	workspaces Workspaces // nil = no workspace membership sync
 	inv        InvitationDeps
+	templates  Templates
+}
+
+// Templates is the anti-corruption port to the contexts that own a new project's workflow and board (B10).
+type Templates interface {
+	Apply(ctx context.Context, actor domain.UserID, key string, t domain.Template) error
+}
+
+// WithTemplates lets projects start from a template.
+func (s *Service) WithTemplates(t Templates) *Service { s.templates = t; return s }
+
+// CreateFromTemplate creates a project and sets it up from a template ("" = Kanban, nothing to set up).
+func (s *Service) CreateFromTemplate(ctx context.Context, actor domain.UserID, key, name, template string) (*domain.Project, error) {
+	t, err := domain.ParseTemplate(template)
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.Create(ctx, actor, key, name)
+	if err != nil {
+		return nil, err
+	}
+	if t == domain.TemplateKanban || s.templates == nil {
+		return p, nil
+	}
+	return p, s.templates.Apply(ctx, actor, p.Key(), t)
 }
 
 func NewService(repo domain.Repository, users UserDirectory, newID func() string) *Service {
@@ -208,6 +233,44 @@ func (s *Service) NextIssueNumber(ctx context.Context, key string) (int, error) 
 		return nil
 	})
 	return n, err
+}
+
+// Archive makes the project read-only (admins); it stays listed and readable until restored.
+func (s *Service) Archive(ctx context.Context, actor domain.UserID, key string) (*domain.Project, error) {
+	return s.change(ctx, key, func(p *domain.Project) error { return p.Archive(actor) })
+}
+
+// Restore makes an archived project writable again (admins).
+func (s *Service) Restore(ctx context.Context, actor domain.UserID, key string) (*domain.Project, error) {
+	return s.change(ctx, key, func(p *domain.Project) error { return p.Restore(actor) })
+}
+
+// change applies fn to a project of the request's workspace and returns the result.
+func (s *Service) change(ctx context.Context, key string, fn func(*domain.Project) error) (*domain.Project, error) {
+	if _, err := s.byKey(ctx, key); err != nil {
+		return nil, err
+	}
+	var out *domain.Project
+	err := s.repo.Update(ctx, key, func(p *domain.Project) error {
+		if err := fn(p); err != nil {
+			return err
+		}
+		out = p
+		return nil
+	})
+	return out, err
+}
+
+// Archived tells whether the project is read-only (a read model for the Access context; unknown = false).
+func (s *Service) Archived(ctx context.Context, key string) (bool, error) {
+	p, err := s.byKey(ctx, key)
+	if errors.Is(err, domain.ErrProjectNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return p.Archived(), nil
 }
 
 // RoleOf returns the user's role in the project; ok is false for non-members and unknown projects.

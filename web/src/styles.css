@@ -757,3 +757,14 @@ circle.wb-handle { cursor: move; }
 .invite-result { display: grid; gap: 0.4rem; font-size: 0.85rem; }
 .invite-page { width: min(460px, 100%); display: grid; gap: 0.9rem; text-align: center; }
 .invite-page h1 { font-size: 1.25rem; margin: 0; }
+.settings fieldset.digest { border: 1px solid var(--border); border-radius: var(--radius); display: grid; gap: 0.4rem; padding: 0.6rem 0.9rem; }
+/* B10 archived projects */
+.project-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
+.project-head h1 { margin: 0.5rem 0; }
+.archived-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 0.5rem 0.9rem; border-radius: var(--radius);
+  background: color-mix(in srgb, #f59e0b 16%, var(--surface)); border: 1px solid color-mix(in srgb, #f59e0b 45%, var(--border)); color: var(--text); }
+.archive-button { font-size: 0.85rem; padding: 0.35rem 0.75rem; }
+.project-list li.archived a { opacity: 0.7; }
+.badge { margin-left: 0.5rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.1rem 0.45rem;
+  border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+.panel.inline .template-pick { grid-column: 1 / -1; }

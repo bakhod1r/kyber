@@ -100,4 +100,18 @@ func TestRepository(t *testing.T) {
 	if p, _ := repo.ByKey(ctx, "KYB"); p.IssueSeq() != n {
 		t.Fatalf("persisted seq = %d", p.IssueSeq())
 	}
+
+	// B10: the archived state persists and comes back.
+	if err := repo.Update(ctx, "KYB", func(p *domain.Project) error { return p.Archive(alice) }); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := repo.ByKey(ctx, "KYB"); !p.Archived() {
+		t.Fatal("archived state lost")
+	}
+	if err := repo.Update(ctx, "KYB", func(p *domain.Project) error { return p.Restore(alice) }); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := repo.ByKey(ctx, "KYB"); p.Archived() {
+		t.Fatal("restore lost")
+	}
 }

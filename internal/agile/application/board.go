@@ -51,6 +51,35 @@ func (s *Service) Boards(ctx context.Context, actor, project string) ([]*domain.
 	return []*domain.Board{b}, s.d.Boards.SaveBoard(ctx, b)
 }
 
+// UseBoardKind makes the project's first board Scrum or Kanban (a project template, B10), creating the default
+// board when the project has none yet; admins only.
+func (s *Service) UseBoardKind(ctx context.Context, actor, project string, kind domain.BoardKind) error {
+	if err := s.d.Admins.Administer(ctx, actor, project); err != nil {
+		return err
+	}
+	list, err := s.d.Boards.BoardsByProject(ctx, project)
+	if err != nil {
+		return err
+	}
+	if len(list) == 0 {
+		b, err := s.newBoard(ctx, project, BoardSpec{Name: project + " board", Kind: kind})
+		if err != nil {
+			return err
+		}
+		b.FollowWorkflow()
+		return s.d.Boards.SaveBoard(ctx, b)
+	}
+	b := list[0]
+	follows := b.FollowsWorkflow()
+	if err := b.Configure(b.Name(), kind, b.Columns()); err != nil {
+		return err
+	}
+	if follows {
+		b.FollowWorkflow()
+	}
+	return s.d.Boards.SaveBoard(ctx, b)
+}
+
 // sync brings boards that follow the workflow up to date with it (read-side; nothing is stored).
 func (s *Service) sync(ctx context.Context, project string, boards ...*domain.Board) error {
 	statuses, err := s.d.Workflows.Statuses(ctx, project)

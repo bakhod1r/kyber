@@ -162,6 +162,7 @@ import (
 	projectmemory "github.com/bakhod1r/kyber/internal/project/infrastructure/memory"
 	projectmail "github.com/bakhod1r/kyber/internal/project/infrastructure/notifymail"
 	projectpg "github.com/bakhod1r/kyber/internal/project/infrastructure/postgres"
+	projecttemplates "github.com/bakhod1r/kyber/internal/project/infrastructure/templateacl"
 	projecthttp "github.com/bakhod1r/kyber/internal/project/interfaces/httpapi"
 	searchapp "github.com/bakhod1r/kyber/internal/search/application"
 	searchdomain "github.com/bakhod1r/kyber/internal/search/domain"
@@ -518,6 +519,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 		Groups: d.groups, Admins: notifyacl.NewAdmins(access), BotName: d.social.TelegramBot,
 		Lookups: notifyacl.NewLookups(issues, agile), Bot: d.botMessenger(),
 	})
+	projects.WithTemplates(projecttemplates.New(issues, agile)) // B10: project templates
 	projects.WithInvitations(projectapp.InvitationDeps{Repo: d.invitations, Mailer: projectmail.New(notify),
 		PublicURL: d.publicURL, NewToken: newSecret, Now: time.Now})
 	search := searchapp.NewService(searchapp.Deps{Projects: searchacl.NewProjects(projects), Issues: searchacl.NewIssues(issues),
@@ -651,9 +653,10 @@ func build(log *slog.Logger, d deps) http.Handler {
 	go relay.Run(d.ctx, d.relayEvery)
 	go dispatch(d.ctx, log, notify, d.senders(), d.dispatchEvery)
 	go remindMeetings(d.ctx, log, calendar.RemindDue, d.reminderEvery)
-	go remindMeetings(d.ctx, log, chat.RemindDue, d.reminderEvery)    // saved messages (S65), /remind (S67)
-	go remindMeetings(d.ctx, log, chat.SendDue, d.reminderEvery)      // scheduled messages (S67)
-	go remindMeetings(d.ctx, log, chat.RunWorkflows, d.reminderEvery) // channel workflows (S80)
+	go remindMeetings(d.ctx, log, chat.RemindDue, d.reminderEvery)     // saved messages (S65), /remind (S67)
+	go remindMeetings(d.ctx, log, chat.SendDue, d.reminderEvery)       // scheduled messages (S67)
+	go remindMeetings(d.ctx, log, chat.RunWorkflows, d.reminderEvery)  // channel workflows (S80)
+	go remindMeetings(d.ctx, log, notify.SendDigests, d.reminderEvery) // daily email digests (B9)
 	go dispatchWebhooks(d.ctx, log, webhooks, d.webhookEvery)
 	identityOpts := []identityapp.Option{identityapp.WithExternalIdentities(d.external), identityapp.WithPersonalTokens(d.tokens), identityapp.WithOAuth(d.oauth), identityapp.WithDirectory(d.directory)}
 	if d.redis != nil {

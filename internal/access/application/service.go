@@ -12,6 +12,8 @@ import (
 var (
 	// ErrNotFound: the actor may not know the project (or issue) exists — report 404.
 	ErrNotFound = errors.New("not found")
+	// ErrArchived comes with ErrForbidden: the project is archived, so it is read-only for everyone.
+	ErrArchived = errors.New("project is archived (read-only)")
 	// ErrForbidden: the actor sees the project but lacks the permission — report 403.
 	ErrForbidden = errors.New("forbidden")
 )
@@ -19,6 +21,8 @@ var (
 // Roles answers a user's role in a project (ACL to the Project context); ok=false for non-members.
 type Roles interface {
 	RoleOf(ctx context.Context, project, user string) (role string, ok bool, err error)
+	// Archived tells whether the project is read-only (B10).
+	Archived(ctx context.Context, project string) (bool, error)
 }
 
 // Issue holds the attributes ABAC rules look at.
@@ -144,6 +148,17 @@ func (s *Service) Can(ctx context.Context, actor, project string, perm domain.Pe
 		return errors.Join(ErrNotFound, err)
 	case errors.Is(err, domain.ErrForbidden):
 		return errors.Join(ErrForbidden, err)
+	case err != nil:
+		return err
 	}
-	return err
+	if perm != domain.BrowseProjects {
+		archived, err := s.roles.Archived(ctx, project)
+		if err != nil {
+			return err
+		}
+		if archived {
+			return errors.Join(ErrForbidden, ErrArchived)
+		}
+	}
+	return nil
 }

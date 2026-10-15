@@ -49,6 +49,7 @@ const (
 	CodeProjectKeyTaken        = "PROJECT_KEY_TAKEN"
 	CodeForbidden              = "PROJECT_FORBIDDEN"
 	CodeLastAdmin              = "PROJECT_LAST_ADMIN"
+	CodeProjectArchived        = "PROJECT_ARCHIVED"
 	CodeUserNotFound           = "USER_NOT_FOUND"
 	CodeInvitationNotFound     = "INVITATION_NOT_FOUND"
 	CodeInvitationExpired      = "INVITATION_EXPIRED"
@@ -160,6 +161,7 @@ var codes = []code{
 	{CodeProjectKeyTaken, "6003", 409, "This project key is already taken.", "Bu loyiha kaliti band.", "Этот ключ проекта уже занят.", errorx.CategoryBusiness},
 	{CodeForbidden, "6004", 403, "Your project role does not allow this.", "Loyihadagi rolingiz bunga ruxsat bermaydi.", "Ваша роль в проекте не позволяет это сделать.", errorx.CategorySecurity},
 	{CodeLastAdmin, "6005", 409, "A project must keep at least one admin.", "Loyihada kamida bitta admin qolishi kerak.", "В проекте должен остаться хотя бы один админ.", errorx.CategoryBusiness},
+	{CodeProjectArchived, "6027", 409, "This project is archived and read-only. An admin can restore it.", "Bu loyiha arxivlangan va faqat o'qish uchun. Admin uni tiklashi mumkin.", "Проект в архиве и доступен только для чтения. Администратор может его восстановить.", errorx.CategoryBusiness},
 	{CodeUserNotFound, "6006", 404, "No user with that email.", "Bunday emailga ega foydalanuvchi yo'q.", "Пользователь с таким email не найден.", errorx.CategoryBusiness},
 	{CodeInvitationNotFound, "6007", 404, "This invitation does not exist or was cancelled.", "Bu taklif mavjud emas yoki bekor qilingan.", "Это приглашение не существует или отменено.", errorx.CategoryBusiness},
 	{CodeInvitationExpired, "6008", 410, "This invitation has expired. Ask for a new one.", "Taklif muddati o'tgan. Yangisini so'rang.", "Срок приглашения истёк. Попросите новое.", errorx.CategoryBusiness},

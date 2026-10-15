@@ -1,10 +1,13 @@
 // project: HTTP gateway to the project API (infrastructure).
 import { request, seg, type List } from "../../../shared/http";
-import type { Invitation, InvitationPreview, InviteResult, Member, Project, Role } from "../domain/model";
+import type { ProjectTemplate, Invitation, InvitationPreview, InviteResult, Member, Project, Role } from "../domain/model";
 
 export const projectGateway = {
   projects: () => request<List<Project>>("GET", "/api/v1/projects").then((r) => r.items),
-  createProject: (key: string, name: string) => request<Project>("POST", "/api/v1/projects", { key, name }),
+  createProject: (key: string, name: string, template?: ProjectTemplate) =>
+    request<Project>("POST", "/api/v1/projects", template && template !== "kanban" ? { key, name, template } : { key, name }),
+  archive: (key: string) => request<Project>("POST", `/api/v1/projects/${seg(key)}/archive`),
+  restore: (key: string) => request<Project>("POST", `/api/v1/projects/${seg(key)}/restore`),
   members: (key: string) => request<List<Member>>("GET", `/api/v1/projects/${seg(key)}/members`).then((r) => r.items),
   setMember: (key: string, email: string, role: Role) =>
     request<undefined>("POST", `/api/v1/projects/${seg(key)}/members`, { email, role }),

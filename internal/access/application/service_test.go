@@ -20,6 +20,28 @@ func (f fakeRoles) RoleOf(_ context.Context, project, user string) (string, bool
 	return r, ok, nil
 }
 
+func (f fakeRoles) Archived(_ context.Context, project string) (bool, error) {
+	return project == "ARC", nil
+}
+
+// B10: in an archived project everyone keeps reading; nobody changes anything, admins included.
+func TestArchivedProjectIsReadOnly(t *testing.T) {
+	ctx := context.Background()
+	s := application.NewService(fakeRoles{"ARC": {"lead": "admin", "dev": "member"}})
+	if err := s.Can(ctx, "dev", "ARC", domain.BrowseProjects, nil); err != nil {
+		t.Fatalf("browse: %v", err)
+	}
+	for _, perm := range []domain.Permission{domain.CreateIssues, domain.EditIssues, domain.AdministerProjects} {
+		err := s.Can(ctx, "lead", "ARC", perm, nil)
+		if !errors.Is(err, application.ErrForbidden) || !errors.Is(err, application.ErrArchived) {
+			t.Fatalf("%s: %v", perm, err)
+		}
+	}
+	if err := s.Can(ctx, "eve", "ARC", domain.EditIssues, nil); !errors.Is(err, application.ErrNotFound) {
+		t.Fatalf("outsider still hidden: %v", err)
+	}
+}
+
 func svc() *application.Service {
 	return application.NewService(fakeRoles{"KYB": {"lead": "admin", "dev": "member", "vic": "viewer"}})
 }

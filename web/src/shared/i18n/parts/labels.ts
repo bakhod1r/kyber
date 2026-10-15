@@ -1,6 +1,18 @@
 // Labels for values the API sends as ids (issue types, priorities, roles, sprint states, permissions) and the
 // navigation added in the UI review. English is the key; uz and ru must translate every key (tsc enforces it).
 export const en = {
+  "Template": "Template",
+  "Kanban — a board for continuous flow": "Kanban — a board for continuous flow",
+  "Scrum — sprints, backlog and a Scrum board": "Scrum — sprints, backlog and a Scrum board",
+  "Bug tracking — Open, In Progress, In Review, Resolved, Closed": "Bug tracking — Open, In Progress, In Review, Resolved, Closed",
+  "This project is archived and read-only.": "This project is archived and read-only.",
+  "Restore project": "Restore project",
+  "Archive project": "Archive project",
+  "Archive {name}? It stays readable, but nobody can change it until it is restored.": "Archive {name}? It stays readable, but nobody can change it until it is restored.",
+  "Archived": "Archived",
+  "When to email": "When to email",
+  "Right away": "Right away",
+  "Once a day, at 08:00 ({zone})": "Once a day, at 08:00 ({zone})",
   "{email} was added to the project.": "{email} was added to the project.",
   "Invitation emailed to {email}.": "Invitation emailed to {email}.",
   "Email is not configured; share this link with {email}:": "Email is not configured; share this link with {email}:",
@@ -55,6 +67,18 @@ export const en = {
 type Key = keyof typeof en;
 
 export const uz: Record<Key, string> = {
+  "Template": "Shablon",
+  "Kanban — a board for continuous flow": "Kanban — uzluksiz oqim uchun doska",
+  "Scrum — sprints, backlog and a Scrum board": "Scrum — sprintlar, beklog va Scrum doskasi",
+  "Bug tracking — Open, In Progress, In Review, Resolved, Closed": "Xatolarni kuzatish — Ochiq, Jarayonda, Ko‘rib chiqilmoqda, Hal qilindi, Yopildi",
+  "This project is archived and read-only.": "Bu loyiha arxivlangan va faqat o‘qish uchun.",
+  "Restore project": "Loyihani tiklash",
+  "Archive project": "Loyihani arxivlash",
+  "Archive {name}? It stays readable, but nobody can change it until it is restored.": "{name} arxivlansinmi? U o‘qilishi mumkin bo‘lib qoladi, lekin tiklanmaguncha hech kim o‘zgartira olmaydi.",
+  "Archived": "Arxivlangan",
+  "When to email": "Qachon yuborish",
+  "Right away": "Darhol",
+  "Once a day, at 08:00 ({zone})": "Kuniga bir marta, soat 08:00 da ({zone})",
   "{email} was added to the project.": "{email} loyihaga qo‘shildi.",
   "Invitation emailed to {email}.": "Taklif {email} manziliga yuborildi.",
   "Email is not configured; share this link with {email}:": "Email sozlanmagan; bu havolani {email} ga yuboring:",
@@ -107,6 +131,18 @@ export const uz: Record<Key, string> = {
 };
 
 export const ru: Record<Key, string> = {
+  "Template": "Шаблон",
+  "Kanban — a board for continuous flow": "Kanban — доска для непрерывного потока",
+  "Scrum — sprints, backlog and a Scrum board": "Scrum — спринты, бэклог и Scrum-доска",
+  "Bug tracking — Open, In Progress, In Review, Resolved, Closed": "Учёт ошибок — Открыта, В работе, На проверке, Решена, Закрыта",
+  "This project is archived and read-only.": "Проект в архиве и доступен только для чтения.",
+  "Restore project": "Восстановить проект",
+  "Archive project": "Архивировать проект",
+  "Archive {name}? It stays readable, but nobody can change it until it is restored.": "Архивировать {name}? Проект останется доступным для чтения, но изменить его нельзя до восстановления.",
+  "Archived": "В архиве",
+  "When to email": "Когда отправлять",
+  "Right away": "Сразу",
+  "Once a day, at 08:00 ({zone})": "Раз в день, в 08:00 ({zone})",
   "{email} was added to the project.": "{email} добавлен(а) в проект.",
   "Invitation emailed to {email}.": "Приглашение отправлено на {email}.",
   "Email is not configured; share this link with {email}:": "Email не настроен; отправьте эту ссылку {email}:",

@@ -45,6 +45,9 @@ func (r *recorder) reset()              { r.skip = len(r.repo.Outbox()) }
 // by the real Access context (default permission scheme), so tests exercise the production rules.
 type fakeAccess map[string]map[string]string
 
+// Archived: no project is archived in these tests.
+func (f fakeAccess) Archived(context.Context, string) (bool, error) { return false, nil }
+
 func (f fakeAccess) RoleOf(_ context.Context, project, user string) (string, bool, error) {
 	role, ok := f[project][user]
 	return map[string]string{"r": "viewer", "w": "member", "a": "admin"}[role], ok, nil

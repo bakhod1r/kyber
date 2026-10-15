@@ -4,6 +4,7 @@ import { NavLink, useParams, useSearchParams } from "react-router-dom";
 import { projectUseCases } from "../contexts/project/application";
 import { identityUseCases } from "../contexts/identity/application";
 import { Members } from "../contexts/project/ui/Members";
+import { ArchiveControl } from "../contexts/project/ui/ArchiveControl";
 import { IssueFocus } from "../contexts/focus/ui/Focus";
 import { Backlog } from "../contexts/agile/ui/Backlog";
 import { Board } from "../contexts/agile/ui/Board";
@@ -43,6 +44,8 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
   const me = useQuery({ queryKey: ["me"], queryFn: identityUseCases.me });
   const project = projects.data?.find((p) => p.key === key);
+  const members = useQuery({ queryKey: ["members", key], queryFn: () => projectUseCases.members(key) });
+  const admin = members.data?.some((m) => m.user_id === me.data?.id && m.role === "admin") ?? false;
   // The open issue lives in the URL (?issue=KEY-1), so notifications and links can deep-link to it.
   const [params, setParams] = useSearchParams();
   const open = params.get("issue");
@@ -56,9 +59,12 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
     });
   return (
     <div className="project">
-      <h1>
-        <span className="key">{key}</span> {project?.name ?? ""}
-      </h1>
+      <div className="project-head">
+        <h1>
+          <span className="key">{key}</span> {project?.name ?? ""}
+        </h1>
+        <ArchiveControl projectKey={key} admin={admin} />
+      </div>
       <nav className="tabs" aria-label={t("Project views")}>
         <NavLink to={`/projects/${encodeURIComponent(key)}/summary`}>{t("Summary")}</NavLink>
         <NavLink to={`/projects/${encodeURIComponent(key)}/timeline`}>{t("Timeline")}</NavLink>
