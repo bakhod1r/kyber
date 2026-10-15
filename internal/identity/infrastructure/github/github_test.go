@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -89,7 +90,7 @@ func TestExchange(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := application.ExternalProfile{Provider: domain.ProviderGitHub, Subject: "583231", Email: "octo@x.uz", EmailVerified: true, Name: "The Octocat"}
-	if p != want {
+	if !reflect.DeepEqual(p, want) {
 		t.Fatalf("profile = %+v", p)
 	}
 	// No public name: the login is used. No primary verified email: no email is vouched for.
