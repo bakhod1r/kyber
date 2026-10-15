@@ -196,3 +196,36 @@ describe("Story points in the issue panel (KYB-S28 AC3)", () => {
     await waitFor(() => expect(calls.find((c) => c.key === "PATCH /api/v1/issues/KYB-1")?.body).toMatchObject({ labels: ["backend", "ui"] }));
   });
 });
+
+describe("IssuePanel focus (a11y)", () => {
+  const api = () =>
+    mockApi({
+      "GET /api/v1/issues/KYB-1": { status: 200, body: base },
+      "GET /api/v1/projects/KYB/members": { status: 200, body: members },
+      "GET /api/v1/issues/KYB-1/comments": { status: 200, body: { items: [] } },
+    });
+
+  it("moves focus into the dialog and keeps Tab inside it", async () => {
+    api();
+    renderWithProviders(<IssuePanel issueKey="KYB-1" projectKey="KYB" onClose={vi.fn()} />);
+    const dialog = await screen.findByRole("dialog", { name: /KYB-1/ });
+    await within(dialog).findByLabelText("Title");
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await userEvent.tab({ shift: true });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    for (let i = 0; i < 60; i++) await userEvent.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
+  it("gives focus back to what opened it when it closes", async () => {
+    api();
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const { unmount } = renderWithProviders(<IssuePanel issueKey="KYB-1" projectKey="KYB" onClose={vi.fn()} />);
+    await screen.findByRole("dialog", { name: /KYB-1/ });
+    unmount();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
+  });
+});

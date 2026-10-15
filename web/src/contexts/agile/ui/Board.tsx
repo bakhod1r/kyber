@@ -114,10 +114,14 @@ export function Board({
   function onDrop(e: DragEvent, col: BoardColumn) {
     e.preventDefault();
     setOver(null);
-    const key = e.dataTransfer.getData(DRAG_TYPE);
+    moveTo(e.dataTransfer.getData(DRAG_TYPE), col);
+  }
+
+  // The card's Move menu does the same without a mouse (keyboard, touch screens).
+  function moveTo(key: string, col: BoardColumn | undefined) {
     const issue = issues.data?.find((i) => i.key === key);
-    const to = col.statuses[0];
-    if (issue && to && !col.statuses.includes(issue.status)) move.mutate({ key, to });
+    const to = col?.statuses[0];
+    if (issue && col && to && !col.statuses.includes(issue.status)) move.mutate({ key, to });
   }
 
   const laneLabel = (id: string): string => {
@@ -173,6 +177,18 @@ export function Board({
               </button>
               <div className="card-foot">
                 <small>{i.key}</small>
+                <select
+                  className="card-move"
+                  aria-label={t("Move {key}", { key: i.key })}
+                  value={col.name}
+                  onChange={(e) => moveTo(i.key, boardColumns.find((c) => c.name === e.target.value))}
+                >
+                  {boardColumns.map((c) => (
+                    <option key={c.name} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
                 {i.assignee_id && byId.get(i.assignee_id) && (
                   <span className="avatar" title={byId.get(i.assignee_id)?.name}>
                     {initials(byId.get(i.assignee_id)?.name ?? "")}

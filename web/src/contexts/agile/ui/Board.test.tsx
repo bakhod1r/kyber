@@ -54,6 +54,24 @@ describe("Board (KYB-S14 AC3)", () => {
     expect(calls.find((c) => c.key.startsWith("POST"))?.body).toEqual({ to: "in_progress" });
   });
 
+  it("moves a card without a mouse: the card's Move menu picks the column (keyboard, touch)", async () => {
+    let status: Issue["status"] = "todo";
+    const calls = mockApi({
+      "GET /api/v1/projects/KYB/issues": () => ({ status: 200, body: { items: [issue(1, status)] } }),
+      "POST /api/v1/issues/KYB-1/transitions": () => {
+        status = "done";
+        return { status: 200, body: issue(1, "done") };
+      },
+    });
+    renderWithProviders(<Board projectKey="KYB" />);
+    const move = await screen.findByRole("combobox", { name: "Move KYB-1" });
+    expect(move).toHaveValue("To Do");
+    await userEvent.selectOptions(move, "Done");
+
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Done" })).getByText("Issue 1")).toBeInTheDocument());
+    expect(calls.find((c) => c.key.startsWith("POST"))?.body).toEqual({ to: "done" });
+  });
+
   it("a rejected move shows the error and the card returns", async () => {
     mockApi({
       "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [issue(1, "todo")] } },

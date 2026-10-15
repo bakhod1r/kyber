@@ -101,6 +101,7 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await page.getByRole("button", { name: "Invite" }).click();
   await expect(page.getByRole("alert")).toContainText("no user with that email");
 
+  await page.locator(".user-menu summary").click();
   await page.getByRole("button", { name: "Log out" }).click();
   await expect(page.getByRole("heading", { name: "Log in to Kyber" })).toBeVisible();
   await page.goto(`/projects/${key}`);

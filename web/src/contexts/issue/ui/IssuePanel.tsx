@@ -10,7 +10,7 @@ import { IssuePresence } from "./IssuePresence";
 import { CommentReactions } from "./CommentReactions";
 import { MentionTextarea } from "./MentionTextarea";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { issueUseCases, type Issue, parseLabels, PRIORITIES, type Priority, RESOLUTIONS, type Resolution } from "../application";
 import { ApiError } from "../../../shared/http";
 import { agileUseCases } from "../../agile/application";
@@ -30,6 +30,8 @@ const toDraft = (i: Issue): Draft => ({
   fixVersions: i.fix_versions ?? [],
   labels: (i.labels ?? []).join(" "),
 });
+
+const FOCUSABLE = 'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
 
 export function IssuePanel({
   issueKey,
@@ -71,6 +73,29 @@ export function IssuePanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // A modal dialog: focus moves in on open, Tab cycles inside it, and focus returns to the opener.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.focus();
+    return () => opener?.focus();
+  }, []);
+  function trapTab(e: ReactKeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "Tab" || !dialogRef.current) return;
+    const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => !el.hasAttribute("disabled"));
+    const first = focusable.at(0);
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || active === dialogRef.current)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
   const save = useMutation({
     mutationFn: (d: Draft) =>
       issueUseCases.editIssue(issueKey, {
@@ -108,7 +133,16 @@ export function IssuePanel({
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="panel issue-panel" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="panel issue-panel"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={trapTab}
+      >
         <header className="issue-panel-head">
           <h2 id={titleId}>
             <span className="key">{issueKey}</span> {loaded?.status.replace("_", " ")}
