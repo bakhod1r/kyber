@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { identityUseCases, type User } from "../contexts/identity/application";
 import { FocusTimer } from "../contexts/focus/ui/Focus";
 import { NotificationBell } from "../contexts/notify/ui/NotificationBell";
@@ -29,25 +29,27 @@ export function Layout({ user, children }: { user: User; children: ReactNode }) 
           <img src="/logo.svg" alt="" width={28} height={28} />
           {t("Kyber")}
         </Link>
-        <Link to="/search" className="nav-link">
-          {t("Search")}
-        </Link>
-        <Link to="/chat" className="nav-link">
-          Chat
-        </Link>
-        <Link to="/meetings" className="nav-link">
-          {t("Time table")}
-        </Link>
-        {admin.data && (
-          <Link to="/admin" className="nav-link">
-            {t("Admin")}
-          </Link>
-        )}
+        <nav className="topnav" aria-label={t("Main")}>
+          <NavLink to="/search" className="nav-link">
+            {t("Search")}
+          </NavLink>
+          <NavLink to="/chat" className="nav-link">
+            {t("Chat")}
+          </NavLink>
+          <NavLink to="/meetings" className="nav-link">
+            {t("Time table")}
+          </NavLink>
+          {admin.data && (
+            <NavLink to="/admin" className="nav-link">
+              {t("Admin")}
+            </NavLink>
+          )}
+        </nav>
         <span className="spacer" />
         <FocusTimer />
         <NotificationBell />
         <LanguagePicker />
-        <Link to="/settings" className="user" title={t("Notification settings")}>
+        <Link to="/settings" className="user" title={t("Settings")}>
           {user.name}
         </Link>
         <button className="ghost" onClick={() => logout.mutate()}>
