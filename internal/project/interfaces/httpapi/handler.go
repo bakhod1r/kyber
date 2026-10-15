@@ -25,6 +25,15 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/projects/{key}", h.get)
 	mux.HandleFunc("GET /api/v1/projects/{key}/members", h.members)
 	mux.HandleFunc("POST /api/v1/projects/{key}/members", h.setMember)
+	mux.HandleFunc("GET /api/v1/projects/{key}/invitations", h.invitations)
+	mux.HandleFunc("POST /api/v1/projects/{key}/invitations", h.invite)
+	mux.HandleFunc("DELETE /api/v1/projects/{key}/invitations/{id}", h.revokeInvitation)
+	mux.HandleFunc("POST /api/v1/invitations/{token}/accept", h.acceptInvitation)
+}
+
+// RegisterPublic serves what the holder of an invitation link may see before signing in.
+func (h *Handler) RegisterPublic(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/v1/invitations/{token}", h.previewInvitation)
 }
 
 type projectDTO struct {
@@ -49,6 +58,16 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeProjectNotFound, true
 	case errors.Is(err, application.ErrUnknownUser):
 		return httpx.CodeUserNotFound, true
+	case errors.Is(err, domain.ErrInvalidEmail):
+		return httpx.CodeValidation, true
+	case errors.Is(err, domain.ErrInvitationNotFound):
+		return httpx.CodeInvitationNotFound, true
+	case errors.Is(err, domain.ErrInvitationExpired):
+		return httpx.CodeInvitationExpired, true
+	case errors.Is(err, domain.ErrInvitationUsed):
+		return httpx.CodeInvitationUsed, true
+	case errors.Is(err, domain.ErrInvitationForSomeoneElse):
+		return httpx.CodeInvitationOtherEmail, true
 	case errors.Is(err, domain.ErrForbidden):
 		return httpx.CodeForbidden, true
 	}

@@ -162,3 +162,19 @@ func announcementLink(base, project string) string {
 	}
 	return fmt.Sprintf("%s/projects/%s/announcements", base, url.PathEscape(project))
 }
+
+// ErrNoEmail means this server has no email channel configured.
+var ErrNoEmail = errors.New("email is not configured")
+
+// SendEmail queues a one-off email (an invitation to someone without an account) on the delivery queue,
+// with its retries. key makes the send idempotent. ErrNoEmail without SMTP.
+func (s *Service) SendEmail(ctx context.Context, workspace, to, subject, body, key string) error {
+	if s.d.Deliveries == nil || !slices.Contains(s.d.Channels, domain.ChannelEmail) {
+		return ErrNoEmail
+	}
+	d, err := domain.NewDelivery(s.d.NewID(), workspace, domain.ChannelEmail, to, subject, body, key, s.d.Now())
+	if err != nil {
+		return err
+	}
+	return s.d.Deliveries.Enqueue(ctx, d)
+}

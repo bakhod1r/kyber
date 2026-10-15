@@ -31,6 +31,7 @@ type Service struct {
 	users      UserDirectory
 	newID      func() string
 	workspaces Workspaces // nil = no workspace membership sync
+	inv        InvitationDeps
 }
 
 func NewService(repo domain.Repository, users UserDirectory, newID func() string) *Service {

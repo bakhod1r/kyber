@@ -50,6 +50,10 @@ const (
 	CodeForbidden              = "PROJECT_FORBIDDEN"
 	CodeLastAdmin              = "PROJECT_LAST_ADMIN"
 	CodeUserNotFound           = "USER_NOT_FOUND"
+	CodeInvitationNotFound     = "INVITATION_NOT_FOUND"
+	CodeInvitationExpired      = "INVITATION_EXPIRED"
+	CodeInvitationUsed         = "INVITATION_USED"
+	CodeInvitationOtherEmail   = "INVITATION_OTHER_EMAIL"
 	CodeIssueNotFound          = "ISSUE_NOT_FOUND"
 	CodeInvalidIssueKey        = "ISSUE_INVALID_KEY"
 	CodeTransitionNotAllowed   = "ISSUE_TRANSITION_NOT_ALLOWED"
@@ -157,6 +161,10 @@ var codes = []code{
 	{CodeForbidden, "6004", 403, "Your project role does not allow this.", "Loyihadagi rolingiz bunga ruxsat bermaydi.", "Ваша роль в проекте не позволяет это сделать.", errorx.CategorySecurity},
 	{CodeLastAdmin, "6005", 409, "A project must keep at least one admin.", "Loyihada kamida bitta admin qolishi kerak.", "В проекте должен остаться хотя бы один админ.", errorx.CategoryBusiness},
 	{CodeUserNotFound, "6006", 404, "No user with that email.", "Bunday emailga ega foydalanuvchi yo'q.", "Пользователь с таким email не найден.", errorx.CategoryBusiness},
+	{CodeInvitationNotFound, "6007", 404, "This invitation does not exist or was cancelled.", "Bu taklif mavjud emas yoki bekor qilingan.", "Это приглашение не существует или отменено.", errorx.CategoryBusiness},
+	{CodeInvitationExpired, "6008", 410, "This invitation has expired. Ask for a new one.", "Taklif muddati o'tgan. Yangisini so'rang.", "Срок приглашения истёк. Попросите новое.", errorx.CategoryBusiness},
+	{CodeInvitationUsed, "6009", 409, "This invitation was already accepted.", "Bu taklif allaqachon qabul qilingan.", "Это приглашение уже принято.", errorx.CategoryBusiness},
+	{CodeInvitationOtherEmail, "6019", 403, "This invitation was sent to another email address. Sign in with that address.", "Taklif boshqa email manziliga yuborilgan. O'sha manzil bilan kiring.", "Приглашение отправлено на другой адрес. Войдите с этим адресом.", errorx.CategorySecurity},
 	{CodeIssueNotFound, "6010", 404, "Issue not found.", "Vazifa topilmadi.", "Задача не найдена.", errorx.CategoryBusiness},
 	{CodeInvalidIssueKey, "6011", 400, "Invalid issue key.", "Vazifa kaliti noto'g'ri.", "Неверный ключ задачи.", errorx.CategoryValidation},
 	{CodeTransitionNotAllowed, "6012", 409, "This status change is not allowed.", "Bu holatga o'tkazib bo'lmaydi.", "Такой переход статуса запрещён.", errorx.CategoryBusiness},

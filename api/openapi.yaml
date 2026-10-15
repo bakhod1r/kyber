@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.69.0
+  version: 0.70.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -2317,6 +2317,122 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/invitations:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listInvitations
+      description: Pending invitations of the project, newest first (admin only). Expired ones are listed until revoked.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: { items: { type: array, items: { $ref: "#/components/schemas/Invitation" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: inviteMember
+      description: |
+        Invite someone by email (admin only). Someone with an account is added right away (200). Anyone else gets an
+        invitation (201) emailed with a link that works for 7 days; `link` is returned so the admin can share it when
+        the server sends no email (`emailed: false`). Inviting the same address again replaces the pending link.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string }
+                role: { $ref: "#/components/schemas/Role" }
+      responses:
+        "200":
+          description: The user already had an account and is now a member.
+          content:
+            application/json:
+              schema: { type: object, required: [added], additionalProperties: false, properties: { added: { type: boolean, const: true } } }
+        "201":
+          description: Invitation created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [added, invitation, link, emailed]
+                additionalProperties: false
+                properties:
+                  added: { type: boolean, const: false }
+                  invitation: { $ref: "#/components/schemas/Invitation" }
+                  link: { type: string, format: uri }
+                  emailed: { type: boolean }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/invitations/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectKey" }
+      - { name: id, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: revokeInvitation
+      description: Cancel a pending invitation (admin only); its link stops working.
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/invitations/{token}:
+    parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: previewInvitation
+      security: []
+      description: What the holder of an invitation link was invited to, before signing in (the token is the credential).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [project, project_name, invited_by, email, role, expires_at, expired]
+                additionalProperties: false
+                properties:
+                  project: { type: string }
+                  project_name: { type: string }
+                  invited_by: { type: string, description: The inviting admin's name. }
+                  email: { type: string, description: The invited address; sign in with it to accept. }
+                  role: { $ref: "#/components/schemas/Role" }
+                  expires_at: { type: string, format: date-time }
+                  expired: { type: boolean }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/invitations/{token}/accept:
+    parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: acceptInvitation
+      description: |
+        Join the invitation's project (and its workspace) as the signed-in user, who must be signed in with the
+        invited address (403 otherwise). Existing members keep their role. Works on any workspace host.
+      responses:
+        "200":
+          description: Joined.
+          content:
+            application/json:
+              schema: { type: object, required: [project], additionalProperties: false, properties: { project: { type: string } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/workflow:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
     get:
@@ -4476,6 +4592,17 @@ components:
       required: [items]
       properties: { items: { type: array, items: { $ref: "#/components/schemas/Project" } } }
     Role: { type: string, enum: [admin, member, viewer] }
+    Invitation:
+      type: object
+      required: [id, email, role, invited_by, created_at, expires_at]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        invited_by: { type: string, description: The inviting admin's user id. }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
     Member:
       type: object
       required: [user_id, email, name, role]

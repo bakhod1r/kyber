@@ -160,6 +160,7 @@ import (
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
 	"github.com/bakhod1r/kyber/internal/project/infrastructure/identitydir"
 	projectmemory "github.com/bakhod1r/kyber/internal/project/infrastructure/memory"
+	projectmail "github.com/bakhod1r/kyber/internal/project/infrastructure/notifymail"
 	projectpg "github.com/bakhod1r/kyber/internal/project/infrastructure/postgres"
 	projecthttp "github.com/bakhod1r/kyber/internal/project/interfaces/httpapi"
 	searchapp "github.com/bakhod1r/kyber/internal/search/application"
@@ -242,6 +243,7 @@ type deps struct {
 	uploadRate     int                   // uploads per user per minute (0 = off)
 	notes          notifydomain.Repository
 	activity       insightsdomain.Repository
+	invitations    projectdomain.InvitationRepository
 	mappings       importerdomain.MappingRepository
 	importLock     importerdomain.ImportLock
 	workspaces     workspacedomain.Repository
@@ -414,7 +416,7 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: pageRepo, docComments: docCommentRepo, attachments: attmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
-		mappings: importermemory.NewRepository(), importLock: importermemory.NewImportLock(), workspaces: workspacememory.NewRepository(),
+		invitations: projectmemory.NewInvitations(), mappings: importermemory.NewRepository(), importLock: importermemory.NewImportLock(), workspaces: workspacememory.NewRepository(),
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
 		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), bots: chatmemory.NewBots(), sectionOrders: chatmemory.NewSectionOrders(), calls: callRepo, whiteboards: wbmemory.NewRepository(), wbComments: wbCommentRepo,
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(wbCommentRepo.Outbox, wbCommentRepo.OutboxMeta), events(docCommentRepo.Outbox, docCommentRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
@@ -463,7 +465,7 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), docComments: docspg.NewComments(pool), attachments: attpg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
-		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), importLock: importerpg.NewImportLock(pool), workspaces: workspacepg.NewRepository(pool),
+		activity: insightspg.NewRepository(pool), invitations: projectpg.NewInvitations(pool), mappings: importerpg.NewRepository(pool), importLock: importerpg.NewImportLock(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), scheduled: chatpg.NewScheduled(pool), reminders: chatpg.NewReminders(pool), userGroups: chatpg.NewGroups(pool), chatPrefs: chatpg.NewPrefs(pool), bookmarks: chatpg.NewBookmarks(pool), chatWorkflows: chatpg.NewWorkflows(pool), webhooks: chatpg.NewWebhooks(pool), bots: chatpg.NewBots(pool), sectionOrders: chatpg.NewSectionOrders(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool), wbComments: wbpg.NewComments(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ready: pool.Ping, cookieSecure: cookieSecure,
@@ -516,6 +518,8 @@ func build(log *slog.Logger, d deps) http.Handler {
 		Groups: d.groups, Admins: notifyacl.NewAdmins(access), BotName: d.social.TelegramBot,
 		Lookups: notifyacl.NewLookups(issues, agile), Bot: d.botMessenger(),
 	})
+	projects.WithInvitations(projectapp.InvitationDeps{Repo: d.invitations, Mailer: projectmail.New(notify),
+		PublicURL: d.publicURL, NewToken: newSecret, Now: time.Now})
 	search := searchapp.NewService(searchapp.Deps{Projects: searchacl.NewProjects(projects), Issues: searchacl.NewIssues(issues),
 		Users: searchacl.NewUsers(d.users), Planning: searchacl.NewPlanning(agile), Filters: d.filters, NewID: id.New})
 	goals := goalapp.NewService(goalapp.Deps{Projects: goalacl.NewProjects(projects), Issues: goalacl.NewIssues(search), Goals: d.goals, NewID: id.New})
@@ -746,6 +750,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	})
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
+	projecthttp.New(projects, log).RegisterPublic(mux) // invitation previews: the token in the URL is the credential
 	auth.RegisterSCIM(mux, d.scimToken)
 	chatAPI.RegisterPublic(mux) // incoming webhooks (S81): the secret in the URL is the credential
 	webhookHTTP.RegisterPublic(mux)
