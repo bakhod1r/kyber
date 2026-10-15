@@ -32,6 +32,9 @@ type PersonalToken struct {
 	CreatedAt  time.Time
 	ExpiresAt  *time.Time // nil = never
 	LastUsedAt *time.Time // nil = never used
+	// Method is how its creator had signed in ("sso:<id>", "password", …): a token made through a
+	// workspace's required SSO connection works there (ADR-0018 §5).
+	Method string
 }
 
 // NewPersonalToken names a token; it may expire, but not before it is created.

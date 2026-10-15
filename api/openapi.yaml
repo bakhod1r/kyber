@@ -1,14 +1,14 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.75.0
+  version: 0.76.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
     `Content-Type: application/json` (CSRF guard). Non-members receive `404` for project resources.
     A workspace that requires single sign-on (ADR-0018) answers any of its routes with
-    `403 SSO_REQUIRED` to members who signed in another way or use an API token; the detail names the
-    connection's sign-in URL. Workspace owners are exempt.
+    `403 SSO_REQUIRED` to members who signed in another way (or use an API token created outside
+    that connection); the detail names the connection's sign-in URL. Workspace owners are exempt.
   license: { name: MIT, identifier: MIT }
 servers:
   - url: http://localhost:8080
