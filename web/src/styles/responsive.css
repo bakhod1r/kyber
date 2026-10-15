@@ -1,0 +1,17 @@
+/* Small screens: kept last so these rules win over the component rules. */
+/* ---- Small screens (kept last so it wins over the component rules above). ---- */
+@media (max-width: 720px) {
+  .topbar { padding: 0.5rem 0.75rem; }
+  /* The section links take their own scrollable row under the brand and tools. */
+  .topnav { order: 1; flex-basis: 100%; overflow-x: auto; scrollbar-width: none; }
+  .topbar .user { max-width: 8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .page { padding: 1rem 0.75rem; }
+  /* Project and settings tabs scroll sideways instead of widening the page. */
+  .tabs { overflow-x: auto; scrollbar-width: none; }
+  .tabs a { white-space: nowrap; }
+  .quick-add { grid-template-columns: 1fr auto; }
+  .quick-add input { grid-column: 1 / -1; }
+  .filters { flex-wrap: wrap; }
+  .backlog-row { grid-template-columns: 1fr auto; row-gap: 0.25rem; }
+  .backlog-row .key { text-align: left; grid-column: 1 / -1; }
+}

@@ -1,0 +1,92 @@
+/* Colour themes, wallpapers and the appearance settings. */
+/* ---- Themes (Settings → Appearance). "system" sets no attribute and follows the OS. ---- */
+:root[data-theme="light"] {
+  --bg: #f4f7fb; --surface: #ffffff; --surface-2: #eef3f9; --border: #d7e0ec; --text: #0f1b2d; --muted: #5b6b82;
+  --accent: #0b6fd8; --accent-text: #ffffff; --danger: #c62828; --success: #1e7f45; --warning: #b26a00; --glow: #5ad8ff;
+  --shadow: 0 1px 2px rgb(15 27 45 / 6%), 0 4px 12px rgb(15 27 45 / 6%);
+  --viz-1: #2a78d6; --viz-2: #eb6834; --viz-muted: #9a9890; --viz-grid: #e6eaf0;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #0a111c; --surface: #111b2a; --surface-2: #162236; --border: #22324a; --text: #e6eef9; --muted: #8da0bb;
+  --accent: #3fb6ff; --accent-text: #04121f; --danger: #ff6b6b; --success: #4cc47e; --warning: #f0b429; --glow: #5ad8ff;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --viz-1: #3987e5; --viz-2: #d95926; --viz-muted: #6f7b8c; --viz-grid: #22324a;
+  color-scheme: dark;
+}
+:root[data-theme="midnight"] {
+  --bg: #05060f; --surface: #0d1020; --surface-2: #141832; --border: #262b52; --text: #e7e9ff; --muted: #9096c8;
+  --accent: #8b7bff; --accent-text: #0b0820; --danger: #ff6b8b; --success: #5fd49a; --warning: #f5c451; --glow: #b3a8ff;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --viz-1: #3987e5; --viz-2: #d95926; --viz-muted: #6f7b8c; --viz-grid: #262b52;
+  color-scheme: dark;
+}
+:root[data-theme="ocean"] {
+  --bg: #e9f6fb; --surface: #ffffff; --surface-2: #d9eff7; --border: #b5dceb; --text: #062a3a; --muted: #44707f;
+  --accent: #00879e; --accent-text: #ffffff; --danger: #c0392b; --success: #1e7f45; --warning: #a35f00; --glow: #00879e;
+  --shadow: 0 1px 2px rgb(15 27 45 / 6%), 0 4px 12px rgb(15 27 45 / 6%);
+  --viz-1: #2a78d6; --viz-2: #eb6834; --viz-muted: #9a9890; --viz-grid: #e6eaf0;
+  color-scheme: light;
+}
+:root[data-theme="forest"] {
+  --bg: #0f1a14; --surface: #16251c; --surface-2: #1d3125; --border: #2c4636; --text: #e3f1e6; --muted: #93b39c;
+  --accent: #5fcf80; --accent-text: #08170d; --danger: #ff7b6b; --success: #5fcf80; --warning: #f0b429; --glow: #8ff0aa;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --viz-1: #3987e5; --viz-2: #d95926; --viz-muted: #6f7b8c; --viz-grid: #2c4636;
+  color-scheme: dark;
+}
+:root[data-theme="sunset"] {
+  --bg: #fff5ee; --surface: #ffffff; --surface-2: #ffe8db; --border: #f6cdb6; --text: #3a1d12; --muted: #8a5a46;
+  --accent: #e8590c; --accent-text: #ffffff; --danger: #c92a2a; --success: #2b8a3e; --warning: #a35f00; --glow: #e8590c;
+  --shadow: 0 1px 2px rgb(15 27 45 / 6%), 0 4px 12px rgb(15 27 45 / 6%);
+  --viz-1: #2a78d6; --viz-2: #eb6834; --viz-muted: #9a9890; --viz-grid: #e6eaf0;
+  color-scheme: light;
+}
+:root[data-theme="rose"] {
+  --bg: #fdf2f6; --surface: #ffffff; --surface-2: #fbe3ec; --border: #f1c4d4; --text: #3b0f22; --muted: #8b5068;
+  --accent: #d6336c; --accent-text: #ffffff; --danger: #c92a2a; --success: #2b8a3e; --warning: #a35f00; --glow: #d6336c;
+  --shadow: 0 1px 2px rgb(15 27 45 / 6%), 0 4px 12px rgb(15 27 45 / 6%);
+  --viz-1: #2a78d6; --viz-2: #eb6834; --viz-muted: #9a9890; --viz-grid: #e6eaf0;
+  color-scheme: light;
+}
+:root[data-theme="nord"] {
+  --bg: #2e3440; --surface: #3b4252; --surface-2: #434c5e; --border: #4c566a; --text: #eceff4; --muted: #b6c0d2;
+  --accent: #88c0d0; --accent-text: #2e3440; --danger: #bf616a; --success: #a3be8c; --warning: #ebcb8b; --glow: #88c0d0;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --viz-1: #3987e5; --viz-2: #d95926; --viz-muted: #6f7b8c; --viz-grid: #4c566a;
+  color-scheme: dark;
+}
+:root[data-theme="dracula"] {
+  --bg: #1e1f29; --surface: #282a36; --surface-2: #343746; --border: #44475a; --text: #f8f8f2; --muted: #a9adc8;
+  --accent: #bd93f9; --accent-text: #1e1f29; --danger: #ff5555; --success: #50fa7b; --warning: #f1fa8c; --glow: #ff79c6;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --viz-1: #3987e5; --viz-2: #d95926; --viz-muted: #6f7b8c; --viz-grid: #44475a;
+  color-scheme: dark;
+}
+:root[data-theme="contrast"] {
+  --bg: #000000; --surface: #000000; --surface-2: #111111; --border: #ffffff; --text: #ffffff; --muted: #f0f0f0;
+  --accent: #ffd400; --accent-text: #000000; --danger: #ff4d4d; --success: #3ddc84; --warning: #ffd400; --glow: #ffd400;
+  --shadow: none;
+  --viz-1: #3987e5; --viz-2: #d95926; --viz-muted: #6f7b8c; --viz-grid: #ffffff;
+  color-scheme: dark;
+}
+
+/* ---- Wallpapers: drawn behind the app; panels keep their own surfaces so text stays readable. ---- */
+:root[data-wallpaper] body { background-color: var(--bg); background-attachment: fixed; background-size: cover; }
+:root[data-wallpaper="aurora"] body, .wp-aurora { background-image: radial-gradient(at 20% 10%, #5ad8ff66, transparent 50%), radial-gradient(at 80% 20%, #8b7bff55, transparent 50%), radial-gradient(at 50% 90%, #5fcf8044, transparent 55%); }
+:root[data-wallpaper="dusk"] body, .wp-dusk { background-image: linear-gradient(160deg, #2b1055 0%, #7597de 100%); }
+:root[data-wallpaper="sea"] body, .wp-sea { background-image: linear-gradient(180deg, #0f3d5e 0%, #1fa2b5 60%, #b8f1f0 100%); }
+:root[data-wallpaper="meadow"] body, .wp-meadow { background-image: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%); }
+:root[data-wallpaper="peach"] body, .wp-peach { background-image: linear-gradient(120deg, #f6d365 0%, #fda085 100%); }
+:root[data-wallpaper="mesh"] body, .wp-mesh { background-image: radial-gradient(at 0% 0%, #ff9a9e88, transparent 40%), radial-gradient(at 100% 0%, #a18cd188, transparent 40%), radial-gradient(at 100% 100%, #84fab088, transparent 40%), radial-gradient(at 0% 100%, #8fd3f488, transparent 40%); }
+:root[data-wallpaper="grid"] body, .wp-grid { background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 32px 32px; }
+:root[data-wallpaper="dots"] body, .wp-dots { background-image: radial-gradient(var(--border) 1.5px, transparent 1.5px); background-size: 20px 20px; }
+:root[data-wallpaper="waves"] body, .wp-waves { background-image: repeating-radial-gradient(circle at 0 100%, transparent 0 28px, color-mix(in srgb, var(--accent) 12%, transparent) 28px 30px); }
+:root[data-wallpaper="paper"] body, .wp-paper { background-image: repeating-linear-gradient(0deg, transparent 0 27px, color-mix(in srgb, var(--accent) 18%, transparent) 27px 28px); }
+:root[data-wallpaper="custom"] body, .wp-custom { background-image: var(--wallpaper-custom); }
+
+/* Appearance settings */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.5rem; margin: 0.5rem 0 1rem; }
+.swatch { display: grid; gap: 0.35rem; padding: 0.5rem; border: 2px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; text-align: start; }
+.swatch[aria-pressed="true"] { border-color: var(--accent); }
+.swatch-preview { height: 2.5rem; border-radius: 6px; border: 1px solid var(--border); background-size: cover; }

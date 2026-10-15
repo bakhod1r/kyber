@@ -1,10 +1,14 @@
 // The stylesheet's colour contract: every theme defines the same tokens, nothing reads an undefined
 // token, and component colours come from tokens so they follow the chosen theme.
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const css = readFileSync(join(__dirname, "..", "..", "styles.css"), "utf8");
+const SRC = join(__dirname, "..", "..");
+const entry = readFileSync(join(SRC, "styles.css"), "utf8");
+/** The stylesheet split into ordered parts under src/styles, imported by src/styles.css. */
+const parts = [...entry.matchAll(/@import "\.\/styles\/([\w-]+\.css)";/g)].map((m) => m[1] ?? "");
+const css = parts.map((f) => readFileSync(join(SRC, "styles", f), "utf8")).join("\n");
 
 /** Tokens every theme must set, so a component never inherits another theme's value. */
 const THEME_TOKENS = [
@@ -20,6 +24,17 @@ function block(selector: string): string {
   expect(at, selector).toBeGreaterThanOrEqual(0);
   return css.slice(at, css.indexOf("}", at));
 }
+
+describe("styles.css layout", () => {
+  it("imports every part under src/styles, in a fixed order", () => {
+    expect(parts).toEqual(["base.css", "components.css", "themes.css", "responsive.css"]);
+    expect(readdirSync(join(SRC, "styles")).sort()).toEqual([...parts].sort());
+  });
+
+  it("stacks layers through z-index tokens, not ad hoc numbers", () => {
+    expect(css.match(/z-index:\s*\d{2,}/g) ?? []).toEqual([]);
+  });
+});
 
 describe("styles.css theme tokens", () => {
   const themes = [...css.matchAll(/:root\[data-theme="(\w+)"\] \{/g)].map((m) => m[1] ?? "");
