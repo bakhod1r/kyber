@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { AppRoutes } from "../../../app/App";
@@ -80,6 +80,35 @@ describe("Sign in with Google and Telegram (KYB-S39)", () => {
     expect(await screen.findByRole("link", { name: "Continue with Acme Okta" })).toHaveAttribute("href", "/api/v1/auth/sso/c-1/start");
     expect(screen.getByRole("link", { name: "Continue with Entra" })).toHaveAttribute("href", "/api/v1/auth/sso/c%202/start");
     expect(screen.getByRole("alert")).toHaveTextContent("already has a Kyber account");
+  });
+
+  it("S107: finds the single sign-on for a work email", async () => {
+    const calls = mockApi({
+      "GET /api/v1/me": anonymous,
+      "GET /api/v1/auth/providers": { status: 200, body: { google: false, github: false, telegram_bot: null, sso: [{ id: "c-1", name: "Acme Okta" }] } },
+      "POST /api/v1/auth/sso/discover": { status: 200, body: { connection: { id: "c-1", name: "Acme Okta" } } },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AppRoutes />, "/login");
+    const sso = await screen.findByRole("form", { name: "Single sign-on" });
+    await user.type(within(sso).getByLabelText("Work email"), "zara@acme.uz");
+    await user.click(within(sso).getByRole("button", { name: "Find my sign-in" }));
+    expect(await within(sso).findByRole("link", { name: "Continue with Acme Okta" })).toHaveAttribute("href", "/api/v1/auth/sso/c-1/start");
+    expect(calls.find((c) => c.key === "POST /api/v1/auth/sso/discover")?.body).toEqual({ email: "zara@acme.uz" });
+  });
+
+  it("S107: says when an email has no single sign-on", async () => {
+    mockApi({
+      "GET /api/v1/me": anonymous,
+      "GET /api/v1/auth/providers": { status: 200, body: { google: false, github: false, telegram_bot: null, sso: [{ id: "c-1", name: "Acme Okta" }] } },
+      "POST /api/v1/auth/sso/discover": { status: 200, body: { connection: null } },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AppRoutes />, "/login");
+    const sso = await screen.findByRole("form", { name: "Single sign-on" });
+    await user.type(within(sso).getByLabelText("Work email"), "ali@gmail.com");
+    await user.click(within(sso).getByRole("button", { name: "Find my sign-in" }));
+    expect(await within(sso).findByRole("status")).toHaveTextContent("No single sign-on for this email");
   });
 
   it("AC4: nothing extra when no provider is configured", async () => {

@@ -104,7 +104,7 @@ describe("admin page", () => {
   });
 
   it("adds, disables and removes SSO connections without ever showing a secret", async () => {
-    const conn = { id: "c-1", kind: "oidc", name: "Acme Okta", issuer: "https://acme.okta.com", client_id: "kyber", groups_claim: "", enabled: true, created_at: "2026-10-15T09:00:00Z" };
+    const conn = { id: "c-1", kind: "oidc", name: "Acme Okta", issuer: "https://acme.okta.com", client_id: "kyber", groups_claim: "", enabled: true, created_at: "2026-10-15T09:00:00Z", domains: [] };
     const calls = mockApi({
       "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
       "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
@@ -159,5 +159,33 @@ describe("admin page", () => {
     await user.type(within(sso).getByLabelText("Client secret"), "b");
     await user.click(within(sso).getByRole("button", { name: "Add connection" }));
     expect(await within(sso).findByRole("alert")).toHaveTextContent("KYBER_ENCRYPTION_KEY");
+  });
+
+  it("adds and verifies the email domains of an SSO connection", async () => {
+    const pending = { name: "acme.uz", verified: false, txt: "kyber-verify=abc123" };
+    const conn = { id: "c-1", kind: "oidc", name: "Acme Okta", issuer: "https://acme.okta.com", client_id: "kyber", groups_claim: "", enabled: true, created_at: "2026-10-15T09:00:00Z", domains: [pending] };
+    const calls = mockApi({
+      "GET /api/v1/admin/access": { status: 200, body: { admin: true } },
+      "GET /api/v1/admin/members": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/projects": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/dead-letters": { status: 200, body: { items: [] } },
+      "GET /api/v1/admin/sso/connections": { status: 200, body: { items: [conn] } },
+      "POST /api/v1/admin/sso/connections/c-1/domains": { status: 200, body: conn },
+      "POST /api/v1/admin/sso/connections/c-1/domains/acme.uz/verify": problem(409, "The TXT record kyber-verify=<token> was not found on the domain yet."),
+      "DELETE /api/v1/admin/sso/connections/c-1/domains/acme.uz": { status: 200, body: { ...conn, domains: [] } },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPage />);
+    const sso = await screen.findByRole("region", { name: "SSO connections" });
+    expect(await within(sso).findByText("kyber-verify=abc123")).toBeInTheDocument();
+    expect(within(sso).getByText("acme.uz")).toBeInTheDocument();
+    await user.click(within(sso).getByRole("button", { name: "Verify acme.uz" }));
+    expect(await within(sso).findByRole("alert")).toHaveTextContent("not found on the domain yet");
+    await user.type(within(sso).getByLabelText("Email domain for Acme Okta"), "corp.uz");
+    await user.click(within(sso).getByLabelText("Trusted (skip DNS check) for Acme Okta"));
+    await user.click(within(sso).getByRole("button", { name: "Add domain to Acme Okta" }));
+    await waitFor(() => expect(calls.find((c) => c.key === "POST /api/v1/admin/sso/connections/c-1/domains")?.body).toEqual({ domain: "corp.uz", trusted: true }));
+    await user.click(within(sso).getByRole("button", { name: "Remove domain acme.uz" }));
+    await waitFor(() => expect(calls.some((c) => c.key === "DELETE /api/v1/admin/sso/connections/c-1/domains/acme.uz")).toBe(true));
   });
 });

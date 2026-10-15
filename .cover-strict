@@ -52,3 +52,4 @@
 ./internal/ssoconnect/application
 ./internal/ssoconnect/infrastructure/memory
 ./internal/ssoconnect/infrastructure/directory
+./internal/ssoconnect/infrastructure/dns

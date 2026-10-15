@@ -130,3 +130,85 @@ func TestDeleteFailure(t *testing.T) {
 		t.Fatalf("audited a failed delete: %v", a.actions)
 	}
 }
+
+type dns map[string][]string
+
+func (d dns) TXT(_ context.Context, name string) ([]string, error) {
+	r, ok := d[name]
+	if !ok {
+		return nil, errors.New("no such host")
+	}
+	return r, nil
+}
+
+func withDNS(repo domain.Connections, records dns) (*application.Service, *audit) {
+	a := &audit{}
+	return application.NewService(application.Deps{Connections: repo, Admins: admins{"boss": true}, Audit: a, DNS: records,
+		NewID: func() string { return "c-1" }, NewToken: func() string { return "tok" },
+		Now: func() time.Time { return time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC) }}), a
+}
+
+func TestDomainsAndDiscovery(t *testing.T) {
+	ctx := context.Background()
+	records := dns{}
+	s, a := withDNS(memory.New(), records)
+	if _, err := s.Create(ctx, "boss", okta); err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.AddDomain(ctx, "boss", "c-1", "acme.uz", false)
+	if err != nil || c.Domains[0].Token != "tok" || c.Domains[0].Verified {
+		t.Fatalf("add = %+v %v", c, err)
+	}
+	if _, err := s.Discover(ctx, "zara@acme.uz"); !errors.Is(err, domain.ErrConnectionNotFound) {
+		t.Fatalf("an unverified domain routes: %v", err)
+	}
+	if _, err := s.VerifyDomain(ctx, "boss", "c-1", "acme.uz"); !errors.Is(err, domain.ErrDomainNotVerified) {
+		t.Fatalf("lookup failure: %v", err)
+	}
+	records["acme.uz"] = []string{"kyber-verify=tok"}
+	if c, err = s.VerifyDomain(ctx, "boss", "c-1", "acme.uz"); err != nil || !c.Domains[0].Verified {
+		t.Fatalf("verify = %+v %v", c, err)
+	}
+	if got, err := s.Discover(ctx, "Zara@ACME.uz"); err != nil || got.ID != "c-1" {
+		t.Fatalf("discover = %+v %v", got, err)
+	}
+	for _, email := range []string{"zara@other.uz", "no-at-sign"} {
+		if _, err := s.Discover(ctx, email); !errors.Is(err, domain.ErrConnectionNotFound) {
+			t.Errorf("discover %q: %v", email, err)
+		}
+	}
+	off := false
+	_, _ = s.Update(ctx, "boss", "c-1", application.Change{Enabled: &off})
+	if _, err := s.Discover(ctx, "zara@acme.uz"); !errors.Is(err, domain.ErrConnectionNotFound) {
+		t.Fatalf("a disabled connection routes: %v", err)
+	}
+	if c, err = s.AddDomain(ctx, "boss", "c-1", "corp.uz", true); err != nil || !c.Serves("corp.uz") {
+		t.Fatalf("trusted = %+v %v", c, err)
+	}
+	if c, err = s.RemoveDomain(ctx, "boss", "c-1", "acme.uz"); err != nil || len(c.Domains) != 1 {
+		t.Fatalf("remove = %+v %v", c, err)
+	}
+	if _, err := s.AddDomain(ctx, "bob", "c-1", "x.uz", false); !errors.Is(err, application.ErrForbidden) {
+		t.Errorf("non-admin: %v", err)
+	}
+	if _, err := s.AddDomain(ctx, "boss", "c-404", "x.uz", false); !errors.Is(err, domain.ErrConnectionNotFound) {
+		t.Errorf("unknown connection: %v", err)
+	}
+	if _, err := s.AddDomain(ctx, "boss", "c-1", "not a domain", false); !errors.Is(err, domain.ErrInvalidConnection) {
+		t.Errorf("bad domain: %v", err)
+	}
+	if _, err := withDNSFailingSave(s).AddDomain(ctx, "boss", "c-1", "y.uz", false); err == nil {
+		t.Error("save error swallowed")
+	}
+	if n := len(a.actions); n != 6 {
+		t.Fatalf("audited %d changes: %v", n, a.actions)
+	}
+}
+
+func withDNSFailingSave(*application.Service) *application.Service {
+	repo := memory.New()
+	s, _ := withDNS(repo, dns{})
+	_, _ = s.Create(context.Background(), "boss", okta)
+	broken, _ := withDNS(failing{repo}, dns{})
+	return broken
+}

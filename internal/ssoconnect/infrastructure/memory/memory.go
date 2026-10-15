@@ -3,7 +3,9 @@ package memory
 
 import (
 	"context"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/bakhod1r/kyber/internal/ssoconnect/domain"
@@ -21,6 +23,7 @@ func (s *Store) All(context.Context) ([]domain.Connection, error) {
 	defer s.mu.Unlock()
 	out := make([]domain.Connection, 0, len(s.byID))
 	for _, c := range s.byID {
+		c.Domains = slices.Clone(c.Domains)
 		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -39,14 +42,39 @@ func (s *Store) ByID(_ context.Context, id domain.ConnectionID) (*domain.Connect
 	if !ok {
 		return nil, domain.ErrConnectionNotFound
 	}
+	c.Domains = slices.Clone(c.Domains)
 	return &c, nil
 }
 
 func (s *Store) Save(_ context.Context, c *domain.Connection) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.byID[c.ID] = *c
+	for id, other := range s.byID {
+		for _, d := range other.Domains {
+			if id != c.ID && slices.ContainsFunc(c.Domains, func(x domain.Domain) bool { return x.Name == d.Name }) {
+				return domain.ErrDomainTaken
+			}
+		}
+	}
+	cp := *c
+	cp.Domains = slices.Clone(c.Domains)
+	s.byID[c.ID] = cp
 	return nil
+}
+
+func (s *Store) ByDomain(_ context.Context, name string) (*domain.Connection, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	name = strings.ToLower(name)
+	for _, c := range s.byID {
+		for _, d := range c.Domains {
+			if d.Name == name {
+				c.Domains = slices.Clone(c.Domains)
+				return &c, nil
+			}
+		}
+	}
+	return nil, domain.ErrConnectionNotFound
 }
 
 func (s *Store) Delete(_ context.Context, id domain.ConnectionID) error {

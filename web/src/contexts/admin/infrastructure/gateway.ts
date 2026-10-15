@@ -14,6 +14,10 @@ export const adminGateway = {
   connections: () => request<List<SSOConnection>>("GET", "/api/v1/admin/sso/connections").then((r) => r.items),
   addConnection: (c: NewSSOConnection) => request<SSOConnection>("POST", "/api/v1/admin/sso/connections", c),
   setConnectionEnabled: (id: string, enabled: boolean) => request<SSOConnection>("PATCH", `/api/v1/admin/sso/connections/${seg(id)}`, { enabled }),
+  addDomain: (id: string, domain: string, trusted: boolean) =>
+    request<SSOConnection>("POST", `/api/v1/admin/sso/connections/${seg(id)}/domains`, { domain, trusted }),
+  verifyDomain: (id: string, domain: string) => request<SSOConnection>("POST", `/api/v1/admin/sso/connections/${seg(id)}/domains/${seg(domain)}/verify`),
+  removeDomain: (id: string, domain: string) => request<SSOConnection>("DELETE", `/api/v1/admin/sso/connections/${seg(id)}/domains/${seg(domain)}`),
   removeConnection: (id: string) => request<undefined>("DELETE", `/api/v1/admin/sso/connections/${seg(id)}`),
   removeGroupMapping: (id: string) => request<undefined>("DELETE", `/api/v1/admin/sso/group-mappings/${seg(id)}`),
 };

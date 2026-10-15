@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { identityUseCases, type TelegramUser } from "../application";
 import { TelegramCode } from "./TelegramCode";
+import { SSODiscovery } from "./SSODiscovery";
 import { msg, type MessageKey, useT } from "../../../shared/i18n/i18n";
 
 declare global {
@@ -101,6 +102,7 @@ export function SocialSignIn() {
               {t("Continue with {name}", { name: sso })}
             </a>
           )}
+          {stored.length > 0 && <SSODiscovery />}
           {stored.map((c) => (
             <a key={c.id} className="button ghost social-sso" href={`/api/v1/auth/sso/${encodeURIComponent(c.id)}/start`}>
               <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
