@@ -87,7 +87,7 @@ func codeFor(err error) (string, bool) {
 		return httpx.CodeOTPPending, true
 	case errors.Is(err, domain.ErrOTPTooManyAttempts):
 		return httpx.CodeTooManyAttempts, true
-	case errors.Is(err, errProviderDisabled), errors.Is(err, application.ErrExternalDisabled):
+	case errors.Is(err, errProviderDisabled), errors.Is(err, application.ErrExternalDisabled), errors.Is(err, application.ErrSSOConnectionNotFound):
 		return httpx.CodeProviderDisabled, true
 	case errors.Is(err, domain.ErrInvalidToken):
 		return httpx.CodeValidation, true

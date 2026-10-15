@@ -103,6 +103,8 @@ const (
 	CodeInternal               = "INTERNAL"
 	CodeRateLimited            = "RATE_LIMITED"
 	CodeGroupMappingNotFound   = "SSO_GROUP_MAPPING_NOT_FOUND"
+	CodeConnectionNotFound     = "SSO_CONNECTION_NOT_FOUND"
+	CodeNoEncryptionKey        = "ENCRYPTION_KEY_MISSING"
 )
 
 type code struct {
@@ -147,6 +149,8 @@ var codes = []code{
 	{CodeCommentNotFound, "6119", 404, "Comment not found.", "Izoh topilmadi.", "Комментарий не найден.", errorx.CategoryBusiness},
 	{CodeNotCommentAuthor, "6120", 403, "Only its author can remove a comment.", "Izohni faqat muallifi o'chira oladi.", "Удалить комментарий может только его автор.", errorx.CategoryBusiness},
 	{CodeWebhookNotFound, "6117", 404, "Webhook not found.", "Vebhuk topilmadi.", "Вебхук не найден.", errorx.CategoryBusiness},
+	{CodeConnectionNotFound, "6194", 404, "SSO connection not found.", "SSO ulanishi topilmadi.", "Подключение SSO не найдено.", errorx.CategoryBusiness},
+	{CodeNoEncryptionKey, "6195", 409, "Set KYBER_ENCRYPTION_KEY to store SSO connections.", "SSO ulanishlarini saqlash uchun KYBER_ENCRYPTION_KEY ni o'rnating.", "Чтобы хранить подключения SSO, задайте KYBER_ENCRYPTION_KEY.", errorx.CategoryBusiness},
 	{CodeGroupMappingNotFound, "6193", 404, "SSO group mapping not found.", "SSO guruh moslamasi topilmadi.", "Сопоставление группы SSO не найдено.", errorx.CategoryBusiness},
 	{CodeRateLimited, "6190", 429, "Too many requests; slow down.", "So'rovlar juda ko'p; sekinroq.", "Слишком много запросов; помедленнее.", errorx.CategoryBusiness},
 	{CodeWebhookRateLimited, "6118", 429, "Too many messages from this webhook; slow down.", "Bu vebhukdan juda ko'p xabar; sekinroq.", "Слишком много сообщений от этого вебхука; помедленнее.", errorx.CategoryBusiness},

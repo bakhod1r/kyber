@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"strings"
 )
 
 var ErrNotLinked = errors.New("external identity not linked")
@@ -16,6 +17,8 @@ const (
 	ProviderOIDC     Provider = "oidc"   // the installation's generic OpenID Connect provider (SSO)
 	ProviderGitHub   Provider = "github" // subject = GitHub's numeric user id
 	ProviderSAML     Provider = "saml"   // the installation's SAML identity provider; subject = NameID
+
+	ssoPrefix = "sso:" // a stored SSO connection (ADR-0018): "sso:<connection id>"
 )
 
 func (p Provider) Valid() bool {
@@ -23,7 +26,7 @@ func (p Provider) Valid() bool {
 	case ProviderGoogle, ProviderTelegram, ProviderOIDC, ProviderGitHub, ProviderSAML:
 		return true
 	}
-	return false
+	return strings.HasPrefix(string(p), ssoPrefix) && len(p) > len(ssoPrefix)
 }
 
 // ExternalIdentity links a provider account (its stable subject id) to a Kyber user.

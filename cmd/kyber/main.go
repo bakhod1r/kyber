@@ -21,6 +21,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/identity/infrastructure/telegram"
 	identityhttp "github.com/bakhod1r/kyber/internal/identity/interfaces/httpapi"
 	"github.com/bakhod1r/kyber/internal/notify/infrastructure/smtpmail"
+	"github.com/bakhod1r/kyber/internal/platform/seal"
 	"log/slog"
 	"net/http"
 	"os"
@@ -111,6 +112,10 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 	if err != nil {
 		return nil, nil, err
 	}
+	box, err := seal.New(cfg.EncryptionKey)
+	if err != nil {
+		return nil, nil, err
+	}
 	social := server.WithSocial(identityhttp.Social{
 		SAML: sp, SAMLName: cfg.SAMLName,
 		Google: google.New(google.Config{ClientID: cfg.GoogleClientID, ClientSecret: cfg.GoogleClientSecret, RedirectURL: callback("google")}),
@@ -125,7 +130,8 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		server.WithPublicURL(cfg.PublicURL), server.WithAttachmentsDir(cfg.AttachmentsDir), server.WithMQTTAddr(cfg.MQTTAddr),
 		server.WithICE(ice.Parse(cfg.ICEServers), cfg.TURNSecret),
 		server.WithWebhooks(cfg.WebhookAllowPrivate, 0), server.WithGitHubSecret(cfg.GitHubWebhookSecret),
-		server.WithRateLimits(cfg.APIRateLimit, cfg.UploadRateLimit), server.WithSCIMToken(cfg.SCIMToken)}, telegramBot(cfg)...)
+		server.WithRateLimits(cfg.APIRateLimit, cfg.UploadRateLimit), server.WithSCIMToken(cfg.SCIMToken),
+		server.WithEncryptionKey(box)}, telegramBot(cfg)...)
 	if cfg.LiveKitURL != "" {
 		lk, err := livekit.New(livekit.Config{URL: cfg.LiveKitURL, APIURL: cfg.LiveKitAPIURL, Key: cfg.LiveKitKey,
 			Secret: cfg.LiveKitSecret, RecordingsDir: cfg.LiveKitRecordingsDir, EgressDir: cfg.LiveKitEgressDir})

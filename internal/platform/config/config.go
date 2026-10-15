@@ -52,6 +52,9 @@ type Config struct {
 	// SCIMToken enables SCIM 2.0 user provisioning at /scim/v2 (ADR-0017): the identity provider
 	// sends it as a Bearer token.
 	SCIMToken string `env:"KYBER_SCIM_TOKEN"`
+	// EncryptionKey (32 bytes, base64) seals secrets stored in the database, such as the client
+	// secrets of SSO connections (ADR-0018). Unset: SSO connections cannot be stored.
+	EncryptionKey string `env:"KYBER_ENCRYPTION_KEY"`
 	// BaseDomain enables workspaces on subdomains (<slug>.<BaseDomain>, ADR-0004); empty = single-tenant.
 	BaseDomain string `env:"KYBER_BASE_DOMAIN"`
 	// AdminEmails (comma-separated) administer the default workspace: they publish workspace-wide

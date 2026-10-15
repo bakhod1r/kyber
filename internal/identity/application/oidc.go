@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -23,3 +24,25 @@ func random() string {
 	_, _ = rand.Read(b) // never fails (crypto/rand)
 	return base64.RawURLEncoding.EncodeToString(b)
 }
+
+// ErrSSOConnectionNotFound: no enabled SSO connection has this id.
+var ErrSSOConnectionNotFound = errors.New("SSO connection not found")
+
+type (
+	// RedirectProvider is an authorization-code sign-in provider (OpenID Connect).
+	RedirectProvider interface {
+		AuthURL(ctx context.Context, f OIDCFlow) (string, error)
+		Exchange(ctx context.Context, code string, f OIDCFlow) (ExternalProfile, error)
+	}
+	// SSOConnection is one stored identity provider (ADR-0018) as sign-in sees it.
+	SSOConnection struct {
+		ID, Name string
+		Provider RedirectProvider
+	}
+	// SSODirectory lists the enabled stored connections (port to the SSO connections context).
+	SSODirectory interface {
+		SSOConnections(ctx context.Context) ([]SSOConnection, error)
+		// SSOConnection returns ErrSSOConnectionNotFound for an unknown or disabled id.
+		SSOConnection(ctx context.Context, id string) (SSOConnection, error)
+	}
+)

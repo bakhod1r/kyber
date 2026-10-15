@@ -1,6 +1,6 @@
 # ADR-0018: Several SSO connections and per-workspace SSO
 
-Status: proposed (2026-10-15, S107) — awaiting approval before implementation.
+Status: accepted (2026-10-15, S107; approved by the maintainer).
 
 ## Context
 
@@ -60,3 +60,13 @@ needs more:
   workspace; rejected.
 - **Delegate to an external broker (Keycloak, Dex)** — simplest for us but pushes operators to run
   another service, against the self-hosted single-binary goal; documented as an option, not chosen.
+
+## Implementation note — phase (a) (2026-10-15)
+
+- Context `internal/ssoconnect` (domain, application, memory/pgx repositories passing `domain/repotest`, a
+  directory adapter to the Identity context, an audit ACL, the admin HTTP API). Migration `0090` adds
+  `sso_connections` and lets `external_identities.provider` be `sso:<id>`.
+- `internal/platform/seal` seals client secrets (AES-256-GCM, random nonce) under `KYBER_ENCRYPTION_KEY`.
+- OpenID Connect connections only in this phase; SAML connections, per-workspace connections, domain routing
+  and enforcement follow in (b) and (c). The environment-configured providers keep their routes and appear in
+  `/api/v1/auth/providers` as before (`oidc`, `saml`); they are not listed by the connections API.

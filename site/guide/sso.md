@@ -34,6 +34,19 @@ GitHub → Settings → Developer settings → OAuth Apps; callback URL
 Sign-in is SP-initiated only (IdP-initiated responses are refused). The email comes from the `email` / `mail`
 attribute or an email-shaped NameID. Single logout is not implemented.
 
+## Several identity providers (SSO connections)
+
+Besides the one OpenID Connect provider set by environment variables, site administrators can add any
+number of OpenID Connect providers on the **Administration** page (**SSO connections**), without a restart:
+
+1. Set `KYBER_ENCRYPTION_KEY` (`openssl rand -base64 32`); client secrets are encrypted with it.
+2. Add the connection: button label, issuer URL (https), client ID, client secret, and optionally the groups claim.
+3. Register the callback URL shown under the connection (`<KYBER_PUBLIC_URL>/api/v1/auth/sso/<id>/callback`)
+   at the provider.
+
+Each enabled connection gets its own "Continue with …" button. Disabling one hides the button; deleting one keeps
+the accounts, which still sign in with their other methods. Secrets are never shown again after saving.
+
 ## Groups → roles
 
 Site administrators can map an identity-provider group to a role on the **Administration** page

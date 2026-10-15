@@ -68,6 +68,20 @@ describe("Sign in with Google and Telegram (KYB-S39)", () => {
     expect(screen.queryByRole("link", { name: "Continue with GitHub" })).not.toBeInTheDocument();
   });
 
+  it("S107: shows a button per stored SSO connection and explains its failures", async () => {
+    mockApi({
+      "GET /api/v1/me": anonymous,
+      "GET /api/v1/auth/providers": {
+        status: 200,
+        body: { google: false, github: false, telegram_bot: null, sso: [{ id: "c-1", name: "Acme Okta" }, { id: "c 2", name: "Entra" }] },
+      },
+    });
+    renderWithProviders(<AppRoutes />, "/login?error=sso_email_taken");
+    expect(await screen.findByRole("link", { name: "Continue with Acme Okta" })).toHaveAttribute("href", "/api/v1/auth/sso/c-1/start");
+    expect(screen.getByRole("link", { name: "Continue with Entra" })).toHaveAttribute("href", "/api/v1/auth/sso/c%202/start");
+    expect(screen.getByRole("alert")).toHaveTextContent("already has a Kyber account");
+  });
+
   it("AC4: nothing extra when no provider is configured", async () => {
     mockApi({ "GET /api/v1/me": anonymous, "GET /api/v1/auth/providers": { status: 200, body: { google: false, telegram_bot: null } } });
     renderWithProviders(<AppRoutes />, "/login");
