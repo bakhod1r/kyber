@@ -86,6 +86,7 @@ label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { display:
 .panel.inline h2, .panel.inline .error { grid-column: 1 / -1; margin: 0; }
 
 .project-grid { display: grid; grid-template-columns: 1fr 260px; gap: 1.25rem; align-items: start; }
+.project-grid > * { min-width: 0; }
 .quick-add { display: grid; grid-template-columns: 1fr 120px auto; gap: 0.5rem; margin-bottom: 1rem; }
 .quick-add .error { grid-column: 1 / -1; }
 .board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: 1rem; overflow-x: auto; }
@@ -725,6 +726,9 @@ circle.wb-handle { cursor: move; }
   .topnav { order: 1; flex-basis: 100%; overflow-x: auto; scrollbar-width: none; }
   .topbar .user { max-width: 8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .page { padding: 1rem 0.75rem; }
+  /* Project and settings tabs scroll sideways instead of widening the page. */
+  .tabs { overflow-x: auto; scrollbar-width: none; }
+  .tabs a { white-space: nowrap; }
   .quick-add { grid-template-columns: 1fr auto; }
   .quick-add input { grid-column: 1 / -1; }
   .filters { flex-wrap: wrap; }
