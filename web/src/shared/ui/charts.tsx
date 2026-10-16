@@ -11,6 +11,17 @@ const stroke = (slot: Slot) => (slot === "muted" ? "var(--viz-muted)" : `var(--v
 export const fmt = (n: number) => (Number.isInteger(n) ? n.toLocaleString() : n.toFixed(1));
 
 /** Smallest "clean" axis maximum >= v. */
+/** Gridlines for a 0..max axis: the smallest 1-2-5 step (whole numbers) that divides max into at most five parts. */
+export function yTicks(max: number): number[] {
+  for (let p = 1; p <= max; p *= 10) {
+    for (const m of [1, 2, 5]) {
+      const step = m * p;
+      if (max % step === 0 && max / step <= 5) return Array.from({ length: max / step + 1 }, (_, i) => i * step);
+    }
+  }
+  return [0, max];
+}
+
 export function niceMax(v: number): number {
   if (v <= 0) return 1;
   const p = 10 ** Math.floor(Math.log10(v));
@@ -54,10 +65,6 @@ function Legend({ items }: { items: { name: string; slot: Slot }[] }) {
 }
 
 // Horizontal bar with a square baseline end and a 4px rounded data end.
-function hbar(x: number, y: number, w: number, h: number) {
-  const r = Math.min(4, w / 2, h / 2);
-  return `M${x},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} H${x} Z`;
-}
 // Vertical column: square at the baseline (bottom), rounded at the top.
 function vbar(x: number, base: number, w: number, h: number) {
   const r = Math.min(4, w / 2, h);
@@ -71,7 +78,7 @@ export type BarItem = { label: string; value: number; extra?: number };
 export function BarList({ title, items, valueLabel, extraLabel, caption }: { title: string; items: BarItem[]; valueLabel?: string; extraLabel?: string; caption?: ReactNode }) {
   const t = useT();
   const max = niceMax(Math.max(0, ...items.map((i) => i.value)));
-  const W = 320, rowH = 32, barH = 16;
+  const W = 320;
   return (
     <Figure
       title={title}
@@ -98,10 +105,11 @@ export function BarList({ title, items, valueLabel, extraLabel, caption }: { tit
             return (
               <div className="barlist-row" key={i.label} title={`${i.label}: ${fmt(i.value)}${extraLabel ? ` · ${fmt(i.extra ?? 0)} ${extraLabel.toLowerCase()}` : ""}`}>
                 <span className="barlist-label">{i.label}</span>
-                <svg viewBox={`0 0 ${W + 48} ${rowH}`} preserveAspectRatio="xMinYMid meet" aria-hidden="true">
-                  <path data-bar data-width={w.toFixed(2)} d={hbar(0, (rowH - barH) / 2, w, barH)} fill="var(--viz-1)" />
-                  <text x={w + 6} y={rowH / 2} dominantBaseline="middle" className="viz-value">{fmt(i.value)}</text>
-                </svg>
+                {/* HTML, not a scaled SVG, so the value keeps its type size at any width. */}
+                <span className="barlist-track" aria-hidden="true">
+                  <span className="barlist-bar" data-bar data-width={w.toFixed(2)} style={{ width: `${(w / W) * 100}%` }} />
+                  <span className="viz-value">{fmt(i.value)}</span>
+                </span>
               </div>
             );
           })}
@@ -161,7 +169,7 @@ export function LineChart({ title, series: raw, caption, xMax, yLabel }: { title
   }
 
   const ht = hover === null ? null : xs[hover]!;
-  const ticks = [0, yMax / 2, yMax];
+  const ticks = yTicks(yMax);
   const xTicks = [x0, (x0 + x1) / 2, x1];
 
   return (

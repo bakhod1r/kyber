@@ -12,7 +12,7 @@ test("invite by email, sign up from the link and join the project", async ({ bro
   await admin.request.post("/api/v1/auth/login", { data: { email: `admin-${id}@example.com`, password: "a very long password" } });
   expect((await admin.request.post("/api/v1/projects", { data: { key, name: "Invited" } })).ok()).toBeTruthy();
 
-  await admin.goto(`/projects/${key}`);
+  await admin.goto(`/projects/${key}/members`);
   await admin.getByLabel("Invite by email").fill(guest);
   await admin.getByRole("button", { name: "Invite" }).click();
   const link = await admin.getByRole("textbox", { name: "Invitation link" }).inputValue();
@@ -29,6 +29,7 @@ test("invite by email, sign up from the link and join the project", async ({ bro
   await expect(page).toHaveURL(new RegExp(`${path}$`));
   await page.getByRole("button", { name: "Accept invitation" }).click();
   await expect(page).toHaveURL(new RegExp(`/projects/${key}$`));
+  await page.goto(`/projects/${key}/members`);
   await expect(page.getByRole("complementary").getByText("Guest")).toBeVisible();
 
   // The admin's pending list is empty once the invitation is accepted.

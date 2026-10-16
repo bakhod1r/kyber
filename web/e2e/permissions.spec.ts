@@ -15,6 +15,8 @@ test("a project admin edits the permission scheme", async ({ page }) => {
   await page.getByRole("button", { name: "Create project" }).click();
   await expect(page).toHaveURL(new RegExp(`/projects/${key}$`));
 
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+
   await page.getByRole("link", { name: "Permissions", exact: true }).click();
   await expect(page.getByText(/uses the default permission scheme/)).toBeVisible();
   await expect(page.getByLabel("Administer projects: Admin")).toBeDisabled();

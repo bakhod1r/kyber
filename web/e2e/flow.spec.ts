@@ -99,6 +99,7 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await page.getByRole("link", { name: "Active sprints", exact: true }).click();
 
   // Inviting an address without an account creates an invitation; without SMTP the admin gets the link (B1).
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByLabel("Invite by email").fill("nobody@example.com");
   await page.getByRole("button", { name: "Invite" }).click();
   await expect(page.getByRole("status").filter({ hasText: "share this link with nobody@example.com" })).toBeVisible();

@@ -14,6 +14,8 @@ test("a project admin manages outgoing webhooks", async ({ page }) => {
   await page.getByRole("button", { name: "Create project" }).click();
   await expect(page).toHaveURL(new RegExp(`/projects/${key}$`));
 
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+
   await page.getByRole("link", { name: "Webhooks", exact: true }).click();
   await expect(page.getByText("No webhooks yet.")).toBeVisible();
   await page.getByLabel("Payload URL").fill("https://ci.example.com/kyber");

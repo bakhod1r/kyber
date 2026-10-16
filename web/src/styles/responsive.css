@@ -12,6 +12,47 @@
   .quick-add { grid-template-columns: 1fr auto; }
   .quick-add input { grid-column: 1 / -1; }
   .filters { flex-wrap: wrap; }
-  .backlog-row { grid-template-columns: 1fr auto; row-gap: 0.25rem; }
-  .backlog-row .key { text-align: left; grid-column: 1 / -1; }
+  /* Tabs scroll sideways: the fade shows there is more. */
+  .tabs { mask-image: linear-gradient(90deg, #000 85%, transparent); }
+  .settings-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  /* A backlog row stacks into three lines: type and key, the title, then status and points. */
+  .backlog-row { grid-template-columns: auto 1fr auto auto; grid-template-rows: auto auto auto; row-gap: 0.2rem; align-items: center; }
+  .backlog-row .type { grid-column: 1; grid-row: 1; }
+  .backlog-row .key { grid-column: 2 / -1; grid-row: 1; justify-self: end; }
+  .backlog-row .row-open { grid-column: 1 / -1; grid-row: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .backlog-row .status { grid-column: 1; grid-row: 3; justify-self: start; }
+  .backlog-row .prio { grid-column: 3; grid-row: 3; }
+  .backlog-row .points { grid-column: 4; grid-row: 3; }
+  .column { min-height: 200px; }
+  .demo-banner { font-size: 0.78rem; padding: 0.35rem 0.75rem; }
+  .lang-picker { max-width: 7rem; }
+  /* One-row top bar: brand, then the tools; the section links take the next row. */
+  .topbar { gap: 0.4rem 0.5rem; }
+  .topbar .lang-picker { max-width: 5.5rem; }
+  .topbar .user-menu summary { max-width: 6.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar .spacer { display: none; }
+  .topbar .brand { margin-inline-end: auto; }
+  .backlog-head { flex-direction: column; align-items: stretch; }
+  .backlog-head h2 { flex-wrap: wrap; }
+  .overlay .issue-panel { max-height: calc(100dvh - 11rem); }
+  .chat { grid-template-columns: 1fr; min-height: 0; }
+  .chat > .chat-sidebar, .chat > aside, .chat > nav { border-inline-end: 0; border-bottom: 1px solid var(--border); }
+  .project-list { grid-template-columns: 1fr; }
+  /* The composer wraps: the message box takes its own full-width line. */
+  .issue-layout { grid-template-columns: 1fr; }
+  .issue-side { position: static; }
+  /* The issue dialog becomes a bottom sheet. */
+  .overlay:has(.issue-panel) { padding: 0; place-items: end stretch; }
+  .overlay .issue-panel { width: 100%; max-height: 92dvh; border-radius: 16px 16px 0 0; }
+  /* Top bar: the language picker lives in the user menu's reach; keep the bar to one row of tools. */
+  .topbar .lang-picker { display: none; }
+  .topbar .user-menu summary { max-width: 7rem; }
+  .demo-banner { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Tables scroll sideways with a hint, and drop low-value columns. */
+  .issue-list table { min-width: 34rem; }
+  .issue-list { mask-image: linear-gradient(90deg, #000 88%, transparent); }
+  /* Quick filters scroll in one row. */
+  .quick-filters { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .quick-filters .chip { flex: none; }
+  .issue-details form, .issue-details { grid-template-columns: 1fr; }
 }

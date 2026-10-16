@@ -233,3 +233,29 @@ export function fileSize(bytes: number): string {
 }
 
 export const MAX_FILE = 25 * 1024 * 1024;
+
+/** One row of the message log: the message, the local day it opens ("YYYY-MM-DD") and whether it starts a group. */
+export type TimelineRow = { message: Message; day: string | null; first: boolean };
+
+const GROUP_GAP = 5 * 60_000;
+
+function localDay(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Lays out an oldest-first history like a messenger: a day divider where the date changes, and one author's
+ * messages sent within five minutes of each other share a header. System messages always stand alone.
+ */
+export function timeline(messages: Message[]): TimelineRow[] {
+  let prev: Message | undefined;
+  return messages.map((m) => {
+    const day = localDay(m.created_at);
+    const newDay = !prev || localDay(prev.created_at) !== day;
+    const first = newDay || !prev || !!m.kind || !!prev.kind || prev.author_id !== m.author_id ||
+      Date.parse(m.created_at) - Date.parse(prev.created_at) > GROUP_GAP;
+    prev = m;
+    return { message: m, day: newDay ? day : null, first };
+  });
+}

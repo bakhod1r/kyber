@@ -27,8 +27,13 @@ function block(selector: string): string {
 
 describe("styles.css layout", () => {
   it("imports every part under src/styles, in a fixed order", () => {
-    expect(parts).toEqual(["base.css", "components.css", "features.css", "themes.css", "responsive.css"]);
+    expect(parts).toEqual(["base.css", "components.css", "features.css", "themes.css", "responsive.css", "motion.css"]);
     expect(readdirSync(join(SRC, "styles")).sort()).toEqual([...parts].sort());
+  });
+
+  it("turns every animation off for people who ask for reduced motion", () => {
+    const motion = readFileSync(join(SRC, "styles", "motion.css"), "utf8");
+    expect(motion).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\*, \*::before, \*::after \{[^}]*animation: none !important;[^}]*transition: none !important;/);
   });
 
   it("stacks layers through z-index tokens, not ad hoc numbers", () => {

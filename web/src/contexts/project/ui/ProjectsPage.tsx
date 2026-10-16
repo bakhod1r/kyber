@@ -42,8 +42,10 @@ export function ProjectsPage() {
         {[...(projects.data ?? [])].sort((a, b) => Number(!!a.archived) - Number(!!b.archived)).map((p) => (
           <li key={p.id} className={p.archived ? "archived" : undefined}>
             <Link to={`/projects/${encodeURIComponent(p.key)}`}>
-              <span className="key">{p.key}</span> {p.name}
+              <span className="project-tile" aria-hidden="true">{p.key.slice(0, 2)}</span>
+              <span className="project-text"><span className="key">{p.key}</span> {p.name}</span>
               {p.archived && <span className="badge">{t("Archived")}</span>}
+              <span className="project-go" aria-hidden="true">→</span>
             </Link>
           </li>
         ))}

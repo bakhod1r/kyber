@@ -10,6 +10,10 @@ hero:
       text: Get started
       link: /getting-started/
     - theme: alt
+      text: Try the live demo
+      link: https://bakhod1r.github.io/kyber/demo/
+      target: _self
+    - theme: alt
       text: View on GitHub
       link: https://github.com/bakhod1r/kyber
 

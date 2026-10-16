@@ -1,6 +1,6 @@
 // ProjectPage composes the project views of every bounded context (app shell / composition root).
 import { useQuery } from "@tanstack/react-query";
-import { NavLink, useParams, useSearchParams } from "react-router-dom";
+import { Link, NavLink, useParams, useSearchParams } from "react-router-dom";
 import { projectUseCases } from "../contexts/project/application";
 import { identityUseCases } from "../contexts/identity/application";
 import { Members } from "../contexts/project/ui/Members";
@@ -40,7 +40,10 @@ function ProjectDocs({ projectKey }: { projectKey: string }) {
 }
 import { useT } from "../shared/i18n/i18n";
 
-export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "docs" | "forms" | "announcements" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" | "webhooks" | "automation" }) {
+/** Admin pages: reached through the one Settings tab, with their own section list. */
+const SETTINGS_VIEWS = new Set(["members", "workflow", "board-settings", "fields", "permissions", "notifications", "webhooks", "import", "audit", "automation"]);
+
+export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "docs" | "forms" | "announcements" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" | "webhooks" | "members" | "automation" }) {
   const t = useT();
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
@@ -48,6 +51,9 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
   const project = projects.data?.find((p) => p.key === key);
   const members = useQuery({ queryKey: ["members", key], queryFn: () => projectUseCases.members(key) });
   const admin = members.data?.some((m) => m.user_id === me.data?.id && m.role === "admin") ?? false;
+  const base = `/projects/${encodeURIComponent(key)}`;
+  const settings = SETTINGS_VIEWS.has(view);
+  const summary = view === "summary";
   // The open issue lives in the URL (?issue=KEY-1), so notifications and links can deep-link to it.
   const [params, setParams] = useSearchParams();
   const open = params.get("issue");
@@ -68,32 +74,39 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         <ArchiveControl projectKey={key} admin={admin} />
       </div>
       <nav className="tabs" aria-label={t("Project views")}>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/summary`}>{t("Summary")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/timeline`}>{t("Timeline")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/backlog`}>{t("Backlog")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}`} end>
+        <NavLink to={`${base}/summary`}>{t("Summary")}</NavLink>
+        <NavLink to={`${base}/timeline`}>{t("Timeline")}</NavLink>
+        <NavLink to={`${base}/backlog`}>{t("Backlog")}</NavLink>
+        <NavLink to={base} end>
           {t("Active sprints")}
         </NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/reports`}>{t("Reports")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/list`}>{t("List")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/releases`}>{t("Releases")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/goals`}>{t("Goals")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/docs`}>{t("Docs")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/forms`}>{t("Forms")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/announcements`}>{t("Announcements")}</NavLink>
+        <NavLink to={`${base}/reports`}>{t("Reports")}</NavLink>
+        <NavLink to={`${base}/list`}>{t("List")}</NavLink>
+        <NavLink to={`${base}/releases`}>{t("Releases")}</NavLink>
+        <NavLink to={`${base}/goals`}>{t("Goals")}</NavLink>
+        <NavLink to={`${base}/docs`}>{t("Docs")}</NavLink>
+        <NavLink to={`${base}/forms`}>{t("Forms")}</NavLink>
+        <NavLink to={`${base}/announcements`}>{t("Announcements")}</NavLink>
+        {/* One entry for the admin pages: their sections only show once you are in them. */}
+        <Link to={`${base}/members`} className={settings ? "settings-link active" : "settings-link"} aria-current={settings ? "page" : undefined}>
+          <span aria-hidden="true">⚙</span> {t("Settings")}
+        </Link>
       </nav>
-      <nav className="tabs settings-tabs" aria-label={t("Project settings")}>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/workflow`}>{t("Workflow")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/board-settings`}>{t("Board settings")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/fields`}>{t("Fields")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/permissions`}>{t("Permissions")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/notifications`}>{t("Notifications")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/automation`}>{t("Automation")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/webhooks`}>{t("Webhooks")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/import`}>{t("Import")}</NavLink>
-        <NavLink to={`/projects/${encodeURIComponent(key)}/audit`}>{t("Audit")}</NavLink>
-      </nav>
-      <div className="project-grid">
+      {settings && (
+        <nav className="settings-nav" aria-label={t("Project settings")}>
+          <NavLink to={`${base}/members`}>{t("Members")}</NavLink>
+          <NavLink to={`${base}/workflow`}>{t("Workflow")}</NavLink>
+          <NavLink to={`${base}/board-settings`}>{t("Board settings")}</NavLink>
+          <NavLink to={`${base}/fields`}>{t("Fields")}</NavLink>
+          <NavLink to={`${base}/permissions`}>{t("Permissions")}</NavLink>
+          <NavLink to={`${base}/notifications`}>{t("Notifications")}</NavLink>
+          <NavLink to={`${base}/automation`}>{t("Automation")}</NavLink>
+          <NavLink to={`${base}/webhooks`}>{t("Webhooks")}</NavLink>
+          <NavLink to={`${base}/import`}>{t("Import")}</NavLink>
+          <NavLink to={`${base}/audit`}>{t("Audit")}</NavLink>
+        </nav>
+      )}
+      <div className={summary ? "project-grid" : "project-main"}>
         {view === "summary" && <ProjectSummary projectKey={key} />}
         {view === "timeline" && <Timeline projectKey={key} onOpen={setOpen} />}
         {view === "list" && (
@@ -121,7 +134,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         {view === "notifications" && <TelegramGroups projectKey={key} />}
         {view === "webhooks" && <Webhooks projectKey={key} />}
         {view === "automation" && <Automation projectKey={key} />}
-        <Members projectKey={key} />
+        {(view === "summary" || view === "members") && <Members projectKey={key} />}
       </div>
       {open && (
         <IssuePanel issueKey={open} projectKey={key} me={me.data?.id} onClose={() => setOpen(null)} onOpen={setOpen} extensions={

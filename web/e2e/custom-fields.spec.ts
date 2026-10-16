@@ -14,6 +14,8 @@ test("custom fields on issues and in JQL", async ({ page }) => {
   await page.getByRole("button", { name: "Create project" }).click();
   await expect(page).toHaveURL(new RegExp(`/projects/${key}$`));
 
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+
   await page.getByRole("link", { name: "Fields", exact: true }).click();
   const admin = page.getByRole("region", { name: "Custom fields" });
   await admin.getByLabel("Field name").fill("Tier");

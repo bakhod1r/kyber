@@ -5,7 +5,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { identityUseCases } from "../../identity/application";
 import { projectUseCases } from "../../project/application";
 import {
-  applyEvent, canManage, type ChannelWorkflow, type ChatEvent, localTime, utcMinute, type ConversationPrefs, type Level, moveSection, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, COMMAND_HELP, clipName, type ClipKind, type ClipRecorder, MAX_CLIP_MS, type Message, parseCommand, startClip, parseRemind, type SlashCommand, remindPresets, type ScheduledMessage, type Receipt, seen, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
+  applyEvent, canManage, type ChannelWorkflow, type ChatEvent, localTime, utcMinute, type ConversationPrefs, type Level, moveSection, sections, chatUseCases, type Conversation, clearAfter, conversationTitle, fileSize, MAX_FILE, COMMAND_HELP, clipName, type ClipKind, type ClipRecorder, MAX_CLIP_MS, type Message, parseCommand, startClip, parseRemind, type SlashCommand, remindPresets, type ScheduledMessage, type Receipt, seen, timeline, type SavedItem, splitMentions, STATUS_PRESETS, type UserGroup, type UserStatus, useChatStream,
 } from "../application";
 import { type MessageKey, msg, useT } from "../../../shared/i18n/i18n";
 
@@ -15,6 +15,20 @@ const QUICK = ["👍", "🎉", "👀", "✅"];
 const historyKey = (id: string) => ["chat", "history", id];
 const threadKey = (id: string) => ["chat", "thread", id];
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "?";
+
+/** "Today", "Yesterday" or the date, for a day divider in the message log. */
+function DayDivider({ day }: { day: string }) {
+  const t = useT();
+  const [y, mo, d] = day.split("-").map(Number) as [number, number, number];
+  const date = new Date(y, mo - 1, d);
+  const today = new Date();
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  const same = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  const text = same(date, today) ? t("Today") : same(date, yesterday) ? t("Yesterday")
+    : date.toLocaleDateString([], { day: "numeric", month: "long", year: date.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+  return <p className="chat-day" role="separator"><span>{text}</span></p>;
+}
 
 /** People the user works with (project members), by id → name. */
 
@@ -914,9 +928,17 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
   const receipts = useQuery({ queryKey: ["chat", "receipts", id], queryFn: () => chatUseCases.receipts(id), enabled: conversation?.kind === "dm" });
   const seenId = conversation?.kind === "dm" ? seen(messages, receipts.data ?? [], me) : null;
   const member = conversation?.member ?? true;
+  // Like a messenger: open at the newest message and follow new ones, unless older pages were just loaded.
+  const logRef = useRef<HTMLDivElement>(null);
+  const newest = history.data?.[0]?.id;
+  useEffect(() => {
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [newest, id]);
   return (
     <section className="chat-main">
       <header className="chat-header">
+        <Link to="/chat" className="chat-back" aria-label={t("All chats")}>←</Link>
         <h1>{title}</h1>
         {conversation?.topic && <p className="muted">{conversation.topic}</p>}
         <button className="ghost" aria-expanded={showPins} onClick={() => setShowPins((v) => !v)}>{t("📌 Pinned")}</button>
@@ -933,12 +955,13 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
         </ul>
       )}
       {extras}
-      <div role="log" aria-label={t("Messages")} className="chat-log">
+      <div role="log" aria-label={t("Messages")} className="chat-log" ref={logRef}>
         {(history.data?.length ?? 0) >= PAGE && !exhausted && <button className="ghost" onClick={() => void loadOlder()}>{t("Load older")}</button>}
         {history.data?.length === 0 && <p className="muted">{t("No messages yet. Say hello!")}</p>}
-        {messages.map((m) => (
-          <div key={m.id}>
-            <MessageItem m={m} names={names} me={me} canAct={member} onChange={replace} onThread={() => onThread(m.id)} />
+        {timeline(messages).map(({ message: m, day, first }) => (
+          <div key={m.id} className="chat-row">
+            {day && <DayDivider day={day} />}
+            <MessageItem m={m} first={first} names={names} me={me} canAct={member} onChange={replace} onThread={() => onThread(m.id)} />
             {m.id === seenId && <p className="chat-seen muted" aria-label={t("Seen")}>{t("✓ Seen")}</p>}
           </div>
         ))}
@@ -970,8 +993,8 @@ function ConversationView({ id, conversation, title, names, me, typers, onThread
   );
 }
 
-function MessageItem({ m, names, me, canAct, onChange, onThread }: {
-  m: Message; names: Map<string, string>; me: string; canAct: boolean; onChange: (m: Message) => void; onThread?: () => void;
+function MessageItem({ m, first = true, names, me, canAct, onChange, onThread }: {
+  m: Message; first?: boolean; names: Map<string, string>; me: string; canAct: boolean; onChange: (m: Message) => void; onThread?: () => void;
 }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
@@ -1028,7 +1051,10 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
     );
   }
   return (
-    <article className="chat-message" aria-label={t("{name} at {time}", { name: names.get(m.author_id) ?? t("Someone"), time: time(m.created_at) })}>
+    <article className={`chat-message${mine ? " mine" : ""}${first ? "" : " grouped"}`}
+      aria-label={t("{name} at {time}", { name: names.get(m.author_id) ?? t("Someone"), time: time(m.created_at) })}>
+      {!mine && <span className="chat-avatar" aria-hidden="true">{first ? initials(names.get(m.author_id) ?? "?") : ""}</span>}
+      <div className="chat-bubble">
       <header>
         <Who id={m.author_id} names={names} /> <time className="muted" dateTime={m.created_at}>{time(m.created_at)}</time>
         {m.edited_at && !m.deleted && <span className="muted">{t(" (edited)")}</span>}
@@ -1045,22 +1071,28 @@ function MessageItem({ m, names, me, canAct, onChange, onThread }: {
       )}
       {m.file && !m.deleted && <Attachment file={m.file} />}
       <IssuePreviews m={m} />
-      {!m.deleted && (
-        <div className="chat-actions">
+      {!m.deleted && (m.reactions.length > 0 || m.reply_count > 0) && (
+        <div className="chat-reactions">
           {m.reactions.map((r) => (
             <button key={r.emoji} className={`reaction ${r.user_ids.includes(me) ? "mine" : ""}`} disabled={!canAct}
               aria-pressed={r.user_ids.includes(me)} onClick={() => react.mutate(r.emoji)}>
               {r.emoji} {r.user_ids.length}
             </button>
           ))}
+          {onThread && m.reply_count > 0 && (
+            <button className="ghost chat-replies" onClick={onThread}>
+              <span aria-hidden="true">💬</span> {t(m.reply_count === 1 ? "{n} reply" : "{n} replies", { n: m.reply_count })}
+            </button>
+          )}
+        </div>
+      )}
+      </div>
+      {!m.deleted && (
+        <div className="chat-actions chat-tools" role="toolbar" aria-label={t("Message actions")}>
           {canAct && QUICK.filter((q) => !m.reactions.some((r) => r.emoji === q)).map((q) => (
             <button key={q} className="ghost quick" aria-label={t("React {emoji}", { emoji: q })} onClick={() => react.mutate(q)}>{q}</button>
           ))}
-          {onThread && (
-            <button className="ghost" onClick={onThread}>
-              {m.reply_count > 0 ? t(m.reply_count === 1 ? "{n} reply" : "{n} replies", { n: m.reply_count }) : t("Reply in thread")}
-            </button>
-          )}
+          {onThread && m.reply_count === 0 && <button className="ghost" onClick={onThread}>{t("Reply in thread")}</button>}
           {canAct && <button className="ghost" onClick={() => pin.mutate()}>{m.pinned_by ? t("Unpin") : t("Pin")}</button>}
           <SaveMenu m={m} />
           {canAct && !m.thread_id && <IssueFromMessage m={m} onDone={onChange} />}
@@ -1128,15 +1160,17 @@ function Composer({ label, initial = "", onSend, onSchedule, onTyping, onCancel 
   };
   return (
     <div className="chat-composer">
-      <textarea aria-label={label} rows={2} value={text} placeholder={label} onKeyDown={onKeyDown}
+      <textarea aria-label={label} rows={1} value={text} placeholder={label} onKeyDown={onKeyDown}
         onChange={(e) => {
           setText(e.target.value);
+          // Grows with the text up to a few lines, like a messenger's input.
+          e.target.style.height = "auto";
+          e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
           if (onTyping && Date.now() - lastTyping.current > 3000) {
             lastTyping.current = Date.now();
             onTyping();
           }
         }} />
-      <button onClick={send} disabled={!text.trim()}>{t("Send")}</button>
       {onSchedule && (
         <select aria-label={t("Send later")} value="" disabled={!text.trim()} onChange={(e) => {
           const p = remindPresets(new Date())[Number(e.target.value)];
@@ -1148,6 +1182,9 @@ function Composer({ label, initial = "", onSend, onSchedule, onTyping, onCancel 
           {remindPresets(new Date()).map((p, i) => <option key={p.label} value={i}>{t("Send {when}", { when: domainLabel(p.label).toLowerCase() })}</option>)}
         </select>
       )}
+      <button className="chat-send" onClick={send} disabled={!text.trim()} aria-label={t("Send")} title={t("Send")}>
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z" /></svg>
+      </button>
     </div>
   );
 }
