@@ -36,7 +36,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   return (
     <main className="auth">
       <form className="panel" onSubmit={onSubmit}>
-        <img src="/logo.svg" alt="" width={56} height={56} className="auth-logo" />
+        <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" width={56} height={56} className="auth-logo" />
         <h1>{signup ? t("Create your Kyber account") : t("Log in to Kyber")}</h1>
         {signup && (
           <label>

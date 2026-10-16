@@ -3,3 +3,4 @@ dist/*
 !dist/.gitkeep
 test-results/
 playwright-report/
+dist-demo/

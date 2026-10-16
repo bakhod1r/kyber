@@ -128,3 +128,7 @@ label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { display:
   .board { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: 1fr; }
   .panel.inline { grid-template-columns: 1fr; }
 }
+
+/* The GitHub Pages demo's notice above the app. */
+.demo-banner { margin: 0; padding: 0.4rem 1rem; text-align: center; font-size: 0.85rem; background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--text); border-bottom: 1px solid var(--border); }
+.demo-banner button { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }

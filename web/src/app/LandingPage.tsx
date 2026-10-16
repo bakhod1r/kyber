@@ -17,7 +17,7 @@ export function LandingPage() {
     <div className="landing">
       <header className="landing-nav">
         <Link to="/" className="brand">
-          <img src="/logo.svg" alt="" width={28} height={28} /> Kyber
+          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" width={28} height={28} /> Kyber
         </Link>
         <nav aria-label={t("Account")}>
           <Link to="/login">{t("Log in")}</Link>
@@ -28,7 +28,7 @@ export function LandingPage() {
       </header>
       <main>
         <section className="hero">
-          <img src="/logo.svg" alt="" width={140} height={140} className="hero-logo" />
+          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" width={140} height={140} className="hero-logo" />
           <h1>{t("Plan, track and ship software — on your own terms.")}</h1>
           <p className="lead">
             {t("Kyber is an open-source issue and project tracker with the Jira essentials: boards, backlog, sprints, reports and permissions. Use it here or run it on your own servers.")}

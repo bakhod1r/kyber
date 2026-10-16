@@ -15,6 +15,7 @@ export default defineConfig({
       { text: 'Guides', link: '/guide/projects-and-boards' },
       { text: 'Operations', link: '/operations/helm' },
       { text: 'Architecture', link: '/architecture/' },
+      { text: 'Live demo', link: 'https://bakhod1r.github.io/kyber/demo/', target: '_self' },
     ],
     sidebar: [
       {

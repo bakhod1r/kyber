@@ -26,7 +26,7 @@ export function Layout({ user, children }: { user: User; children: ReactNode }) 
     <>
       <header className="topbar">
         <Link to="/" className="brand">
-          <img src="/logo.svg" alt="" width={28} height={28} />
+          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="" width={28} height={28} />
           {t("Kyber")}
         </Link>
         <nav className="topnav" aria-label={t("Main")}>
