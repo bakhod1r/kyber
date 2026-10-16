@@ -90,23 +90,20 @@ describe("Pomodoro buttons", () => {
   });
 });
 
-describe("Pomodoro → eye break", () => {
-  it("opens the guided eye break when the focus time is up", async () => {
+describe("Pomodoro end (the eye break was removed)", () => {
+  it("ends the focus time without an eye-break screen", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockApi({ "GET /api/v1/focus": { status: 200, body: { session: session({ remaining_seconds: 2 }) } } });
     renderWithProviders(<FocusTimer />);
     await screen.findByRole("timer");
     await act(async () => vi.advanceTimersByTime(3000));
-    expect(await screen.findByRole("dialog", { name: "Eye break" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("can be opened any time from the top bar", async () => {
+  it("the top bar offers no eye-break button", async () => {
     mockApi({ "GET /api/v1/focus": { status: 200, body: { session: null } } });
-    const user = userEvent.setup();
     renderWithProviders(<FocusTimer />);
-    await user.click(await screen.findByRole("button", { name: "Eye break" }));
-    expect(screen.getByRole("dialog", { name: "Eye break" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Skip break" }));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await screen.findByRole("button", { name: "Pomodoro mode" });
+    expect(screen.queryByRole("button", { name: "Eye break" })).not.toBeInTheDocument();
   });
 });

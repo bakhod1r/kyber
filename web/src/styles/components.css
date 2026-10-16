@@ -18,6 +18,9 @@
 }
 .overlay { position: fixed; inset: 0; background: rgb(4 10 20 / 45%); display: grid; place-items: center; padding: 1rem; z-index: var(--z-overlay); }
 .issue-panel { width: min(720px, 100%); max-height: 90vh; overflow: auto; display: grid; gap: 1rem; }
+/* The top bar stays above the overlay (its Pomodoro timer works while an issue is open), so the dialog sits below it. */
+.overlay:has(.issue-panel) { place-items: end center; }
+.overlay .issue-panel { max-height: calc(100dvh - 7.5rem); }
 .issue-panel-head { display: flex; justify-content: space-between; align-items: center; }
 .issue-panel-head h2 { margin: 0; text-transform: capitalize; }
 .issue-form { display: grid; gap: 0.75rem; }
@@ -107,12 +110,14 @@ textarea { font: inherit; color: var(--text); background: var(--surface); border
 .barlist { display: grid; gap: 0.1rem; }
 .barlist-row { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 0.5rem; }
 .barlist-label { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.barlist svg { width: 100%; height: 32px; }
+.barlist-track { display: flex; align-items: center; gap: 0.4rem; min-height: 1.75rem; padding-right: 2.5rem; }
+.barlist-bar { height: 0.9rem; border-radius: 0 4px 4px 0; background: var(--viz-1); flex: none; }
+.barlist .viz-value { font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .plot-wrap { position: relative; }
 .plot { width: 100%; height: auto; display: block; }
 .plot .grid { stroke: var(--viz-grid); stroke-width: 1; }
 .plot .axis, .viz-value { fill: var(--muted); font-size: 11px; }
-.viz-value { fill: var(--text); font-weight: 600; }
+.viz-value { fill: var(--text); color: var(--text); font-weight: 600; }
 .plot .crosshair { stroke: var(--muted); stroke-width: 1; }
 .tooltip {
   position: absolute; top: 8px; transform: translateX(-50%); pointer-events: none; background: var(--surface);
@@ -188,19 +193,6 @@ a.button.ghost { background: transparent; color: var(--accent); border: 1px soli
 .meeting-list button { margin-left: auto; }
 .meetings fieldset { border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .check { display: inline-flex; align-items: center; gap: 0.35rem; }
-/* The top bar (Pomodoro timer, notifications) stays usable above the issue panel overlay. */
-
-/* Eye break (S50, from Sharingan) */
-.eye-break { position: fixed; inset: 0; z-index: var(--z-fullscreen); display: grid; place-items: center; align-content: center; gap: 0.75rem;
-  padding: 16px; background: var(--bg); text-align: center; }
-.eye-stage { width: min(70vmin, 420px); height: auto; color: var(--text); }
-.eye-guide { transition: transform 0.6s ease-in-out; }
-.eye-say { font-size: 1.25rem; font-weight: 600; min-height: 1.6em; margin: 0; }
-.eye-exercise { color: var(--muted); margin: 0; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem; }
-.eye-break progress { width: min(420px, 90vw); }
-.eye-done { display: grid; gap: 1rem; justify-items: center; }
-.eye-button { padding: 0.15rem 0.5rem; }
-@media (prefers-reduced-motion: reduce) { .eye-guide { transition: none; } }
 
 /* S43 workflow editor */
 .workflow-editor { display: grid; gap: 0.75rem; max-width: 40rem; }
@@ -220,10 +212,9 @@ a.button.ghost { background: transparent; color: var(--accent); border: 1px soli
 .column.wip-over .count { background: var(--danger); color: var(--surface); }
 .column.wip-under { border-color: var(--warning); }
 
-/* Pomodoro mode toggle and the eye-exercise question */
+/* Pomodoro mode toggle */
 .pomodoro-toggle { opacity: 0.45; }
 .pomodoro-toggle.on { opacity: 1; }
-.eye-ask { position: fixed; right: 1rem; bottom: 1rem; z-index: var(--z-toast); max-width: 22rem; display: grid; gap: 0.5rem; }
 
 /* Issue history */
 .history-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.35rem; font-size: 0.9rem; }
@@ -277,9 +268,10 @@ a.user:hover { text-decoration: underline; }
 @media (max-width: 720px) { .search-grid { grid-template-columns: 1fr; } }
 .columns-editor { list-style: none; padding: 0; margin: 0 0 0.5rem; display: grid; gap: 0.35rem; }
 .columns-editor .narrow input { width: 4.5rem; }
-.settings-tabs { font-size: 0.85rem; opacity: 0.85; }
 .quick-filters { margin-bottom: 0.5rem; flex-wrap: wrap; }
-.quick-filters [aria-pressed="true"] { outline: 2px solid currentColor; }
+/* Quick filters are toggles: light pills, filled while on. */
+.quick-filters .chip { min-height: 2rem; padding: 0.25rem 0.8rem; border-radius: 999px; font-weight: 500; font-size: 0.875rem; }
+.quick-filters .chip[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: var(--accent); color: var(--accent); }
 
 /* Chat (S53) */
 .chat { display: grid; grid-template-columns: 240px 1fr; gap: 16px; align-items: start; min-height: 70vh; }
@@ -486,11 +478,12 @@ circle.wb-handle { cursor: move; }
 
 /* Board toolbar (Jira-style) */
 /* One row of fixed height: filters loading in must not shift the board under the pointer. */
-.board-toolbar { display: flex; flex-wrap: nowrap; overflow-x: auto; align-items: center; gap: 0.5rem; height: 2.75rem; margin: 0.5rem 0 0.75rem; }
+.board-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; min-height: 2.75rem; margin: 0.5rem 0 0.75rem; }
 .board-toolbar > * { flex-shrink: 0; }
+.board-toolbar input[type="search"], .board-toolbar > input { flex: 1 1 14rem; width: auto; }
 .board-search { min-width: 14rem; }
 .avatar-filter { display: flex; }
-.avatar-filter .avatar { margin-left: -0.35rem; border: 2px solid var(--bg); cursor: pointer; }
+.avatar-filter .avatar { width: 2rem; height: 2rem; min-height: 0; padding: 0; margin-left: -0.3rem; border: 2px solid var(--bg); cursor: pointer; font-size: 0.7rem; }
 .avatar-filter .avatar:first-child { margin-left: 0; }
 .avatar-filter .avatar[aria-pressed="true"] { outline: 2px solid var(--accent); z-index: 1; }
 .multi-pick { position: relative; }
@@ -512,3 +505,25 @@ circle.wb-handle { cursor: move; }
 .wf-matrix table { border-collapse: collapse; }
 .wf-matrix th, .wf-matrix td { padding: 0.25rem 0.6rem; border: 1px solid var(--border); text-align: center; }
 .wf-matrix caption { text-align: left; font-weight: 600; padding-bottom: 0.35rem; }
+
+/* ---- Polish (design review): project navigation, board, cards. ---- */
+.project-main { display: block; }
+.tabs { align-items: flex-end; }
+.tabs .settings-link { margin-inline-start: auto; }
+.settings-nav { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: -0.25rem 0 1.25rem; padding: 0.3rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); }
+.settings-nav a { padding: 0.35rem 0.8rem; border-radius: 6px; color: var(--muted); font-weight: 600; font-size: 0.875rem; white-space: nowrap; }
+.settings-nav a:hover { color: var(--text); text-decoration: none; }
+.settings-nav a.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
+/* Columns reach the bottom of the screen, so a card can be dropped anywhere in them. */
+.board { align-items: stretch; }
+.column { display: flex; flex-direction: column; min-height: max(320px, calc(100vh - 360px)); }
+.card { padding: 0.65rem 0.75rem; }
+.card-foot { gap: 0.5rem; justify-content: flex-start; margin-top: 0.15rem; }
+.card-foot .avatar { margin-inline-start: auto; }
+.card-move { order: 0; }
+.type { font-size: 0.72rem; letter-spacing: 0.03em; }
+.state, .status { font-size: 0.75rem; }
+.avatar { font-size: 0.7rem; }
+
+.board-toolbar label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.board-toolbar label select { width: auto; }

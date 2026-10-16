@@ -97,6 +97,7 @@ test("a new user runs a project on the Kanban board", async ({ page }) => {
   await page.getByRole("link", { name: "Active sprints", exact: true }).click();
 
   // Inviting an unknown email surfaces the server error.
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
   await page.getByLabel("Invite by email").fill("nobody@example.com");
   await page.getByRole("button", { name: "Invite" }).click();
   await expect(page.getByRole("alert")).toContainText("no user with that email");

@@ -114,7 +114,7 @@ describe("App routing and auth (KYB-S14 AC1, AC2)", () => {
       "GET /api/v1/projects/KYB/members": { status: 200, body: { items: [{ user_id: "u-1", email: "ali@x.uz", name: "Ali", role: "admin" }] } },
       "POST /api/v1/projects/KYB/members": { status: 204 },
     });
-    renderWithProviders(<AppRoutes />, "/projects/KYB");
+    renderWithProviders(<AppRoutes />, "/projects/KYB/members");
     await userEvent.type(await screen.findByLabelText("Invite by email"), "bob@x.uz");
     await userEvent.selectOptions(screen.getByLabelText("Role"), "viewer");
     await userEvent.click(screen.getByRole("button", { name: "Invite" }));
