@@ -19,6 +19,7 @@ KYBER_URL=http://localhost:8080 ISSUES=10000 DURATION=2m "$(scripts/dev-env.sh k
 | 1 | baseline (list without paging, 5.4 MB per response) | 6.2 s | 11.8 s | 12.3 s | 0 % (requests dropped) |
 | 2 | `limit`/`offset` paging on `GET /projects/{key}/issues` | 489 ms | 1.32 s | 1.75 s | 0 % |
 | 3 | JQL evaluator: build the value normaliser once (was 56 % of search CPU) | 5.3 ms | **78.9 ms** | 104.7 ms | 0 % |
+| 4 | v0.1.0 release check (2026-10-16, main `fada1e7` + docs; same setup) | 2.7 ms | **37.4 ms** | — (max 88 ms) | 0 % |
 
 Single requests on an idle server after run 3: issue 3 ms, list page 3 ms, search ~35 ms (a search still
 loads every issue of the query's narrowed set; see the JQL pushdown in ADR/PLAN).

@@ -236,7 +236,7 @@ Har bir milestone `awesome-agents` zanjiri bo'yicha o'tadi: `/design` → implem
 - [x] F11 Board filtrlari: matn, assignee, version, epic, type, label; quick filters
 - [x] Frontend: shell, auth, board (Jira toolbar), issue detail, project settings
 - [x] e2e: Playwright, 35 ssenariy (`web/e2e`, `make e2e`)
-- [ ] **Release v0.1.0** tegi — `release.yml` + GoReleaser tayyor, teg hali qo'yilmagan
+- [x] **Release v0.1.0** (2026-10-16) — `make ship` o'tdi, `CHANGELOG.md`, GoReleaser + multi-arch image
 
 ### M2 — v0.5 Beta
 - [x] F7 Backlog, Sprint, Scrum board, LexoRank
@@ -340,9 +340,9 @@ Katta feature'lar uchun: `/flow "Sprint va backlog moduli"` — har bosqichdan k
 
 ---
 
-## 10. Keyingi qadamlar (darhol)
+## 10. Keyingi qadamlar
 
-1. ADR-0007 (litsenziya) bo'yicha qaror.
-2. M0: repo skeleti + CI + docker-compose.
-3. `/design "Kyber core domain model"` → ADR-0001…0005.
-4. GitHub'da M1 issue'larini milestone bilan ochish.
+1. v0.1.0 bo'yicha foydalanuvchi fikrlarini yig'ish (issue'lar, discussions).
+2. Tashqi pentest (M3) — v1.0 dan oldin majburiy.
+3. Stored SAML connections (ADR-0018 davomi).
+4. **Release v1.0.0** + launch.

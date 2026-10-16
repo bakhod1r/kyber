@@ -467,8 +467,17 @@ func TestRoomRemoveAndServerRecording(t *testing.T) {
 		mu.Lock()
 		posted := filepath.Join(dir, filepath.Base(file))
 		mu.Unlock()
-		if _, err := os.Stat(posted); !os.IsNotExist(err) {
-			t.Fatalf("the posted file stays behind: %v", err)
+		// The file is discarded right after the message is posted, so wait for it to go.
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			_, err := os.Stat(posted)
+			if os.IsNotExist(err) {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the posted file stays behind: %v", err)
+			}
+			time.Sleep(20 * time.Millisecond)
 		}
 	}, server.WithMediaServer(lk))
 }
