@@ -34,7 +34,9 @@ export function ProjectsPage() {
         {projects.data?.map((p) => (
           <li key={p.id}>
             <Link to={`/projects/${encodeURIComponent(p.key)}`}>
-              <span className="key">{p.key}</span> {p.name}
+              <span className="project-tile" aria-hidden="true">{p.key.slice(0, 2)}</span>
+              <span className="project-text"><span className="key">{p.key}</span> {p.name}</span>
+              <span className="project-go" aria-hidden="true">→</span>
             </Link>
           </li>
         ))}

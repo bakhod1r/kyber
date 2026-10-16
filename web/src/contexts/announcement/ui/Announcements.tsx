@@ -33,7 +33,7 @@ export function Announcements({ projectKey }: { projectKey: string | null }) {
       <div className="row between">
         <h2>{label}</h2>
         {!writing && (
-          <button type="button" onClick={() => setWriting(true)}>
+          <button type="button" className="ghost" onClick={() => setWriting(true)}>
             {t("New announcement")}
           </button>
         )}

@@ -205,10 +205,15 @@ export function Board({
   return (
     <div className="board-wrap">
       {active && (
-        <p className="sprint-banner">
-          <strong>{active.name}</strong>
-          {active.goal && <span> — {active.goal}</span>}
-        </p>
+        <div className="sprint-banner">
+          <p>
+            <strong>{active.name}</strong>
+            {active.goal && <span> — {active.goal}</span>}
+          </p>
+          <button type="button" disabled={complete.isPending} onClick={() => complete.mutate(active.id)} title={active.name}>
+            {t("Complete sprint")}
+          </button>
+        </div>
       )}
       {boards.data && boards.data.length > 1 && (
         <label className="board-picker">
@@ -252,7 +257,6 @@ export function Board({
           setMode(m);
           storeMode(projectKey, m);
         }}
-        sprint={active ? { name: active.name, completing: complete.isPending, onComplete: () => complete.mutate(active.id) } : undefined}
       />
       {mode === "none" ? (
         <div className="board">{renderColumns(issues.data)}</div>
@@ -307,7 +311,6 @@ function BoardToolbar({
   onFilter,
   mode,
   onMode,
-  sprint,
 }: {
   projectKey: string;
   issues: Issue[];
@@ -318,7 +321,6 @@ function BoardToolbar({
   onFilter: (f: BoardFilter) => void;
   mode: SwimlaneMode;
   onMode: (m: SwimlaneMode) => void;
-  sprint?: { name: string; completing: boolean; onComplete: () => void };
 }) {
   const t = useT();
   const set = (patch: Partial<BoardFilter>) => onFilter({ ...filter, ...patch });
@@ -377,11 +379,6 @@ function BoardToolbar({
         </button>
       )}
       <span className="toolbar-spacer" />
-      {sprint && (
-        <button type="button" disabled={sprint.completing} onClick={sprint.onComplete} title={sprint.name}>
-          {t("Complete sprint")}
-        </button>
-      )}
       <label className="board-picker">
         {t("Group")}{" "}
         <select aria-label={t("Group")} value={mode} onChange={(e) => onMode(SWIMLANE_MODES.find((x) => x === e.target.value) ?? "none")}>

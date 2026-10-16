@@ -807,3 +807,18 @@ button.ghost.danger-ghost:hover:not(:disabled) { border-color: color-mix(in srgb
 .chat-tools { flex-wrap: nowrap; max-width: calc(100vw - 2.5rem); overflow-x: auto; scrollbar-width: none; }
 /* The toolbar stays hit-testable while hidden: moving the pointer onto it keeps the message hovered. */
 .chat-tools { top: -0.6rem; pointer-events: auto; }
+
+/* Sprint banner carries its own Complete action; project cards get a key tile. */
+.sprint-banner p { margin: 0; flex: 1; min-width: 0; }
+.sprint-banner button { flex: none; }
+.project-list a { display: flex; align-items: center; gap: 0.75rem; }
+.project-tile {
+  flex: none; inline-size: 2.5rem; block-size: 2.5rem; border-radius: 10px; display: grid; place-items: center;
+  font-weight: 800; font-size: 0.85rem; letter-spacing: 0.02em; color: #fff; background: linear-gradient(135deg, var(--accent), var(--glow));
+}
+.project-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-go { color: var(--muted); transition: transform var(--dur-fast, 120ms) var(--ease), color var(--dur-fast, 120ms) var(--ease); }
+.project-list a:hover .project-go { transform: translateX(3px); color: var(--accent); }
+.projects + .announcements { max-width: 640px; margin-top: 2rem; }
+.announcements > .row.between { margin-bottom: 0.75rem; }
+.announcements > .row.between h2 { margin: 0; }
