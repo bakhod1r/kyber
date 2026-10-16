@@ -45,4 +45,18 @@
   .chat-composer select { max-width: 100%; }
   .issue-layout { grid-template-columns: 1fr; }
   .issue-side { position: static; }
+  /* The issue dialog becomes a bottom sheet. */
+  .overlay:has(.issue-panel) { padding: 0; place-items: end stretch; }
+  .overlay .issue-panel { width: 100%; max-height: 92dvh; border-radius: 16px 16px 0 0; }
+  /* Top bar: the language picker lives in the user menu's reach; keep the bar to one row of tools. */
+  .topbar .lang-picker { display: none; }
+  .topbar .user-menu summary { max-width: 7rem; }
+  .demo-banner { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Tables scroll sideways with a hint, and drop low-value columns. */
+  .issue-list table { min-width: 34rem; }
+  .issue-list { mask-image: linear-gradient(90deg, #000 88%, transparent); }
+  /* Quick filters scroll in one row. */
+  .quick-filters { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .quick-filters .chip { flex: none; }
+  .issue-details form, .issue-details { grid-template-columns: 1fr; }
 }

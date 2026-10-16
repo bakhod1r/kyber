@@ -516,7 +516,7 @@ circle.wb-handle { cursor: move; }
 .settings-nav a.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow); }
 /* Columns reach the bottom of the screen, so a card can be dropped anywhere in them. */
 .board { align-items: stretch; }
-.column { display: flex; flex-direction: column; min-height: max(320px, calc(100vh - 360px)); }
+.column { display: flex; flex-direction: column; min-height: 280px; }
 .card { padding: 0.65rem 0.75rem; }
 .card-foot { gap: 0.5rem; justify-content: flex-start; margin-top: 0.15rem; }
 .card-foot .avatar { margin-inline-start: auto; }
@@ -603,3 +603,87 @@ button.ghost.danger-ghost:hover:not(:disabled) { border-color: color-mix(in srgb
 .account-settings .settings { gap: 0.4rem; }
 .account-settings .settings p { margin: 0 0 0.5rem; }
 .account-settings .settings h3, .account-settings .panel h3 { margin: 1rem 0 0.35rem; font-size: 0.95rem; }
+
+/* ---- Premium pass 2 (second design review). ---- */
+/* Chat header: title, topic and actions on one tidy row. */
+.chat-header { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding-bottom: 0.75rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+.chat-header h1 { flex: 1 0 100%; margin: 0; font-size: 1.35rem; }
+.chat-header > p { flex: 1 0 100%; margin: -0.25rem 0 0.25rem; }
+.chat-header button, .conversation-extras button { min-height: 2rem; padding: 0.25rem 0.75rem; font-size: 0.85rem; }
+.conversation-extras { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-start; margin-bottom: 0.5rem; }
+.conversation-extras > * { margin: 0; }
+.conversation-extras details > summary, .conversation-extras .whiteboards > button { width: auto; }
+/* Native selects used as small menus (chat actions, composer, channel ⋯) look like quiet ghost controls. */
+.chat-actions select, .chat-compose-row select, .chat-sidebar li select {
+  appearance: none; -webkit-appearance: none; width: auto; min-width: 0; min-height: 1.9rem; padding: 0.2rem 0.55rem;
+  border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 0.8rem; cursor: pointer; box-shadow: none;
+}
+.chat-actions select:hover, .chat-compose-row select:hover, .chat-sidebar li select:hover { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+.chat-sidebar li select { max-width: 2rem; text-align: center; opacity: 0.55; }
+.chat-sidebar li:hover select, .chat-sidebar li select:focus { opacity: 1; }
+.chat-compose-row { align-items: flex-end; }
+/* Workflow: the diagram's arcs have room; the status list lines up with the add row. */
+.wf-diagram { overflow: visible; padding-block: 2rem 0.5rem; }
+.workflow-statuses { padding: 0; list-style: none; }
+.workflow-editor h2 { margin-bottom: 0.25rem; }
+/* Board toolbar: one control height; the Group label centred. */
+.board-toolbar :is(input, select, button) { min-height: 2.25rem; font-size: 0.875rem; }
+.board-toolbar .icon-link { display: inline-grid; place-items: center; inline-size: 2.25rem; block-size: 2.25rem; padding: 0; }
+/* Sprint banner reads as a header, not a dead bar. */
+.sprint-banner { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1rem; background: var(--surface); box-shadow: var(--shadow); }
+/* Card status menu as a small pill. */
+.card-foot .card-move { appearance: none; -webkit-appearance: none; max-width: 9rem; min-height: 0; padding: 0.1rem 0.6rem; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--muted) 13%, transparent); color: var(--muted); font-size: 0.72rem; font-weight: 600; cursor: pointer; }
+.card-foot .card-move:hover { color: var(--text); }
+.card-open:focus-visible { outline-offset: 1px; }
+.quick-add select { width: 9rem; text-transform: capitalize; }
+.issue-side select, .card-move, .quick-add select { text-transform: capitalize; }
+/* Issue dialog header: the key, then the status as a pill. */
+.issue-panel-head h2 { display: flex; align-items: center; gap: 0.6rem; font-size: 1rem; }
+.issue-panel-head .status-pill { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; padding: 0.2rem 0.55rem; border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+/* Title reads as a heading until you edit it. */
+.issue-main .issue-form label:first-child input { font-size: 1.3rem; font-weight: 650; border-color: transparent; background: transparent; box-shadow: none; padding-inline: 0.35rem; }
+.issue-main .issue-form label:first-child input:hover { border-color: var(--border); }
+.issue-main .issue-form label:first-child input:focus { border-color: var(--accent); background: var(--surface); box-shadow: var(--ring); }
+.issue-details form, .issue-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 0.75rem; align-items: end; }
+.issue-details > h3, .issue-details .row.end { grid-column: 1 / -1; }
+.issue-side input:not([type="checkbox"]), .issue-side select { width: 100%; }
+.issue-side label.narrow { max-width: none; }
+.issue-side .check { align-items: flex-start; font-size: 0.8rem; }
+.issue-side .check input { margin-top: 0.2rem; }
+.time-tracking meter, .time-tracking progress { width: 100%; height: 0.5rem; }
+.time-tracking p { font-size: 0.82rem; }
+.issue-panel section > header, .issue-panel section > h3:has(+ button) { display: flex; justify-content: space-between; align-items: center; }
+/* Summary: an even grid with gaps; stat values line up. */
+.stats + .charts-grid, .stats + * { margin-top: 1rem; }
+.charts-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.stat { align-content: start; }
+/* Data tables behind charts: a quiet link, not a browser triangle. */
+.chart-table summary { list-style: none; font-size: 0.78rem; font-weight: 600; color: var(--accent); cursor: pointer; margin-top: 0.4rem; }
+.chart-table summary::-webkit-details-marker { display: none; }
+/* Members list: names and roles on one line. */
+.members li { align-items: center; }
+/* Meetings form rhythm. */
+.meetings form { display: grid; gap: 0.85rem; }
+.meetings fieldset { padding: 0.75rem; margin: 0; }
+.meetings legend { font-size: 0.82rem; font-weight: 500; color: var(--muted); padding: 0 0.3rem; }
+.meetings > p.muted { margin-top: -0.5rem; }
+/* Inline admin forms (fields, versions…): one height. */
+.row > :is(input, select, button) { min-height: 2.25rem; }
+/* Backlog: the sprint goal is text, statuses are even pills. */
+.backlog-head .goal, .backlog .goal { border: 0; background: transparent; padding: 0; color: var(--muted); box-shadow: none; }
+.backlog-row .status { min-width: 6.5rem; text-align: center; background: color-mix(in srgb, currentColor 12%, transparent); }
+/* Empty timeline and similar: a centred card. */
+.timeline > .muted:only-of-type, .timeline .empty { padding: 2.5rem 1rem; text-align: center; border: 1px dashed var(--border); border-radius: var(--radius); }
+/* A placeholder dash in a stat is quieter than a number. */
+.stat-value:is(:empty, :where(:not(:has(*)))) { font-variant-numeric: tabular-nums; }
+
+.language-settings .lang-picker { max-width: 16rem; font-size: 0.95rem; }
+
+/* Premium pass 3: alignment fixes from the last screenshot sweep. */
+.quick-add { grid-template-columns: minmax(0, 1fr) 9.5rem auto; align-items: center; }
+.quick-add select { width: 100%; padding-inline-end: 1.75rem; }
+.card-open { border: 0; border-bottom: 0; box-shadow: none; text-decoration: none; }
+.card-open:hover { text-decoration: none; }
+.board-toolbar label { min-height: 2.25rem; line-height: 1; margin: 0; }
+.chat-composer select, .chat-compose-row select { width: auto; flex: 0 0 auto; min-width: 3rem; }
+.issue-panel section select, .issue-main select { width: auto; max-width: 14rem; }

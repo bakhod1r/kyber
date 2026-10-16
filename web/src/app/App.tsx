@@ -27,6 +27,7 @@ import { ProjectsPage } from "../contexts/project/ui/ProjectsPage";
 import { identityUseCases } from "../contexts/identity/application";
 import { SearchPage } from "../contexts/search/ui/SearchPage";
 import { useT } from "../shared/i18n/i18n";
+import { LanguagePicker } from "../shared/i18n/LanguagePicker";
 
 export const ME = ["me"];
 
@@ -62,6 +63,10 @@ function AccountSettings() {
   return (
     <div className="account-settings">
       <h1>{t("Settings")}</h1>
+      <section className="panel language-settings" aria-label={t("Language")}>
+        <h2>{t("Language")}</h2>
+        <LanguagePicker />
+      </section>
       <SettingsPage />
       <AppearanceSettings />
       <AccessTokens />

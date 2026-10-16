@@ -50,6 +50,17 @@ const SEED: [string, IssueType, string, Priority, string | null, number | null][
   ["Import issues from Jira CSV", "epic", "todo", "high", null, null],
 ];
 
+/** The server's default permission scheme (internal/access/domain.DefaultScheme). */
+const role = (value: string) => ({ kind: "role", value });
+const MEMBERS = [role("member"), role("admin")];
+const DEFAULT_PERMISSIONS = [
+  { permission: "BROWSE_PROJECTS", grants: [role("viewer"), ...MEMBERS] },
+  ...["CREATE_ISSUES", "ASSIGN_ISSUES", "TRANSITION_ISSUES", "CLOSE_ISSUES", "ADD_COMMENTS", "MANAGE_SPRINTS"].map((permission) => ({ permission, grants: MEMBERS })),
+  { permission: "EDIT_ISSUES", grants: [...MEMBERS, { kind: "reporter", value: "" }] },
+  { permission: "DELETE_ISSUES", grants: [role("admin"), { kind: "reporter", value: "" }] },
+  ...["EDIT_ALL_COMMENTS", "DELETE_ALL_COMMENTS", "ADMINISTER_PROJECTS"].map((permission) => ({ permission, grants: [role("admin")] })),
+];
+
 /** Kinds created through another path than their own (POST /channels makes a conversation). */
 const KIND_ALIAS: Record<string, string> = { channels: "conversations", dms: "conversations" };
 /** The field a child carries for its parent: /projects/KYB/goals → project_key "KYB". */
@@ -196,7 +207,12 @@ export class DemoServer {
     if (/^\/projects\/[^/]+\/reports\/velocity$/.test(path)) return ok({ sprints: [] });
     if (/^\/projects\/[^/]+\/reports\/control-chart$/.test(path))
       return ok({ days: Number(u.searchParams.get("days") ?? 30), average_hours: 0, stddev_hours: 0, points: [] });
-    if (/^\/projects\/[^/]+\/permissions$/.test(path) && method === "GET") return ok({ custom: false, permissions: [] });
+    if (/^\/projects\/[^/]+\/permissions$/.test(path)) {
+      if (method === "GET") return ok((this.s.docs[path] as object) ?? { custom: false, permissions: DEFAULT_PERMISSIONS });
+      if (method === "DELETE") { delete this.s.docs[path]; return noContent; }
+      this.s.docs[path] = { custom: true, permissions: input.permissions ?? [] };
+      return ok(this.s.docs[path]);
+    }
 
     if ((m = path.match(/^\/issues\/([^/]+)(?:\/([a-z]+))?$/)) && this.s.issues.some((i) => i.key === m?.[1])) {
       const res = this.issue(method, m[1] ?? "", m[2] ?? "", input);

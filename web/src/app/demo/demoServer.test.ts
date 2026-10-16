@@ -119,4 +119,10 @@ describe("DemoServer (the in-browser API behind the GitHub Pages demo)", () => {
     const titles = (b.handle("GET", "/api/v1/projects/KYB/issues").body as { items: { title: string }[] }).items.map((i) => i.title);
     expect(titles).toContain("Survives reload");
   });
+
+  it("serves the default permission scheme, like the server", () => {
+    const s = new DemoServer(now);
+    const scheme = s.handle("GET", "/api/v1/projects/KYB/permissions").body as { permissions: { permission: string }[] };
+    expect(scheme.permissions.map((p) => p.permission)).toContain("CREATE_ISSUES");
+  });
 });

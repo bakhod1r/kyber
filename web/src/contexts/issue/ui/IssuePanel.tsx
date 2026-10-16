@@ -146,7 +146,7 @@ export function IssuePanel({
       >
         <header className="issue-panel-head">
           <h2 id={titleId}>
-            <span className="key">{issueKey}</span> {loaded?.status.replace("_", " ")}
+            <span className="key">{issueKey}</span> {loaded && <span className="status-pill">{loaded.status.replace("_", " ")}</span>}
           </h2>
           <button type="button" className="ghost" aria-label={t("Close")} onClick={onClose}>
             ✕
