@@ -687,7 +687,6 @@ button.ghost.danger-ghost:hover:not(:disabled) { border-color: color-mix(in srgb
 .board-toolbar label { min-height: 2.25rem; line-height: 1; margin: 0; }
 .chat-composer select, .chat-compose-row select { width: auto; flex: 0 0 auto; min-width: 3rem; }
 .issue-panel section select, .issue-main select { width: auto; max-width: 14rem; }
-<<<<<<< HEAD
 
 /* ---- Chat, messenger style: bubbles, day dividers, grouped messages, a pill composer. ---- */
 .chat-main { display: flex; flex-direction: column; min-height: calc(100vh - 11rem); padding: 0; }
@@ -808,5 +807,3 @@ button.ghost.danger-ghost:hover:not(:disabled) { border-color: color-mix(in srgb
 .chat-tools { flex-wrap: nowrap; max-width: calc(100vw - 2.5rem); overflow-x: auto; scrollbar-width: none; }
 /* The toolbar stays hit-testable while hidden: moving the pointer onto it keeps the message hovered. */
 .chat-tools { top: -0.6rem; pointer-events: auto; }
-=======
->>>>>>> origin/claude/funny-wright-2x19zl
