@@ -1,0 +1,70 @@
+/* Motion: short, purposeful animations. Everything here is switched off under prefers-reduced-motion. */
+:root { --dur-fast: 120ms; --dur: 200ms; --dur-slow: 320ms; --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes sheet-up { from { opacity: 0.6; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@keyframes bubble-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes bump { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+@keyframes shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+
+/* Pages and sections ease in when a route opens. */
+.page > * { animation: fade-up var(--dur-slow) var(--ease-out) both; }
+.page > *:nth-child(2) { animation-delay: 40ms; }
+.page > *:nth-child(3) { animation-delay: 80ms; }
+
+/* Menus, popovers and dialogs open from where they are anchored. */
+.bell-panel, .user-menu-list, .mention-list, .jql-suggestions, .multi-pick-menu { transform-origin: top right; animation: pop-in var(--dur) var(--ease-out); }
+.overlay { animation: fade-in var(--dur) ease-out; }
+.issue-panel { animation: bubble-in var(--dur-slow) var(--ease-out); }
+
+/* Navigation: hover and the active tab move smoothly. */
+.nav-link, .tabs a, .settings-nav a, .chat-sidebar li > a, .chat-activity-link, .user-menu-list a {
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), border-color var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.chat-sidebar li > a:hover:not(.active) { transform: translateX(2px); }
+input, select, textarea { transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease), background-color var(--dur-fast) var(--ease); }
+
+/* Board: cards rise in column by column, lift on hover and while dragged; the target column glows. */
+.column .card { animation: fade-up var(--dur-slow) var(--ease-out) both; }
+.column .card:nth-child(2) { animation-delay: 30ms; }
+.column .card:nth-child(3) { animation-delay: 60ms; }
+.column .card:nth-child(4) { animation-delay: 90ms; }
+.column .card:nth-child(n+5) { animation-delay: 120ms; }
+.card:active { transform: scale(0.99) rotate(-0.4deg); box-shadow: var(--shadow-lg); }
+.column { transition: box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease), background-color var(--dur) var(--ease); }
+.column.over { background: color-mix(in srgb, var(--glow) 8%, var(--surface-2)); }
+
+/* Chat: new bubbles slide up; reactions bump when added; the day pill fades. */
+.chat-message { animation: bubble-in var(--dur) var(--ease-out); }
+.chat-message.mine { transform-origin: bottom right; }
+.chat-message:not(.mine) { transform-origin: bottom left; }
+.chat-reactions .reaction { transition: background-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease-spring); }
+.chat-reactions .reaction:hover { transform: scale(1.06); }
+.chat-reactions .reaction.mine { animation: bump 260ms var(--ease-spring); }
+.chat-day span { animation: fade-in var(--dur-slow) ease-out; }
+.chat-send:not(:disabled) { animation: pop-in var(--dur-fast) var(--ease-spring); }
+.chat-send:hover:not(:disabled) { transform: scale(1.06); }
+.chat-typing:not(:empty) { animation: fade-in var(--dur) ease-out; }
+
+/* Counters and badges bump when they change (React remounts them with a new key or value). */
+.badge { animation: bump 300ms var(--ease-spring); }
+
+/* Buttons: a soft press. */
+button { transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease), transform 80ms var(--ease), color var(--dur-fast) var(--ease); }
+button:active:not(:disabled) { transform: translateY(1px) scale(0.985); }
+
+/* Loading text shimmers instead of sitting still. */
+.loading, [aria-busy="true"] {
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--accent) 10%, transparent) 50%, transparent 100%) 0 0 / 200% 100%;
+  animation: shimmer 1.4s linear infinite; border-radius: var(--radius-sm);
+}
+
+@media (max-width: 720px) {
+  .overlay .issue-panel { animation: sheet-up var(--dur-slow) var(--ease-out); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
