@@ -40,7 +40,7 @@ calls, in one Go binary with a React UI and PostgreSQL. API version 0.76.0 (`api
 - Docker image, `docker-compose.yml`, Helm chart; backup/restore and upgrade guides; `/healthz`, `/readyz`,
   Prometheus `/metrics`, OpenTelemetry tracing.
 - Forward-only embedded migrations (0001–0093).
-- Load test: 10 000 issues per project at 50 requests/s → p95 78.9 ms (`loadtest/README.md`).
+- Load test: 10 000 issues per project, reads p95 37.4 ms, 0 % errors (`loadtest/README.md`).
 - Release gate `make ship`; internal security review (`docs/operations/security-review-2026-10.md`).
 
 ### Known limits
