@@ -17,7 +17,7 @@ export function Timeline({ projectKey, onOpen }: { projectKey: string; onOpen: (
     <section className="timeline" aria-label={t("Timeline")}>
       <h2>{t("Timeline")}</h2>
       {plan.rows.length === 0 ? (
-        <p className="muted">{t("Nothing is scheduled yet. Give issues a start or due date to see them here.")}</p>
+        <p className="empty muted">{t("Nothing is scheduled yet. Give issues a start or due date to see them here.")}</p>
       ) : (
         <>
           <p className="muted">

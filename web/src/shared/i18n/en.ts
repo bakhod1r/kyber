@@ -422,6 +422,7 @@ export const en = {
   "Project views": "Project views",
   "Projects": "Projects",
   "pts": "pts",
+  "{n} issue": "{n} issue",
   "Publish to everyone": "Publish to everyone",
   "Question {n}": "Question {n}",
   "Questions (a summary is always asked)": "Questions (a summary is always asked)",

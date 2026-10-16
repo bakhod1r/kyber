@@ -10,6 +10,17 @@ const stroke = (slot: Slot) => (slot === "muted" ? "var(--viz-muted)" : `var(--v
 export const fmt = (n: number) => (Number.isInteger(n) ? n.toLocaleString() : n.toFixed(1));
 
 /** Smallest "clean" axis maximum >= v. */
+/** Gridlines for a 0..max axis: the smallest 1-2-5 step (whole numbers) that divides max into at most five parts. */
+export function yTicks(max: number): number[] {
+  for (let p = 1; p <= max; p *= 10) {
+    for (const m of [1, 2, 5]) {
+      const step = m * p;
+      if (max % step === 0 && max / step <= 5) return Array.from({ length: max / step + 1 }, (_, i) => i * step);
+    }
+  }
+  return [0, max];
+}
+
 export function niceMax(v: number): number {
   if (v <= 0) return 1;
   const p = 10 ** Math.floor(Math.log10(v));
@@ -157,7 +168,7 @@ export function LineChart({ title, series: raw, caption, xMax, yLabel }: { title
   }
 
   const ht = hover === null ? null : xs[hover]!;
-  const ticks = [0, yMax / 2, yMax];
+  const ticks = yTicks(yMax);
   const xTicks = [x0, (x0 + x1) / 2, x1];
 
   return (

@@ -108,7 +108,7 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
               <div>
                 <h2>
                   {sec.title} {sec.sprint && <span className={`state state-${sec.sprint.state}`}>{sec.sprint.state}</span>}
-                  <span className="count">{rows.length}</span>
+                  <span className="count">{t(rows.length === 1 ? "{n} issue" : "{n} issues", { n: rows.length })}</span>
                   {rows.some((i) => i.estimate !== null) && (
                     <span className="count">{fmt(rows.reduce((sum, i) => sum + (i.estimate ?? 0), 0))} {t("pts")}</span>
                   )}
