@@ -35,4 +35,12 @@
   .backlog-head { flex-direction: column; align-items: stretch; }
   .backlog-head h2 { flex-wrap: wrap; }
   .overlay .issue-panel { max-height: calc(100dvh - 11rem); }
+  .chat { grid-template-columns: 1fr; min-height: 0; }
+  .chat > .chat-sidebar, .chat > aside, .chat > nav { border-inline-end: 0; border-bottom: 1px solid var(--border); }
+  .project-list { grid-template-columns: 1fr; }
+  /* The composer wraps: the message box takes its own full-width line. */
+  .chat-compose-row, .chat-composer { flex-wrap: wrap; }
+  .chat-composer textarea { flex-basis: 100%; }
+  .chat-compose-row .chat-composer { flex-basis: 100%; }
+  .chat-composer select { max-width: 100%; }
 }

@@ -59,7 +59,7 @@ textarea { font: inherit; color: var(--text); background: var(--surface); border
 .backlog-row .key { text-align: right; color: var(--muted); }
 .row-open { background: none; border: 0; color: var(--text); text-align: left; font-weight: 500; padding: 0; }
 .row-open:hover { color: var(--accent); }
-.empty { padding: 0.75rem; text-align: center; border: 1px dashed var(--border); border-radius: 8px; }
+.empty { padding: 1.25rem 1rem; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: var(--radius); }
 .state, .status { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; padding: 0.1rem 0.45rem; border-radius: 999px; background: var(--surface); color: var(--muted); }
 .state-active { background: var(--accent); color: var(--accent-text); }
 .status-done { color: var(--success); }
@@ -527,3 +527,29 @@ circle.wb-handle { cursor: move; }
 
 .board-toolbar label { display: inline-flex; align-items: center; gap: 0.4rem; }
 .board-toolbar label select { width: auto; }
+
+/* ---- Polish, second pass: home, chat, buttons, issue dialog. ---- */
+/* Projects as cards, first on the home page. */
+.projects { margin-bottom: 2rem; }
+.project-list { max-width: none; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 0.75rem; }
+.project-list a { display: grid; gap: 0.25rem; padding: 1rem 1.1rem; box-shadow: var(--shadow); font-weight: 600; transition: border-color 120ms, transform 120ms; }
+.project-list a:hover { border-color: var(--accent); text-decoration: none; transform: translateY(-1px); }
+.project-list a .key { font-size: 0.8rem; }
+/* Destructive ghost actions read as such without shouting. */
+button.ghost.danger-ghost { color: var(--danger); border-color: transparent; }
+button.ghost.danger-ghost:hover:not(:disabled) { border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+/* Chat is one surface: a tinted sidebar beside the conversation. */
+.chat { gap: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; min-height: calc(100vh - 11rem); }
+.chat > .chat-sidebar, .chat > aside, .chat > nav { background: var(--surface-2); border-inline-end: 1px solid var(--border); padding: 0.75rem; align-self: stretch; box-shadow: none; border-radius: 0; border-block: 0; border-inline-start: 0; }
+.chat-main, .chat-activity { padding: 1rem 1.25rem; }
+.chat-sidebar a.active, .chat-activity-link.active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font-weight: 600; }
+/* Issue dialog: wider on large screens, and its Save stays in reach while the form scrolls. */
+.issue-panel { width: min(820px, 100%); }
+.issue-form .row.end { position: sticky; bottom: -1.25rem; z-index: 1; margin: 0 -1.25rem; padding: 0.75rem 1.25rem; background: var(--surface); border-top: 1px solid var(--border); }
+
+/* The clip picker is a compact control; the composer takes the rest of the row. */
+.chat select { width: auto; flex: none; max-width: 12rem; }
+.chat-compose-row .chat-composer { flex: 1; min-width: 0; }
+.chat-composer { display: flex; gap: 0.5rem; align-items: flex-start; }
+.chat-composer textarea { flex: 1; min-width: 0; min-height: 2.5rem; }
+.chat-sidebar li select { max-width: 2.25rem; padding-inline: 0.25rem; }

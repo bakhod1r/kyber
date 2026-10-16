@@ -46,7 +46,7 @@ export function Members({ projectKey }: { projectKey: string }) {
             <option value="admin">{t("admin")}</option>
           </select>
         </label>
-        <button type="submit" disabled={invite.isPending}>
+        <button type="submit" className="ghost" disabled={invite.isPending}>
           {t("Invite")}
         </button>
         {invite.isError && (

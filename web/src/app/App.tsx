@@ -64,8 +64,8 @@ function Home() {
   if (!me.data) return <LandingPage />;
   return (
     <Layout user={me.data}>
-      <Announcements projectKey={null} />
       <ProjectsPage />
+      <Announcements projectKey={null} />
     </Layout>
   );
 }
