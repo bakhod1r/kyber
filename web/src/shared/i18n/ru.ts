@@ -423,6 +423,7 @@ export const ru: Record<MessageKey, string> = {
   "Project views": "Представления проекта",
   "Projects": "Проекты",
   "pts": "очк.",
+  "{n} issue": "Задач: {n}",
   "Publish to everyone": "Опубликовать для всех",
   "Question {n}": "Вопрос {n}",
   "Questions (a summary is always asked)": "Вопросы (краткое описание запрашивается всегда)",

@@ -1,8 +1,16 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { BarList, LineChart, niceMax } from "./charts";
+import { BarList, LineChart, niceMax, yTicks } from "./charts";
 
 describe("chart primitives", () => {
+  it("yTicks splits the axis into whole-number steps", () => {
+    expect(yTicks(1)).toEqual([0, 1]);
+    expect(yTicks(8)).toEqual([0, 2, 4, 6, 8]);
+    expect(yTicks(25)).toEqual([0, 5, 10, 15, 20, 25]);
+    expect(yTicks(150)).toEqual([0, 50, 100, 150]);
+    expect(yTicks(3)).toEqual([0, 1, 2, 3]);
+  });
+
   it("niceMax rounds the axis up to a clean value", () => {
     expect(niceMax(0)).toBe(1);
     expect(niceMax(7)).toBe(8);

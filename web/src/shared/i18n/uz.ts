@@ -423,6 +423,7 @@ export const uz: Record<MessageKey, string> = {
   "Project views": "Loyiha ko‘rinishlari",
   "Projects": "Loyihalar",
   "pts": "ball",
+  "{n} issue": "{n} ta vazifa",
   "Publish to everyone": "Hammaga e’lon qilish",
   "Question {n}": "{n}-savol",
   "Questions (a summary is always asked)": "Savollar (qisqacha mazmun doim so‘raladi)",

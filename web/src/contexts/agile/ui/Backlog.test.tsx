@@ -37,6 +37,8 @@ describe("Backlog (KYB-S20)", () => {
     const rows = within(backlog).getAllByRole("listitem").map((li) => li.textContent);
     expect(rows[0]).toContain("Issue 1");
     expect(rows[1]).toContain("Issue 3");
+    expect(within(s1).getByText("1 issue")).toBeInTheDocument();
+    expect(within(backlog).getByText("2 issues")).toBeInTheDocument();
   });
 
   it("AC1: dropping a backlog issue on a sprint row moves it into the sprint before that row", async () => {
