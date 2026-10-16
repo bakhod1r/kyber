@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "build:demo": "tsc -b && VITE_DEMO=1 vite build --base=./ --outDir dist-demo"
   },
   "dependencies": {
     "@tanstack/react-query": "5.80.7",
