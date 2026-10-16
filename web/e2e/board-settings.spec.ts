@@ -17,6 +17,8 @@ test("a project admin configures the board", async ({ page }) => {
   await page.getByRole("button", { name: "Add issue" }).click();
   await expect(page.getByText("Ship it")).toBeVisible();
 
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+
   await page.getByRole("link", { name: "Board settings", exact: true }).click();
   const settings = page.getByRole("region", { name: "Board settings" });
   await settings.getByRole("button", { name: "Add column" }).click();

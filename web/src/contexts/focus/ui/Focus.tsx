@@ -1,8 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { focusUseCases, type FocusSession } from "../application";
-import { EyeBreak } from "./EyeBreak";
-import { onIssueDone } from "../../../shared/events";
 import { useT } from "../../../shared/i18n/i18n";
 
 const FOCUS = ["focus"];
@@ -40,7 +38,7 @@ export function usePomodoroMode(): [boolean, (on: boolean) => void] {
   return [on, set];
 }
 
-// Finishing a task (moving it to a Done status) is announced (shared/events) so eye health can react.
+// Finishing a task (moving it to a Done status) is announced (shared/events).
 export { announceIssueDone } from "../../../shared/events";
 
 /**
@@ -87,71 +85,26 @@ export function FocusTimer() {
     return () => document.removeEventListener("visibilitychange", wake);
   }, []);
   const act = useMutation({ mutationFn: focusUseCases.focusAction, onSuccess: done });
-  const [eyes, setEyes] = useState(false);
-  const [ask, setAsk] = useState<string | null>(null);
-  useEffect(() => {
-    // Pomodoro off: offer the exercise when a task is finished. Pomodoro on: it comes at the break.
-    return onIssueDone((issueKey) => {
-      if (!readMode()) setAsk(issueKey);
-    });
-  }, []);
   const finished = useRef<string | null>(null);
   const left = Math.ceil(ms / 1000);
   useEffect(() => {
     if (s && running && left <= 0 && finished.current !== s.id) {
       finished.current = s.id; // once per session
-      setEyes(true); // Pomodoro done: time to rest the eyes (Sharingan break)
       void done(s); // the server settles the session on the next read
     }
   });
-  const eyeButton = (
-    <>
-      <button
-        className={`ghost pomodoro-toggle${pomodoro ? " on" : ""}`}
-        aria-label={t("Pomodoro mode")}
-        aria-pressed={pomodoro}
-        title={pomodoro ? t("Pomodoro mode is on") : t("Pomodoro mode is off")}
-        onClick={() => setPomodoro(!pomodoro)}
-      >
-        🍅
-      </button>
-      <button className="ghost eye-button" aria-label={t("Eye break")} title={t("Eye break")} onClick={() => setEyes(true)}>
-        👁
-      </button>
-    </>
+  const pomodoroToggle = (
+    <button
+      className={`ghost pomodoro-toggle${pomodoro ? " on" : ""}`}
+      aria-label={t("Pomodoro mode")}
+      aria-pressed={pomodoro}
+      title={pomodoro ? t("Pomodoro mode is on") : t("Pomodoro mode is off")}
+      onClick={() => setPomodoro(!pomodoro)}
+    >
+      🍅
+    </button>
   );
-  const breakScreen = (
-    <>
-      {ask && (
-        <div role="alertdialog" aria-label={t("Eye exercise")} aria-describedby="eye-ask" className="panel eye-ask">
-          <p id="eye-ask">
-            <b>{ask}</b> is done. Rest your eyes with a one-minute exercise?
-          </p>
-          <div className="row">
-            <button
-              onClick={() => {
-                setAsk(null);
-                setEyes(true);
-              }}
-            >
-              {t("Start exercise")}
-            </button>
-            <button className="ghost" onClick={() => setAsk(null)}>
-              {t("Not now")}
-            </button>
-          </div>
-        </div>
-      )}
-      {eyes && <EyeBreak onClose={() => setEyes(false)} />}
-    </>
-  );
-  if (!s)
-    return (
-      <>
-        {eyeButton}
-        {breakScreen}
-      </>
-    );
+  if (!s) return pomodoroToggle;
   return (
     <div className={`focus-timer ${s.state}`}>
       <span role="timer" aria-label={t("Focus on {key}", { key: s.issue_key })}>
@@ -170,8 +123,7 @@ export function FocusTimer() {
         {t("Stop")}
       </button>
       {act.isError && <span role="alert" className="error">{act.error.message}</span>}
-      {eyeButton}
-      {breakScreen}
+      {pomodoroToggle}
     </div>
   );
 }

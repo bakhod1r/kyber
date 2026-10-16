@@ -15,6 +15,8 @@ test("a project admin customises the workflow and the board follows", async ({ p
   await page.getByRole("button", { name: "Create project" }).click();
   await expect(page).toHaveURL(new RegExp(`/projects/${key}$`));
 
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+
   await page.getByRole("link", { name: "Workflow", exact: true }).click();
   await page.getByLabel("New status name").fill("Code Review");
   await page.getByLabel("New status category").selectOption("in_progress");

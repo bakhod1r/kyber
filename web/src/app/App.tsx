@@ -27,6 +27,7 @@ import { ProjectsPage } from "../contexts/project/ui/ProjectsPage";
 import { identityUseCases } from "../contexts/identity/application";
 import { SearchPage } from "../contexts/search/ui/SearchPage";
 import { useT } from "../shared/i18n/i18n";
+import { LanguagePicker } from "../shared/i18n/LanguagePicker";
 
 export const ME = ["me"];
 
@@ -56,6 +57,23 @@ function RequireUser({ children }: { children: ReactNode }) {
 }
 
 /** "/" is the landing page for visitors and the project list for signed-in users. */
+/** The person's own settings: one centred column of panels under one heading. */
+function AccountSettings() {
+  const t = useT();
+  return (
+    <div className="account-settings">
+      <h1>{t("Settings")}</h1>
+      <section className="panel language-settings" aria-label={t("Language")}>
+        <h2>{t("Language")}</h2>
+        <LanguagePicker />
+      </section>
+      <SettingsPage />
+      <AppearanceSettings />
+      <AccessTokens />
+    </div>
+  );
+}
+
 function Home() {
   const t = useT();
   const me = useMe();
@@ -64,8 +82,8 @@ function Home() {
   if (!me.data) return <LandingPage />;
   return (
     <Layout user={me.data}>
-      <Announcements projectKey={null} />
       <ProjectsPage />
+      <Announcements projectKey={null} />
     </Layout>
   );
 }
@@ -83,6 +101,7 @@ export function AppRoutes() {
       <Route path="/projects/:key/import" element={<RequireUser><ProjectPage view="import" /></RequireUser>} />
       <Route path="/projects/:key/workflow" element={<RequireUser><ProjectPage view="workflow" /></RequireUser>} />
       <Route path="/projects/:key/audit" element={<RequireUser><ProjectPage view="audit" /></RequireUser>} />
+      <Route path="/projects/:key/members" element={<RequireUser><ProjectPage view="members" /></RequireUser>} />
       <Route path="/projects/:key/summary" element={<RequireUser><ProjectPage view="summary" /></RequireUser>} />
       <Route path="/projects/:key/timeline" element={<RequireUser><ProjectPage view="timeline" /></RequireUser>} />
       <Route path="/projects/:key/announcements" element={<RequireUser><ProjectPage view="announcements" /></RequireUser>} />
@@ -101,7 +120,7 @@ export function AppRoutes() {
       <Route path="/projects/:key/webhooks" element={<RequireUser><ProjectPage view="webhooks" /></RequireUser>} />
       <Route path="/oauth/authorize" element={<RequireUser><OAuthConsent /></RequireUser>} />
       <Route path="/search" element={<RequireUser><SearchPage /></RequireUser>} />
-      <Route path="/settings" element={<RequireUser><SettingsPage /><AppearanceSettings /><AccessTokens /></RequireUser>} />
+      <Route path="/settings" element={<RequireUser><AccountSettings /></RequireUser>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

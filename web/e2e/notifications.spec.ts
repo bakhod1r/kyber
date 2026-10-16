@@ -22,9 +22,11 @@ test("assignment and mention notify a teammate", async ({ browser }) => {
   await alice.getByLabel("Key").fill(key);
   await alice.getByLabel("Project name").fill("Notify test");
   await alice.getByRole("button", { name: "Create project" }).click();
+  await alice.getByRole("link", { name: "Settings", exact: true }).click();
   await alice.getByLabel("Invite by email").fill(`bob-${id}@example.com`);
   await alice.getByRole("button", { name: "Invite" }).click();
   await expect(alice.locator(".members").getByText("Bob Bek")).toBeVisible();
+  await alice.getByRole("link", { name: "Active sprints", exact: true }).click();
   await alice.getByLabel("New issue title").fill("Fix login");
   await alice.getByRole("button", { name: "Add issue" }).click();
 

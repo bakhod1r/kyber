@@ -84,7 +84,7 @@ export function WorkflowEditor({ projectKey }: { projectKey: string }) {
               onChange={(e) => update({ ...draft, statuses: draft.statuses.map((x) => (x.id === s.id ? { ...x, name: e.target.value } : x)) })}
             />
             <span className={`status status-${s.category}`}>{STATUS_CATEGORIES.find((c) => c.id === s.category)?.label}</span>
-            <button type="button" className="ghost" aria-label={t("Remove {name}", { name: s.name })} onClick={() => remove(s.id)} disabled={draft.statuses.length <= 1}>
+            <button type="button" className="ghost danger-ghost" aria-label={t("Remove {name}", { name: s.name })} onClick={() => remove(s.id)} disabled={draft.statuses.length <= 1}>
               {t("Remove")}
             </button>
           </li>
@@ -99,7 +99,7 @@ export function WorkflowEditor({ projectKey }: { projectKey: string }) {
             </option>
           ))}
         </select>
-        <button type="submit">{t("Add status")}</button>
+        <button type="submit" className="ghost">{t("Add status")}</button>
       </form>
       <label>
         {t("Initial status")}{" "}

@@ -51,9 +51,9 @@ export function IssueList({ projectKey, onOpen }: { projectKey: string; onOpen?:
                     </button>
                   </td>
                   <td>{is.title}</td>
-                  <td>{is.type}</td>
+                  <td className="cap">{is.type}</td>
                   <td>{label(is.status_name || is.status)}</td>
-                  <td>{is.priority}</td>
+                  <td className="cap">{is.priority}</td>
                   <td>{is.points ?? ""}</td>
                 </tr>
               ))}

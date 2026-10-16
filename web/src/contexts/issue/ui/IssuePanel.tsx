@@ -58,6 +58,7 @@ export function IssuePanel({
   const versions = useQuery({ queryKey: ["versions", projectKey], queryFn: () => agileUseCases.versions(projectKey) });
   const projectLabels = useQuery({ queryKey: ["labels", projectKey], queryFn: () => issueUseCases.projectLabels(projectKey) });
   const labelsId = useId();
+  const formId = useId();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
@@ -145,7 +146,7 @@ export function IssuePanel({
       >
         <header className="issue-panel-head">
           <h2 id={titleId}>
-            <span className="key">{issueKey}</span> {loaded?.status.replace("_", " ")}
+            <span className="key">{issueKey}</span> {loaded && <span className="status-pill">{loaded.status.replace("_", " ")}</span>}
           </h2>
           <button type="button" className="ghost" aria-label={t("Close")} onClick={onClose}>
             ✕
@@ -169,111 +170,122 @@ export function IssuePanel({
             )}
           </p>
         )}
-        {draft && (
-          <form onSubmit={onSubmit} className="issue-form">
-            <label>
-              {t("Title")}
-              <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} required />
-            </label>
-            <label>
-              {t("Description")}
-              <textarea rows={6} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
-            </label>
-            <div className="row">
-              <label>
-                {t("Priority")}
-                <select value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value as Priority })}>
-                  {PRIORITIES.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                {t("Assignee")}
-                <select value={draft.assignee} onChange={(e) => setDraft({ ...draft, assignee: e.target.value })}>
-                  <option value="">{t("Unassigned")}</option>
-                  {members.data?.filter((m) => m.role !== "viewer").map((m) => (
-                    <option key={m.user_id} value={m.user_id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            {draft.resolution && (
-              <label className="narrow">
-                {t("Resolution")}
-                <select value={draft.resolution} onChange={(e) => setDraft({ ...draft, resolution: e.target.value as Resolution })}>
-                  {RESOLUTIONS.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+        <div className="issue-layout">
+          <div className="issue-main">
+            {draft && (
+              <form id={formId} onSubmit={onSubmit} className="issue-form">
+                <label>
+                  {t("Title")}
+                  <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} required />
+                </label>
+                <label>
+                  {t("Description")}
+                  <textarea rows={6} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+                </label>
+              </form>
             )}
-            <label>
-              {t("Labels")}
-              <input list={labelsId} value={draft.labels} placeholder="ui backend" onChange={(e) => setDraft({ ...draft, labels: e.target.value })} />
-              <datalist id={labelsId}>
-                {(projectLabels.data ?? []).map((l) => (
-                  <option key={l} value={l} />
-                ))}
-              </datalist>
-            </label>
-            {(versions.data ?? []).some((v) => v.state !== "archived" || draft.fixVersions.includes(v.id)) && (
-              <fieldset className="fix-versions">
-                <legend>{t("Fix versions")}</legend>
-                {(versions.data ?? [])
-                  .filter((v) => v.state !== "archived" || draft.fixVersions.includes(v.id))
-                  .map((v) => (
-                    <label key={v.id} className="check">
-                      <input
-                        type="checkbox"
-                        checked={draft.fixVersions.includes(v.id)}
-                        onChange={(e) =>
-                          setDraft({
-                            ...draft,
-                            fixVersions: e.target.checked ? [...draft.fixVersions, v.id] : draft.fixVersions.filter((x) => x !== v.id),
-                          })
-                        }
-                      />
-                      {v.name}
-                    </label>
-                  ))}
-              </fieldset>
+            {loaded && <IssueChildren issue={loaded} projectKey={projectKey} onOpen={onOpen} />}
+            {loaded && <IssueDetails key={loaded.id} issue={loaded} projectKey={projectKey} />}
+            <IssueAttachments issueKey={issueKey} />
+            <IssueLinks issueKey={issueKey} onOpen={onOpen} />
+            <Comments issueKey={issueKey} projectKey={projectKey} />
+            <IssueHistory issueKey={issueKey} projectKey={projectKey} />
+          </div>
+          {/* The fields beside the text, as in Jira: they belong to the form through form={formId}. */}
+          <aside className="issue-side" aria-label={t("Details")}>
+            {draft && (
+              <div className="issue-form">
+                <div className="row">
+                  <label>
+                    {t("Priority")}
+                    <select value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value as Priority })}>
+                      {PRIORITIES.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    {t("Assignee")}
+                    <select value={draft.assignee} onChange={(e) => setDraft({ ...draft, assignee: e.target.value })}>
+                      <option value="">{t("Unassigned")}</option>
+                      {members.data?.filter((m) => m.role !== "viewer").map((m) => (
+                        <option key={m.user_id} value={m.user_id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {draft.resolution && (
+                  <label className="narrow">
+                    {t("Resolution")}
+                    <select value={draft.resolution} onChange={(e) => setDraft({ ...draft, resolution: e.target.value as Resolution })}>
+                      {RESOLUTIONS.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <label>
+                  {t("Labels")}
+                  <input list={labelsId} value={draft.labels} placeholder="ui backend" onChange={(e) => setDraft({ ...draft, labels: e.target.value })} />
+                  <datalist id={labelsId}>
+                    {(projectLabels.data ?? []).map((l) => (
+                      <option key={l} value={l} />
+                    ))}
+                  </datalist>
+                </label>
+                {(versions.data ?? []).some((v) => v.state !== "archived" || draft.fixVersions.includes(v.id)) && (
+                  <fieldset className="fix-versions">
+                    <legend>{t("Fix versions")}</legend>
+                    {(versions.data ?? [])
+                      .filter((v) => v.state !== "archived" || draft.fixVersions.includes(v.id))
+                      .map((v) => (
+                        <label key={v.id} className="check">
+                          <input
+                            type="checkbox"
+                            checked={draft.fixVersions.includes(v.id)}
+                            onChange={(e) =>
+                              setDraft({
+                                ...draft,
+                                fixVersions: e.target.checked ? [...draft.fixVersions, v.id] : draft.fixVersions.filter((x) => x !== v.id),
+                              })
+                            }
+                          />
+                          {v.name}
+                        </label>
+                      ))}
+                  </fieldset>
+                )}
+                <label className="narrow">
+                  {t("Story points")}
+                  <input type="number" min={0} max={999} step={0.5} value={draft.estimate} onChange={(e) => setDraft({ ...draft, estimate: e.target.value })} />
+                </label>
+                <label className="check">
+                  <input type="checkbox" checked={draft.confidential} onChange={(e) => setDraft({ ...draft, confidential: e.target.checked })} />
+                  {t("Confidential — only admins and the people on this issue see it")}
+                </label>
+                <div className="row end">
+                  {notice && (
+                    <span role={notice.kind === "error" ? "alert" : "status"} className={notice.kind === "error" ? "error" : "muted"}>
+                      {notice.text}
+                    </span>
+                  )}
+                  <button type="submit" form={formId} disabled={save.isPending}>
+                    {t("Save")}
+                  </button>
+                </div>
+              </div>
             )}
-            <label className="narrow">
-              {t("Story points")}
-              <input type="number" min={0} max={999} step={0.5} value={draft.estimate} onChange={(e) => setDraft({ ...draft, estimate: e.target.value })} />
-            </label>
-            <label className="check">
-              <input type="checkbox" checked={draft.confidential} onChange={(e) => setDraft({ ...draft, confidential: e.target.checked })} />
-              {t("Confidential — only admins and the people on this issue see it")}
-            </label>
-            <div className="row end">
-              {notice && (
-                <span role={notice.kind === "error" ? "alert" : "status"} className={notice.kind === "error" ? "error" : "muted"}>
-                  {notice.text}
-                </span>
-              )}
-              <button type="submit" disabled={save.isPending}>
-                {t("Save")}
-              </button>
-            </div>
-          </form>
-        )}
-        {loaded && <IssueChildren issue={loaded} projectKey={projectKey} onOpen={onOpen} />}
-        <IssueWatchers issueKey={issueKey} />
-        {loaded && <IssueDetails key={loaded.id} issue={loaded} projectKey={projectKey} />}
-        <IssueAttachments issueKey={issueKey} />
-        {loaded && <IssueTimeTracking key={loaded.version} issue={loaded} />}
-        <IssueLinks issueKey={issueKey} onOpen={onOpen} />
-        {extensions}
-        <Comments issueKey={issueKey} projectKey={projectKey} />
-        <IssueHistory issueKey={issueKey} projectKey={projectKey} />
+            <IssueWatchers issueKey={issueKey} />
+            {loaded && <IssueTimeTracking key={loaded.version} issue={loaded} />}
+            {extensions}
+          </aside>
+        </div>
       </div>
     </div>
   );

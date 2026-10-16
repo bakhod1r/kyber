@@ -63,32 +63,9 @@ describe("Pomodoro mode on/off", () => {
   });
 });
 
-describe("Eye health", () => {
-  it("with Pomodoro off, finishing a task asks for an eye exercise", async () => {
+describe("Finishing a task", () => {
+  it("never interrupts with an eye-exercise question", async () => {
     localStorage.setItem("kyber.pomodoro", "off");
-    mockApi({ "GET /api/v1/focus": { status: 200, body: { session: null } } });
-    const user = userEvent.setup();
-    renderWithProviders(<FocusTimer />);
-    await screen.findByRole("button", { name: "Pomodoro mode" });
-    act(() => announceIssueDone("KYB-7"));
-    const ask = await screen.findByRole("alertdialog", { name: "Eye exercise" });
-    expect(ask).toHaveTextContent("KYB-7");
-    await user.click(screen.getByRole("button", { name: "Start exercise" }));
-    expect(screen.getByRole("dialog", { name: "Eye break" })).toBeInTheDocument();
-  });
-
-  it("the question can be dismissed", async () => {
-    localStorage.setItem("kyber.pomodoro", "off");
-    mockApi({ "GET /api/v1/focus": { status: 200, body: { session: null } } });
-    const user = userEvent.setup();
-    renderWithProviders(<FocusTimer />);
-    await screen.findByRole("button", { name: "Pomodoro mode" });
-    act(() => announceIssueDone("KYB-7"));
-    await user.click(await screen.findByRole("button", { name: "Not now" }));
-    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-  });
-
-  it("with Pomodoro on, finishing a task does not interrupt (the exercise comes at the break)", async () => {
     mockApi({ "GET /api/v1/focus": { status: 200, body: { session: null } } });
     renderWithProviders(<FocusTimer />);
     await screen.findByRole("button", { name: "Pomodoro mode" });

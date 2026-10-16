@@ -124,9 +124,9 @@ export function SearchPage() {
                         <Link to={`/projects/${encodeURIComponent(is.project_key)}?issue=${encodeURIComponent(is.key)}`}>{is.key}</Link>
                       </td>
                       <td>{is.title}</td>
-                      <td>{is.type}</td>
+                      <td className="cap">{is.type}</td>
                       <td>{is.status_name || is.status}</td>
-                      <td>{is.priority}</td>
+                      <td className="cap">{is.priority}</td>
                     </tr>
                   ))}
                 </tbody>
