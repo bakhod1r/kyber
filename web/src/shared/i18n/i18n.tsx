@@ -2,6 +2,7 @@
 // more languages translate the core interface and fall back to English.
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { en, type MessageKey } from "./en";
+import { setDateLanguage } from "./labels";
 import { ru } from "./ru";
 import { uz } from "./uz";
 import { zh } from "./zh";
@@ -94,6 +95,7 @@ const I18nContext = createContext<I18n>({ lang: "en", setLang: () => {}, t: (k, 
 
 export function I18nProvider({ children, initial }: { children: ReactNode; initial?: Language }) {
   const [lang, setLangState] = useState<Language>(() => initial ?? currentLanguage());
+  setDateLanguage(lang); // before children render, so dates follow the language at once
   useEffect(() => {
     document.documentElement.lang = lang;
     document.documentElement.dir = RTL.includes(lang) ? "rtl" : "ltr";

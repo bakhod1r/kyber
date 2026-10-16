@@ -25,6 +25,7 @@ func New(svc *application.Service, log *slog.Logger) *Handler { return &Handler{
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/projects/{key}/issues", h.create)
+	mux.HandleFunc("POST /api/v1/projects/{key}/issues/bulk", h.bulk)
 	mux.HandleFunc("GET /api/v1/projects/{key}/issues", h.list)
 	mux.HandleFunc("GET /api/v1/projects/{key}/labels", h.projectLabels)
 	mux.HandleFunc("GET /api/v1/issues/{issueKey}", h.get)
@@ -111,6 +112,8 @@ func toDTO(is *domain.Issue) issueDTO {
 
 func codeFor(err error) (string, bool) {
 	switch {
+	case errors.Is(err, application.ErrBulkInvalid):
+		return httpx.CodeValidation, true
 	case errors.Is(err, application.ErrInvalidKey):
 		return httpx.CodeInvalidIssueKey, true
 	case errors.Is(err, domain.ErrEmptyTitle), errors.Is(err, domain.ErrInvalidTitle), errors.Is(err, domain.ErrInvalidIssueType),

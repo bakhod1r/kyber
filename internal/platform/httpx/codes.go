@@ -50,7 +50,12 @@ const (
 	CodeProjectKeyTaken        = "PROJECT_KEY_TAKEN"
 	CodeForbidden              = "PROJECT_FORBIDDEN"
 	CodeLastAdmin              = "PROJECT_LAST_ADMIN"
+	CodeProjectArchived        = "PROJECT_ARCHIVED"
 	CodeUserNotFound           = "USER_NOT_FOUND"
+	CodeInvitationNotFound     = "INVITATION_NOT_FOUND"
+	CodeInvitationExpired      = "INVITATION_EXPIRED"
+	CodeInvitationUsed         = "INVITATION_USED"
+	CodeInvitationOtherEmail   = "INVITATION_OTHER_EMAIL"
 	CodeIssueNotFound          = "ISSUE_NOT_FOUND"
 	CodeInvalidIssueKey        = "ISSUE_INVALID_KEY"
 	CodeTransitionNotAllowed   = "ISSUE_TRANSITION_NOT_ALLOWED"
@@ -80,6 +85,8 @@ const (
 	CodeFieldConflict          = "FIELD_CONFLICT"
 	CodeGoalNotFound           = "GOAL_NOT_FOUND"
 	CodeGoalConflict           = "GOAL_CONFLICT"
+	CodeRuleNotFound           = "AUTOMATION_RULE_NOT_FOUND"
+	CodeRuleConflict           = "AUTOMATION_RULE_CONFLICT"
 	CodePageNotFound           = "PAGE_NOT_FOUND"
 	CodePageConflict           = "PAGE_CONFLICT"
 	CodeFormNotFound           = "FORM_NOT_FOUND"
@@ -172,7 +179,12 @@ var codes = []code{
 	{CodeProjectKeyTaken, "6003", 409, "This project key is already taken.", "Bu loyiha kaliti band.", "Этот ключ проекта уже занят.", errorx.CategoryBusiness},
 	{CodeForbidden, "6004", 403, "Your project role does not allow this.", "Loyihadagi rolingiz bunga ruxsat bermaydi.", "Ваша роль в проекте не позволяет это сделать.", errorx.CategorySecurity},
 	{CodeLastAdmin, "6005", 409, "A project must keep at least one admin.", "Loyihada kamida bitta admin qolishi kerak.", "В проекте должен остаться хотя бы один админ.", errorx.CategoryBusiness},
+	{CodeProjectArchived, "6027", 409, "This project is archived and read-only. An admin can restore it.", "Bu loyiha arxivlangan va faqat o'qish uchun. Admin uni tiklashi mumkin.", "Проект в архиве и доступен только для чтения. Администратор может его восстановить.", errorx.CategoryBusiness},
 	{CodeUserNotFound, "6006", 404, "No user with that email.", "Bunday emailga ega foydalanuvchi yo'q.", "Пользователь с таким email не найден.", errorx.CategoryBusiness},
+	{CodeInvitationNotFound, "6007", 404, "This invitation does not exist or was cancelled.", "Bu taklif mavjud emas yoki bekor qilingan.", "Это приглашение не существует или отменено.", errorx.CategoryBusiness},
+	{CodeInvitationExpired, "6008", 410, "This invitation has expired. Ask for a new one.", "Taklif muddati o'tgan. Yangisini so'rang.", "Срок приглашения истёк. Попросите новое.", errorx.CategoryBusiness},
+	{CodeInvitationUsed, "6009", 409, "This invitation was already accepted.", "Bu taklif allaqachon qabul qilingan.", "Это приглашение уже принято.", errorx.CategoryBusiness},
+	{CodeInvitationOtherEmail, "6019", 403, "This invitation was sent to another email address. Sign in with that address.", "Taklif boshqa email manziliga yuborilgan. O'sha manzil bilan kiring.", "Приглашение отправлено на другой адрес. Войдите с этим адресом.", errorx.CategorySecurity},
 	{CodeIssueNotFound, "6010", 404, "Issue not found.", "Vazifa topilmadi.", "Задача не найдена.", errorx.CategoryBusiness},
 	{CodeInvalidIssueKey, "6011", 400, "Invalid issue key.", "Vazifa kaliti noto'g'ri.", "Неверный ключ задачи.", errorx.CategoryValidation},
 	{CodeTransitionNotAllowed, "6012", 409, "This status change is not allowed.", "Bu holatga o'tkazib bo'lmaydi.", "Такой переход статуса запрещён.", errorx.CategoryBusiness},
@@ -201,6 +213,8 @@ var codes = []code{
 	{CodeFieldConflict, "6094", 409, "Another field has this name, or someone else changed it. Reload and try again.", "Bu nomli maydon bor yoki uni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Поле с таким именем уже есть или его изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeGoalNotFound, "6095", 404, "Goal not found.", "Maqsad topilmadi.", "Цель не найдена.", errorx.CategoryBusiness},
 	{CodeGoalConflict, "6096", 409, "Someone else changed this goal. Reload and try again.", "Maqsadni boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Цель изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
+	{CodeRuleNotFound, "6121", 404, "Automation rule not found.", "Avtomatlashtirish qoidasi topilmadi.", "Правило автоматизации не найдено.", errorx.CategoryBusiness},
+	{CodeRuleConflict, "6122", 409, "Someone else changed this rule. Reload and try again.", "Qoidani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Правило изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodePageNotFound, "6085", 404, "Page not found.", "Sahifa topilmadi.", "Страница не найдена.", errorx.CategoryBusiness},
 	{CodePageConflict, "6086", 409, "Someone else changed this page. Reload and try again.", "Sahifani boshqa kishi o'zgartirdi. Qayta yuklab, yana urinib ko'ring.", "Страницу изменил кто-то другой. Обновите и попробуйте снова.", errorx.CategoryBusiness},
 	{CodeFormNotFound, "6087", 404, "Form not found.", "Forma topilmadi.", "Форма не найдена.", errorx.CategoryBusiness},

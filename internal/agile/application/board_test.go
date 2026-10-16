@@ -176,3 +176,26 @@ func TestKanbanBacklogBoards(t *testing.T) {
 		t.Fatalf("update to scrum with backlog: %v", err)
 	}
 }
+
+// B10: a project template picks the kind of the project's first board; admins only.
+func TestUseBoardKind(t *testing.T) {
+	ctx := context.Background()
+	s := boardSetup()
+	if err := s.UseBoardKind(ctx, dev, "KYB", domain.KindScrum); !errors.Is(err, application.ErrForbidden) {
+		t.Fatalf("member: %v", err)
+	}
+	if err := s.UseBoardKind(ctx, lead, "KYB", domain.KindScrum); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.Boards(ctx, viewer, "KYB")
+	if len(list) != 1 || list[0].Kind() != domain.KindScrum || len(list[0].Columns()) != 3 {
+		t.Fatalf("boards = %+v", list)
+	}
+	// Again on an existing board: it changes kind, and there is still one board.
+	if err := s.UseBoardKind(ctx, lead, "KYB", domain.KindKanban); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := s.Boards(ctx, viewer, "KYB"); len(list) != 1 || list[0].Kind() != domain.KindKanban {
+		t.Fatalf("boards = %+v", list)
+	}
+}

@@ -728,9 +728,8 @@ func TestS19Sprints(t *testing.T) {
 		if body["completed"] != float64(1) || body["returned"] != float64(1) || body["sprint"].(map[string]any)["state"] != "closed" {
 			t.Fatalf("completion = %v", body)
 		}
-		if got := issueKeys(t, alice, "/api/v1/projects/KYB/issues?sprint=backlog"); got != "KYB-2,KYB-3" {
-			t.Fatalf("backlog after completion = %s", got)
-		}
+		// Issue Tracking carries them over in reaction to sprint.completed (QA-05: one transaction).
+		waitFor(t, func() bool { return issueKeys(t, alice, "/api/v1/projects/KYB/issues?sprint=backlog") == "KYB-2,KYB-3" })
 		code, body = move("KYB-2", s1["id"])
 		expect(t, code, 422, body) // closed sprints take no issues
 		code, body = alice.do("POST", "/api/v1/sprints/"+s2["id"].(string)+"/start", nil)

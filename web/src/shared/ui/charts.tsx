@@ -1,3 +1,4 @@
+import { formatShortDate } from "../i18n/labels";
 // Chart primitives built to the dataviz method: thin marks, 4px rounded data-ends,
 // hairline solid grid, legend for >= 2 series, crosshair tooltip on lines, and a
 // table view for every chart. Colors come from validated CSS tokens (--viz-*).
@@ -28,7 +29,7 @@ export function niceMax(v: number): number {
   return 10 * p;
 }
 
-const shortDate = (d: Date) => d.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+const shortDate = (d: Date) => formatShortDate(d);
 
 function Figure({ title, caption, legend, table, children }: { title: string; caption?: ReactNode; legend?: ReactNode; table: ReactNode; children: ReactNode }) {
   const t = useT();

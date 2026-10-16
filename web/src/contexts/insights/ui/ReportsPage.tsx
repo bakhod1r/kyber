@@ -1,3 +1,4 @@
+import { priorityLabel, typeLabel } from "../../../shared/i18n/labels";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { SprintReport } from "./SprintReport";
@@ -65,8 +66,8 @@ export function Reports({ projectKey }: { projectKey: string }) {
 
       <div className="charts-grid">
         <BarList title={t("Issues by status")} items={s.by_status.map((c) => ({ label: statusName(c.key), value: c.count, extra: c.points }))} extraLabel={t("Points")} />
-        <BarList title={t("Issues by type")} items={s.by_type.map((c) => ({ label: title(t, c.key), value: c.count, extra: c.points }))} extraLabel={t("Points")} />
-        <BarList title={t("Issues by priority")} items={s.by_priority.map((c) => ({ label: title(t, c.key), value: c.count, extra: c.points }))} extraLabel={t("Points")} />
+        <BarList title={t("Issues by type")} items={s.by_type.map((c) => ({ label: typeLabel(t, c.key), value: c.count, extra: c.points }))} extraLabel={t("Points")} />
+        <BarList title={t("Issues by priority")} items={s.by_priority.map((c) => ({ label: priorityLabel(t, c.key), value: c.count, extra: c.points }))} extraLabel={t("Points")} />
         <BarList title={t("Workload (open issues)")} items={s.workload.map((w) => ({ label: w.name, value: w.count, extra: w.points }))} extraLabel={t("Points")} />
       </div>
 

@@ -122,7 +122,7 @@ func Run(t *testing.T, newRepo Factory) {
 		for i, s := range []*domain.Sprint{c1, c2} {
 			_ = s.Start(t0, t0.Add(14*24*time.Hour))
 			_ = repo.Save(ctx, s, nil)
-			_ = s.Complete(t0.Add(time.Duration(i+1) * time.Hour))
+			_ = s.Complete(t0.Add(time.Duration(i+1)*time.Hour), "u-1", "")
 			_ = repo.Save(ctx, s, nil)
 		}
 		_ = act.Start(t0, t0.Add(14*24*time.Hour))

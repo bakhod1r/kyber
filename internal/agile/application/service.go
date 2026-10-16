@@ -23,7 +23,8 @@ type Access interface {
 
 // Issues is the anti-corruption port to Issue Tracking.
 type Issues interface {
-	ReturnUnfinished(ctx context.Context, actor, project, sprint, to string) (completed, returned int, err error)
+	// SprintTally counts the sprint's issues in a Done-category status and the rest.
+	SprintTally(ctx context.Context, project, sprint string) (done, unfinished int, err error)
 	// VersionIssues lists the issues planned into the version that the actor may see.
 	VersionIssues(ctx context.Context, actor, project, version string) ([]VersionIssue, error)
 }
@@ -118,10 +119,10 @@ type Completion struct {
 	Returned  int // unfinished issues carried over to the backlog or the next sprint
 }
 
-// Complete returns unfinished issues to the backlog first and only then closes
-// the sprint, so a failure leaves it active and the action can simply be retried.
 // Complete closes the active sprint; unfinished issues are carried over to moveTo — a planned
-// sprint of the same project, or the backlog when "".
+// sprint of the same project, or the backlog when "". Only the sprint and its sprint.completed event
+// are written, in one transaction; Issue Tracking carries the issues over in reaction to the event, so
+// a failure leaves nothing half done (QA-05). The counts are those at the moment of closing.
 func (s *Service) Complete(ctx context.Context, actor, id, moveTo string) (Completion, error) {
 	sp, err := s.load(ctx, actor, id, true)
 	if err != nil {
@@ -136,11 +137,11 @@ func (s *Service) Complete(ctx context.Context, actor, id, moveTo string) (Compl
 			return Completion{}, ErrInvalidSprint
 		}
 	}
-	done, returned, err := s.d.Issues.ReturnUnfinished(ctx, actor, sp.Project(), string(sp.ID()), moveTo)
+	done, returned, err := s.d.Issues.SprintTally(ctx, sp.Project(), string(sp.ID()))
 	if err != nil {
 		return Completion{}, err
 	}
-	if err := sp.Complete(s.d.Now()); err != nil {
+	if err := sp.Complete(s.d.Now(), actor, domain.SprintID(moveTo)); err != nil {
 		return Completion{}, err
 	}
 	if err := s.d.Sprints.Save(ctx, sp, sp.PullEvents()); err != nil {

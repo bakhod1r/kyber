@@ -55,6 +55,7 @@ curl -H "$H" -XPOST localhost:8080/api/v1/issues/KYB-1/transitions -d '{"to":"in
 | `KYBER_SAML_IDP_METADATA_URL` / `KYBER_SAML_IDP_METADATA_FILE` | — | Enables "Continue with SAML" (ADR-0017). Also set `KYBER_SAML_CERT_FILE` / `KYBER_SAML_KEY_FILE` (the service provider's RSA certificate and key, PEM) and register `<KYBER_PUBLIC_URL>/api/v1/auth/saml/metadata` at the identity provider; `KYBER_SAML_NAME` labels the button |
 | `KYBER_SCIM_TOKEN` | — | Enables SCIM 2.0 provisioning at `/scim/v2` (ADR-0017); the identity provider sends it as a Bearer token. Deprovisioned users are deactivated, not deleted |
 | `KYBER_API_RATE_LIMIT` | `1200` | API requests per signed-in user per minute; over it the API answers 429 `RATE_LIMITED` with `Retry-After` (0 = off; shared across replicas with `KYBER_REDIS_URL`) |
+| `KYBER_TRUSTED_PROXIES` | — | Comma-separated CIDRs/addresses of reverse proxies (e.g. `10.0.0.0/8`); their `X-Forwarded-For` (rightmost untrusted hop) becomes the client IP for login and OTP throttles. Empty = the header is ignored |
 | `KYBER_UPLOAD_RATE_LIMIT` | `60` | Attachment/file uploads per user per minute (0 = off) |
 | `KYBER_WEBHOOK_ALLOW_PRIVATE` | `false` | Let project webhooks reach loopback/private/link-local addresses (refused by default against SSRF; ADR-0014) |
 | `KYBER_DATABASE_URL` | — | PostgreSQL URL; unset = in-memory dev mode. Connect as a non-superuser role so row-level security (ADR-0010) applies |

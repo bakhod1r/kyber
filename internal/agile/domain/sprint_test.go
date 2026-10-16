@@ -38,7 +38,7 @@ func TestNewSprint(t *testing.T) {
 func TestSprintLifecycle(t *testing.T) {
 	s := newSprint(t)
 	s.PullEvents()
-	if err := s.Complete(t0); !errors.Is(err, domain.ErrSprintState) {
+	if err := s.Complete(t0, "u-1", ""); !errors.Is(err, domain.ErrSprintState) {
 		t.Fatalf("complete planned err = %v", err)
 	}
 	if err := s.Start(t0, t0.Add(14*24*time.Hour)); err != nil {
@@ -50,7 +50,7 @@ func TestSprintLifecycle(t *testing.T) {
 	if err := s.Start(t0, t0.Add(14*24*time.Hour)); !errors.Is(err, domain.ErrSprintState) {
 		t.Fatalf("double start err = %v", err)
 	}
-	if err := s.Complete(t0.Add(time.Hour)); err != nil {
+	if err := s.Complete(t0.Add(time.Hour), "u-1", "s-2"); err != nil {
 		t.Fatal(err)
 	}
 	if s.State() != domain.StateClosed || !s.CompletedAt().Equal(t0.Add(time.Hour)) {
@@ -114,5 +114,19 @@ func TestStartRequiresEndAfterStart(t *testing.T) {
 	}
 	if !domain.Rehydrate(domain.Snapshot{EndsAt: end}).EndsAt().Equal(end) {
 		t.Fatal("rehydrate EndsAt")
+	}
+}
+
+// A sprint cannot carry its unfinished issues over to itself.
+func TestCompleteRefusesCarryOverToItself(t *testing.T) {
+	s := newSprint(t)
+	if err := s.Start(t0, t0.Add(14*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Complete(t0.Add(time.Hour), "u-1", s.ID()); !errors.Is(err, domain.ErrSprintState) {
+		t.Fatalf("carry over to itself: %v", err)
+	}
+	if s.State() != domain.StateActive {
+		t.Fatal("a refused completion must leave the sprint active")
 	}
 }

@@ -14,10 +14,13 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/tenant"
 )
 
-type contacts struct{ chats map[string]string }
+type contacts struct {
+	chats map[string]string
+	gone  string // another user whose account is gone
+}
 
 func (c contacts) Email(_ context.Context, user string) (string, error) {
-	if user == "ghost" {
+	if user == "ghost" || (c.gone != "" && user == c.gone) {
 		return "", errors.New("user gone")
 	}
 	return user + "@x.uz", nil

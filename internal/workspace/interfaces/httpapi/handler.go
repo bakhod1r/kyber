@@ -104,7 +104,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 
 // apexAPI are the API paths served on the apex domain in multi-tenant mode
 // (entries ending in "/" are prefixes, the others exact paths).
-var apexAPI = []string{"/api/v1/auth/", "/api/v1/me", "/api/v1/workspaces"}
+// Invitations are accepted by people who are not workspace members yet; the token picks the workspace.
+var apexAPI = []string{"/api/v1/auth/", "/api/v1/me", "/api/v1/workspaces", "/api/v1/invitations/"}
 
 // IsApexPath reports whether path is served on the apex in multi-tenant mode (sign-in, /me, the
 // workspace list): workspace guards leave these open.

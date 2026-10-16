@@ -98,3 +98,19 @@ func (r *Repository) MarkConversationRead(_ context.Context, in domain.Inbox, co
 	}
 	return nil
 }
+
+func (r *Repository) UnreadSince(_ context.Context, user domain.UserID, since time.Time, limit int) ([]domain.Notification, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []domain.Notification
+	for _, n := range r.all {
+		if n.Recipient == user && !n.Read() && n.CreatedAt.After(since) {
+			out = append(out, n)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}

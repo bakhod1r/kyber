@@ -41,6 +41,7 @@ import (
 	"github.com/bakhod1r/kyber/internal/platform/db"
 	"github.com/bakhod1r/kyber/internal/platform/otel"
 	"github.com/bakhod1r/kyber/internal/platform/outbox"
+	"github.com/bakhod1r/kyber/internal/platform/realip"
 	"github.com/bakhod1r/kyber/internal/server"
 )
 
@@ -116,6 +117,10 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 	if err != nil {
 		return nil, nil, err
 	}
+	proxies, err := realip.Parse(cfg.TrustedProxies)
+	if err != nil {
+		return nil, nil, err
+	}
 	social := server.WithSocial(identityhttp.Social{
 		SAML: sp, SAMLName: cfg.SAMLName,
 		Google: google.New(google.Config{ClientID: cfg.GoogleClientID, ClientSecret: cfg.GoogleClientSecret, RedirectURL: callback("google")}),
@@ -131,7 +136,7 @@ func newHandler(ctx context.Context, log *slog.Logger, cfg *config.Config) (http
 		server.WithICE(ice.Parse(cfg.ICEServers), cfg.TURNSecret),
 		server.WithWebhooks(cfg.WebhookAllowPrivate, 0), server.WithGitHubSecret(cfg.GitHubWebhookSecret),
 		server.WithRateLimits(cfg.APIRateLimit, cfg.UploadRateLimit), server.WithSCIMToken(cfg.SCIMToken),
-		server.WithEncryptionKey(box)}, telegramBot(cfg)...)
+		server.WithEncryptionKey(box), server.WithTrustedProxies(proxies)}, telegramBot(cfg)...)
 	if cfg.LiveKitURL != "" {
 		lk, err := livekit.New(livekit.Config{URL: cfg.LiveKitURL, APIURL: cfg.LiveKitAPIURL, Key: cfg.LiveKitKey,
 			Secret: cfg.LiveKitSecret, RecordingsDir: cfg.LiveKitRecordingsDir, EgressDir: cfg.LiveKitEgressDir})

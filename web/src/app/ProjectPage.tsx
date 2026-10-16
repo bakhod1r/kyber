@@ -4,6 +4,7 @@ import { Link, NavLink, useParams, useSearchParams } from "react-router-dom";
 import { projectUseCases } from "../contexts/project/application";
 import { identityUseCases } from "../contexts/identity/application";
 import { Members } from "../contexts/project/ui/Members";
+import { ArchiveControl } from "../contexts/project/ui/ArchiveControl";
 import { IssueFocus } from "../contexts/focus/ui/Focus";
 import { Backlog } from "../contexts/agile/ui/Backlog";
 import { Board } from "../contexts/agile/ui/Board";
@@ -22,10 +23,12 @@ import { Docs } from "../contexts/docs/ui/Docs";
 import { Forms } from "../contexts/form/ui/Forms";
 import { Goals } from "../contexts/goal/ui/Goals";
 import { Webhooks } from "../contexts/webhook/ui/Webhooks";
+import { Automation } from "../contexts/automation/ui/Automation";
 import { Development } from "../contexts/webhook/ui/Development";
 import { Timeline } from "../contexts/issue/ui/Timeline";
 import { ProjectSummary } from "../contexts/insights/ui/ProjectSummary";
 import { IssueList } from "../contexts/search/ui/IssueList";
+import { BulkEdit } from "../contexts/issue/ui/BulkEdit";
 import { type QuickFilterState, QuickFilters } from "../contexts/search/ui/QuickFilters";
 import { useState } from "react";
 
@@ -38,14 +41,16 @@ function ProjectDocs({ projectKey }: { projectKey: string }) {
 import { useT } from "../shared/i18n/i18n";
 
 /** Admin pages: reached through the one Settings tab, with their own section list. */
-const SETTINGS_VIEWS = new Set(["members", "workflow", "board-settings", "fields", "permissions", "notifications", "webhooks", "import", "audit"]);
+const SETTINGS_VIEWS = new Set(["members", "workflow", "board-settings", "fields", "permissions", "notifications", "webhooks", "import", "audit", "automation"]);
 
-export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "docs" | "forms" | "announcements" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" | "webhooks" | "members" }) {
+export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" | "list" | "goals" | "docs" | "forms" | "announcements" | "board" | "backlog" | "reports" | "import" | "workflow" | "audit" | "notifications" | "permissions" | "releases" | "board-settings" | "fields" | "webhooks" | "members" | "automation" }) {
   const t = useT();
   const key = useParams<{ key: string }>().key ?? "";
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectUseCases.projects });
   const me = useQuery({ queryKey: ["me"], queryFn: identityUseCases.me });
   const project = projects.data?.find((p) => p.key === key);
+  const members = useQuery({ queryKey: ["members", key], queryFn: () => projectUseCases.members(key) });
+  const admin = members.data?.some((m) => m.user_id === me.data?.id && m.role === "admin") ?? false;
   const base = `/projects/${encodeURIComponent(key)}`;
   const settings = SETTINGS_VIEWS.has(view);
   const summary = view === "summary";
@@ -62,9 +67,12 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
     });
   return (
     <div className="project">
-      <h1>
-        <span className="key">{key}</span> {project?.name ?? ""}
-      </h1>
+      <div className="project-head">
+        <h1>
+          <span className="key">{key}</span> {project?.name ?? ""}
+        </h1>
+        <ArchiveControl projectKey={key} admin={admin} />
+      </div>
       <nav className="tabs" aria-label={t("Project views")}>
         <NavLink to={`${base}/summary`}>{t("Summary")}</NavLink>
         <NavLink to={`${base}/timeline`}>{t("Timeline")}</NavLink>
@@ -92,6 +100,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
           <NavLink to={`${base}/fields`}>{t("Fields")}</NavLink>
           <NavLink to={`${base}/permissions`}>{t("Permissions")}</NavLink>
           <NavLink to={`${base}/notifications`}>{t("Notifications")}</NavLink>
+          <NavLink to={`${base}/automation`}>{t("Automation")}</NavLink>
           <NavLink to={`${base}/webhooks`}>{t("Webhooks")}</NavLink>
           <NavLink to={`${base}/import`}>{t("Import")}</NavLink>
           <NavLink to={`${base}/audit`}>{t("Audit")}</NavLink>
@@ -100,7 +109,9 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
       <div className={summary ? "project-grid" : "project-main"}>
         {view === "summary" && <ProjectSummary projectKey={key} />}
         {view === "timeline" && <Timeline projectKey={key} onOpen={setOpen} />}
-        {view === "list" && <IssueList projectKey={key} onOpen={setOpen} />}
+        {view === "list" && (
+          <IssueList projectKey={key} onOpen={setOpen} bulk={(keys, done) => <BulkEdit projectKey={key} keys={keys} onDone={done} />} />
+        )}
         {view === "board" && (
           <div>
             <QuickFilters projectKey={key} value={filters} onChange={setFilters} onKeys={setVisible} />
@@ -122,6 +133,7 @@ export function ProjectPage({ view = "board" }: { view?: "summary" | "timeline" 
         {view === "permissions" && <PermissionScheme projectKey={key} />}
         {view === "notifications" && <TelegramGroups projectKey={key} />}
         {view === "webhooks" && <Webhooks projectKey={key} />}
+        {view === "automation" && <Automation projectKey={key} />}
         {(view === "summary" || view === "members") && <Members projectKey={key} />}
       </div>
       {open && (

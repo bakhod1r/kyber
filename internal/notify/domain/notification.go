@@ -152,4 +152,7 @@ type Repository interface {
 	MarkAllRead(ctx context.Context, in Inbox, at time.Time) error
 	// MarkConversationRead reads the inbox's chat mentions in one conversation.
 	MarkConversationRead(ctx context.Context, in Inbox, conversation string, at time.Time) error
+	// UnreadSince lists the user's unread notifications created after since in every workspace, newest
+	// first (the daily digest).
+	UnreadSince(ctx context.Context, user UserID, since time.Time, limit int) ([]Notification, error)
 }

@@ -2,6 +2,14 @@
 package server
 
 import (
+	automationapp "github.com/bakhod1r/kyber/internal/automation/application"
+	automationdomain "github.com/bakhod1r/kyber/internal/automation/domain"
+	automationacl "github.com/bakhod1r/kyber/internal/automation/infrastructure/acl"
+	automationmemory "github.com/bakhod1r/kyber/internal/automation/infrastructure/memory"
+	automationpg "github.com/bakhod1r/kyber/internal/automation/infrastructure/postgres"
+	automationhttp "github.com/bakhod1r/kyber/internal/automation/interfaces/httpapi"
+	"net/netip"
+
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -14,6 +22,7 @@ import (
 	attmemory "github.com/bakhod1r/kyber/internal/attachment/infrastructure/memory"
 	attpg "github.com/bakhod1r/kyber/internal/attachment/infrastructure/postgres"
 	atthttp "github.com/bakhod1r/kyber/internal/attachment/interfaces/httpapi"
+	"github.com/bakhod1r/kyber/internal/platform/realip"
 	whapp "github.com/bakhod1r/kyber/internal/webhook/application"
 	whdomain "github.com/bakhod1r/kyber/internal/webhook/domain"
 	whacl "github.com/bakhod1r/kyber/internal/webhook/infrastructure/acl"
@@ -159,7 +168,9 @@ import (
 	projectdomain "github.com/bakhod1r/kyber/internal/project/domain"
 	"github.com/bakhod1r/kyber/internal/project/infrastructure/identitydir"
 	projectmemory "github.com/bakhod1r/kyber/internal/project/infrastructure/memory"
+	projectmail "github.com/bakhod1r/kyber/internal/project/infrastructure/notifymail"
 	projectpg "github.com/bakhod1r/kyber/internal/project/infrastructure/postgres"
+	projecttemplates "github.com/bakhod1r/kyber/internal/project/infrastructure/templateacl"
 	projecthttp "github.com/bakhod1r/kyber/internal/project/interfaces/httpapi"
 	searchapp "github.com/bakhod1r/kyber/internal/search/application"
 	searchdomain "github.com/bakhod1r/kyber/internal/search/domain"
@@ -199,99 +210,103 @@ import (
 
 // deps are the adapters a server is assembled from.
 type deps struct {
-	projects      projectdomain.Repository
-	issues        issuedomain.Repository
-	comments      issuedomain.CommentRepository
-	workflows     issuedomain.WorkflowRepository
-	history       issuedomain.HistoryRepository
-	links         issuedomain.LinkRepository
-	watchers      issuedomain.WatcherRepository
-	reactions     issuedomain.ReactionRepository
-	worklogs      issuedomain.WorklogRepository
-	fields        issuedomain.CustomFieldRepository
-	audit         auditdomain.Repository
-	schemes       accessdomain.SchemeRepository
-	filters       searchdomain.FilterRepository
-	goals         goaldomain.Repository
-	pages         docsdomain.Repository
-	docComments   docsdomain.Comments
-	attachments   attdomain.Repository
-	projectHooks  whdomain.Repository
-	whDeliveries  whdomain.DeliveryRepository
-	devLinks      whdomain.LinkRepository
-	webhookOpen   bool          // deliver to private/loopback addresses too (KYBER_WEBHOOK_ALLOW_PRIVATE)
-	webhookEvery  time.Duration // how often due webhook deliveries are sent (default 2s)
-	githubSecret  string
-	blobs         attapp.Blobs
-	forms         formdomain.Repository
-	announcements anndomain.Repository
-	siteAdmins    map[string]bool // lower-case emails administering the default workspace
-	sprints       agiledomain.Repository
-	boards        agiledomain.BoardRepository
-	versions      agiledomain.VersionRepository
-	users         identitydomain.Users
-	external      identitydomain.ExternalIdentities
-	tokens        identitydomain.PersonalTokens
-	oauth         identitydomain.OAuthStore
-	directory     identitydomain.Directory
-	ssoMappings   ssodomain.Mappings
-	ssoGrants     ssodomain.Grants
-	ssoConns      ssocdomain.Connections // stored SSO connections (ADR-0018); Postgres is built once the key is known
-	ssoBuild      ssocdir.Build
-	ssoDNS        ssocapp.DNS
-	sealBox       *seal.Box
-	scimToken     string
-	social        identityhttp.Social
-	otps          identitydomain.OTPChallenges
-	telegramBot   *telegram.Bot
-	mailer        notifyapp.Sender
-	publicURL     string
-	mqttAddr      string
-	dispatchEvery time.Duration
-	deliveries    notifydomain.DeliveryRepository
-	prefs         notifydomain.PrefsRepository
-	groups        notifydomain.GroupRepository
-	telegramWait  time.Duration
-	sessions      identitydomain.Sessions
-	ready         func(context.Context) error
-	cookieSecure  bool
-	redis         redis.UniversalClient // optional: shared login limiter (guard)
-	apiRate       int                   // requests per user per minute (0 = off)
-	uploadRate    int                   // uploads per user per minute (0 = off)
-	notes         notifydomain.Repository
-	activity      insightsdomain.Repository
-	mappings      importerdomain.MappingRepository
-	workspaces    workspacedomain.Repository
-	meetings      calendardomain.Repository
-	focusSessions focusdomain.Repository
-	conversations chatdomain.Repository
-	messages      chatdomain.Messages
-	saved         chatdomain.SavedMessages
-	statuses      chatdomain.Statuses
-	scheduled     chatdomain.ScheduledMessages
-	reminders     chatdomain.Reminders
-	userGroups    chatdomain.Groups // chat @groups (S70); groups are Telegram groups
-	chatPrefs     chatdomain.Prefs
-	transcriber   chatapp.Transcriber
-	summarizer    chatapp.Summarizer
-	bookmarks     chatdomain.Bookmarks
-	chatWorkflows chatdomain.Workflows
-	webhooks      chatdomain.Webhooks
-	bots          chatdomain.Bots
-	sectionOrders chatdomain.SectionOrders
-	calls         calldomain.Repository
-	whiteboards   wbdomain.Repository
-	wbComments    wbdomain.Comments
-	chatStore     blob.Store // chat files on S3 (S82)
-	chatBlobs     blob.Store // chat files; memory unless WithFilesDir
-	baseDomain    string     // "" = single-tenant (ADR-0004)
-	ice           ice.Config
-	media         MediaServer
-	outbox        outbox.Store
-	livePool      *pgxpool.Pool   // set: hints cross replicas through NOTIFY
-	ctx           context.Context // lifetime of background work (outbox relay)
-	relayEvery    time.Duration
-	reminderEvery time.Duration // how often due meeting reminders are sent (default 30s)
+	trustedProxies []netip.Prefix
+	projects       projectdomain.Repository
+	issues         issuedomain.Repository
+	comments       issuedomain.CommentRepository
+	workflows      issuedomain.WorkflowRepository
+	history        issuedomain.HistoryRepository
+	links          issuedomain.LinkRepository
+	watchers       issuedomain.WatcherRepository
+	reactions      issuedomain.ReactionRepository
+	worklogs       issuedomain.WorklogRepository
+	fields         issuedomain.CustomFieldRepository
+	audit          auditdomain.Repository
+	schemes        accessdomain.SchemeRepository
+	filters        searchdomain.FilterRepository
+	goals          goaldomain.Repository
+	rules          automationdomain.Repository
+	pages          docsdomain.Repository
+	docComments    docsdomain.Comments
+	attachments    attdomain.Repository
+	projectHooks   whdomain.Repository
+	whDeliveries   whdomain.DeliveryRepository
+	devLinks       whdomain.LinkRepository
+	webhookOpen    bool          // deliver to private/loopback addresses too (KYBER_WEBHOOK_ALLOW_PRIVATE)
+	webhookEvery   time.Duration // how often due webhook deliveries are sent (default 2s)
+	githubSecret   string
+	blobs          attapp.Blobs
+	forms          formdomain.Repository
+	announcements  anndomain.Repository
+	siteAdmins     map[string]bool // lower-case emails administering the default workspace
+	sprints        agiledomain.Repository
+	boards         agiledomain.BoardRepository
+	versions       agiledomain.VersionRepository
+	users          identitydomain.Users
+	external       identitydomain.ExternalIdentities
+	tokens         identitydomain.PersonalTokens
+	oauth          identitydomain.OAuthStore
+	directory      identitydomain.Directory
+	ssoMappings    ssodomain.Mappings
+	ssoGrants      ssodomain.Grants
+	ssoConns       ssocdomain.Connections // stored SSO connections (ADR-0018); Postgres is built once the key is known
+	ssoBuild       ssocdir.Build
+	ssoDNS         ssocapp.DNS
+	sealBox        *seal.Box
+	scimToken      string
+	social         identityhttp.Social
+	otps           identitydomain.OTPChallenges
+	telegramBot    *telegram.Bot
+	mailer         notifyapp.Sender
+	publicURL      string
+	mqttAddr       string
+	dispatchEvery  time.Duration
+	deliveries     notifydomain.DeliveryRepository
+	prefs          notifydomain.PrefsRepository
+	groups         notifydomain.GroupRepository
+	telegramWait   time.Duration
+	sessions       identitydomain.Sessions
+	ready          func(context.Context) error
+	cookieSecure   bool
+	redis          redis.UniversalClient // optional: shared login limiter (guard)
+	apiRate        int                   // requests per user per minute (0 = off)
+	uploadRate     int                   // uploads per user per minute (0 = off)
+	notes          notifydomain.Repository
+	activity       insightsdomain.Repository
+	invitations    projectdomain.InvitationRepository
+	mappings       importerdomain.MappingRepository
+	importLock     importerdomain.ImportLock
+	workspaces     workspacedomain.Repository
+	meetings       calendardomain.Repository
+	focusSessions  focusdomain.Repository
+	conversations  chatdomain.Repository
+	messages       chatdomain.Messages
+	saved          chatdomain.SavedMessages
+	statuses       chatdomain.Statuses
+	scheduled      chatdomain.ScheduledMessages
+	reminders      chatdomain.Reminders
+	userGroups     chatdomain.Groups // chat @groups (S70); groups are Telegram groups
+	chatPrefs      chatdomain.Prefs
+	transcriber    chatapp.Transcriber
+	summarizer     chatapp.Summarizer
+	bookmarks      chatdomain.Bookmarks
+	chatWorkflows  chatdomain.Workflows
+	webhooks       chatdomain.Webhooks
+	bots           chatdomain.Bots
+	sectionOrders  chatdomain.SectionOrders
+	calls          calldomain.Repository
+	whiteboards    wbdomain.Repository
+	wbComments     wbdomain.Comments
+	chatStore      blob.Store // chat files on S3 (S82)
+	chatBlobs      blob.Store // chat files; memory unless WithFilesDir
+	baseDomain     string     // "" = single-tenant (ADR-0004)
+	ice            ice.Config
+	media          MediaServer
+	outbox         outbox.Store
+	livePool       *pgxpool.Pool   // set: hints cross replicas through NOTIFY
+	ctx            context.Context // lifetime of background work (outbox relay)
+	relayEvery     time.Duration
+	reminderEvery  time.Duration // how often due meeting reminders are sent (default 30s)
 }
 
 // WithContext bounds background work (the outbox relay) to ctx.
@@ -433,6 +448,10 @@ func WithFilesDir(dir string) Option {
 // Option configures optional infrastructure.
 type Option func(*deps)
 
+// WithTrustedProxies names the reverse proxies whose X-Forwarded-For is believed (KYBER_TRUSTED_PROXIES):
+// login and OTP throttles then count the real client, not the proxy.
+func WithTrustedProxies(p []netip.Prefix) Option { return func(d *deps) { d.trustedProxies = p } }
+
 // WithRedis shares the login limiter across replicas via guard's Redis limiter.
 func WithRedis(rdb redis.UniversalClient) Option { return func(d *deps) { d.redis = rdb } }
 
@@ -457,10 +476,10 @@ func NewInMemory(log *slog.Logger, opts ...Option) http.Handler {
 		projectHooks: hooks.Webhooks(), whDeliveries: hooks.Deliveries(), devLinks: hooks.Links(),
 		projects: projectmemory.NewRepository(), issues: issueRepo, comments: issuememory.NewCommentRepository(issueRepo),
 		workflows: issuememory.NewWorkflowRepository(), history: issuememory.NewHistoryRepository(), links: issuememory.NewLinkRepository(issueRepo), watchers: issuememory.NewWatcherRepository(), reactions: issuememory.NewReactionRepository(), worklogs: issuememory.NewWorklogRepository(), fields: issuememory.NewCustomFieldRepository(),
-		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), pages: pageRepo, docComments: docCommentRepo, attachments: attmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
+		audit: auditmemory.NewRepository(), schemes: accessmemory.NewRepository(), filters: searchmemory.NewFilterRepository(), goals: goalmemory.NewRepository(), rules: automationmemory.NewRepository(), pages: pageRepo, docComments: docCommentRepo, attachments: attmemory.NewRepository(), forms: formmemory.NewRepository(), announcements: annRepo,
 		sprints: sprintRepo, boards: agilememory.NewBoardRepository(), versions: versionRepo, notes: notifymemory.NewRepository(),
 		deliveries: notifymemory.NewDeliveryRepository(), prefs: notifymemory.NewPrefsRepository(), groups: notifymemory.NewGroupRepository(), activity: insightsmemory.NewRepository(),
-		mappings: importermemory.NewRepository(), workspaces: workspacememory.NewRepository(),
+		invitations: projectmemory.NewInvitations(), mappings: importermemory.NewRepository(), importLock: importermemory.NewImportLock(), workspaces: workspacememory.NewRepository(),
 		meetings: meetingRepo, focusSessions: focusmemory.NewRepository(),
 		conversations: chatRepo, messages: chatRepo.Messages(), saved: savedRepo, statuses: chatmemory.NewStatuses(), scheduled: chatmemory.NewScheduled(), reminders: remRepo, userGroups: chatmemory.NewGroups(), chatPrefs: chatmemory.NewPrefs(), bookmarks: chatmemory.NewBookmarks(), chatWorkflows: chatmemory.NewWorkflows(), webhooks: chatmemory.NewWebhooks(), bots: chatmemory.NewBots(), sectionOrders: chatmemory.NewSectionOrders(), calls: callRepo, whiteboards: wbmemory.NewRepository(), wbComments: wbCommentRepo,
 		outbox: outbox.NewMemoryStore(events(issueRepo.Outbox, issueRepo.OutboxMeta), events(sprintRepo.Outbox, sprintRepo.OutboxMeta), events(versionRepo.Outbox, versionRepo.OutboxMeta), events(annRepo.Outbox, annRepo.OutboxMeta), events(meetingRepo.Outbox, meetingRepo.OutboxMeta), events(chatRepo.Outbox, chatRepo.OutboxMeta), events(savedRepo.Outbox, savedRepo.OutboxMeta), events(remRepo.Outbox, remRepo.OutboxMeta), events(wbCommentRepo.Outbox, wbCommentRepo.OutboxMeta), events(docCommentRepo.Outbox, docCommentRepo.OutboxMeta), events(callRepo.Outbox, callRepo.OutboxMeta)),
@@ -507,10 +526,10 @@ func NewPostgres(log *slog.Logger, pool *pgxpool.Pool, cookieSecure bool, opts .
 		projectHooks: whpg.NewWebhooks(pool), whDeliveries: whpg.NewDeliveries(pool), devLinks: whpg.NewLinks(pool),
 		projects: projectpg.NewRepository(pool), issues: issuepg.NewRepository(pool), comments: issuepg.NewCommentRepository(pool),
 		workflows: issuepg.NewWorkflowRepository(pool), history: issuepg.NewHistoryRepository(pool), links: issuepg.NewLinkRepository(pool), watchers: issuepg.NewWatcherRepository(pool), reactions: issuepg.NewReactionRepository(pool), worklogs: issuepg.NewWorklogRepository(pool), fields: issuepg.NewCustomFieldRepository(pool),
-		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), pages: docspg.NewRepository(pool), docComments: docspg.NewComments(pool), attachments: attpg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
+		audit: auditpg.NewRepository(pool), schemes: accesspg.NewRepository(pool), filters: searchpg.NewFilterRepository(pool), goals: goalpg.NewRepository(pool), rules: automationpg.NewRepository(pool), pages: docspg.NewRepository(pool), docComments: docspg.NewComments(pool), attachments: attpg.NewRepository(pool), forms: formpg.NewRepository(pool), announcements: annpg.NewRepository(pool),
 		sprints: agilepg.NewRepository(pool), boards: agilepg.NewBoardRepository(pool), versions: agilepg.NewVersionRepository(pool), notes: notifypg.NewRepository(pool),
 		deliveries: notifypg.NewDeliveryRepository(pool), prefs: notifypg.NewPrefsRepository(pool), groups: notifypg.NewGroupRepository(pool), outbox: outbox.NewPostgresStore(pool), livePool: pool,
-		activity: insightspg.NewRepository(pool), mappings: importerpg.NewRepository(pool), workspaces: workspacepg.NewRepository(pool),
+		activity: insightspg.NewRepository(pool), invitations: projectpg.NewInvitations(pool), mappings: importerpg.NewRepository(pool), importLock: importerpg.NewImportLock(pool), workspaces: workspacepg.NewRepository(pool),
 		meetings: calendarpg.NewRepository(pool), focusSessions: focuspg.NewRepository(pool),
 		conversations: chatpg.NewRepository(pool), messages: chatpg.NewMessages(pool), saved: chatpg.NewSaved(pool), statuses: chatpg.NewStatuses(pool), scheduled: chatpg.NewScheduled(pool), reminders: chatpg.NewReminders(pool), userGroups: chatpg.NewGroups(pool), chatPrefs: chatpg.NewPrefs(pool), bookmarks: chatpg.NewBookmarks(pool), chatWorkflows: chatpg.NewWorkflows(pool), webhooks: chatpg.NewWebhooks(pool), bots: chatpg.NewBots(pool), sectionOrders: chatpg.NewSectionOrders(pool), calls: callpg.NewRepository(pool), whiteboards: wbpg.NewRepository(pool), wbComments: wbpg.NewComments(pool),
 		users: ids, sessions: ids, external: ids, otps: ids, tokens: ids, oauth: ids, directory: ids, ssoMappings: sso, ssoGrants: sso, ready: pool.Ping, cookieSecure: cookieSecure,
@@ -563,9 +582,14 @@ func build(log *slog.Logger, d deps) http.Handler {
 		Groups: d.groups, Admins: notifyacl.NewAdmins(access), BotName: d.social.TelegramBot,
 		Lookups: notifyacl.NewLookups(issues, agile), Bot: d.botMessenger(),
 	})
+	projects.WithTemplates(projecttemplates.New(issues, agile)) // B10: project templates
+	projects.WithInvitations(projectapp.InvitationDeps{Repo: d.invitations, Mailer: projectmail.New(notify),
+		PublicURL: d.publicURL, NewToken: newSecret, Now: time.Now})
 	search := searchapp.NewService(searchapp.Deps{Projects: searchacl.NewProjects(projects), Issues: searchacl.NewIssues(issues),
 		Users: searchacl.NewUsers(d.users), Planning: searchacl.NewPlanning(agile), Filters: d.filters, NewID: id.New})
 	goals := goalapp.NewService(goalapp.Deps{Projects: goalacl.NewProjects(projects), Issues: goalacl.NewIssues(search), Goals: d.goals, NewID: id.New})
+	automation := automationapp.NewService(automationapp.Deps{Projects: automationacl.NewProjects(projects), Issues: automationacl.NewIssues(issues),
+		Conditions: automationacl.NewConditions(search), Rules: d.rules, NewID: id.New, Now: time.Now, Log: log})
 	pages := docsapp.NewService(docsapp.Deps{Projects: docsacl.NewProjects(projects), Pages: d.pages, Comments: d.docComments, NewID: id.New, Now: time.Now})
 	forms := formapp.NewService(formapp.Deps{Projects: formacl.NewProjects(projects), Issues: formacl.NewIssues(issues), Forms: d.forms, NewID: id.New})
 	insights := insightsapp.NewService(insightsapp.Deps{
@@ -575,7 +599,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	importGate := projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)
 	importer := importerapp.NewService(importerapp.Deps{
 		Access: importeracl.NewProject(importGate), Members: importeracl.NewProject(importGate),
-		Issues: importeracl.NewIssues(issues, time.Now), Mappings: d.mappings, Source: importeracl.NewSource(issues, d.users),
+		Issues: importeracl.NewIssues(issues, time.Now), Mappings: d.mappings, Lock: d.importLock, Source: importeracl.NewSource(issues, d.users),
 	})
 	teams := calendaracl.NewTeams(projects, workspaces, d.siteAdmin)
 	calendar := calendarapp.NewService(d.meetings, calendaracl.NewMembers(workspaces, d.users), id.New, time.Now).WithTeams(teams, teams)
@@ -684,6 +708,10 @@ func build(log *slog.Logger, d deps) http.Handler {
 	for _, name := range []string{"issue.work_logged", "issue.worklog_removed"} {
 		relay.Handle(name, issues.OnWorklogEvent)
 	}
+	for _, t := range automationdomain.Triggers { // G8: automation rules react to people's issue changes
+		relay.Handle(string(t), automation.OnEvent)
+	}
+	relay.Handle("sprint.completed", issues.OnSprintCompleted) // carry unfinished issues over (QA-05)
 	for _, name := range []string{"version.released", "version.deleted"} {
 		relay.Handle(name, issues.OnVersionEvent)
 	}
@@ -709,9 +737,10 @@ func build(log *slog.Logger, d deps) http.Handler {
 	go relay.Run(d.ctx, d.relayEvery)
 	go dispatch(d.ctx, log, notify, d.senders(), d.dispatchEvery)
 	go remindMeetings(d.ctx, log, calendar.RemindDue, d.reminderEvery)
-	go remindMeetings(d.ctx, log, chat.RemindDue, d.reminderEvery)    // saved messages (S65), /remind (S67)
-	go remindMeetings(d.ctx, log, chat.SendDue, d.reminderEvery)      // scheduled messages (S67)
-	go remindMeetings(d.ctx, log, chat.RunWorkflows, d.reminderEvery) // channel workflows (S80)
+	go remindMeetings(d.ctx, log, chat.RemindDue, d.reminderEvery)     // saved messages (S65), /remind (S67)
+	go remindMeetings(d.ctx, log, chat.SendDue, d.reminderEvery)       // scheduled messages (S67)
+	go remindMeetings(d.ctx, log, chat.RunWorkflows, d.reminderEvery)  // channel workflows (S80)
+	go remindMeetings(d.ctx, log, notify.SendDigests, d.reminderEvery) // daily email digests (B9)
 	go dispatchWebhooks(d.ctx, log, webhooks, d.webhookEvery)
 	auditLog := auditapp.NewService(d.audit, auditacl.NewAdmins(projectcompat.NewGate(projects, access, accessdomain.AdministerProjects)), auditacl.NewNames(d.users), time.Now)
 	// S106: SSO groups → workspace and project roles, applied at every SSO login.
@@ -767,6 +796,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	accesshttp.New(access, log).Register(api)
 	searchhttp.New(search, log).Register(api)
 	goalhttp.New(goals, log).Register(api)
+	automationhttp.New(automation, log).Register(api)
 	docshttp.New(pages, log).Register(api)
 	if d.blobs == nil {
 		d.blobs = attmemory.NewBlobs()
@@ -831,6 +861,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 	mux.Handle("GET /metrics", m)
 	auth.RegisterPublic(mux)
 	connectionsHTTP.RegisterPublic(mux, d.rateLimit(log))
+	projecthttp.New(projects, log).RegisterPublic(mux) // invitation previews: the token in the URL is the credential
 	auth.RegisterSCIM(mux, d.scimToken)
 	chatAPI.RegisterPublic(mux) // incoming webhooks (S81): the secret in the URL is the credential
 	webhookHTTP.RegisterPublic(mux)
@@ -840,7 +871,7 @@ func build(log *slog.Logger, d deps) http.Handler {
 		mediaOrigins = d.media.Origins()
 	}
 	mux.Handle("/", web.Handler(web.Dist(), mediaOrigins...))
-	return otel.Middleware(observe(log, m, recoverer(log, hsts(d.cookieSecure, tenancy.Resolve(otel.Routed(mux))))))
+	return otel.Middleware(realip.Middleware(d.trustedProxies, observe(log, m, recoverer(log, hsts(d.cookieSecure, tenancy.Resolve(otel.Routed(mux)))))))
 }
 
 // rateLimit limits each user's API requests: per process, or across replicas with Redis.

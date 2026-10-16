@@ -242,3 +242,7 @@ export function layoutWorkflow(wf: Workflow): Map<Status, { x: number; y: number
   });
   return out;
 }
+
+/** A change applied to several issues at once (G9); omitted fields stay as they are. */
+export type BulkChange = { keys: string[]; status?: string; assignee_id?: string; sprint_id?: string; add_labels?: string[] };
+export type BulkResult = { key: string; ok: boolean; code?: string; error?: string };

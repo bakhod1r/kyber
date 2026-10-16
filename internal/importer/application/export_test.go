@@ -37,7 +37,7 @@ func TestExport(t *testing.T) {
 // QA parity: importing a project's own export into it skips the issues it already has.
 func TestImportSkipsIssuesAlreadyInTheProject(t *testing.T) {
 	issues, maps := &fakeIssues{}, memory.NewRepository()
-	s := application.NewService(application.Deps{Access: fakeAccess{"u-lead": "admin"}, Members: fakeAccess{}, Issues: issues, Mappings: maps,
+	s := application.NewService(application.Deps{Access: fakeAccess{"u-lead": "admin"}, Members: fakeAccess{}, Issues: issues, Mappings: maps, Lock: memory.NewImportLock(),
 		Source: fakeSource{{Key: "KYB-1", Summary: "Login", Type: "bug", Status: "done", Priority: "high"}}})
 	r, err := s.Import(context.Background(), "u-lead", "KYB", "Summary,Issue key\nLogin,KYB-1\nNew,PROJ-9\n", false)
 	if err != nil || len(r.Items) != 1 || r.Items[0].Key != "PROJ-9" || len(r.Skipped) != 1 || r.Skipped[0] != "KYB-1" {

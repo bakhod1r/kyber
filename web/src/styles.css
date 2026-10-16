@@ -1,6 +1,7 @@
 /* The app's stylesheet, in cascade order: later parts win over earlier ones. */
 @import "./styles/base.css";
 @import "./styles/components.css";
+@import "./styles/features.css";
 @import "./styles/themes.css";
 @import "./styles/responsive.css";
 @import "./styles/motion.css";

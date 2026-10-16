@@ -3,11 +3,13 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/bakhod1r/kyber/internal/issue/application"
 	"github.com/bakhod1r/kyber/internal/issue/domain"
+	"github.com/bakhod1r/kyber/internal/platform/outbox"
 )
 
 func order(t *testing.T, s *application.Service, q application.ListQuery) string {
@@ -108,7 +110,16 @@ func TestMoveIssuesIntoSprintAndFilter(t *testing.T) {
 	}
 }
 
-func TestReturnUnfinished(t *testing.T) {
+// completeSprint delivers the Agile context's sprint.completed event.
+func completeSprint(t *testing.T, s *application.Service, by, project, sprint, to string) {
+	t.Helper()
+	payload := fmt.Sprintf(`{"id":%q,"project":%q,"carry_over_to":%q,"by":%q}`, sprint, project, to, by)
+	if err := s.OnSprintCompleted(context.Background(), outbox.Message{Name: "sprint.completed", Payload: []byte(payload)}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSprintCompletedCarriesUnfinishedIssuesOver(t *testing.T) {
 	ctx := context.Background()
 	s := seed(t, 3)
 	for _, k := range []string{"KYB-1", "KYB-2", "KYB-3"} {
@@ -119,10 +130,12 @@ func TestReturnUnfinished(t *testing.T) {
 	_, _ = s.Transition(ctx, dev, "KYB-1", "done", "")
 	_, _ = s.Transition(ctx, dev, "KYB-2", "in_progress", "")
 
-	completed, returned, err := s.ReturnUnfinished(ctx, dev, "KYB", "s-1", "")
+	completed, returned, err := s.SprintTally(ctx, "KYB", "s-1")
 	if err != nil || completed != 1 || returned != 2 {
-		t.Fatalf("ReturnUnfinished = %d, %d, %v", completed, returned, err)
+		t.Fatalf("SprintTally = %d, %d, %v", completed, returned, err)
 	}
+	completeSprint(t, s, dev, "KYB", "s-1", "")
+	completeSprint(t, s, dev, "KYB", "s-1", "") // re-delivery changes nothing
 	if got := order(t, s, application.ListQuery{Sprint: "s-1"}); got != "KYB-1" {
 		t.Fatalf("done issues stay in the closed sprint: %s", got)
 	}
@@ -131,5 +144,27 @@ func TestReturnUnfinished(t *testing.T) {
 	}
 	if is, _ := s.Get(ctx, dev, "KYB-2"); is.Status() != domain.StatusInProgress {
 		t.Fatal("returning to the backlog must keep the status")
+	}
+}
+
+func TestSprintCompletedCarriesOverToTheNextSprintOrTheBacklog(t *testing.T) {
+	ctx := context.Background()
+	s := seed(t, 2)
+	for _, k := range []string{"KYB-1", "KYB-2"} {
+		is, _ := s.Get(ctx, dev, k)
+		_, _ = s.Edit(ctx, dev, k, application.EditIssue{Version: is.Version(), SprintSet: true, Sprint: "s-1"})
+	}
+	completeSprint(t, s, dev, "KYB", "s-1", "s-2")
+	if got := order(t, s, application.ListQuery{Sprint: "s-2"}); got != "KYB-1,KYB-2" {
+		t.Fatalf("next sprint = %s", got)
+	}
+	// The target closed before the event was handled: the issues go to the backlog instead.
+	completeSprint(t, s, dev, "KYB", "s-2", "s-closed")
+	if got := order(t, s, application.ListQuery{Sprint: application.Backlog}); got != "KYB-1,KYB-2" {
+		t.Fatalf("backlog = %s", got)
+	}
+	// A malformed event is dropped, never retried forever.
+	if err := s.OnSprintCompleted(ctx, outbox.Message{Name: "sprint.completed", Payload: []byte("garbage")}); err != nil {
+		t.Fatal(err)
 	}
 }

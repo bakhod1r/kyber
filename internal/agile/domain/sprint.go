@@ -99,13 +99,17 @@ func (s *Sprint) Start(at, endsAt time.Time) error {
 	return nil
 }
 
-// Complete closes the active sprint; returning unfinished issues is a separate step.
-func (s *Sprint) Complete(at time.Time) error {
+// Complete closes the active sprint, by `by`; its unfinished issues are to carry over to carryOverTo
+// ("" = the backlog). Issue Tracking moves them in reaction to the SprintCompleted event.
+func (s *Sprint) Complete(at time.Time, by string, carryOverTo SprintID) error {
 	if s.state != StateActive {
 		return ErrSprintState
 	}
+	if carryOverTo == s.id {
+		return ErrSprintState
+	}
 	s.state, s.completedAt = StateClosed, at
-	s.record(SprintCompleted{ID: s.id, Project: s.project})
+	s.record(SprintCompleted{ID: s.id, Project: s.project, CarryOverTo: carryOverTo, By: by})
 	return nil
 }
 
@@ -132,8 +136,10 @@ type SprintStarted struct {
 }
 
 type SprintCompleted struct {
-	ID      SprintID `json:"id"`
-	Project string   `json:"project"`
+	ID          SprintID `json:"id"`
+	Project     string   `json:"project"`
+	CarryOverTo SprintID `json:"carry_over_to,omitempty"` // "" = the backlog
+	By          string   `json:"by,omitempty"`
 }
 
 func (SprintCreated) EventName() string   { return "sprint.created" }

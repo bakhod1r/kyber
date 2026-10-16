@@ -1,3 +1,4 @@
+import { formatDate, priorityLabel, typeLabel } from "../../../shared/i18n/labels";
 import { useQuery } from "@tanstack/react-query";
 import { agileUseCases } from "../../agile/application";
 import { BarList, StatTile, fmt } from "../../../shared/ui/charts";
@@ -33,8 +34,8 @@ export function ProjectSummary({ projectKey }: { projectKey: string }) {
       </section>
       <div className="charts-grid">
         <BarList title={t("Status overview")} items={s.by_status.map((c) => ({ label: label(c.key), value: c.count }))} />
-        <BarList title={t("Types of work")} items={s.by_type.map((c) => ({ label: c.key, value: c.count }))} />
-        <BarList title={t("Priority breakdown")} items={s.by_priority.map((c) => ({ label: c.key, value: c.count }))} />
+        <BarList title={t("Types of work")} items={s.by_type.map((c) => ({ label: typeLabel(t, c.key), value: c.count }))} />
+        <BarList title={t("Priority breakdown")} items={s.by_priority.map((c) => ({ label: priorityLabel(t, c.key), value: c.count }))} />
         <BarList title={t("Team workload")} items={s.workload.map((w) => ({ label: w.name, value: w.count }))} />
       </div>
       <section className="panel" aria-label={t("Upcoming releases")}>
@@ -48,7 +49,7 @@ export function ProjectSummary({ projectKey }: { projectKey: string }) {
                 <span>{v.name}</span>
                 <meter min={0} max={Math.max(v.issues ?? 0, 1)} value={v.done ?? 0} aria-label={t("{name} progress", { name: v.name })} />
                 <span className="muted">
-                  {t("{done}/{total} done", { done: v.done ?? 0, total: v.issues ?? 0 })}{v.release_date ? ` · ${new Date(v.release_date).toLocaleDateString()}` : ""}
+                  {t("{done}/{total} done", { done: v.done ?? 0, total: v.issues ?? 0 })}{v.release_date ? ` · ${formatDate(v.release_date)}` : ""}
                 </span>
               </li>
             ))}

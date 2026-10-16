@@ -1,3 +1,4 @@
+import { priorityLabel, typeLabel } from "../../../shared/i18n/labels";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useState } from "react";
 import { Link } from "react-router-dom";
@@ -111,9 +112,9 @@ function ReportView({ report, projectKey }: { report: ImportReport; projectKey: 
                   </td>
                 )}
                 <td>{it.title}</td>
-                <td>{it.type}</td>
+                <td>{typeLabel(t, it.type)}</td>
                 <td>{statusLabel(it.status)}</td>
-                <td>{it.priority}</td>
+                <td>{priorityLabel(t, it.priority)}</td>
                 <td>{it.points ?? "—"}</td>
                 <td>{it.warnings.join("; ")}</td>
               </tr>

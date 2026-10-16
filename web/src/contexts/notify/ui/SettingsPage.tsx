@@ -18,7 +18,7 @@ export function SettingsPage() {
     refetchInterval: (q) => (link && !q.state.data?.telegram_connected ? 2000 : false),
   });
   const save = useMutation({
-    mutationFn: (patch: Partial<Pick<NotificationSettings, "email" | "telegram">>) => notifyUseCases.setNotificationSettings(patch),
+    mutationFn: (patch: Partial<Pick<NotificationSettings, "email" | "telegram" | "email_digest">>) => notifyUseCases.setNotificationSettings(patch),
     onSuccess: (s) => qc.setQueryData(KEY, s),
   });
   const connect = useMutation({
@@ -44,6 +44,18 @@ export function SettingsPage() {
         </label>
       ) : (
         <p className="muted">{t("Email is not configured on this server (ask an administrator to set KYBER_SMTP_HOST).")}</p>
+      )}
+      {s.email_available && s.email && (
+        <fieldset className="digest">
+          <legend>{t("When to email")}</legend>
+          <label className="check">
+            <input type="radio" name="digest" checked={!s.email_digest} onChange={() => save.mutate({ email_digest: false })} /> {t("Right away")}
+          </label>
+          <label className="check">
+            <input type="radio" name="digest" checked={!!s.email_digest} onChange={() => save.mutate({ email_digest: true })} />{" "}
+            {t("Once a day, at 08:00 ({zone})", { zone: s.time_zone || "UTC" })}
+          </label>
+        </fieldset>
       )}
 
       <h2>{t("Telegram")}</h2>

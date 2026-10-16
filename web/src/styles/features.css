@@ -1,0 +1,76 @@
+/* Fixes from the UI review and the styles of features added on top of the base components. */
+
+/* Board: the toolbar wraps, so filters, the Group picker and Complete sprint stay in sight. */
+.board-toolbar { flex-wrap: wrap; overflow: visible; height: auto; }
+.board-toolbar .board-search { flex: 1 1 14rem; width: auto; min-width: 10rem; max-width: 26rem; }
+.board-toolbar .board-picker { margin-bottom: 0; }
+.avatar-filter .avatar { flex: none; width: 30px; height: 30px; padding: 0; font-size: 0.65rem; }
+
+/* Panels stacked directly in a page or a summary never touch. */
+.summary { display: grid; gap: 1rem; }
+.page > .panel + .panel, .page > section + section, .page > .panel + section, .page > section + .panel { margin-top: 1rem; }
+.check { color: var(--text); font-size: 0.9rem; gap: 0.5rem; }
+
+/* Project: archived banner, archive button, template picker (B10). */
+.project-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
+.project-head h1 { margin: 0.5rem 0; }
+.archived-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 0.5rem 0.9rem; border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warning) 16%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border)); color: var(--text); }
+.archive-button { font-size: 0.85rem; padding: 0.35rem 0.75rem; }
+.project-list li.archived a { opacity: 0.7; }
+.badge { margin-left: 0.5rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.1rem 0.45rem;
+  border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+.panel.inline .template-pick { grid-column: 1 / -1; }
+
+/* Invitations (B1). */
+.invitations h3 { font-size: 0.9rem; margin: 1rem 0 0.5rem; }
+.invitations ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.35rem; }
+.invitations li { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; font-size: 0.85rem; overflow-wrap: anywhere; }
+.invitations button { padding: 0.15rem 0.5rem; }
+.invite-result { display: grid; gap: 0.4rem; font-size: 0.85rem; }
+.invite-page { width: min(460px, 100%); display: grid; gap: 0.9rem; text-align: center; }
+.invite-page h1 { font-size: 1.25rem; margin: 0; }
+
+/* Notification digest (B9). */
+.settings fieldset.digest { border: 1px solid var(--border); border-radius: var(--radius); display: grid; gap: 0.4rem; padding: 0.6rem 0.9rem; }
+
+/* Automation (G8). */
+.automation { display: grid; gap: 0.75rem; }
+.automation h3 { margin: 0.75rem 0 0; font-size: 0.95rem; }
+.automation .rules, .automation .runs { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.4rem; }
+.automation .rules li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.75rem; align-items: center;
+  padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.automation .rules li.off { opacity: 0.6; }
+.automation .rules small { display: block; overflow-wrap: anywhere; }
+.automation .runs li { font-size: 0.85rem; overflow-wrap: anywhere; }
+.automation .runs li.failed { color: var(--danger); }
+.rule-form { display: grid; gap: 0.6rem; max-width: 40rem; }
+.rule-actions { border: 1px solid var(--border); border-radius: var(--radius); display: grid; gap: 0.5rem; padding: 0.6rem 0.9rem; }
+.rule-action { display: grid; grid-template-columns: 15rem minmax(0, 1fr) auto; gap: 0.5rem; }
+.rule-form > button[type="submit"], .rule-actions > button { justify-self: start; }
+
+/* Bulk change (G9). */
+.bulk-edit { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.6rem; align-items: end; margin-bottom: 0.75rem; }
+.bulk-edit > strong, .bulk-edit > .row, .bulk-edit > .bulk-result, .bulk-edit > .error { grid-column: 1 / -1; }
+.bulk-edit .row { display: flex; gap: 0.5rem; }
+.bulk-result ul { margin: 0.25rem 0 0; padding-left: 1.1rem; color: var(--danger); font-size: 0.85rem; }
+.issue-table .select { width: 2rem; }
+
+@media (max-width: 720px) {
+  /* The issue panel covers the top bar on phones, so its close button is never hidden. */
+  .overlay { padding: 0.5rem; align-items: start; z-index: calc(var(--z-topbar) + 1); }
+  .issue-panel { max-height: calc(100dvh - 1rem); }
+  .issue-form .row { grid-template-columns: 1fr; }
+  .versions-table { display: block; max-width: 100%; overflow-x: auto; }
+  /* Issue tables become cards: key and title first, type · status · priority underneath. */
+  .issue-table, .issue-table tbody, .issue-table thead { display: block; overflow: visible; }
+  .issue-table thead tr { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .issue-table thead th { border: 0; padding: 0; }
+  .issue-table tbody tr { display: block; padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+  .issue-table td { display: inline-block; border: 0; padding: 0 0.6rem 0 0; }
+  .issue-table td.title { display: block; margin: 0.15rem 0; color: var(--text); }
+  .issue-table td.meta { font-size: 0.8rem; color: var(--muted); }
+  .permissions { overflow-x: auto; }
+  .perm-table input[type="checkbox"] { width: 1.4rem; height: 1.4rem; }
+  .rule-action { grid-template-columns: 1fr; }
+}

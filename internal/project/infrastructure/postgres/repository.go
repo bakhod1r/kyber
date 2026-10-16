@@ -49,8 +49,8 @@ func (r *Repository) Update(ctx context.Context, key string, fn func(*domain.Pro
 		if err := fn(p); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE projects SET name = $2, issue_seq = $3 WHERE id = $1`,
-			string(p.ID()), p.Name(), p.IssueSeq()); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE projects SET name = $2, issue_seq = $3, archived = $4 WHERE id = $1`,
+			string(p.ID()), p.Name(), p.IssueSeq(), p.Archived()); err != nil {
 			return err
 		}
 		return writeMembers(ctx, tx, p)
@@ -94,7 +94,9 @@ func (r *Repository) list(ctx context.Context, query string, args ...any) ([]*do
 func load(ctx context.Context, q querier, where string, args ...any) (*domain.Project, error) {
 	var id, ws, key, name string
 	var seq int
-	err := q.QueryRow(ctx, `SELECT id::text, workspace_id::text, key, name, issue_seq FROM projects `+where, args...).Scan(&id, &ws, &key, &name, &seq)
+	var archived bool
+	err := q.QueryRow(ctx, `SELECT id::text, workspace_id::text, key, name, issue_seq, archived FROM projects `+where, args...).
+		Scan(&id, &ws, &key, &name, &seq, &archived)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrProjectNotFound
 	}
@@ -113,7 +115,7 @@ func load(ctx context.Context, q querier, where string, args ...any) (*domain.Pr
 	if err != nil {
 		return nil, err
 	}
-	return domain.Rehydrate(domain.ProjectID(id), domain.WorkspaceID(ws), key, name, seq, members), nil
+	return domain.RehydrateArchived(domain.ProjectID(id), domain.WorkspaceID(ws), key, name, seq, members, archived), nil
 }
 
 // writeMembers replaces the stored membership with the aggregate's.

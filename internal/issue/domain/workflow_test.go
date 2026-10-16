@@ -149,3 +149,17 @@ func TestImportedIssueLandsInCategoryStatus(t *testing.T) {
 		t.Fatalf("ghost err = %v", err)
 	}
 }
+
+// B10: the bug-tracking template's workflow is valid, starts at Open and ends in two Done-category statuses.
+func TestBugTrackingWorkflow(t *testing.T) {
+	wf, err := domain.DefineWorkflow(domain.BugTrackingWorkflowDef())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wf.Initial() != "open" || !wf.IsDone("resolved") || !wf.IsDone("closed") || wf.IsDone("in_review") {
+		t.Fatalf("workflow = %+v", wf.Statuses())
+	}
+	if !wf.CanTransition("open", "in_progress") || !wf.CanTransition("resolved", "open") || wf.CanTransition("open", "closed") {
+		t.Fatal("transitions")
+	}
+}

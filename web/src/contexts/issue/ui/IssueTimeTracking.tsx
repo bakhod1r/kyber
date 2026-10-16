@@ -1,3 +1,4 @@
+import { formatDate } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { type Issue, issueUseCases } from "../application";
@@ -82,7 +83,7 @@ export function IssueTimeTracking({ issue }: { issue: Issue }) {
           {worklogs.data?.map((w) => (
             <li key={w.id}>
               <span>
-                <strong>{w.spent}</strong> {w.author_name} · {new Date(w.started).toLocaleDateString()}
+                <strong>{w.spent}</strong> {w.author_name} · {formatDate(w.started)}
                 {w.comment && <> — {w.comment}</>}
               </span>
               <button type="button" className="ghost" aria-label={t("Delete worklog {spent} by {name}", { spent: w.spent, name: w.author_name })} onClick={() => remove.mutate(w.id)}>

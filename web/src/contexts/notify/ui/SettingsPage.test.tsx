@@ -15,11 +15,32 @@ describe("Notification settings", () => {
       "PUT /api/v1/me/notification-settings": (init) => ({ status: 200, body: settings(JSON.parse(String(init?.body))) }),
     });
     renderWithProviders(<SettingsPage />);
-    const email = await screen.findByRole("checkbox", { name: /Email/ });
+    const email = await screen.findByRole("checkbox", { name: /Email me/ });
     expect(email).toBeChecked();
     await userEvent.click(email);
     await waitFor(() => expect(calls.find((c) => c.key.startsWith("PUT"))?.body).toEqual({ email: false }));
-    await waitFor(() => expect(screen.getByRole("checkbox", { name: /Email/ })).not.toBeChecked());
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: /Email me/ })).not.toBeChecked());
+  });
+
+  it("switches email to a daily digest (B9)", async () => {
+    const calls = mockApi({
+      "GET /api/v1/me/notification-settings": { status: 200, body: settings({ time_zone: "Asia/Tashkent", email_digest: false }) },
+      "PUT /api/v1/me/notification-settings": (init) => ({ status: 200, body: settings({ time_zone: "Asia/Tashkent", ...JSON.parse(String(init?.body)) }) }),
+    });
+    renderWithProviders(<SettingsPage />);
+    const daily = await screen.findByRole("radio", { name: /Once a day/ });
+    expect(screen.getByRole("radio", { name: "Right away" })).toBeChecked();
+    expect(daily).toHaveAccessibleName("Once a day, at 08:00 (Asia/Tashkent)");
+    await userEvent.click(daily);
+    await waitFor(() => expect(calls.find((c) => c.key.startsWith("PUT"))?.body).toEqual({ email_digest: true }));
+    await waitFor(() => expect(screen.getByRole("radio", { name: /Once a day/ })).toBeChecked());
+  });
+
+  it("offers no digest when email is off", async () => {
+    mockApi({ "GET /api/v1/me/notification-settings": { status: 200, body: settings({ email: false }) } });
+    renderWithProviders(<SettingsPage />);
+    await screen.findByRole("checkbox", { name: /Email me/ });
+    expect(screen.queryByRole("radio", { name: /Once a day/ })).not.toBeInTheDocument();
   });
 
   it("connects Telegram through the bot link and notices when it is done", async () => {

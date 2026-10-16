@@ -94,3 +94,20 @@ func (r *Repository) MarkConversationRead(ctx context.Context, in domain.Inbox, 
 		string(in.User), at, in.Workspace, conversation)
 	return err
 }
+
+func (r *Repository) UnreadSince(ctx context.Context, user domain.UserID, since time.Time, limit int) ([]domain.Notification, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id::text, recipient_id::text, workspace_id::text, kind, issue_key, issue_title, actor_name,
+		excerpt, source_event, created_at, read_at, project_key, conversation_id, conversation_name, page_id FROM notifications
+		WHERE recipient_id = $1 AND read_at IS NULL AND created_at > $2 ORDER BY created_at DESC, id LIMIT $3`,
+		string(user), since, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Notification, error) {
+		var n domain.Notification
+		var readAt *time.Time
+		err := row.Scan(&n.ID, &n.Recipient, &n.Workspace, &n.Kind, &n.IssueKey, &n.IssueTitle, &n.ActorName, &n.Excerpt,
+			&n.SourceEvent, &n.CreatedAt, &readAt, &n.Project, &n.ConversationID, &n.ConversationName, &n.PageID)
+		return n, err
+	})
+}

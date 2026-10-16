@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Kyber API
-  version: 0.76.0
+  version: 0.77.0
   description: |
     Self-hosted issue & project tracker. Authenticate with the `kyber_session` cookie (browsers)
     or `Authorization: Bearer <token>` (API clients). Cookie-authenticated writes must send
@@ -2545,6 +2545,7 @@ paths:
               properties:
                 key: { $ref: "#/components/schemas/ProjectKey" }
                 name: { type: string }
+                template: { type: string, enum: [kanban, scrum, bug-tracking], description: "How the project starts: Kanban board (default), Scrum board, or the bug-tracking workflow (B10)" }
       responses:
         "201": { description: Created; the caller becomes admin., content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } } }
         "400": { $ref: "#/components/responses/Error" }
@@ -2599,6 +2600,283 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/archive:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    post:
+      operationId: archiveProject
+      description: "Archive the project (admins): it stays listed and readable, but nothing in it can change."
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/restore:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    post:
+      operationId: restoreProject
+      description: "Restore an archived project (admins), making it writable again."
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/invitations:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listInvitations
+      description: Pending invitations of the project, newest first (admin only). Expired ones are listed until revoked.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties: { items: { type: array, items: { $ref: "#/components/schemas/Invitation" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: inviteMember
+      description: |
+        Invite someone by email (admin only). Someone with an account is added right away (200). Anyone else gets an
+        invitation (201) emailed with a link that works for 7 days; `link` is returned so the admin can share it when
+        the server sends no email (`emailed: false`). Inviting the same address again replaces the pending link.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string }
+                role: { $ref: "#/components/schemas/Role" }
+      responses:
+        "200":
+          description: The user already had an account and is now a member.
+          content:
+            application/json:
+              schema: { type: object, required: [added], additionalProperties: false, properties: { added: { type: boolean, const: true } } }
+        "201":
+          description: Invitation created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [added, invitation, link, emailed]
+                additionalProperties: false
+                properties:
+                  added: { type: boolean, const: false }
+                  invitation: { $ref: "#/components/schemas/Invitation" }
+                  link: { type: string, format: uri }
+                  emailed: { type: boolean }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/invitations/{id}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectKey" }
+      - { name: id, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: revokeInvitation
+      description: Cancel a pending invitation (admin only); its link stops working.
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/invitations/{token}:
+    parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
+    get:
+      operationId: previewInvitation
+      security: []
+      description: What the holder of an invitation link was invited to, before signing in (the token is the credential).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [project, project_name, invited_by, email, role, expires_at, expired]
+                additionalProperties: false
+                properties:
+                  project: { type: string }
+                  project_name: { type: string }
+                  invited_by: { type: string, description: The inviting admin's name. }
+                  email: { type: string, description: The invited address; sign in with it to accept. }
+                  role: { $ref: "#/components/schemas/Role" }
+                  expires_at: { type: string, format: date-time }
+                  expired: { type: boolean }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/invitations/{token}/accept:
+    parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: acceptInvitation
+      description: |
+        Join the invitation's project (and its workspace) as the signed-in user, who must be signed in with the
+        invited address (403 otherwise). Existing members keep their role. Works on any workspace host.
+      responses:
+        "200":
+          description: Joined.
+          content:
+            application/json:
+              schema: { type: object, required: [project], additionalProperties: false, properties: { project: { type: string } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "410": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/automation/rules:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listAutomationRules
+      description: The project's automation rules, by name (any member may read them).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/AutomationRule" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createAutomationRule
+      description: |
+        Add a rule (project admins). When a person causes the trigger event on an issue of the project and the issue
+        matches the JQL condition, the actions run in order as the rule's creator, with their permissions. Changes made
+        by automation never trigger rules, so rules cannot loop.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AutomationRuleInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/AutomationRule" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/automation/runs:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    get:
+      operationId: listAutomationRuns
+      description: The project's 50 most recent rule runs, newest first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [rule_id, issue_key, at, ok, detail]
+                      additionalProperties: false
+                      properties:
+                        rule_id: { type: string }
+                        issue_key: { type: string }
+                        at: { type: string, format: date-time }
+                        ok: { type: boolean }
+                        detail: { type: string, description: "What was done, or why it failed" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/automation/rules/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: updateAutomationRule
+      description: Redefine a rule and turn it on or off (project admins); `version` must be the current one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/AutomationRuleInput" }
+                - type: object
+                  required: [version]
+                  properties:
+                    version: { type: integer }
+                    enabled: { type: boolean }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AutomationRule" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteAutomationRule
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/projects/{key}/issues/bulk:
+    parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
+    post:
+      operationId: bulkChangeIssues
+      description: |
+        Apply one change to up to 100 issues of the project (G9). Each issue is changed as it would be alone, so
+        permissions and workflow transitions apply per issue; `results` lists every issue's outcome (a failure does
+        not stop the others). Omitted fields stay unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keys]
+              properties:
+                keys: { type: array, minItems: 1, maxItems: 100, items: { type: string } }
+                status: { type: string, description: A workflow status id }
+                assignee_id: { type: string, description: "A user id; empty = unassigned" }
+                sprint_id: { type: string, description: "A sprint id; empty = the backlog" }
+                add_labels: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: Every issue's outcome, in the order given (duplicates once)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [key, ok]
+                      additionalProperties: false
+                      properties:
+                        key: { type: string }
+                        ok: { type: boolean }
+                        code: { type: string, description: "The problem code a single request would return" }
+                        error: { type: string }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/projects/{key}/workflow:
     parameters: [{ $ref: "#/components/parameters/ProjectKey" }]
@@ -3225,6 +3503,8 @@ paths:
       description: |
         Closes the active sprint. Issues that are not done are carried over to `move_to` (a planned sprint of the
         same project, 422 otherwise) or, without it, to the backlog; the sprint report lists them as not completed.
+        The sprint and its `sprint.completed` event are saved in one transaction and the issues move right after,
+        in reaction to that event (a live update follows); `completed`/`returned` count them at the moment of closing.
       requestBody:
         required: false
         content:
@@ -4233,6 +4513,7 @@ paths:
                 email: { type: boolean }
                 telegram: { type: boolean }
                 time_zone: { type: string, description: "IANA name (the browser's zone), or empty for UTC" }
+                email_digest: { type: boolean, description: "Daily digest instead of one email per notification" }
       responses:
         "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/NotificationSettings" } } } }
         "400": { $ref: "#/components/responses/Error" }
@@ -4792,17 +5073,60 @@ components:
     ProjectKey: { type: string, pattern: "^[A-Z][A-Z0-9]{1,9}$" }
     Project:
       type: object
-      required: [id, key, name]
+      required: [id, key, name, archived]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
         key: { $ref: "#/components/schemas/ProjectKey" }
         name: { type: string }
+        archived: { type: boolean, description: "Read-only until an admin restores it (B10)" }
     ProjectList:
       type: object
       required: [items]
       properties: { items: { type: array, items: { $ref: "#/components/schemas/Project" } } }
     Role: { type: string, enum: [admin, member, viewer] }
+    Invitation:
+      type: object
+      required: [id, email, role, invited_by, created_at, expires_at]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        invited_by: { type: string, description: The inviting admin's user id. }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+    AutomationAction:
+      type: object
+      required: [kind, value]
+      additionalProperties: false
+      properties:
+        kind: { type: string, enum: [transition, assign, add_label, comment] }
+        value: { type: string, description: "status id; user id, reporter or unassigned; a label; or comment text" }
+    AutomationRuleInput:
+      type: object
+      required: [name, trigger, actions]
+      properties:
+        name: { type: string }
+        trigger: { type: string, enum: [issue.created, issue.transitioned, comment.added, issue.assigned] }
+        to_status: { type: string, description: "issue.transitioned only: the status reached (empty = any)" }
+        condition: { type: string, description: JQL the issue must match (empty = always) }
+        actions: { type: array, minItems: 1, maxItems: 5, items: { $ref: "#/components/schemas/AutomationAction" } }
+    AutomationRule:
+      type: object
+      required: [id, project_key, owner_id, name, trigger, to_status, condition, actions, enabled, version]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        project_key: { type: string }
+        owner_id: { type: string, description: The rule runs as this user }
+        name: { type: string }
+        trigger: { type: string }
+        to_status: { type: string }
+        condition: { type: string }
+        actions: { type: array, items: { $ref: "#/components/schemas/AutomationAction" } }
+        enabled: { type: boolean }
+        version: { type: integer }
     Member:
       type: object
       required: [user_id, email, name, role]
@@ -5144,7 +5468,7 @@ components:
     NotificationSettings:
       type: object
       additionalProperties: false
-      required: [email, telegram, email_available, telegram_available, telegram_connected, time_zone]
+      required: [email, telegram, email_available, telegram_available, telegram_connected, time_zone, email_digest]
       properties:
         time_zone: { type: string, description: "The user's IANA time zone for meeting times in messages; empty = UTC" }
         email: { type: boolean }
@@ -5152,6 +5476,7 @@ components:
         email_available: { type: boolean, description: SMTP is configured on this server }
         telegram_available: { type: boolean, description: A Telegram bot is configured on this server }
         telegram_connected: { type: boolean, description: The user connected their Telegram chat }
+        email_digest: { type: boolean, description: "One email a day (08:00 in time_zone) listing unread notifications, instead of one email each" }
     HistoryEntry:
       type: object
       additionalProperties: false

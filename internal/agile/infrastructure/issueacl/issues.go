@@ -10,7 +10,7 @@ import (
 // IssueSource is the part of Issue Tracking the Agile context uses for sprints and versions.
 type IssueSource interface {
 	Source
-	ReturnUnfinished(ctx context.Context, actor, project, sprint, to string) (completed, returned int, err error)
+	SprintTally(ctx context.Context, project, sprint string) (done, unfinished int, err error)
 	InVersion(ctx context.Context, actor, project, version string) ([]*issuedomain.Issue, error)
 }
 
@@ -19,8 +19,8 @@ type Issues struct{ src IssueSource }
 
 func NewIssues(src IssueSource) Issues { return Issues{src: src} }
 
-func (a Issues) ReturnUnfinished(ctx context.Context, actor, project, sprint, to string) (int, int, error) {
-	return a.src.ReturnUnfinished(ctx, actor, project, sprint, to)
+func (a Issues) SprintTally(ctx context.Context, project, sprint string) (int, int, error) {
+	return a.src.SprintTally(ctx, project, sprint)
 }
 
 func (a Issues) VersionIssues(ctx context.Context, actor, project, version string) ([]agileapp.VersionIssue, error) {

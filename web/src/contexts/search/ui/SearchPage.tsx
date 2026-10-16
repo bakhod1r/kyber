@@ -1,3 +1,4 @@
+import { priorityLabel, typeLabel } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type KeyboardEvent, useId, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -107,7 +108,7 @@ export function SearchPage() {
           {results.data && (
             <>
               <p className="muted">{results.data.total === 1 ? t("1 issue") : t("{n} issues", { n: results.data.total })}</p>
-              <table className="versions-table">
+              <table className="versions-table issue-table">
                 <thead>
                   <tr>
                     <th scope="col">{t("Key")}</th>
@@ -123,10 +124,10 @@ export function SearchPage() {
                       <td>
                         <Link to={`/projects/${encodeURIComponent(is.project_key)}?issue=${encodeURIComponent(is.key)}`}>{is.key}</Link>
                       </td>
-                      <td>{is.title}</td>
-                      <td className="cap">{is.type}</td>
-                      <td>{is.status_name || is.status}</td>
-                      <td className="cap">{is.priority}</td>
+                      <td className="title">{is.title}</td>
+                      <td className="meta">{typeLabel(t, is.type)}</td>
+                      <td className="meta">{is.status_name || is.status}</td>
+                      <td className="meta">{priorityLabel(t, is.priority)}</td>
                     </tr>
                   ))}
                 </tbody>

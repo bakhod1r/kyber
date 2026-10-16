@@ -63,7 +63,7 @@ const csv = "Summary,Issue key,Issue Type,Status,Priority,Assignee,Reporter,Crea
 
 func setup() (*application.Service, *fakeIssues, *memory.Repository) {
 	issues, maps := &fakeIssues{}, memory.NewRepository()
-	return application.NewService(application.Deps{Access: fakeAccess{"u-lead": "admin", "u-dev": "member"}, Members: fakeAccess{}, Issues: issues, Mappings: maps}), issues, maps
+	return application.NewService(application.Deps{Access: fakeAccess{"u-lead": "admin", "u-dev": "member"}, Members: fakeAccess{}, Issues: issues, Mappings: maps, Lock: memory.NewImportLock()}), issues, maps
 }
 
 func TestPreviewChangesNothing(t *testing.T) {

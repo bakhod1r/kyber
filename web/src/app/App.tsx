@@ -24,6 +24,7 @@ import { AccessTokens } from "../contexts/identity/ui/AccessTokens";
 import { OAuthConsent } from "../contexts/identity/ui/OAuthConsent";
 import { AppearanceSettings } from "../shared/ui/AppearanceSettings";
 import { ProjectsPage } from "../contexts/project/ui/ProjectsPage";
+import { InvitePage } from "../contexts/project/ui/InvitePage";
 import { identityUseCases } from "../contexts/identity/application";
 import { SearchPage } from "../contexts/search/ui/SearchPage";
 import { useT } from "../shared/i18n/i18n";
@@ -54,6 +55,13 @@ function RequireUser({ children }: { children: ReactNode }) {
   if (me.isError) return <p role="alert" className="error center">{me.error.message}</p>;
   if (!me.data) return <Navigate to={here.pathname === "/" ? "/login" : `/login?next=${encodeURIComponent(here.pathname + here.search)}`} replace />;
   return <Layout user={me.data}>{children}</Layout>;
+}
+
+/** Invitation links work signed in or out: visitors are sent to sign in or sign up and come back (B1). */
+function Invite() {
+  const me = useMe();
+  if (me.isPending) return null;
+  return <InvitePage signedIn={!!me.data} />;
 }
 
 /** "/" is the landing page for visitors and the project list for signed-in users. */
@@ -92,6 +100,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<AuthPage mode="login" />} />
+      <Route path="/invite/:token" element={<Invite />} />
       <Route path="/signup" element={<AuthPage mode="signup" />} />
       <Route path="/" element={<Home />} />
       <Route path="/admin" element={<RequireUser><AdminPage /></RequireUser>} />
@@ -118,6 +127,7 @@ export function AppRoutes() {
       <Route path="/chat/:id" element={<RequireUser><ChatPage extras={extras} activity={<ChatMentions />} commands={runChatCommand} issueMaker={issueFromMessage} /></RequireUser>} />
       <Route path="/meetings" element={<RequireUser><Meetings /></RequireUser>} />
       <Route path="/projects/:key/webhooks" element={<RequireUser><ProjectPage view="webhooks" /></RequireUser>} />
+      <Route path="/projects/:key/automation" element={<RequireUser><ProjectPage view="automation" /></RequireUser>} />
       <Route path="/oauth/authorize" element={<RequireUser><OAuthConsent /></RequireUser>} />
       <Route path="/search" element={<RequireUser><SearchPage /></RequireUser>} />
       <Route path="/settings" element={<RequireUser><AccountSettings /></RequireUser>} />

@@ -50,4 +50,23 @@ describe("IssueList and quick filters", () => {
     await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     await waitFor(() => expect(onKeys).toHaveBeenLastCalledWith(null));
   });
+
+  it("selects issues for a bulk change and offers the bulk panel (G9)", async () => {
+    mockApi({
+      [q('project = "KYB" ORDER BY key')]: { status: 200, body: { total: 2, items: [hit("KYB-1", "One"), hit("KYB-2", "Two")] } },
+      "GET /api/v1/filters": { status: 200, body: { items: [] } },
+    });
+    const bulk = vi.fn((keys: string[], done: () => void) => (
+      <button type="button" onClick={done}>
+        bulk {keys.join(",")}
+      </button>
+    ));
+    renderWithProviders(<IssueList projectKey="KYB" bulk={bulk} />);
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Select KYB-2" }));
+    expect(screen.getByRole("button", { name: "bulk KYB-2" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Select all" }));
+    await userEvent.click(screen.getByRole("button", { name: "bulk KYB-1,KYB-2" }));
+    expect(screen.getByRole("checkbox", { name: "Select KYB-1" })).not.toBeChecked(); // done clears the selection
+    expect(screen.queryByRole("button", { name: /^bulk/ })).not.toBeInTheDocument();
+  });
 });

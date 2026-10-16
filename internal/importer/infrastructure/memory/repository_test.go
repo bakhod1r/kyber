@@ -11,3 +11,10 @@ import (
 func TestContract(t *testing.T) {
 	repotest.Run(t, func(*testing.T) domain.MappingRepository { return memory.NewRepository() })
 }
+
+func TestLockContract(t *testing.T) {
+	repotest.RunLock(t, func(*testing.T) (domain.ImportLock, domain.ImportLock) {
+		l := memory.NewImportLock()
+		return l, l
+	})
+}

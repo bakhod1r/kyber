@@ -43,18 +43,24 @@ func (f *fakeIssues) VersionIssues(_ context.Context, _, _, version string) ([]a
 	return f.inVersion[version], f.err
 }
 
-func (f *fakeIssues) ReturnUnfinished(_ context.Context, _, project, sprint, to string) (int, int, error) {
-	f.calls = append(f.calls, project+"/"+sprint+"→"+to)
+// SprintTally only reads; calls records it so tests can tell a refused completion never looked.
+func (f *fakeIssues) SprintTally(_ context.Context, project, sprint string) (int, int, error) {
+	f.calls = append(f.calls, project+"/"+sprint)
 	return f.completed, f.returned, f.err
 }
 
 func setup() (*application.Service, *memory.Repository, *fakeIssues) {
+	return setupWith(func(r domain.Repository) domain.Repository { return r })
+}
+
+// setupWith wraps the sprint store, e.g. to make saving fail.
+func setupWith(wrap func(domain.Repository) domain.Repository) (*application.Service, *memory.Repository, *fakeIssues) {
 	repo := memory.NewRepository()
 	issues := &fakeIssues{completed: 3, returned: 2}
 	n := 0
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	svc := application.NewService(application.Deps{
-		Sprints: repo, Issues: issues,
+		Sprints: wrap(repo), Issues: issues,
 		Access: fakeAccess{"KYB": {dev: "w", viewer: "r"}, "OPS": {dev: "w"}},
 		NewID:  func() string { n++; return fmt.Sprintf("s-%d", n) },
 		Now:    func() time.Time { now = now.Add(time.Hour); return now },
@@ -124,15 +130,12 @@ func TestComplete(t *testing.T) {
 		t.Fatalf("complete planned err = %v", err)
 	}
 	if len(issues.calls) != 0 {
-		t.Fatal("issues must not move when completion is rejected")
+		t.Fatal("a rejected completion must not look at issues")
 	}
 	_, _ = s.Start(ctx, dev, string(a.ID()), time.Time{})
 	res, err := s.Complete(ctx, dev, string(a.ID()), "")
 	if err != nil || res.Completed != 3 || res.Returned != 2 || res.Sprint.State() != domain.StateClosed {
 		t.Fatalf("Complete = %+v, %v", res, err)
-	}
-	if len(issues.calls) != 1 || issues.calls[0] != "KYB/"+string(a.ID())+"→" {
-		t.Fatalf("ReturnUnfinished calls = %v", issues.calls)
 	}
 	if stored, _ := repo.ByID(ctx, a.ID()); stored.State() != domain.StateClosed {
 		t.Fatal("sprint not closed")
@@ -141,7 +144,7 @@ func TestComplete(t *testing.T) {
 		t.Fatalf("outbox = %v", got)
 	}
 
-	// If returning issues fails the sprint stays active, so completion can be retried.
+	// If counting issues fails the sprint stays active, so completion can be retried.
 	b, _ := s.Create(ctx, dev, "KYB", "B", "")
 	_, _ = s.Start(ctx, dev, string(b.ID()), time.Time{})
 	issues.err = errors.New("db down")
@@ -191,7 +194,7 @@ func TestStartEndDate(t *testing.T) {
 
 func TestCompleteCarriesOverToNextSprint(t *testing.T) {
 	ctx := context.Background()
-	s, _, issues := setup()
+	s, repo, issues := setup()
 	a, _ := s.Create(ctx, dev, "KYB", "A", "")
 	next, _ := s.Create(ctx, dev, "KYB", "B", "")
 	other, _ := s.Create(ctx, dev, "OPS", "O", "")
@@ -207,7 +210,13 @@ func TestCompleteCarriesOverToNextSprint(t *testing.T) {
 	if _, err := s.Complete(ctx, dev, string(a.ID()), string(next.ID())); err != nil {
 		t.Fatal(err)
 	}
-	if issues.calls[0] != "KYB/"+string(a.ID())+"→"+string(next.ID()) {
-		t.Fatalf("calls = %v", issues.calls)
+	var e domain.SprintCompleted
+	for _, ev := range repo.Outbox() {
+		if c, ok := ev.(domain.SprintCompleted); ok {
+			e = c
+		}
+	}
+	if e.ID != a.ID() || e.CarryOverTo != next.ID() || e.By != dev {
+		t.Fatalf("sprint.completed = %+v", e)
 	}
 }

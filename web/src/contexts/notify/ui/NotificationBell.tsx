@@ -1,3 +1,4 @@
+import { formatDateTime } from "../../../shared/i18n/labels";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -82,7 +83,7 @@ export function NotificationBell() {
                   </span>
                   <span className="note-title">{n.issue_title}</span>
                   {n.excerpt && <span className="note-excerpt">{n.excerpt}</span>}
-                  <time dateTime={n.created_at}>{new Date(n.created_at).toLocaleString()}</time>
+                  <time dateTime={n.created_at}>{formatDateTime(n.created_at)}</time>
                 </button>
               </li>
             ))}
