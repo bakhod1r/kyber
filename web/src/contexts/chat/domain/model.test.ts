@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter, parseRemind, seen, sections, type Conversation, parseCommand, utcMinute, localTime, moveSection } from "./model";
+import { applyEvent, conversationTitle, fileSize, type Message, remindPresets, splitMentions, clearAfter, parseRemind, seen, sections, type Conversation, parseCommand, utcMinute, localTime, moveSection, timeline } from "./model";
 
 const msg = (id: string, body: string, extra: Partial<Message> = {}): Message => ({
   id, conversation_id: "c-1", author_id: "u-1", body, created_at: "2026-10-13T09:00:00Z", edited_at: null, deleted: false,
@@ -148,5 +148,30 @@ describe("section order (S85)", () => {
   it("moves a section before another", () => {
     expect(moveSection(["Archive", "Team", "Work"], "Work", "Archive")).toEqual(["Work", "Archive", "Team"]);
     expect(moveSection(["Archive", "Team"], "New", "nowhere")).toEqual(["Archive", "Team", "New"]);
+  });
+});
+
+describe("timeline", () => {
+  const m = (id: string, author: string, at: string, extra: Partial<Message> = {}): Message => ({
+    id, conversation_id: "c-1", author_id: author, body: id, created_at: at, edited_at: null, deleted: false,
+    thread_id: null, reply_count: 0, reactions: [], issues: [], ...extra,
+  });
+  it("marks new days and groups one author's messages sent close together", () => {
+    const rows = timeline([
+      m("a", "u-1", "2026-10-13T12:00:00Z"),
+      m("b", "u-1", "2026-10-13T12:02:00Z"),
+      m("c", "u-2", "2026-10-13T12:03:00Z"),
+      m("d", "u-2", "2026-10-13T12:20:00Z"),
+      m("e", "u-2", "2026-10-14T12:21:00Z"),
+      m("f", "u-2", "2026-10-14T12:22:00Z", { kind: "workflow" }),
+    ]);
+    expect(rows.map((r) => [r.message.id, r.day, r.first])).toEqual([
+      ["a", "2026-10-13", true],
+      ["b", null, false],
+      ["c", null, true],
+      ["d", null, true],
+      ["e", "2026-10-14", true],
+      ["f", null, true],
+    ]);
   });
 });
