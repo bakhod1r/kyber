@@ -43,4 +43,6 @@
   .chat-composer textarea { flex-basis: 100%; }
   .chat-compose-row .chat-composer { flex-basis: 100%; }
   .chat-composer select { max-width: 100%; }
+  .issue-layout { grid-template-columns: 1fr; }
+  .issue-side { position: static; }
 }

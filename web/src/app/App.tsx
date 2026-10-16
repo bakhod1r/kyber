@@ -56,6 +56,19 @@ function RequireUser({ children }: { children: ReactNode }) {
 }
 
 /** "/" is the landing page for visitors and the project list for signed-in users. */
+/** The person's own settings: one centred column of panels under one heading. */
+function AccountSettings() {
+  const t = useT();
+  return (
+    <div className="account-settings">
+      <h1>{t("Settings")}</h1>
+      <SettingsPage />
+      <AppearanceSettings />
+      <AccessTokens />
+    </div>
+  );
+}
+
 function Home() {
   const t = useT();
   const me = useMe();
@@ -102,7 +115,7 @@ export function AppRoutes() {
       <Route path="/projects/:key/webhooks" element={<RequireUser><ProjectPage view="webhooks" /></RequireUser>} />
       <Route path="/oauth/authorize" element={<RequireUser><OAuthConsent /></RequireUser>} />
       <Route path="/search" element={<RequireUser><SearchPage /></RequireUser>} />
-      <Route path="/settings" element={<RequireUser><SettingsPage /><AppearanceSettings /><AccessTokens /></RequireUser>} />
+      <Route path="/settings" element={<RequireUser><AccountSettings /></RequireUser>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

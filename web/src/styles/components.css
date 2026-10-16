@@ -26,7 +26,7 @@
 .issue-form { display: grid; gap: 0.75rem; }
 .issue-form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 .issue-form .row.end { display: flex; justify-content: flex-end; align-items: center; gap: 1rem; }
-textarea { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem 0.65rem; width: 100%; resize: vertical; }
+textarea { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.55rem 0.7rem; width: 100%; resize: vertical; transition: border-color 120ms var(--ease), box-shadow 120ms var(--ease); }
 .comments ul { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
 .comments form { display: grid; gap: 0.5rem; justify-items: end; }
 .comments label { width: 100%; }
@@ -553,3 +553,53 @@ button.ghost.danger-ghost:hover:not(:disabled) { border-color: color-mix(in srgb
 .chat-composer { display: flex; gap: 0.5rem; align-items: flex-start; }
 .chat-composer textarea { flex: 1; min-width: 0; min-height: 2.5rem; }
 .chat-sidebar li select { max-width: 2.25rem; padding-inline: 0.25rem; }
+
+/* ---- Premium pass: surfaces, motion, the issue layout, empty states. ---- */
+.panel { border-color: var(--border); }
+.bell-panel, .user-menu-list, .mention-list, .jql-suggestions, .multi-pick-menu { box-shadow: var(--shadow-lg); border-radius: var(--radius); }
+.overlay { background: rgb(10 17 28 / 42%); backdrop-filter: blur(2px); }
+.issue-panel { box-shadow: var(--shadow-lg); border-radius: 14px; animation: rise 160ms var(--ease); }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .issue-panel { animation: none; } button { transition: none; } }
+/* Cards lift a little under the pointer. */
+.card { border-radius: 10px; transition: box-shadow 140ms var(--ease), border-color 140ms var(--ease), transform 140ms var(--ease); }
+.card:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+.column { border-radius: var(--radius); }
+.column h2 { font-weight: 700; }
+/* Tabs: a confident active state. */
+.tabs a { position: relative; transition: color 120ms var(--ease); }
+.tabs a.active { border-bottom-width: 2px; }
+/* The issue dialog: text on the left, fields on the right (Jira's layout). */
+.issue-panel { width: min(1040px, 100%); }
+.issue-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1.5rem; align-items: start; }
+.issue-main { display: grid; gap: 1.25rem; min-width: 0; }
+.issue-side { display: grid; gap: 1rem; position: sticky; top: 0; padding: 1rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); }
+.issue-side .issue-form .row { grid-template-columns: 1fr; }
+.issue-side .issue-form .row.end { position: static; margin: 0; padding: 0; border: 0; background: none; justify-content: stretch; }
+.issue-side .issue-form .row.end button { flex: 1; }
+.issue-side h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 0.4rem; }
+.issue-main .issue-form input:first-of-type { font-size: 1.05rem; font-weight: 600; }
+.issue-panel h3 { font-size: 0.95rem; margin: 0 0 0.5rem; }
+/* Empty states: a calm dashed card. */
+.empty, .chart.empty { color: var(--muted); }
+/* Account settings: a centred column of panels. */
+.account-settings { max-width: 46rem; margin: 0 auto; display: grid; gap: 1.25rem; }
+.account-settings > .panel, .account-settings > section { max-width: none; margin: 0; }
+.account-settings .settings h2:first-child, .account-settings .panel > h2:first-child { margin-top: 0; font-size: 1.15rem; }
+/* Inside the issue dialog only Save is a primary action; section actions are secondary and sit beside their input. */
+.issue-panel section button:not(.ghost):not(.link):not(.reaction):not([form]) { background: var(--surface); color: var(--text); border-color: var(--border); }
+.issue-panel section button:not(.ghost):not(.link):not(.reaction):not([form]):hover:not(:disabled) { background: var(--surface-2); }
+.issue-panel section form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-end; }
+.issue-panel section form > input:not([type="checkbox"]), .issue-panel section form > label { flex: 1 1 12rem; }
+.issue-panel .comments form { display: grid; }
+
+/* Search: the button lines up with the input, examples are quiet code chips. */
+.search-page > form.row { align-items: flex-end; flex-wrap: nowrap; }
+.search-page > form.row .grow { flex: 1; }
+.search-page .chip { font: 500 0.8rem/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 0.3rem 0.6rem; min-height: 0; border-radius: 6px; max-width: 26rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cap { text-transform: capitalize; }
+.demo-banner button { min-height: 0; box-shadow: none; }
+.demo-banner button:hover:not(:disabled) { background: none; }
+.account-settings .settings { gap: 0.4rem; }
+.account-settings .settings p { margin: 0 0 0.5rem; }
+.account-settings .settings h3, .account-settings .panel h3 { margin: 1rem 0 0.35rem; font-size: 0.95rem; }

@@ -34,7 +34,7 @@ export function SettingsPage() {
   const s = settings.data;
   return (
     <section className="settings panel">
-      <h1>{t("Notifications")}</h1>
+      <h2>{t("Notifications")}</h2>
       <p className="muted">{t("You always see notifications in Kyber. Choose where else they should reach you.")}</p>
 
       <h2>{t("Email")}</h2>
