@@ -106,6 +106,15 @@ describe("Board (KYB-S14 AC3)", () => {
   });
 });
 
+describe("Board quick-add types", () => {
+  it("does not offer sub-task: it needs a parent, so the server always rejects it", async () => {
+    mockApi({ "GET /api/v1/projects/KYB/issues": { status: 200, body: { items: [] } } });
+    renderWithProviders(<Board projectKey="KYB" />);
+    const options = within(await screen.findByLabelText("Type")).getAllByRole("option").map((o) => o.getAttribute("value"));
+    expect(options).toEqual(["task", "story", "bug", "epic"]);
+  });
+});
+
 describe("Board with a project workflow (KYB-S43)", () => {
   it("renders one column per workflow status, in workflow order", async () => {
     mockApi({
