@@ -24,6 +24,24 @@ function drag(from: HTMLElement, to: HTMLElement) {
 }
 
 describe("Backlog (KYB-S20)", () => {
+  it("adds an issue to the backlog from the quick-add form", async () => {
+    const items: Issue[] = [];
+    const calls = mockApi({
+      "GET /api/v1/projects/KYB/sprints": { status: 200, body: { items: [] } },
+      "GET /api/v1/projects/KYB/issues": () => ({ status: 200, body: { items } }),
+      "POST /api/v1/projects/KYB/issues": () => {
+        items.push({ ...issue(1, null), title: "Write docs" });
+        return { status: 201, body: items[0] };
+      },
+    });
+    renderWithProviders(<Backlog projectKey="KYB" />);
+    await userEvent.type(await screen.findByLabelText("New issue title"), "Write docs");
+    await userEvent.click(screen.getByRole("button", { name: "Add issue" }));
+
+    expect(await within(screen.getByRole("region", { name: "Backlog" })).findByText("Write docs")).toBeInTheDocument();
+    expect(calls.find((c) => c.key.startsWith("POST"))?.body).toEqual({ title: "Write docs", type: "task" });
+  });
+
   it("AC1: shows sprint sections above the backlog, in rank order", async () => {
     mockApi({
       "GET /api/v1/projects/KYB/sprints": { status: 200, body: { items: [sprint("s-1", "Sprint 1", "planned", "Ship it")] } },

@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type DragEvent, type FormEvent, useState } from "react";
+import { type DragEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { agileUseCases, type BoardColumn, type BoardFilter, boardFilterActive, filterBoard, NO_BOARD_FILTER, SWIMLANE_MODES, swimlanes, type SwimlaneMode, toggle, type Version } from "../application";
-import { issueUseCases, DEFAULT_WORKFLOW, ISSUE_TYPES, type Issue, type IssueType, type Status } from "../../issue/application";
+import { issueUseCases, DEFAULT_WORKFLOW, type Issue, type Status } from "../../issue/application";
 import { projectUseCases, type Member } from "../../project/application";
 import { announceIssueDone } from "../../../shared/events";
+import { QuickAdd } from "./QuickAdd";
 import { useLabel, useT } from "../../../shared/i18n/i18n";
 
 const DRAG_TYPE = "application/x-kyber-issue";
@@ -432,44 +433,3 @@ function MultiPick({
   );
 }
 
-// QuickAdd creates an issue; during an active sprint it joins that sprint (as in Jira),
-// otherwise it would land in the backlog and vanish from the sprint board.
-function QuickAdd({ projectKey, sprintId }: { projectKey: string; sprintId?: string }) {
-  const t = useT();
-  const qc = useQueryClient();
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState<IssueType>("task");
-  const create = useMutation({
-    mutationFn: () => issueUseCases.createIssueIn(projectKey, title, type, sprintId),
-    onSuccess: () => {
-      setTitle("");
-      return qc.invalidateQueries({ queryKey: ["issues", projectKey] });
-    },
-  });
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    if (title.trim()) create.mutate();
-  }
-
-  return (
-    <form className="quick-add" onSubmit={submit}>
-      <input aria-label={t("New issue title")} placeholder={t("What needs to be done?")} value={title} onChange={(e) => setTitle(e.target.value)} />
-      <select aria-label={t("Type")} value={type} onChange={(e) => setType(e.target.value as IssueType)}>
-        {ISSUE_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {t}
-          </option>
-        ))}
-      </select>
-      <button type="submit" disabled={create.isPending}>
-        {t("Add issue")}
-      </button>
-      {create.isError && (
-        <span role="alert" className="error">
-          {create.error.message}
-        </span>
-      )}
-    </form>
-  );
-}

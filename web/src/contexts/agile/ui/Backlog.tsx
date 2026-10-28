@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type DragEvent, type FormEvent, useState } from "react";
 import { agileUseCases, type Sprint } from "../application";
 import { issueUseCases, type Issue } from "../../issue/application";
+import { QuickAdd } from "./QuickAdd";
 import { useT } from "../../../shared/i18n/i18n";
 
 const DRAG_TYPE = "application/x-kyber-issue";
@@ -172,6 +173,7 @@ export function Backlog({ projectKey, onOpen }: { projectKey: string; onOpen?: (
           </section>
         );
       })}
+      <QuickAdd projectKey={projectKey} />
       <CreateSprint projectKey={projectKey} />
     </div>
   );
