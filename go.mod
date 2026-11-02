@@ -15,7 +15,7 @@ require (
 	github.com/crewjam/saml v0.4.14
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/getkin/kin-openapi v0.149.0
-	github.com/go-jose/go-jose/v4 v4.1.5
+	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/johannesboyne/gofakes3 v1.2.0
